@@ -1,0 +1,28 @@
+﻿node_modules/
+dist/
+build/
+out/
+.cache/
+.vite/
+.next/
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+# Local runtime/cache data
+.localappdata/
+.npm-cache/
+.smoke-user-data/
+
+# Electron/Vite build output
+dist-electron/
+dist/
+build/
+out/
+
+# Logs and env
+*.log
+.env
+.env.*

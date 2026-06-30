@@ -1,0 +1,18 @@
+:root {
+  --背景色: #f5f2eb;
+  --面板色: #fffdf8;
+  --深色面板: #1e2523;
+  --主文字: #25302d;
+  --次文字: #6c7773;
+  --边框色: #dedbd2;
+  --强调色: #2f7365;
+  --强调浅色: #dcece6;
+  --阅读背景: #252928;
+  --阴影: 0 18px 48px rgba(40, 49, 46, 0.08);
+  color: var(--主文字);
+  background: var(--背景色);
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
