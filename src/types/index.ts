@@ -11,10 +11,12 @@ export type 进度条粗细 = "thin" | "normal" | "thick";
 export type 阅读器缩放模式 = "fit-width" | "fit-height" | "original";
 export type 阅读器页模式 = "single" | "double";
 export type 双页阅读方向 = "left-to-right" | "right-to-left";
+export type 阅读流向 = "horizontal" | "vertical";
 export type 沉浸自动隐藏延迟 = 500 | 1000 | 1500 | 2000 | 2500 | 3000;
 export type 图书切换按钮透明度 = 20 | 30 | 40 | 50 | 60 | 70 | 80;
 export type 整理侧边栏透明度 = 70 | 80 | 90 | 100;
 export type 书架备注悬停延迟 = 0 | 500 | 1000 | 1500 | 2000;
+export type 最近打开记录上限 = 50 | 100 | 150 | 200;
 export type 批量删除确认类型 = "favorites" | "bookmarks" | "recent";
 export type 标签搜索模式 = "fuzzy" | "exact";
 
@@ -40,18 +42,36 @@ export interface AppSettings {
   progressBarThickness: 进度条粗细;
   readerDefaultFitMode: 阅读器缩放模式;
   readerPageMode: 阅读器页模式;
+  readerDefaultFlow: 阅读流向;
+  readerDefaultPanorama: boolean;
+  readerDefaultImmersive: boolean;
   doublePageFirstSingle: boolean;
   doublePageDirection: 双页阅读方向;
   smartDetectSpreadPage: boolean;
   wheelPageTurn: boolean;
   immersiveAutoHide: boolean;
   immersiveAutoHideDelay: 沉浸自动隐藏延迟;
+  readerHideFooterControls: boolean;
+  readerHideImmersiveProgress: boolean;
+  readerMemoryCacheSizeMb: number;
+  readerPreloadPages: number;
+  readerImageLoadConcurrency: number;
   bookSwitchButtonOpacity: 图书切换按钮透明度;
   organizeDrawerOpacity: 整理侧边栏透明度;
   bookshelfNoteHoverDelayMs: 书架备注悬停延迟;
+  recentOpenedLimit: 最近打开记录上限;
   tagSearchMode: 标签搜索模式;
   confirmBeforeDeleteTags: boolean;
   confirmBeforeBatchDelete: 批量删除确认设置;
+}
+
+export interface ReaderViewState {
+  fitMode: 阅读器缩放模式;
+  pageMode: 阅读器页模式;
+  pageDirection: 双页阅读方向;
+  flow: 阅读流向;
+  panorama: boolean;
+  immersive: boolean;
 }
 
 export interface ReadingProgress {
@@ -67,6 +87,7 @@ export interface ReadingProgress {
   hasStartedReading: boolean;
   firstReadAt: number;
   updatedAt: number;
+  readerViewState?: ReaderViewState;
 }
 
 export interface RecentOpenedItem {
@@ -88,6 +109,7 @@ export interface FavoriteItem {
   tags?: string[];
   addedAt: number;
   updatedAt: number;
+  sortIndex: number;
 }
 
 export interface BookmarkItem {
@@ -105,6 +127,7 @@ export interface BookmarkItem {
   tags?: string[];
   createdAt: number;
   updatedAt: number;
+  sortIndex: number;
 }
 
 export interface 整理信息输入 {
@@ -142,10 +165,20 @@ export interface VirtualFolderItem {
 
 export interface VirtualFolder {
   id: string;
+  bookshelfId: string;
   name: string;
   note: string;
   tags: string[];
+  coverResourceKey?: string;
   items: VirtualFolderItem[];
+  createdAt: number;
+  updatedAt: number;
+  sortIndex: number;
+}
+
+export interface Bookshelf {
+  id: string;
+  name: string;
   createdAt: number;
   updatedAt: number;
   sortIndex: number;
@@ -168,10 +201,12 @@ export interface OmiComicAppData {
   settings: AppSettings;
   readingProgress: Record<string, ReadingProgress>;
   recentOpened: RecentOpenedItem[];
+  removedRecentResourceKeys: string[];
   favorites: FavoriteItem[];
   bookmarks: BookmarkItem[];
   resourceMeta: Record<string, ResourceMetaItem>;
   tagOrder: string[];
+  bookshelves: Bookshelf[];
   virtualFolders: VirtualFolder[];
 }
 
@@ -247,6 +282,8 @@ export interface 获取页面图片输入 {
 
 export interface 页面图片结果 {
   url: string;
+  width?: number;
+  height?: number;
 }
 
 export interface 书签页预览输入 {
@@ -275,6 +312,14 @@ export interface 可阅读页数输入 {
   type: 资源类型;
 }
 
+export interface 资源路径状态 {
+  path: string;
+  exists: boolean;
+  readable: boolean;
+  isDirectory?: boolean;
+  reason?: string;
+}
+
 export interface 操作错误 {
   code: string;
   message: string;
@@ -289,7 +334,8 @@ export interface OmiComicApi {
   getAppData(): Promise<操作结果<OmiComicAppData>>;
   updateSettings(input: Partial<AppSettings>): Promise<操作结果<AppSettings>>;
   addLibraryRoot(input: { path: string; name: string }): Promise<操作结果<LibraryRoot>>;
-  removeLibraryRoot(path: string): Promise<操作结果<LibraryRoot[]>>;
+  removeLibraryRoot(path: string): Promise<操作结果<OmiComicAppData>>;
+  reorderLibraryRoots(orderedPaths: string[]): Promise<操作结果<LibraryRoot[]>>;
   updateLibraryState(input: {
     lastActiveRootPath?: string;
     lastCurrentPath?: string;
@@ -299,25 +345,46 @@ export interface OmiComicApi {
   getRecentOpened(): Promise<操作结果<RecentOpenedItem[]>>;
   removeRecentOpened(resourceKey: string): Promise<操作结果<null>>;
   getFavorites(): Promise<操作结果<FavoriteItem[]>>;
-  addFavorite(input: Omit<FavoriteItem, "addedAt" | "updatedAt">): Promise<操作结果<FavoriteItem>>;
+  addFavorite(input: Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex">): Promise<操作结果<FavoriteItem>>;
   updateFavoriteMeta(resourceKey: string, input: 整理信息输入): Promise<操作结果<FavoriteItem>>;
+  reorderFavorites(orderedResourceKeys: string[]): Promise<操作结果<FavoriteItem[]>>;
   removeFavorite(resourceKey: string): Promise<操作结果<null>>;
   updateResourceMeta(input: ResourceMetaInput): Promise<操作结果<ResourceMetaItem>>;
   updateTagOrder(tags: string[]): Promise<操作结果<string[]>>;
   deleteTags(tags: string[]): Promise<操作结果<OmiComicAppData>>;
-  createVirtualFolder(input: { name: string; note?: string }): Promise<操作结果<VirtualFolder>>;
-  updateVirtualFolder(input: { id: string; name?: string; note?: string }): Promise<操作结果<VirtualFolder>>;
+  createBookshelf(input: { name: string }): Promise<操作结果<Bookshelf>>;
+  updateBookshelf(input: { id: string; name: string }): Promise<操作结果<Bookshelf>>;
+  reorderBookshelves(orderedIds: string[]): Promise<操作结果<Bookshelf[]>>;
+  deleteBookshelf(id: string): Promise<操作结果<OmiComicAppData>>;
+  createVirtualFolder(input: { name: string; note?: string; bookshelfId?: string }): Promise<操作结果<VirtualFolder>>;
+  updateVirtualFolder(input: { id: string; name?: string; note?: string; coverResourceKey?: string | null }): Promise<操作结果<VirtualFolder>>;
+  reorderVirtualFolders(orderedIds: string[]): Promise<操作结果<VirtualFolder[]>>;
   deleteVirtualFolder(id: string): Promise<操作结果<VirtualFolder[]>>;
   addVirtualFolderItems(input: {
     folderId: string;
     items: VirtualFolderItemInput[];
   }): Promise<操作结果<{ folder: VirtualFolder; addedCount: number; skippedCount: number }>>;
   removeVirtualFolderItem(input: { folderId: string; resourceKey: string }): Promise<操作结果<VirtualFolder>>;
+  removeVirtualFolderItems(input: { folderId: string; resourceKeys: string[] }): Promise<操作结果<VirtualFolder>>;
+  clearVirtualFolderItems(folderId: string): Promise<操作结果<VirtualFolder>>;
+  clearInvalidResourceRecords(input: { sourcePaths: string[]; resourceKeys: string[] }): Promise<操作结果<OmiComicAppData>>;
+  reorderVirtualFolderItems(input: { folderId: string; orderedResourceKeys: string[] }): Promise<操作结果<VirtualFolder>>;
+  moveVirtualFolderItem(input: {
+    fromFolderId: string;
+    toFolderId: string;
+    item: VirtualFolderItemInput;
+  }): Promise<操作结果<{ virtualFolders: VirtualFolder[]; targetAlreadyHad: boolean; addedToTarget: boolean }>>;
+  moveVirtualFolderItems(input: {
+    fromFolderId: string;
+    toFolderId: string;
+    items: VirtualFolderItemInput[];
+  }): Promise<操作结果<{ virtualFolders: VirtualFolder[]; targetAlreadyHadCount: number; addedCount: number; movedCount: number }>>;
   getBookmarks(): Promise<操作结果<BookmarkItem[]>>;
   toggleBookmark(
-    input: Omit<BookmarkItem, "id" | "createdAt" | "updatedAt">,
+    input: Omit<BookmarkItem, "id" | "createdAt" | "updatedAt" | "sortIndex">,
   ): Promise<操作结果<{ bookmarked: boolean; bookmark?: BookmarkItem }>>;
   updateBookmarkMeta(id: string, input: 整理信息输入): Promise<操作结果<BookmarkItem>>;
+  reorderBookmarks(orderedIds: string[]): Promise<操作结果<BookmarkItem[]>>;
   removeBookmark(id: string): Promise<操作结果<null>>;
   isPageBookmarked(resourceKey: string, pageIndex: number): Promise<操作结果<boolean>>;
   selectFolder(): Promise<操作结果<string | null>>;
@@ -328,7 +395,12 @@ export interface OmiComicApi {
   getBookmarkPagePreview(input: 书签页预览输入): Promise<操作结果<书签页预览结果>>;
   getThumbnail(input: 缩略图输入): Promise<操作结果<缩略图结果>>;
   getReadablePageCount(input: 可阅读页数输入): Promise<操作结果<number | null>>;
+  checkResourcePath(input: { path: string; type: 资源类型 }): Promise<操作结果<资源路径状态>>;
   releaseReaderResource(path: string): Promise<操作结果<null>>;
+  minimizeWindow(): void;
+  toggleMaximizeWindow(): Promise<操作结果<boolean>>;
+  isWindowMaximized(): Promise<操作结果<boolean>>;
+  closeWindow(): void;
   setFullscreen(enabled: boolean): Promise<操作结果<boolean>>;
   isFullscreen(): Promise<操作结果<boolean>>;
 }

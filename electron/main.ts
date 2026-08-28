@@ -13,13 +13,26 @@ import {
   保存阅读进度,
   当前页已书签,
   切换书签,
+  创建书架,
   创建虚拟文件夹,
+  删除书架,
   删除虚拟文件夹,
+  清理失效资源记录,
+  清空虚拟文件夹项目,
   移除书签,
   移除根目录,
   移除虚拟文件夹项目,
+  移除虚拟文件夹项目列表,
+  移动虚拟文件夹项目,
+  移动虚拟文件夹项目列表,
   移除收藏,
   移除最近打开,
+  重排书签,
+  重排书架,
+  重排根目录,
+  重排收藏,
+  重排虚拟文件夹,
+  重排虚拟文件夹项目,
   删除标签,
   获取书签列表,
   获取收藏列表,
@@ -28,6 +41,7 @@ import {
   读取应用数据,
   更新收藏整理信息,
   更新标签顺序,
+  更新书架,
   更新虚拟文件夹,
   更新资源整理信息,
   更新书签整理信息,
@@ -135,6 +149,68 @@ function 获取图片媒体类型(名称: string): string {
   return "application/octet-stream";
 }
 
+function 读取图片像素尺寸(数据: Buffer): { width: number; height: number } | null {
+  const 有效尺寸 = (width: number, height: number) => (
+    Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+      ? { width, height }
+      : null
+  );
+
+  if (
+    数据.length >= 24
+    && 数据.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return 有效尺寸(数据.readUInt32BE(16), 数据.readUInt32BE(20));
+  }
+
+  if (数据.length >= 10 && (数据.subarray(0, 6).toString("ascii") === "GIF87a" || 数据.subarray(0, 6).toString("ascii") === "GIF89a")) {
+    return 有效尺寸(数据.readUInt16LE(6), 数据.readUInt16LE(8));
+  }
+
+  if (数据.length >= 26 && 数据.subarray(0, 2).toString("ascii") === "BM") {
+    return 有效尺寸(Math.abs(数据.readInt32LE(18)), Math.abs(数据.readInt32LE(22)));
+  }
+
+  if (数据.length >= 30 && 数据.subarray(0, 4).toString("ascii") === "RIFF" && 数据.subarray(8, 12).toString("ascii") === "WEBP") {
+    const 块类型 = 数据.subarray(12, 16).toString("ascii");
+    if (块类型 === "VP8X") {
+      const width = 1 + 数据.readUIntLE(24, 3);
+      const height = 1 + 数据.readUIntLE(27, 3);
+      return 有效尺寸(width, height);
+    }
+    if (块类型 === "VP8 " && 数据.length >= 30 && 数据[23] === 0x9d && 数据[24] === 0x01 && 数据[25] === 0x2a) {
+      return 有效尺寸(数据.readUInt16LE(26) & 0x3fff, 数据.readUInt16LE(28) & 0x3fff);
+    }
+    if (块类型 === "VP8L" && 数据.length >= 25 && 数据[20] === 0x2f) {
+      const width = 1 + 数据[21] + ((数据[22] & 0x3f) << 8);
+      const height = 1 + (数据[22] >> 6) + (数据[23] << 2) + ((数据[24] & 0x0f) << 10);
+      return 有效尺寸(width, height);
+    }
+  }
+
+  if (数据.length >= 4 && 数据[0] === 0xff && 数据[1] === 0xd8) {
+    const SOF标记 = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+    let 偏移 = 2;
+    while (偏移 + 8 < 数据.length) {
+      while (偏移 < 数据.length && 数据[偏移] !== 0xff) 偏移 += 1;
+      while (偏移 < 数据.length && 数据[偏移] === 0xff) 偏移 += 1;
+      if (偏移 >= 数据.length) break;
+      const 标记 = 数据[偏移];
+      偏移 += 1;
+      if (标记 === 0xd8 || 标记 === 0xd9 || (标记 >= 0xd0 && 标记 <= 0xd7)) continue;
+      if (偏移 + 2 > 数据.length) break;
+      const 段长度 = 数据.readUInt16BE(偏移);
+      if (段长度 < 2 || 偏移 + 段长度 > 数据.length) break;
+      if (SOF标记.has(标记) && 段长度 >= 7) {
+        return 有效尺寸(数据.readUInt16BE(偏移 + 5), 数据.readUInt16BE(偏移 + 3));
+      }
+      偏移 += 段长度;
+    }
+  }
+
+  return null;
+}
+
 function 是整理信息输入(输入: unknown): 输入 is { note?: string; tags?: string[] } {
   return typeof 输入 === "object"
     && 输入 !== null
@@ -169,6 +245,41 @@ function 是资源整理信息输入(输入: unknown): 输入 is {
       || 输入.sourceType === "epub"
       || 输入.sourceType === "unknown"
     );
+}
+
+function 是虚拟文件夹项目输入(输入: unknown): 输入 is {
+  resourceKey: string;
+  sourcePath: string;
+  sourceType: 资源类型;
+  title: string;
+} {
+  return typeof 输入 === "object"
+    && 输入 !== null
+    && "resourceKey" in 输入
+    && "sourcePath" in 输入
+    && "sourceType" in 输入
+    && "title" in 输入
+    && typeof 输入.resourceKey === "string"
+    && typeof 输入.sourcePath === "string"
+    && typeof 输入.title === "string"
+    && (
+      输入.sourceType === "folder"
+      || 输入.sourceType === "image"
+      || 输入.sourceType === "archive"
+      || 输入.sourceType === "pdf"
+      || 输入.sourceType === "epub"
+      || 输入.sourceType === "unknown"
+    );
+}
+
+function 筛选虚拟文件夹项目输入列表(输入: unknown): Array<{
+  resourceKey: string;
+  sourcePath: string;
+  sourceType: 资源类型;
+  title: string;
+}> {
+  if (!Array.isArray(输入)) return [];
+  return 输入.filter(是虚拟文件夹项目输入);
 }
 
 function 是支持的压缩包(名称: string): boolean {
@@ -332,6 +443,40 @@ function 注册安全通道(): void {
     return { ok: true, data: 窗口.isFullScreen() };
   });
 
+  ipcMain.on("窗口:最小化", (事件) => {
+    BrowserWindow.fromWebContents(事件.sender)?.minimize();
+  });
+
+  ipcMain.handle("窗口:切换最大化", (事件) => {
+    const 窗口 = BrowserWindow.fromWebContents(事件.sender);
+    if (!窗口) {
+      return {
+        ok: false,
+        error: { code: "WINDOW_NOT_FOUND", message: "无法找到当前窗口。" },
+      };
+    }
+
+    if (窗口.isMaximized()) 窗口.unmaximize();
+    else 窗口.maximize();
+    return { ok: true, data: 窗口.isMaximized() };
+  });
+
+  ipcMain.handle("窗口:是否最大化", (事件) => {
+    const 窗口 = BrowserWindow.fromWebContents(事件.sender);
+    if (!窗口) {
+      return {
+        ok: false,
+        error: { code: "WINDOW_NOT_FOUND", message: "无法找到当前窗口。" },
+      };
+    }
+
+    return { ok: true, data: 窗口.isMaximized() };
+  });
+
+  ipcMain.on("窗口:关闭", (事件) => {
+    BrowserWindow.fromWebContents(事件.sender)?.close();
+  });
+
   ipcMain.handle("数据:获取应用数据", async () => {
     try {
       const 数据 = await 读取应用数据();
@@ -403,13 +548,31 @@ function 注册安全通道(): void {
 
     try {
       const 根路径 = 规范化路径(根路径输入);
-      const 根目录列表 = await 移除根目录(根路径);
+      const 数据 = await 移除根目录(根路径);
       已授权根目录.delete(根路径);
-      return { ok: true, data: 根目录列表 };
+      return { ok: true, data: 数据 };
     } catch {
       return {
         ok: false,
-        error: { code: "REMOVE_ROOT_FAILED", message: "根目录移除失败。" },
+        error: { code: "REMOVE_ROOT_FAILED", message: "根目录移除失败，未删除任何真实漫画文件。" },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:重排根目录", async (_事件, orderedPaths: unknown) => {
+    if (!Array.isArray(orderedPaths) || !orderedPaths.every((根路径) => typeof 根路径 === "string")) {
+      return {
+        ok: false,
+        error: { code: "INVALID_ROOT_ORDER", message: "资源目录排序数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 重排根目录(orderedPaths) };
+    } catch {
+      return {
+        ok: false,
+        error: { code: "REORDER_ROOTS_FAILED", message: "资源目录顺序保存失败，未改动任何本地文件。" },
       };
     }
   });
@@ -569,7 +732,7 @@ function 注册安全通道(): void {
         sourcePath: 资源路径,
         sourceType: 输入.sourceType,
         title: 输入.title,
-      } satisfies Omit<FavoriteItem, "addedAt" | "updatedAt">);
+      } satisfies Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex">);
       return { ok: true, data: 收藏 };
     } catch {
       return {
@@ -613,6 +776,24 @@ function 注册安全通道(): void {
       return {
         ok: false,
         error: { code: "SAVE_FAVORITE_META_FAILED", message: "收藏备注和标签保存失败。" },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:重排收藏", async (_事件, orderedResourceKeys: unknown) => {
+    if (!Array.isArray(orderedResourceKeys) || !orderedResourceKeys.every((key) => typeof key === "string")) {
+      return {
+        ok: false,
+        error: { code: "INVALID_FAVORITE_ORDER", message: "收藏排序数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 重排收藏(orderedResourceKeys) };
+    } catch {
+      return {
+        ok: false,
+        error: { code: "REORDER_FAVORITES_FAILED", message: "收藏顺序保存失败，只会影响 OmiComic 内部显示顺序。" },
       };
     }
   });
@@ -689,11 +870,108 @@ function 注册安全通道(): void {
     }
   });
 
+  ipcMain.handle("数据:创建书架", async (_事件, 输入: unknown) => {
+    if (typeof 输入 !== "object" || 输入 === null || !("name" in 输入) || typeof 输入.name !== "string") {
+      return {
+        ok: false,
+        error: { code: "INVALID_BOOKSHELF_NAME", message: "书架栏名称不能为空。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 创建书架({ name: 输入.name }) };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "CREATE_BOOKSHELF_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "BOOKSHELF_NAME_EXISTS" ? "已存在同名书架栏。" : "书架栏创建失败。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:更新书架", async (_事件, 输入: unknown) => {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("id" in 输入)
+      || !("name" in 输入)
+      || typeof 输入.id !== "string"
+      || typeof 输入.name !== "string"
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_BOOKSHELF", message: "书架栏数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 更新书架({ id: 输入.id, name: 输入.name }) };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "UPDATE_BOOKSHELF_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "BOOKSHELF_NAME_EXISTS"
+            ? "已存在同名书架栏。"
+            : code === "INVALID_BOOKSHELF_NAME"
+              ? "书架栏名称不能为空。"
+              : "书架栏保存失败。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:重排书架", async (_事件, orderedIds: unknown) => {
+    if (!Array.isArray(orderedIds) || !orderedIds.every((id) => typeof id === "string")) {
+      return {
+        ok: false,
+        error: { code: "INVALID_BOOKSHELF_ORDER", message: "书架栏排序数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 重排书架(orderedIds) };
+    } catch {
+      return {
+        ok: false,
+        error: { code: "REORDER_BOOKSHELF_FAILED", message: "书架栏排序保存失败。" },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:删除书架", async (_事件, id: unknown) => {
+    if (typeof id !== "string" || id.trim() === "") {
+      return {
+        ok: false,
+        error: { code: "INVALID_BOOKSHELF", message: "书架栏数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 删除书架(id) };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "DELETE_BOOKSHELF_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "BOOKSHELF_MINIMUM_REQUIRED"
+            ? "至少需要保留一个书架栏。"
+            : "书架栏删除失败。此操作不会删除任何真实漫画文件。",
+        },
+      };
+    }
+  });
+
   ipcMain.handle("数据:创建虚拟文件夹", async (_事件, 输入: unknown) => {
     if (typeof 输入 !== "object" || 输入 === null || !("name" in 输入) || typeof 输入.name !== "string") {
       return {
         ok: false,
-        error: { code: "INVALID_VIRTUAL_FOLDER_NAME", message: "自定义文件夹名称不能为空。" },
+        error: { code: "INVALID_VIRTUAL_FOLDER_NAME", message: "书架名称不能为空。" },
       };
     }
 
@@ -701,6 +979,7 @@ function 注册安全通道(): void {
       const 文件夹 = await 创建虚拟文件夹({
         name: 输入.name,
         note: "note" in 输入 && typeof 输入.note === "string" ? 输入.note : undefined,
+        bookshelfId: "bookshelfId" in 输入 && typeof 输入.bookshelfId === "string" ? 输入.bookshelfId : undefined,
       });
       return { ok: true, data: 文件夹 };
     } catch (错误) {
@@ -709,7 +988,7 @@ function 注册安全通道(): void {
         ok: false,
         error: {
           code,
-          message: code === "VIRTUAL_FOLDER_NAME_EXISTS" ? "已存在同名自定义文件夹。" : "自定义文件夹创建失败。",
+          message: code === "VIRTUAL_FOLDER_NAME_EXISTS" ? "已存在同名书架。" : "书架创建失败。",
         },
       };
     }
@@ -719,7 +998,7 @@ function 注册安全通道(): void {
     if (typeof 输入 !== "object" || 输入 === null || !("id" in 输入) || typeof 输入.id !== "string") {
       return {
         ok: false,
-        error: { code: "INVALID_VIRTUAL_FOLDER", message: "自定义文件夹数据无效。" },
+        error: { code: "INVALID_VIRTUAL_FOLDER", message: "书架数据无效。" },
       };
     }
 
@@ -728,6 +1007,9 @@ function 注册安全通道(): void {
         id: 输入.id,
         name: "name" in 输入 && typeof 输入.name === "string" ? 输入.name : undefined,
         note: "note" in 输入 && typeof 输入.note === "string" ? 输入.note : undefined,
+        coverResourceKey: "coverResourceKey" in 输入 && (typeof 输入.coverResourceKey === "string" || 输入.coverResourceKey === null)
+          ? 输入.coverResourceKey
+          : undefined,
       });
       return { ok: true, data: 文件夹 };
     } catch (错误) {
@@ -737,11 +1019,31 @@ function 注册安全通道(): void {
         error: {
           code,
           message: code === "VIRTUAL_FOLDER_NAME_EXISTS"
-            ? "已存在同名自定义文件夹。"
+            ? "已存在同名书架。"
             : code === "INVALID_VIRTUAL_FOLDER_NAME"
-              ? "自定义文件夹名称不能为空。"
-              : "自定义文件夹保存失败。",
+              ? "书架名称不能为空。"
+              : code === "INVALID_VIRTUAL_FOLDER_COVER"
+                ? "只能将当前书架内的资源设为封面。"
+                : "书架保存失败。",
         },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:重排虚拟文件夹", async (_事件, orderedIds: unknown) => {
+    if (!Array.isArray(orderedIds) || !orderedIds.every((id) => typeof id === "string")) {
+      return {
+        ok: false,
+        error: { code: "INVALID_VIRTUAL_FOLDER_ORDER", message: "书架排序数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 重排虚拟文件夹(orderedIds) };
+    } catch {
+      return {
+        ok: false,
+        error: { code: "REORDER_VIRTUAL_FOLDER_FAILED", message: "书架排序保存失败。" },
       };
     }
   });
@@ -750,18 +1052,21 @@ function 注册安全通道(): void {
     if (typeof id !== "string" || id.trim() === "") {
       return {
         ok: false,
-        error: { code: "INVALID_VIRTUAL_FOLDER", message: "自定义文件夹数据无效。" },
+        error: { code: "INVALID_VIRTUAL_FOLDER", message: "书架数据无效。" },
       };
     }
 
     try {
       return { ok: true, data: await 删除虚拟文件夹(id) };
-    } catch {
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "DELETE_VIRTUAL_FOLDER_FAILED";
       return {
         ok: false,
         error: {
-          code: "DELETE_VIRTUAL_FOLDER_FAILED",
-          message: "自定义文件夹删除失败。此操作不会删除任何真实漫画文件。",
+          code,
+          message: code === "VIRTUAL_FOLDER_MINIMUM_REQUIRED"
+            ? "至少需要保留一个书架。"
+            : "书架删除失败。此操作不会删除任何真实漫画文件。",
         },
       };
     }
@@ -778,34 +1083,11 @@ function 注册安全通道(): void {
     ) {
       return {
         ok: false,
-        error: { code: "INVALID_VIRTUAL_FOLDER_ITEMS", message: "加入自定义文件夹的数据无效。" },
+        error: { code: "INVALID_VIRTUAL_FOLDER_ITEMS", message: "加入书架的数据无效。" },
       };
     }
 
-    const 项目列表 = 输入.items.filter((项目): 项目 is {
-      resourceKey: string;
-      sourcePath: string;
-      sourceType: 资源类型;
-      title: string;
-    } => (
-      typeof 项目 === "object"
-      && 项目 !== null
-      && "resourceKey" in 项目
-      && "sourcePath" in 项目
-      && "sourceType" in 项目
-      && "title" in 项目
-      && typeof 项目.resourceKey === "string"
-      && typeof 项目.sourcePath === "string"
-      && typeof 项目.title === "string"
-      && (
-        项目.sourceType === "folder"
-        || 项目.sourceType === "image"
-        || 项目.sourceType === "archive"
-        || 项目.sourceType === "pdf"
-        || 项目.sourceType === "epub"
-        || 项目.sourceType === "unknown"
-      )
-    ));
+    const 项目列表 = 筛选虚拟文件夹项目输入列表(输入.items);
 
     try {
       return { ok: true, data: await 添加虚拟文件夹项目(输入.folderId, 项目列表) };
@@ -815,7 +1097,7 @@ function 注册安全通道(): void {
         ok: false,
         error: {
           code,
-          message: code === "VIRTUAL_FOLDER_NOT_FOUND" ? "未找到目标自定义文件夹。" : "加入自定义文件夹失败。",
+          message: code === "VIRTUAL_FOLDER_NOT_FOUND" ? "未找到目标书架。" : "加入书架失败。",
         },
       };
     }
@@ -832,7 +1114,7 @@ function 注册安全通道(): void {
     ) {
       return {
         ok: false,
-        error: { code: "INVALID_VIRTUAL_FOLDER_ITEM", message: "自定义文件夹项目数据无效。" },
+        error: { code: "INVALID_VIRTUAL_FOLDER_ITEM", message: "书架项目数据无效。" },
       };
     }
 
@@ -845,8 +1127,244 @@ function 注册安全通道(): void {
         error: {
           code,
           message: code === "VIRTUAL_FOLDER_NOT_FOUND"
-            ? "未找到目标自定义文件夹。"
-            : "从自定义文件夹移除失败。此操作不会删除真实漫画文件。",
+            ? "未找到目标书架。"
+            : "从书架移除失败。此操作不会删除真实漫画文件。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:批量移除虚拟文件夹项目", async (_事件, 输入: unknown) => {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("folderId" in 输入)
+      || !("resourceKeys" in 输入)
+      || typeof 输入.folderId !== "string"
+      || !Array.isArray(输入.resourceKeys)
+      || !输入.resourceKeys.every((key) => typeof key === "string")
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_VIRTUAL_FOLDER_ITEMS", message: "书架项目数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 移除虚拟文件夹项目列表(输入.folderId, 输入.resourceKeys) };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "REMOVE_VIRTUAL_FOLDER_ITEMS_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "VIRTUAL_FOLDER_NOT_FOUND"
+            ? "未找到目标书架。"
+            : "从书架批量移除失败。此操作只修改 OmiComic 内部引用，不会删除真实漫画文件。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:清空虚拟文件夹项目", async (_事件, folderId: unknown) => {
+    if (typeof folderId !== "string" || folderId.trim() === "") {
+      return {
+        ok: false,
+        error: { code: "INVALID_VIRTUAL_FOLDER", message: "书架数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 清空虚拟文件夹项目(folderId) };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "CLEAR_VIRTUAL_FOLDER_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "VIRTUAL_FOLDER_NOT_FOUND"
+            ? "未找到目标书架。"
+            : "清空书架失败。此操作只修改 OmiComic 内部引用，不会删除真实漫画文件。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:清理失效资源记录", async (_事件, 输入: unknown) => {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("sourcePaths" in 输入)
+      || !("resourceKeys" in 输入)
+      || !Array.isArray(输入.sourcePaths)
+      || !Array.isArray(输入.resourceKeys)
+      || !输入.sourcePaths.every((项目) => typeof 项目 === "string")
+      || !输入.resourceKeys.every((项目) => typeof 项目 === "string")
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_INVALID_RESOURCE_INPUT", message: "失效资源清理数据无效。" },
+      };
+    }
+
+    try {
+      return {
+        ok: true,
+        data: await 清理失效资源记录({
+          sourcePaths: 输入.sourcePaths,
+          resourceKeys: 输入.resourceKeys,
+        }),
+      };
+    } catch {
+      return {
+        ok: false,
+        error: {
+          code: "CLEAR_INVALID_RESOURCE_RECORDS_FAILED",
+          message: "清理失效资源记录失败。此操作只修改 OmiComic 内部记录，不会删除、移动或复制真实漫画文件。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:重排虚拟文件夹项目", async (_事件, 输入: unknown) => {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("folderId" in 输入)
+      || !("orderedResourceKeys" in 输入)
+      || typeof 输入.folderId !== "string"
+      || !Array.isArray(输入.orderedResourceKeys)
+      || !输入.orderedResourceKeys.every((key) => typeof key === "string")
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_VIRTUAL_FOLDER_ITEM_ORDER", message: "书架内部排序数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 重排虚拟文件夹项目(输入.folderId, 输入.orderedResourceKeys) };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "REORDER_VIRTUAL_FOLDER_ITEMS_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "VIRTUAL_FOLDER_NOT_FOUND"
+            ? "未找到目标书架。"
+            : "书架内部排序保存失败。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:移动虚拟文件夹项目", async (_事件, 输入: unknown) => {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("fromFolderId" in 输入)
+      || !("toFolderId" in 输入)
+      || !("item" in 输入)
+      || typeof 输入.fromFolderId !== "string"
+      || typeof 输入.toFolderId !== "string"
+      || typeof 输入.item !== "object"
+      || 输入.item === null
+      || !("resourceKey" in 输入.item)
+      || !("sourcePath" in 输入.item)
+      || !("sourceType" in 输入.item)
+      || !("title" in 输入.item)
+      || typeof 输入.item.resourceKey !== "string"
+      || typeof 输入.item.sourcePath !== "string"
+      || typeof 输入.item.title !== "string"
+      || (
+        输入.item.sourceType !== "folder"
+        && 输入.item.sourceType !== "image"
+        && 输入.item.sourceType !== "archive"
+        && 输入.item.sourceType !== "pdf"
+        && 输入.item.sourceType !== "epub"
+        && 输入.item.sourceType !== "unknown"
+      )
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_VIRTUAL_FOLDER_ITEM", message: "书架项目数据无效。" },
+      };
+    }
+
+    try {
+      return {
+        ok: true,
+        data: await 移动虚拟文件夹项目({
+          fromFolderId: 输入.fromFolderId,
+          toFolderId: 输入.toFolderId,
+          item: {
+            resourceKey: 输入.item.resourceKey,
+            sourcePath: 输入.item.sourcePath,
+            sourceType: 输入.item.sourceType,
+            title: 输入.item.title,
+          },
+        }),
+      };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "MOVE_VIRTUAL_FOLDER_ITEM_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "VIRTUAL_FOLDER_NOT_FOUND"
+            ? "未找到目标书架。"
+            : code === "SAME_VIRTUAL_FOLDER"
+              ? "请选择其他书架。"
+              : code === "INVALID_VIRTUAL_FOLDER_MOVE_TARGET"
+                ? "请选择有效的目标书架。"
+                : code === "VIRTUAL_FOLDER_ITEM_NOT_FOUND"
+                  ? "当前书架中已没有该资源。"
+                  : "移动到书架失败。此操作不会移动或删除真实漫画文件。",
+        },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:批量移动虚拟文件夹项目", async (_事件, 输入: unknown) => {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("fromFolderId" in 输入)
+      || !("toFolderId" in 输入)
+      || !("items" in 输入)
+      || typeof 输入.fromFolderId !== "string"
+      || typeof 输入.toFolderId !== "string"
+      || !Array.isArray(输入.items)
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_VIRTUAL_FOLDER_ITEM", message: "书架项目数据无效。" },
+      };
+    }
+
+    const 项目列表 = 筛选虚拟文件夹项目输入列表(输入.items);
+    try {
+      return {
+        ok: true,
+        data: await 移动虚拟文件夹项目列表({
+          fromFolderId: 输入.fromFolderId,
+          toFolderId: 输入.toFolderId,
+          items: 项目列表,
+        }),
+      };
+    } catch (错误) {
+      const code = 错误 instanceof Error ? 错误.message : "MOVE_VIRTUAL_FOLDER_ITEMS_FAILED";
+      return {
+        ok: false,
+        error: {
+          code,
+          message: code === "VIRTUAL_FOLDER_NOT_FOUND"
+            ? "未找到目标书架。"
+            : code === "SAME_VIRTUAL_FOLDER"
+              ? "请选择其他书架。"
+              : code === "VIRTUAL_FOLDER_ITEM_NOT_FOUND"
+                ? "当前书架中已没有这些资源。"
+                : "批量移动到书架失败。此操作只修改 OmiComic 内部引用，不会移动或删除真实漫画文件。",
         },
       };
     }
@@ -917,7 +1435,7 @@ function 注册安全通道(): void {
         thumbnailUrl: "thumbnailUrl" in 输入 && typeof 输入.thumbnailUrl === "string"
           ? 输入.thumbnailUrl
           : undefined,
-      } satisfies Omit<BookmarkItem, "id" | "createdAt" | "updatedAt">);
+      } satisfies Omit<BookmarkItem, "id" | "createdAt" | "updatedAt" | "sortIndex">);
       return { ok: true, data: 结果 };
     } catch {
       return {
@@ -961,6 +1479,24 @@ function 注册安全通道(): void {
       return {
         ok: false,
         error: { code: "SAVE_BOOKMARK_META_FAILED", message: "书签备注和标签保存失败。" },
+      };
+    }
+  });
+
+  ipcMain.handle("数据:重排书签", async (_事件, orderedIds: unknown) => {
+    if (!Array.isArray(orderedIds) || !orderedIds.every((id) => typeof id === "string")) {
+      return {
+        ok: false,
+        error: { code: "INVALID_BOOKMARK_ORDER", message: "书签排序数据无效。" },
+      };
+    }
+
+    try {
+      return { ok: true, data: await 重排书签(orderedIds) };
+    } catch {
+      return {
+        ok: false,
+        error: { code: "REORDER_BOOKMARKS_FAILED", message: "书签顺序保存失败，只会影响 OmiComic 内部显示顺序。" },
       };
     }
   });
@@ -1386,9 +1922,14 @@ function 注册安全通道(): void {
         const 图片数据 = await 读取压缩包单张图片(来源路径, 内部路径);
         if (会话已过期()) return 创建过期会话结果();
         const 媒体类型 = 获取图片媒体类型(内部路径);
+        const 图片尺寸 = 读取图片像素尺寸(图片数据);
         return {
           ok: true,
-          data: { url: `data:${媒体类型};base64,${图片数据.toString("base64")}` },
+          data: {
+            url: `data:${媒体类型};base64,${图片数据.toString("base64")}`,
+            width: 图片尺寸?.width,
+            height: 图片尺寸?.height,
+          },
         };
       } catch (错误) {
         const 错误代码 = 是压缩包服务错误(错误) ? 错误.code : "ARCHIVE_PAGE_READ_FAILED";
@@ -1418,9 +1959,14 @@ function 注册安全通道(): void {
       const 图片数据 = await 文件系统.readFile(来源路径);
       if (会话已过期()) return 创建过期会话结果();
       const 媒体类型 = 获取图片媒体类型(来源路径);
+      const 图片尺寸 = 读取图片像素尺寸(图片数据);
       return {
         ok: true,
-        data: { url: `data:${媒体类型};base64,${图片数据.toString("base64")}` },
+        data: {
+          url: `data:${媒体类型};base64,${图片数据.toString("base64")}`,
+          width: 图片尺寸?.width,
+          height: 图片尺寸?.height,
+        },
       };
     } catch {
       return {
@@ -1473,6 +2019,57 @@ function 注册安全通道(): void {
       return {
         ok: false,
         error: { code: "THUMBNAIL_READ_FAILED", message: "缩略图读取失败。" },
+      };
+    }
+  });
+
+  ipcMain.handle("资源:检查路径状态", async (_事件, 输入: unknown) => {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("path" in 输入)
+      || typeof 输入.path !== "string"
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_RESOURCE_PATH", message: "资源路径无效。" },
+      };
+    }
+
+    const 目标路径 = 规范化路径(输入.path);
+    if (!查找所属根目录(目标路径)) {
+      return {
+        ok: true,
+        data: {
+          path: 目标路径,
+          exists: false,
+          readable: false,
+          reason: "当前资源不在已授权的漫画目录内。",
+        },
+      };
+    }
+
+    try {
+      await 文件系统.access(目标路径);
+      const 状态 = await 文件系统.stat(目标路径);
+      return {
+        ok: true,
+        data: {
+          path: 目标路径,
+          exists: true,
+          readable: true,
+          isDirectory: 状态.isDirectory(),
+        },
+      };
+    } catch {
+      return {
+        ok: true,
+        data: {
+          path: 目标路径,
+          exists: false,
+          readable: false,
+          reason: "资源原路径不存在或当前不可读取。",
+        },
       };
     }
   });
@@ -1547,13 +2144,14 @@ function 注册安全通道(): void {
 
 function 创建主窗口(): void {
   const 主窗口 = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: 1440,
+    height: 900,
     minWidth: 960,
     minHeight: 640,
     title: "OmiComic 本地漫画阅读器",
-    backgroundColor: "#f5f2eb",
+    backgroundColor: "#e9ebee",
     autoHideMenuBar: true,
+    frame: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

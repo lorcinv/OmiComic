@@ -1,18 +1,17 @@
 :root {
-  --背景色: #f5f2eb;
-  --面板色: #fffdf8;
-  --深色面板: #1e2523;
-  --主文字: #25302d;
-  --次文字: #6c7773;
-  --边框色: #dedbd2;
-  --强调色: #2f7365;
-  --强调浅色: #dcece6;
-  --阅读背景: #252928;
-  --阴影: 0 18px 48px rgba(40, 49, 46, 0.08);
+  --背景色: #e9ebee;
+  --面板色: #fbfbfc;
+  --深色面板: #f7f8f9;
+  --主文字: #20242a;
+  --次文字: #747b85;
+  --边框色: #dde0e5;
+  --强调色: #4e5968;
+  --强调浅色: #eceff3;
+  --阅读背景: #e2e5e9;
+  --阴影: 0 18px 50px rgba(28, 33, 40, 0.10);
   color: var(--主文字);
   background: var(--背景色);
   font-family: "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
-

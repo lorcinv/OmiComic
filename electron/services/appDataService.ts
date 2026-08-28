@@ -1,4 +1,5 @@
 import { app } from "electron";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 
@@ -13,10 +14,12 @@ export type 进度条粗细 = "thin" | "normal" | "thick";
 export type 阅读器缩放模式 = "fit-width" | "fit-height" | "original";
 export type 阅读器页模式 = "single" | "double";
 export type 双页阅读方向 = "left-to-right" | "right-to-left";
+export type 阅读流向 = "horizontal" | "vertical";
 export type 沉浸自动隐藏延迟 = 500 | 1000 | 1500 | 2000 | 2500 | 3000;
 export type 图书切换按钮透明度 = 20 | 30 | 40 | 50 | 60 | 70 | 80;
 export type 整理侧边栏透明度 = 70 | 80 | 90 | 100;
 export type 书架备注悬停延迟 = 0 | 500 | 1000 | 1500 | 2000;
+export type 最近打开记录上限 = 50 | 100 | 150 | 200;
 export type 批量删除确认类型 = "favorites" | "bookmarks" | "recent";
 export type 标签搜索模式 = "fuzzy" | "exact";
 
@@ -42,18 +45,36 @@ export interface AppSettings {
   progressBarThickness: 进度条粗细;
   readerDefaultFitMode: 阅读器缩放模式;
   readerPageMode: 阅读器页模式;
+  readerDefaultFlow: 阅读流向;
+  readerDefaultPanorama: boolean;
+  readerDefaultImmersive: boolean;
   doublePageFirstSingle: boolean;
   doublePageDirection: 双页阅读方向;
   smartDetectSpreadPage: boolean;
   wheelPageTurn: boolean;
   immersiveAutoHide: boolean;
   immersiveAutoHideDelay: 沉浸自动隐藏延迟;
+  readerHideFooterControls: boolean;
+  readerHideImmersiveProgress: boolean;
+  readerMemoryCacheSizeMb: number;
+  readerPreloadPages: number;
+  readerImageLoadConcurrency: number;
   bookSwitchButtonOpacity: 图书切换按钮透明度;
   organizeDrawerOpacity: 整理侧边栏透明度;
   bookshelfNoteHoverDelayMs: 书架备注悬停延迟;
+  recentOpenedLimit: 最近打开记录上限;
   tagSearchMode: 标签搜索模式;
   confirmBeforeDeleteTags: boolean;
   confirmBeforeBatchDelete: 批量删除确认设置;
+}
+
+export interface ReaderViewState {
+  fitMode: 阅读器缩放模式;
+  pageMode: 阅读器页模式;
+  pageDirection: 双页阅读方向;
+  flow: 阅读流向;
+  panorama: boolean;
+  immersive: boolean;
 }
 
 export interface ReadingProgress {
@@ -69,6 +90,7 @@ export interface ReadingProgress {
   hasStartedReading: boolean;
   firstReadAt: number;
   updatedAt: number;
+  readerViewState?: ReaderViewState;
 }
 
 export interface RecentOpenedItem {
@@ -90,6 +112,7 @@ export interface FavoriteItem {
   tags?: string[];
   addedAt: number;
   updatedAt: number;
+  sortIndex: number;
 }
 
 export interface BookmarkItem {
@@ -107,6 +130,7 @@ export interface BookmarkItem {
   tags?: string[];
   createdAt: number;
   updatedAt: number;
+  sortIndex: number;
 }
 
 export interface 整理信息输入 {
@@ -144,10 +168,20 @@ export interface VirtualFolderItem {
 
 export interface VirtualFolder {
   id: string;
+  bookshelfId: string;
   name: string;
   note: string;
   tags: string[];
+  coverResourceKey?: string;
   items: VirtualFolderItem[];
+  createdAt: number;
+  updatedAt: number;
+  sortIndex: number;
+}
+
+export interface Bookshelf {
+  id: string;
+  name: string;
   createdAt: number;
   updatedAt: number;
   sortIndex: number;
@@ -170,15 +204,18 @@ export interface OmiComicAppData {
   settings: AppSettings;
   readingProgress: Record<string, ReadingProgress>;
   recentOpened: RecentOpenedItem[];
+  removedRecentResourceKeys: string[];
   favorites: FavoriteItem[];
   bookmarks: BookmarkItem[];
   resourceMeta: Record<string, ResourceMetaItem>;
   tagOrder: string[];
+  bookshelves: Bookshelf[];
   virtualFolders: VirtualFolder[];
 }
 
 const 数据版本 = 1;
-const 最近打开最大数量 = 50;
+const 最近打开默认上限: 最近打开记录上限 = 50;
+const 默认书架ID = "bookshelf-default";
 const 每页数量选项 = new Set<number>([60, 100, 150, 200]);
 const 卡片尺寸选项 = new Set<string>(["small", "medium", "large"]);
 const 排序方式选项 = new Set<string>(["name-asc", "name-desc", "time-asc", "time-desc", "type"]);
@@ -187,10 +224,12 @@ const 进度条粗细选项 = new Set<string>(["thin", "normal", "thick"]);
 const 阅读器缩放模式选项 = new Set<string>(["fit-width", "fit-height", "original"]);
 const 阅读器页模式选项 = new Set<string>(["single", "double"]);
 const 双页阅读方向选项 = new Set<string>(["left-to-right", "right-to-left"]);
+const 阅读流向选项 = new Set<string>(["horizontal", "vertical"]);
 const 沉浸自动隐藏延迟选项 = new Set<number>([500, 1000, 1500, 2000, 2500, 3000]);
 const 图书切换按钮透明度选项 = new Set<number>([20, 30, 40, 50, 60, 70, 80]);
 const 整理侧边栏透明度选项 = new Set<number>([70, 80, 90, 100]);
 const 书架备注悬停延迟选项 = new Set<number>([0, 500, 1000, 1500, 2000]);
+const 最近打开记录上限选项 = new Set<number>([50, 100, 150, 200]);
 const 标签搜索模式选项 = new Set<string>(["fuzzy", "exact"]);
 const 资源类型选项 = new Set<string>(["folder", "image", "archive", "pdf", "epub", "unknown"]);
 
@@ -207,15 +246,24 @@ const 默认设置: AppSettings = {
   progressBarThickness: "normal",
   readerDefaultFitMode: "fit-height",
   readerPageMode: "single",
+  readerDefaultFlow: "horizontal",
+  readerDefaultPanorama: false,
+  readerDefaultImmersive: false,
   doublePageFirstSingle: true,
-  doublePageDirection: "right-to-left",
+  doublePageDirection: "left-to-right",
   smartDetectSpreadPage: true,
   wheelPageTurn: true,
   immersiveAutoHide: false,
   immersiveAutoHideDelay: 3000,
+  readerHideFooterControls: false,
+  readerHideImmersiveProgress: false,
+  readerMemoryCacheSizeMb: 200,
+  readerPreloadPages: 5,
+  readerImageLoadConcurrency: 4,
   bookSwitchButtonOpacity: 40,
   organizeDrawerOpacity: 90,
   bookshelfNoteHoverDelayMs: 1000,
+  recentOpenedLimit: 最近打开默认上限,
   tagSearchMode: "fuzzy",
   confirmBeforeDeleteTags: true,
   confirmBeforeBatchDelete: {
@@ -226,6 +274,22 @@ const 默认设置: AppSettings = {
 };
 
 let 数据缓存: OmiComicAppData | null = null;
+let 数据读取任务: Promise<OmiComicAppData> | null = null;
+let 数据变更队列: Promise<void> = Promise.resolve();
+const 数据变更上下文 = new AsyncLocalStorage<boolean>();
+
+function 正在数据变更事务中(): boolean {
+  return 数据变更上下文.getStore() === true;
+}
+
+function 排队执行数据变更<T>(操作: () => Promise<T>): Promise<T> {
+  const 当前任务 = 数据变更队列.then(() => 数据变更上下文.run(true, 操作));
+  数据变更队列 = 当前任务.then(
+    () => undefined,
+    () => undefined,
+  );
+  return 当前任务;
+}
 
 function 获取数据文件路径(): string {
   return path.join(app.getPath("userData"), "omicomic-data.json");
@@ -240,10 +304,12 @@ function 创建默认数据(): OmiComicAppData {
     settings: { ...默认设置 },
     readingProgress: {},
     recentOpened: [],
+    removedRecentResourceKeys: [],
     favorites: [],
     bookmarks: [],
     resourceMeta: {},
     tagOrder: [],
+    bookshelves: [创建默认书架()],
     virtualFolders: [],
   };
 }
@@ -285,6 +351,12 @@ function 读取数字(值: unknown): number | undefined {
   return typeof 值 === "number" && Number.isFinite(值) ? 值 : undefined;
 }
 
+function 读取范围整数(值: unknown, 默认值: number, 最小值: number, 最大值: number): number {
+  const 数字 = 读取数字(值);
+  if (数字 === undefined) return 默认值;
+  return Math.min(Math.max(Math.round(数字), 最小值), 最大值);
+}
+
 function 修正设置(输入: unknown): AppSettings {
   const 设置 = 是对象(输入) ? 输入 : {};
   const 删除前确认 = 是对象(设置.confirmBeforeBatchDelete) ? 设置.confirmBeforeBatchDelete : {};
@@ -310,6 +382,9 @@ function 修正设置(输入: unknown): AppSettings {
   const readerPageMode = 阅读器页模式选项.has(String(设置.readerPageMode))
     ? 设置.readerPageMode as 阅读器页模式
     : 默认设置.readerPageMode;
+  const readerDefaultFlow = 阅读流向选项.has(String(设置.readerDefaultFlow))
+    ? 设置.readerDefaultFlow as 阅读流向
+    : 默认设置.readerDefaultFlow;
   const doublePageDirection = 双页阅读方向选项.has(String(设置.doublePageDirection))
     ? 设置.doublePageDirection as 双页阅读方向
     : 默认设置.doublePageDirection;
@@ -325,9 +400,30 @@ function 修正设置(输入: unknown): AppSettings {
   const bookshelfNoteHoverDelayMs = 书架备注悬停延迟选项.has(Number(设置.bookshelfNoteHoverDelayMs))
     ? Number(设置.bookshelfNoteHoverDelayMs) as 书架备注悬停延迟
     : 默认设置.bookshelfNoteHoverDelayMs;
+  const recentOpenedLimit = 最近打开记录上限选项.has(Number(设置.recentOpenedLimit))
+    ? Number(设置.recentOpenedLimit) as 最近打开记录上限
+    : 默认设置.recentOpenedLimit;
   const tagSearchMode = 标签搜索模式选项.has(String(设置.tagSearchMode))
     ? 设置.tagSearchMode as 标签搜索模式
     : 默认设置.tagSearchMode;
+  const readerMemoryCacheSizeMb = 读取范围整数(
+    设置.readerMemoryCacheSizeMb,
+    默认设置.readerMemoryCacheSizeMb,
+    0,
+    2048,
+  );
+  const readerPreloadPages = 读取范围整数(
+    设置.readerPreloadPages,
+    默认设置.readerPreloadPages,
+    0,
+    20,
+  );
+  const readerImageLoadConcurrency = 读取范围整数(
+    设置.readerImageLoadConcurrency,
+    默认设置.readerImageLoadConcurrency,
+    1,
+    8,
+  );
 
   return {
     cardSize,
@@ -348,6 +444,13 @@ function 修正设置(输入: unknown): AppSettings {
     progressBarThickness,
     readerDefaultFitMode,
     readerPageMode,
+    readerDefaultFlow,
+    readerDefaultPanorama: typeof 设置.readerDefaultPanorama === "boolean"
+      ? 设置.readerDefaultPanorama
+      : 默认设置.readerDefaultPanorama,
+    readerDefaultImmersive: typeof 设置.readerDefaultImmersive === "boolean"
+      ? 设置.readerDefaultImmersive
+      : 默认设置.readerDefaultImmersive,
     doublePageFirstSingle: typeof 设置.doublePageFirstSingle === "boolean"
       ? 设置.doublePageFirstSingle
       : 默认设置.doublePageFirstSingle,
@@ -360,9 +463,19 @@ function 修正设置(输入: unknown): AppSettings {
       ? 设置.immersiveAutoHide
       : 默认设置.immersiveAutoHide,
     immersiveAutoHideDelay,
+    readerHideFooterControls: typeof 设置.readerHideFooterControls === "boolean"
+      ? 设置.readerHideFooterControls
+      : 默认设置.readerHideFooterControls,
+    readerHideImmersiveProgress: typeof 设置.readerHideImmersiveProgress === "boolean"
+      ? 设置.readerHideImmersiveProgress
+      : 默认设置.readerHideImmersiveProgress,
+    readerMemoryCacheSizeMb,
+    readerPreloadPages,
+    readerImageLoadConcurrency,
     bookSwitchButtonOpacity,
     organizeDrawerOpacity,
     bookshelfNoteHoverDelayMs,
+    recentOpenedLimit,
     tagSearchMode,
     confirmBeforeDeleteTags: typeof 设置.confirmBeforeDeleteTags === "boolean"
       ? 设置.confirmBeforeDeleteTags
@@ -407,6 +520,29 @@ function 修正根目录列表(输入: unknown): LibraryRoot[] {
   }
 
   return 根目录列表;
+}
+
+function 修正阅读视图状态(输入: unknown): ReaderViewState | undefined {
+  if (!是对象(输入)) return undefined;
+  if (
+    !阅读器缩放模式选项.has(String(输入.fitMode))
+    || !阅读器页模式选项.has(String(输入.pageMode))
+    || !双页阅读方向选项.has(String(输入.pageDirection))
+    || !阅读流向选项.has(String(输入.flow))
+    || typeof 输入.panorama !== "boolean"
+    || typeof 输入.immersive !== "boolean"
+  ) {
+    return undefined;
+  }
+
+  return {
+    fitMode: 输入.fitMode as 阅读器缩放模式,
+    pageMode: 输入.pageMode as 阅读器页模式,
+    pageDirection: 输入.pageDirection as 双页阅读方向,
+    flow: 输入.flow as 阅读流向,
+    panorama: 输入.panorama,
+    immersive: 输入.immersive,
+  };
 }
 
 function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
@@ -455,13 +591,19 @@ function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
       hasStartedReading,
       firstReadAt,
       updatedAt,
+      readerViewState: 修正阅读视图状态(值.readerViewState),
     };
   }
 
   return 进度表;
 }
 
-function 修正最近打开(输入: unknown, 进度表: Record<string, ReadingProgress>): RecentOpenedItem[] {
+function 修正最近打开(
+  输入: unknown,
+  进度表: Record<string, ReadingProgress>,
+  上限: 最近打开记录上限,
+  已移除资源Key集合: ReadonlySet<string> = new Set(),
+): RecentOpenedItem[] {
   if (!Array.isArray(输入)) return [];
   const 已加入 = new Set<string>();
   const 最近列表: RecentOpenedItem[] = [];
@@ -479,6 +621,7 @@ function 修正最近打开(输入: unknown, 进度表: Record<string, ReadingPr
       || !title
       || totalPages <= 0
       || 已加入.has(resourceKey)
+      || 已移除资源Key集合.has(resourceKey)
       || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive")
     ) {
       continue;
@@ -504,7 +647,34 @@ function 修正最近打开(输入: unknown, 进度表: Record<string, ReadingPr
 
   return 最近列表
     .sort((左侧, 右侧) => 右侧.updatedAt - 左侧.updatedAt)
-    .slice(0, 最近打开最大数量);
+    .slice(0, 上限);
+}
+
+function 从阅读进度生成最近打开候选(进度表: Record<string, ReadingProgress>): RecentOpenedItem[] {
+  return Object.values(进度表).map((进度) => ({
+    resourceKey: 进度.resourceKey,
+    sourcePath: 进度.sourcePath,
+    sourceType: 进度.sourceType,
+    title: 进度.title,
+    currentPageIndex: 进度.currentPageIndex,
+    totalPages: 进度.totalPages,
+    updatedAt: 进度.updatedAt,
+  }));
+}
+
+function 修正最近打开并补足历史(
+  输入: unknown,
+  进度表: Record<string, ReadingProgress>,
+  上限: 最近打开记录上限,
+  已移除资源Key集合: ReadonlySet<string> = new Set(),
+): RecentOpenedItem[] {
+  const 输入列表 = Array.isArray(输入) ? 输入 : [];
+  return 修正最近打开(
+    [...输入列表, ...从阅读进度生成最近打开候选(进度表)],
+    进度表,
+    上限,
+    已移除资源Key集合,
+  );
 }
 
 function 修正收藏列表(输入: unknown): FavoriteItem[] {
@@ -538,11 +708,14 @@ function 修正收藏列表(输入: unknown): FavoriteItem[] {
       tags: 修正标签列表(项目.tags),
       addedAt: 读取数字(项目.addedAt) ?? 当前时间,
       updatedAt: 读取数字(项目.updatedAt) ?? 当前时间,
+      sortIndex: 读取数字(项目.sortIndex) ?? 收藏列表.length,
     });
     已加入.add(resourceKey);
   }
 
-  return 收藏列表.sort((左侧, 右侧) => 右侧.updatedAt - 左侧.updatedAt);
+  return 收藏列表
+    .sort((左侧, 右侧) => 左侧.sortIndex - 右侧.sortIndex || 右侧.updatedAt - 左侧.updatedAt)
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
 }
 
 function 创建书签ID(resourceKey: string, pageIndex: number): string {
@@ -593,11 +766,14 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
       tags: 修正标签列表(项目.tags),
       createdAt: 读取数字(项目.createdAt) ?? 当前时间,
       updatedAt: 读取数字(项目.updatedAt) ?? 当前时间,
+      sortIndex: 读取数字(项目.sortIndex) ?? 书签列表.length,
     });
     已加入.add(`${resourceKey}:${pageIndex}`);
   }
 
-  return 书签列表.sort((左侧, 右侧) => 右侧.updatedAt - 左侧.updatedAt);
+  return 书签列表
+    .sort((左侧, 右侧) => 左侧.sortIndex - 右侧.sortIndex || 右侧.updatedAt - 左侧.updatedAt)
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
 }
 
 function 修正资源元数据(输入: unknown): Record<string, ResourceMetaItem> {
@@ -629,6 +805,10 @@ function 创建虚拟文件夹ID(): string {
   return `vf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function 创建书架ID(): string {
+  return `bs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function 创建虚拟文件夹项目ID(folderId: string, resourceKey: string): string {
   return `${folderId}::${resourceKey}`;
 }
@@ -637,10 +817,57 @@ function 读取资源类型(输入: unknown): 资源类型 | undefined {
   return 资源类型选项.has(String(输入)) ? 输入 as 资源类型 : undefined;
 }
 
-function 修正虚拟文件夹列表(输入: unknown): VirtualFolder[] {
+function 创建默认书架(时间 = Date.now()): Bookshelf {
+  return {
+    id: 默认书架ID,
+    name: "书架栏",
+    createdAt: 时间,
+    updatedAt: 时间,
+    sortIndex: 0,
+  };
+}
+
+function 修正书架列表(输入: unknown): Bookshelf[] {
+  if (!Array.isArray(输入)) return [创建默认书架()];
+  const 已加入书架 = new Set<string>();
+  const 书架列表: Bookshelf[] = [];
+  const 已有非默认书架栏 = 输入.some((项目) => (
+    是对象(项目)
+    && 读取字符串(项目.id) !== 默认书架ID
+    && 读取字符串(项目.name) === "书架栏"
+  ));
+
+  for (const 项目 of 输入) {
+    if (!是对象(项目)) continue;
+    const id = 读取字符串(项目.id) ?? 创建书架ID();
+    if (已加入书架.has(id)) continue;
+    const 原名称 = 读取字符串(项目.name);
+    if (!原名称) continue;
+    const name = id === 默认书架ID && 原名称 === "书架" && !已有非默认书架栏 ? "书架栏" : 原名称;
+    const 当前时间 = Date.now();
+    const createdAt = 读取数字(项目.createdAt) ?? 当前时间;
+    书架列表.push({
+      id,
+      name,
+      createdAt,
+      updatedAt: 读取数字(项目.updatedAt) ?? createdAt,
+      sortIndex: 读取数字(项目.sortIndex) ?? 书架列表.length,
+    });
+    已加入书架.add(id);
+  }
+
+  if (书架列表.length === 0) return [创建默认书架()];
+  return 书架列表
+    .sort((左侧, 右侧) => 左侧.sortIndex - 右侧.sortIndex || 左侧.createdAt - 右侧.createdAt)
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+}
+
+function 修正虚拟文件夹列表(输入: unknown, 书架列表: Bookshelf[]): VirtualFolder[] {
   if (!Array.isArray(输入)) return [];
   const 已加入文件夹 = new Set<string>();
   const 文件夹列表: VirtualFolder[] = [];
+  const 默认归属书架ID = 书架列表[0]?.id ?? 默认书架ID;
+  const 书架ID集合 = new Set(书架列表.map((书架) => 书架.id));
 
   for (const 项目 of 输入) {
     if (!是对象(项目)) continue;
@@ -681,11 +908,17 @@ function 修正虚拟文件夹列表(输入: unknown): VirtualFolder[] {
     }
 
     items.sort((左侧, 右侧) => 左侧.sortIndex - 右侧.sortIndex || 左侧.addedAt - 右侧.addedAt);
+    const coverResourceKey = 读取字符串(项目.coverResourceKey);
+    const bookshelfId = 读取字符串(项目.bookshelfId);
     文件夹列表.push({
       id,
+      bookshelfId: bookshelfId && 书架ID集合.has(bookshelfId) ? bookshelfId : 默认归属书架ID,
       name,
       note: 读取可空文本(项目.note ?? 项目.description),
       tags: 修正标签列表(项目.tags),
+      coverResourceKey: coverResourceKey && items.some((资源) => 资源.resourceKey === coverResourceKey)
+        ? coverResourceKey
+        : undefined,
       items,
       createdAt,
       updatedAt,
@@ -736,7 +969,11 @@ function 修正应用数据(输入: unknown): OmiComicAppData {
   const favorites = 修正收藏列表(输入.favorites);
   const bookmarks = 修正书签列表(输入.bookmarks);
   const resourceMeta = 修正资源元数据(输入.resourceMeta);
-  const virtualFolders = 修正虚拟文件夹列表(输入.virtualFolders);
+  const bookshelves = 修正书架列表(输入.bookshelves);
+  const virtualFolders = 修正虚拟文件夹列表(输入.virtualFolders, bookshelves);
+  const settings = 修正设置(输入.settings);
+  const removedRecentResourceKeys = 修正标签列表(输入.removedRecentResourceKeys);
+  const 已移除最近资源Key集合 = new Set(removedRecentResourceKeys);
 
   return {
     version: 数据版本,
@@ -745,13 +982,20 @@ function 修正应用数据(输入: unknown): OmiComicAppData {
       lastActiveRootPath: 读取字符串(library.lastActiveRootPath),
       lastCurrentPath: 读取字符串(library.lastCurrentPath),
     },
-    settings: 修正设置(输入.settings),
+    settings,
     readingProgress: 进度表,
-    recentOpened: 修正最近打开(输入.recentOpened, 进度表),
+    recentOpened: 修正最近打开并补足历史(
+      输入.recentOpened,
+      进度表,
+      settings.recentOpenedLimit,
+      已移除最近资源Key集合,
+    ),
+    removedRecentResourceKeys,
     favorites,
     bookmarks,
     resourceMeta,
     tagOrder: 合并标签顺序(输入.tagOrder, { favorites, bookmarks, resourceMeta, virtualFolders }),
+    bookshelves,
     virtualFolders,
   };
 }
@@ -763,9 +1007,12 @@ async function 安全写入JSON(文件路径: string, 数据: OmiComicAppData): 
   await 文件系统.rename(临时路径, 文件路径);
 }
 
-export async function 读取应用数据(): Promise<OmiComicAppData> {
-  if (数据缓存) return 数据缓存;
+async function 直接保存应用数据(数据: OmiComicAppData): Promise<void> {
+  数据缓存 = 修正应用数据(数据);
+  await 安全写入JSON(获取数据文件路径(), 数据缓存);
+}
 
+async function 从磁盘读取应用数据(): Promise<OmiComicAppData> {
   const 文件路径 = 获取数据文件路径();
   try {
     const 原始内容 = await 文件系统.readFile(文件路径, "utf8");
@@ -779,24 +1026,46 @@ export async function 读取应用数据(): Promise<OmiComicAppData> {
     }
 
     数据缓存 = 创建默认数据();
-    await 保存应用数据(数据缓存).catch(() => undefined);
+    await 直接保存应用数据(数据缓存).catch(() => undefined);
     return 数据缓存;
   }
 }
 
+export async function 读取应用数据(): Promise<OmiComicAppData> {
+  if (数据读取任务) return 数据读取任务;
+  if (数据缓存) return 数据缓存;
+
+  const 当前读取任务 = 从磁盘读取应用数据();
+  数据读取任务 = 当前读取任务;
+  try {
+    return await 当前读取任务;
+  } finally {
+    if (数据读取任务 === 当前读取任务) 数据读取任务 = null;
+  }
+}
+
 export async function 保存应用数据(数据: OmiComicAppData): Promise<void> {
-  数据缓存 = 修正应用数据(数据);
-  await 安全写入JSON(获取数据文件路径(), 数据缓存);
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 保存应用数据(数据));
+  if (数据读取任务) await 数据读取任务;
+  await 直接保存应用数据(数据);
 }
 
 export async function 更新设置(局部设置: Partial<AppSettings>): Promise<AppSettings> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新设置(局部设置));
   const 数据 = await 读取应用数据();
   数据.settings = 修正设置({ ...数据.settings, ...局部设置 });
+  数据.recentOpened = 修正最近打开并补足历史(
+    数据.recentOpened,
+    数据.readingProgress,
+    数据.settings.recentOpenedLimit,
+    new Set(数据.removedRecentResourceKeys),
+  );
   await 保存应用数据(数据);
   return 数据.settings;
 }
 
 export async function 添加或更新根目录(根路径: string, 名称: string): Promise<LibraryRoot> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 添加或更新根目录(根路径, 名称));
   const 数据 = await 读取应用数据();
   const 当前时间 = Date.now();
   const 已有根目录 = 数据.library.roots.find((项目) => 项目.path === 根路径);
@@ -823,12 +1092,45 @@ export async function 添加或更新根目录(根路径: string, 名称: string
   return 根目录;
 }
 
-export async function 移除根目录(根路径: string): Promise<LibraryRoot[]> {
+export async function 重排根目录(orderedPaths: string[]): Promise<LibraryRoot[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 重排根目录(orderedPaths));
+  const 数据 = await 读取应用数据();
+  const 当前根目录表 = new Map(数据.library.roots.map((根目录) => [根目录.path, 根目录]));
+  const 新顺序 = orderedPaths.filter((根路径) => 根路径.trim() !== "");
+  const 新顺序集合 = new Set(新顺序);
+
+  if (
+    新顺序.length !== 数据.library.roots.length
+    || 新顺序集合.size !== 数据.library.roots.length
+    || 新顺序.some((根路径) => !当前根目录表.has(根路径))
+  ) {
+    throw new Error("INVALID_LIBRARY_ROOT_ORDER");
+  }
+
+  数据.library.roots = 新顺序.map((根路径) => 当前根目录表.get(根路径)!);
+  await 保存应用数据(数据);
+  return 数据.library.roots;
+}
+
+function 路径属于根目录(目标路径: string, 根路径: string): boolean {
+  const 规范目标 = path.resolve(目标路径);
+  const 规范根 = path.resolve(根路径);
+  const 比较目标 = process.platform === "win32" ? 规范目标.toLocaleLowerCase() : 规范目标;
+  const 比较根 = process.platform === "win32" ? 规范根.toLocaleLowerCase() : 规范根;
+  const 相对路径 = path.relative(比较根, 比较目标);
+  return 相对路径 === "" || (!相对路径.startsWith("..") && !path.isAbsolute(相对路径));
+}
+
+export async function 移除根目录(根路径: string): Promise<OmiComicAppData> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移除根目录(根路径));
   const 数据 = await 读取应用数据();
   const 删除前数量 = 数据.library.roots.length;
   数据.library.roots = 数据.library.roots.filter((项目) => 项目.path !== 根路径);
 
-  if (数据.library.lastActiveRootPath === 根路径 || 数据.library.lastCurrentPath === 根路径) {
+  if (
+    (数据.library.lastActiveRootPath && 路径属于根目录(数据.library.lastActiveRootPath, 根路径))
+    || (数据.library.lastCurrentPath && 路径属于根目录(数据.library.lastCurrentPath, 根路径))
+  ) {
     const 下一个根目录 = 数据.library.roots[0];
     if (下一个根目录) {
       数据.library.lastActiveRootPath = 下一个根目录.path;
@@ -839,16 +1141,50 @@ export async function 移除根目录(根路径: string): Promise<LibraryRoot[]>
     }
   }
 
+  数据.recentOpened = 数据.recentOpened.filter((项目) => !路径属于根目录(项目.sourcePath, 根路径));
+  数据.favorites = 数据.favorites
+    .filter((项目) => !路径属于根目录(项目.sourcePath, 根路径))
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  数据.bookmarks = 数据.bookmarks
+    .filter((项目) => !路径属于根目录(项目.sourcePath, 根路径))
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  数据.readingProgress = Object.fromEntries(
+    Object.entries(数据.readingProgress).filter(([, 项目]) => !路径属于根目录(项目.sourcePath, 根路径)),
+  );
+  数据.resourceMeta = Object.fromEntries(
+    Object.entries(数据.resourceMeta).filter(([, 项目]) => !路径属于根目录(项目.sourcePath, 根路径)),
+  );
+  数据.virtualFolders = 数据.virtualFolders.map((文件夹) => {
+    const 保留项目 = 文件夹.items.filter((项目) => !路径属于根目录(项目.sourcePath, 根路径));
+    return 保留项目.length === 文件夹.items.length
+      ? 文件夹
+      : {
+          ...文件夹,
+          coverResourceKey: 文件夹.coverResourceKey && 保留项目.some((项目) => 项目.resourceKey === 文件夹.coverResourceKey)
+            ? 文件夹.coverResourceKey
+            : undefined,
+          items: 保留项目.map((项目, 索引) => ({ ...项目, sortIndex: 索引 })),
+          updatedAt: Date.now(),
+        };
+  });
+  数据.tagOrder = 合并标签顺序(数据.tagOrder, {
+    favorites: 数据.favorites,
+    bookmarks: 数据.bookmarks,
+    resourceMeta: 数据.resourceMeta,
+    virtualFolders: 数据.virtualFolders,
+  });
+
   if (删除前数量 !== 数据.library.roots.length) {
     await 保存应用数据(数据);
   }
-  return 数据.library.roots;
+  return 读取应用数据();
 }
 
 export async function 更新资源库状态(状态: {
   lastActiveRootPath?: string;
   lastCurrentPath?: string;
 }): Promise<void> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新资源库状态(状态));
   const 数据 = await 读取应用数据();
   if (状态.lastActiveRootPath) 数据.library.lastActiveRootPath = 状态.lastActiveRootPath;
   if (状态.lastCurrentPath) 数据.library.lastCurrentPath = 状态.lastCurrentPath;
@@ -865,6 +1201,7 @@ export async function 获取阅读进度(resourceKey: string): Promise<ReadingPr
 }
 
 export async function 保存阅读进度(进度: ReadingProgress): Promise<ReadingProgress> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 保存阅读进度(进度));
   const 数据 = await 读取应用数据();
   const 已有进度 = 数据.readingProgress[进度.resourceKey];
   const totalPages = Math.max(1, Math.floor(进度.totalPages));
@@ -873,6 +1210,9 @@ export async function 保存阅读进度(进度: ReadingProgress): Promise<Readi
   const updatedAt = Date.now();
   const completed = currentPageIndex >= totalPages - 1;
   const hasStartedReading = Boolean(已有进度?.hasStartedReading || 进度.hasStartedReading || currentPageIndex > 0 || completed);
+  const readerViewState = 进度.readerViewState === undefined
+    ? 已有进度?.readerViewState
+    : 修正阅读视图状态(进度.readerViewState) ?? 已有进度?.readerViewState;
   const 修正进度: ReadingProgress = {
     ...进度,
     currentPageIndex,
@@ -882,9 +1222,13 @@ export async function 保存阅读进度(进度: ReadingProgress): Promise<Readi
     hasStartedReading,
     firstReadAt: 已有进度?.firstReadAt ?? 进度.firstReadAt ?? updatedAt,
     updatedAt,
+    readerViewState,
   };
 
   数据.readingProgress[修正进度.resourceKey] = 修正进度;
+  数据.removedRecentResourceKeys = 数据.removedRecentResourceKeys.filter(
+    (resourceKey) => resourceKey !== 修正进度.resourceKey,
+  );
   数据.recentOpened = [
     {
       resourceKey: 修正进度.resourceKey,
@@ -896,20 +1240,32 @@ export async function 保存阅读进度(进度: ReadingProgress): Promise<Readi
       updatedAt,
     },
     ...数据.recentOpened.filter((项目) => 项目.resourceKey !== 修正进度.resourceKey),
-  ].slice(0, 最近打开最大数量);
+  ].slice(0, 数据.settings.recentOpenedLimit);
 
   await 保存应用数据(数据);
   return 修正进度;
 }
 
 export async function 获取最近打开(): Promise<RecentOpenedItem[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 获取最近打开());
   const 数据 = await 读取应用数据();
+  数据.recentOpened = 修正最近打开并补足历史(
+    数据.recentOpened,
+    数据.readingProgress,
+    数据.settings.recentOpenedLimit,
+    new Set(数据.removedRecentResourceKeys),
+  );
+  await 保存应用数据(数据);
   return 数据.recentOpened;
 }
 
 export async function 移除最近打开(resourceKey: string): Promise<void> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移除最近打开(resourceKey));
   const 数据 = await 读取应用数据();
   数据.recentOpened = 数据.recentOpened.filter((项目) => 项目.resourceKey !== resourceKey);
+  if (!数据.removedRecentResourceKeys.includes(resourceKey)) {
+    数据.removedRecentResourceKeys.push(resourceKey);
+  }
   await 保存应用数据(数据);
 }
 
@@ -918,7 +1274,8 @@ export async function 获取收藏列表(): Promise<FavoriteItem[]> {
   return 数据.favorites;
 }
 
-export async function 添加收藏(输入: Omit<FavoriteItem, "addedAt" | "updatedAt">): Promise<FavoriteItem> {
+export async function 添加收藏(输入: Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex">): Promise<FavoriteItem> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 添加收藏(输入));
   const 数据 = await 读取应用数据();
   const 已有收藏 = 数据.favorites.find((项目) => 项目.resourceKey === 输入.resourceKey);
   const 当前时间 = Date.now();
@@ -931,6 +1288,7 @@ export async function 添加收藏(输入: Omit<FavoriteItem, "addedAt" | "updat
         note: 输入.note ?? 已有收藏.note ?? "",
         tags: 修正标签列表(输入.tags ?? 已有收藏.tags),
         updatedAt: 当前时间,
+        sortIndex: 0,
       }
     : {
         ...输入,
@@ -938,23 +1296,28 @@ export async function 添加收藏(输入: Omit<FavoriteItem, "addedAt" | "updat
         tags: 修正标签列表(输入.tags),
         addedAt: 当前时间,
         updatedAt: 当前时间,
+        sortIndex: 0,
       };
 
   数据.favorites = [
     收藏,
     ...数据.favorites.filter((项目) => 项目.resourceKey !== 输入.resourceKey),
-  ];
+  ].map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   await 保存应用数据(数据);
   return 收藏;
 }
 
 export async function 移除收藏(resourceKey: string): Promise<void> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移除收藏(resourceKey));
   const 数据 = await 读取应用数据();
-  数据.favorites = 数据.favorites.filter((项目) => 项目.resourceKey !== resourceKey);
+  数据.favorites = 数据.favorites
+    .filter((项目) => 项目.resourceKey !== resourceKey)
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   await 保存应用数据(数据);
 }
 
 export async function 更新收藏整理信息(resourceKey: string, 输入: 整理信息输入): Promise<FavoriteItem> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新收藏整理信息(resourceKey, 输入));
   const 数据 = await 读取应用数据();
   const 收藏 = 数据.favorites.find((项目) => 项目.resourceKey === resourceKey);
   if (!收藏) throw new Error("FAVORITE_NOT_FOUND");
@@ -978,12 +1341,37 @@ export async function 更新收藏整理信息(resourceKey: string, 输入: 整�
   数据.favorites = [
     更新后收藏,
     ...数据.favorites.filter((项目) => 项目.resourceKey !== resourceKey),
-  ];
+  ].map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   await 保存应用数据(数据);
   return 更新后收藏;
 }
 
+export async function 重排收藏(orderedResourceKeys: string[]): Promise<FavoriteItem[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 重排收藏(orderedResourceKeys));
+  const 数据 = await 读取应用数据();
+  const 顺序表 = new Map<string, number>();
+  orderedResourceKeys.forEach((key, 索引) => {
+    const resourceKey = key.trim();
+    if (resourceKey && !顺序表.has(resourceKey)) 顺序表.set(resourceKey, 索引);
+  });
+  if (顺序表.size === 0) return 数据.favorites;
+
+  数据.favorites = [...数据.favorites]
+    .sort((左侧, 右侧) => {
+      const 左侧顺序 = 顺序表.get(左侧.resourceKey);
+      const 右侧顺序 = 顺序表.get(右侧.resourceKey);
+      if (左侧顺序 !== undefined && 右侧顺序 !== undefined) return 左侧顺序 - 右侧顺序;
+      if (左侧顺序 !== undefined) return -1;
+      if (右侧顺序 !== undefined) return 1;
+      return 左侧.sortIndex - 右侧.sortIndex || 右侧.updatedAt - 左侧.updatedAt;
+    })
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  await 保存应用数据(数据);
+  return 数据.favorites;
+}
+
 export async function 更新资源整理信息(输入: ResourceMetaInput): Promise<ResourceMetaItem> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新资源整理信息(输入));
   const 数据 = await 读取应用数据();
   if (!资源类型选项.has(输入.sourceType)) throw new Error("INVALID_RESOURCE_META_TYPE");
   const 整理信息 = 修正整理信息(输入);
@@ -1014,7 +1402,7 @@ export async function 更新资源整理信息(输入: ResourceMetaInput): Promi
         updatedAt: 当前时间,
       },
       ...数据.favorites.filter((项目) => 项目.resourceKey !== 输入.resourceKey),
-    ];
+    ].map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   }
 
   await 保存应用数据(数据);
@@ -1022,6 +1410,7 @@ export async function 更新资源整理信息(输入: ResourceMetaInput): Promi
 }
 
 export async function 更新标签顺序(tags: string[]): Promise<string[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新标签顺序(tags));
   const 数据 = await 读取应用数据();
   数据.tagOrder = 合并标签顺序(tags, {
     favorites: 数据.favorites,
@@ -1034,6 +1423,7 @@ export async function 更新标签顺序(tags: string[]): Promise<string[]> {
 }
 
 export async function 删除标签(tags: string[]): Promise<OmiComicAppData> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 删除标签(tags));
   const 数据 = await 读取应用数据();
   const 删除集合 = new Set(修正标签列表(tags));
   if (删除集合.size === 0) return 数据;
@@ -1076,24 +1466,103 @@ export async function 删除标签(tags: string[]): Promise<OmiComicAppData> {
   return 读取应用数据();
 }
 
-export async function 创建虚拟文件夹(输入: { name: string; note?: string }): Promise<VirtualFolder> {
+export async function 创建书架(输入: { name: string }): Promise<Bookshelf> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 创建书架(输入));
+  const 名称 = 输入.name.trim();
+  if (!名称) throw new Error("INVALID_BOOKSHELF_NAME");
+  const 数据 = await 读取应用数据();
+  if (数据.bookshelves.some((项目) => 项目.name.trim() === 名称)) throw new Error("BOOKSHELF_NAME_EXISTS");
+
+  const 当前时间 = Date.now();
+  const 书架: Bookshelf = {
+    id: 创建书架ID(),
+    name: 名称,
+    createdAt: 当前时间,
+    updatedAt: 当前时间,
+    sortIndex: 数据.bookshelves.length,
+  };
+  数据.bookshelves = [...数据.bookshelves, 书架];
+  await 保存应用数据(数据);
+  return 书架;
+}
+
+export async function 更新书架(输入: { id: string; name: string }): Promise<Bookshelf> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新书架(输入));
+  const 数据 = await 读取应用数据();
+  const 书架 = 数据.bookshelves.find((项目) => 项目.id === 输入.id);
+  if (!书架) throw new Error("BOOKSHELF_NOT_FOUND");
+  const 名称 = 输入.name.trim();
+  if (!名称) throw new Error("INVALID_BOOKSHELF_NAME");
+  if (数据.bookshelves.some((项目) => 项目.id !== 输入.id && 项目.name.trim() === 名称)) {
+    throw new Error("BOOKSHELF_NAME_EXISTS");
+  }
+
+  const 更新后书架: Bookshelf = { ...书架, name: 名称, updatedAt: Date.now() };
+  数据.bookshelves = 数据.bookshelves.map((项目) => 项目.id === 输入.id ? 更新后书架 : 项目);
+  await 保存应用数据(数据);
+  return 更新后书架;
+}
+
+export async function 重排书架(orderedIds: string[]): Promise<Bookshelf[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 重排书架(orderedIds));
+  const 数据 = await 读取应用数据();
+  const 顺序表 = new Map<string, number>();
+  orderedIds.forEach((id, 索引) => {
+    if (id.trim()) 顺序表.set(id, 索引);
+  });
+
+  数据.bookshelves = [...数据.bookshelves]
+    .sort((左侧, 右侧) => {
+      const 左侧顺序 = 顺序表.get(左侧.id);
+      const 右侧顺序 = 顺序表.get(右侧.id);
+      if (左侧顺序 !== undefined && 右侧顺序 !== undefined) return 左侧顺序 - 右侧顺序;
+      if (左侧顺序 !== undefined) return -1;
+      if (右侧顺序 !== undefined) return 1;
+      return 左侧.sortIndex - 右侧.sortIndex || 左侧.createdAt - 右侧.createdAt;
+    })
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  await 保存应用数据(数据);
+  return 数据.bookshelves;
+}
+
+export async function 删除书架(id: string): Promise<OmiComicAppData> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 删除书架(id));
+  const 数据 = await 读取应用数据();
+  if (数据.bookshelves.length <= 1) throw new Error("BOOKSHELF_MINIMUM_REQUIRED");
+  const 删除前数量 = 数据.bookshelves.length;
+  数据.bookshelves = 数据.bookshelves.filter((项目) => 项目.id !== id)
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  if (数据.bookshelves.length === 删除前数量) throw new Error("BOOKSHELF_NOT_FOUND");
+  数据.virtualFolders = 数据.virtualFolders
+    .filter((项目) => 项目.bookshelfId !== id)
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  await 保存应用数据(数据);
+  return 读取应用数据();
+}
+
+export async function 创建虚拟文件夹(输入: { name: string; note?: string; bookshelfId?: string }): Promise<VirtualFolder> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 创建虚拟文件夹(输入));
   const 名称 = 输入.name.trim();
   if (!名称) throw new Error("INVALID_VIRTUAL_FOLDER_NAME");
   const 数据 = await 读取应用数据();
-  if (数据.virtualFolders.some((项目) => 项目.name.trim() === 名称)) {
+  const bookshelfId = 数据.bookshelves.some((项目) => 项目.id === 输入.bookshelfId)
+    ? 输入.bookshelfId as string
+    : 数据.bookshelves[0]?.id ?? 默认书架ID;
+  if (数据.virtualFolders.some((项目) => 项目.bookshelfId === bookshelfId && 项目.name.trim() === 名称)) {
     throw new Error("VIRTUAL_FOLDER_NAME_EXISTS");
   }
 
   const 当前时间 = Date.now();
   const 文件夹: VirtualFolder = {
     id: 创建虚拟文件夹ID(),
+    bookshelfId,
     name: 名称,
     note: 读取可空文本(输入.note),
     tags: [],
     items: [],
     createdAt: 当前时间,
     updatedAt: 当前时间,
-    sortIndex: 数据.virtualFolders.length,
+    sortIndex: 数据.virtualFolders.filter((项目) => 项目.bookshelfId === bookshelfId).length,
   };
   数据.virtualFolders = [...数据.virtualFolders, 文件夹];
   await 保存应用数据(数据);
@@ -1101,22 +1570,37 @@ export async function 创建虚拟文件夹(输入: { name: string; note?: strin
 }
 
 export async function 更新虚拟文件夹(
-  输入: { id: string; name?: string; note?: string },
+  输入: { id: string; name?: string; note?: string; coverResourceKey?: string | null },
 ): Promise<VirtualFolder> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新虚拟文件夹(输入));
   const 数据 = await 读取应用数据();
   const 文件夹 = 数据.virtualFolders.find((项目) => 项目.id === 输入.id);
   if (!文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
 
   const 新名称 = 输入.name === undefined ? 文件夹.name : 输入.name.trim();
   if (!新名称) throw new Error("INVALID_VIRTUAL_FOLDER_NAME");
-  if (数据.virtualFolders.some((项目) => 项目.id !== 输入.id && 项目.name.trim() === 新名称)) {
+  if (数据.virtualFolders.some((项目) => (
+    项目.id !== 输入.id
+    && 项目.bookshelfId === 文件夹.bookshelfId
+    && 项目.name.trim() === 新名称
+  ))) {
     throw new Error("VIRTUAL_FOLDER_NAME_EXISTS");
+  }
+
+  const 封面资源Key = 输入.coverResourceKey === undefined
+    ? 文件夹.coverResourceKey
+    : 输入.coverResourceKey === null
+      ? undefined
+      : 输入.coverResourceKey.trim();
+  if (封面资源Key && !文件夹.items.some((项目) => 项目.resourceKey === 封面资源Key)) {
+    throw new Error("INVALID_VIRTUAL_FOLDER_COVER");
   }
 
   const 更新后文件夹: VirtualFolder = {
     ...文件夹,
     name: 新名称,
     note: 输入.note === undefined ? 文件夹.note : 读取可空文本(输入.note),
+    coverResourceKey: 封面资源Key || undefined,
     updatedAt: Date.now(),
   };
   数据.virtualFolders = 数据.virtualFolders.map((项目) => 项目.id === 输入.id ? 更新后文件夹 : 项目);
@@ -1125,10 +1609,42 @@ export async function 更新虚拟文件夹(
 }
 
 export async function 删除虚拟文件夹(id: string): Promise<VirtualFolder[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 删除虚拟文件夹(id));
   const 数据 = await 读取应用数据();
+  const 待删除文件夹 = 数据.virtualFolders.find((项目) => 项目.id === id);
   const 删除前数量 = 数据.virtualFolders.length;
   数据.virtualFolders = 数据.virtualFolders.filter((项目) => 项目.id !== id);
+  if (待删除文件夹) {
+    let 同书架索引 = 0;
+    数据.virtualFolders = 数据.virtualFolders.map((项目) => (
+      项目.bookshelfId === 待删除文件夹.bookshelfId
+        ? { ...项目, sortIndex: 同书架索引++ }
+        : 项目
+    ));
+  }
   if (数据.virtualFolders.length !== 删除前数量) await 保存应用数据(数据);
+  return 数据.virtualFolders;
+}
+
+export async function 重排虚拟文件夹(orderedIds: string[]): Promise<VirtualFolder[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 重排虚拟文件夹(orderedIds));
+  const 数据 = await 读取应用数据();
+  const 顺序表 = new Map<string, number>();
+  orderedIds.forEach((id, 索引) => {
+    if (id.trim()) 顺序表.set(id, 索引);
+  });
+
+  数据.virtualFolders = [...数据.virtualFolders]
+    .sort((左侧, 右侧) => {
+      const 左侧顺序 = 顺序表.get(左侧.id);
+      const 右侧顺序 = 顺序表.get(右侧.id);
+      if (左侧顺序 !== undefined && 右侧顺序 !== undefined) return 左侧顺序 - 右侧顺序;
+      if (左侧顺序 !== undefined) return -1;
+      if (右侧顺序 !== undefined) return 1;
+      return 左侧.sortIndex - 右侧.sortIndex || 左侧.createdAt - 右侧.createdAt;
+    })
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  await 保存应用数据(数据);
   return 数据.virtualFolders;
 }
 
@@ -1136,6 +1652,7 @@ export async function 添加虚拟文件夹项目(
   folderId: string,
   items: VirtualFolderItemInput[],
 ): Promise<{ folder: VirtualFolder; addedCount: number; skippedCount: number }> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 添加虚拟文件夹项目(folderId, items));
   const 数据 = await 读取应用数据();
   const 文件夹 = 数据.virtualFolders.find((项目) => 项目.id === folderId);
   if (!文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
@@ -1179,6 +1696,7 @@ export async function 添加虚拟文件夹项目(
 }
 
 export async function 移除虚拟文件夹项目(folderId: string, resourceKey: string): Promise<VirtualFolder> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移除虚拟文件夹项目(folderId, resourceKey));
   const 数据 = await 读取应用数据();
   const 文件夹 = 数据.virtualFolders.find((项目) => 项目.id === folderId);
   if (!文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
@@ -1186,6 +1704,9 @@ export async function 移除虚拟文件夹项目(folderId: string, resourceKey:
   const 更新后项目 = 文件夹.items.filter((项目) => 项目.resourceKey !== resourceKey);
   const 更新后文件夹: VirtualFolder = {
     ...文件夹,
+    coverResourceKey: 文件夹.coverResourceKey && 更新后项目.some((项目) => 项目.resourceKey === 文件夹.coverResourceKey)
+      ? 文件夹.coverResourceKey
+      : undefined,
     items: 更新后项目.map((项目, 索引) => ({ ...项目, sortIndex: 索引 })),
     updatedAt: 更新后项目.length === 文件夹.items.length ? 文件夹.updatedAt : Date.now(),
   };
@@ -1194,14 +1715,280 @@ export async function 移除虚拟文件夹项目(folderId: string, resourceKey:
   return 更新后文件夹;
 }
 
+export async function 移除虚拟文件夹项目列表(folderId: string, resourceKeys: string[]): Promise<VirtualFolder> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移除虚拟文件夹项目列表(folderId, resourceKeys));
+  const 数据 = await 读取应用数据();
+  const 文件夹 = 数据.virtualFolders.find((项目) => 项目.id === folderId);
+  if (!文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
+  const 删除集合 = new Set(resourceKeys.map((key) => key.trim()).filter(Boolean));
+  if (删除集合.size === 0) return 文件夹;
+
+  const 更新后项目 = 文件夹.items.filter((项目) => !删除集合.has(项目.resourceKey));
+  const 更新后文件夹: VirtualFolder = {
+    ...文件夹,
+    coverResourceKey: 文件夹.coverResourceKey && 更新后项目.some((项目) => 项目.resourceKey === 文件夹.coverResourceKey)
+      ? 文件夹.coverResourceKey
+      : undefined,
+    items: 更新后项目.map((项目, 索引) => ({ ...项目, sortIndex: 索引 })),
+    updatedAt: 更新后项目.length === 文件夹.items.length ? 文件夹.updatedAt : Date.now(),
+  };
+  数据.virtualFolders = 数据.virtualFolders.map((项目) => 项目.id === folderId ? 更新后文件夹 : 项目);
+  if (更新后项目.length !== 文件夹.items.length) await 保存应用数据(数据);
+  return 更新后文件夹;
+}
+
+export async function 清空虚拟文件夹项目(folderId: string): Promise<VirtualFolder> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 清空虚拟文件夹项目(folderId));
+  const 数据 = await 读取应用数据();
+  const 文件夹 = 数据.virtualFolders.find((项目) => 项目.id === folderId);
+  if (!文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
+  const 更新后文件夹: VirtualFolder = {
+    ...文件夹,
+    coverResourceKey: undefined,
+    items: [],
+    updatedAt: 文件夹.items.length > 0 ? Date.now() : 文件夹.updatedAt,
+  };
+  数据.virtualFolders = 数据.virtualFolders.map((项目) => 项目.id === folderId ? 更新后文件夹 : 项目);
+  if (文件夹.items.length > 0) await 保存应用数据(数据);
+  return 更新后文件夹;
+}
+
+export async function 清理失效资源记录(输入: { sourcePaths: string[]; resourceKeys: string[] }): Promise<OmiComicAppData> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 清理失效资源记录(输入));
+  const 数据 = await 读取应用数据();
+  const 路径集合 = new Set(输入.sourcePaths.map((项目) => 读取字符串(项目)).filter(Boolean));
+  const key集合 = new Set(输入.resourceKeys.map((项目) => 读取字符串(项目)).filter(Boolean));
+  if (路径集合.size === 0 && key集合.size === 0) return 数据;
+
+  const 应清理 = (项目: { sourcePath?: string; resourceKey?: string }): boolean => (
+    Boolean(项目.sourcePath && 路径集合.has(项目.sourcePath))
+    || Boolean(项目.resourceKey && key集合.has(项目.resourceKey))
+  );
+  const 当前时间 = Date.now();
+
+  数据.recentOpened = 数据.recentOpened.filter((项目) => !应清理(项目));
+  数据.favorites = 数据.favorites
+    .filter((项目) => !应清理(项目))
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  数据.bookmarks = 数据.bookmarks
+    .filter((项目) => !应清理(项目))
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  数据.readingProgress = Object.fromEntries(
+    Object.entries(数据.readingProgress).filter(([, 项目]) => !应清理(项目)),
+  );
+  数据.resourceMeta = Object.fromEntries(
+    Object.entries(数据.resourceMeta).filter(([, 项目]) => !应清理(项目)),
+  );
+  数据.virtualFolders = 数据.virtualFolders.map((文件夹) => {
+    const 保留项目 = 文件夹.items.filter((项目) => !应清理(项目));
+    return 保留项目.length === 文件夹.items.length
+      ? 文件夹
+      : {
+          ...文件夹,
+          coverResourceKey: 文件夹.coverResourceKey && 保留项目.some((项目) => 项目.resourceKey === 文件夹.coverResourceKey)
+            ? 文件夹.coverResourceKey
+            : undefined,
+          items: 保留项目.map((项目, 索引) => ({ ...项目, sortIndex: 索引 })),
+          updatedAt: 当前时间,
+        };
+  });
+  数据.tagOrder = 合并标签顺序(数据.tagOrder, {
+    favorites: 数据.favorites,
+    bookmarks: 数据.bookmarks,
+    resourceMeta: 数据.resourceMeta,
+    virtualFolders: 数据.virtualFolders,
+  });
+
+  await 保存应用数据(数据);
+  return 数据;
+}
+
+export async function 重排虚拟文件夹项目(folderId: string, orderedResourceKeys: string[]): Promise<VirtualFolder> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 重排虚拟文件夹项目(folderId, orderedResourceKeys));
+  const 数据 = await 读取应用数据();
+  const 文件夹 = 数据.virtualFolders.find((项目) => 项目.id === folderId);
+  if (!文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
+
+  const 顺序表 = new Map<string, number>();
+  orderedResourceKeys.forEach((key, 索引) => {
+    const resourceKey = key.trim();
+    if (resourceKey && !顺序表.has(resourceKey)) 顺序表.set(resourceKey, 索引);
+  });
+  if (顺序表.size === 0) return 文件夹;
+
+  const 更新后文件夹: VirtualFolder = {
+    ...文件夹,
+    items: [...文件夹.items]
+      .sort((左侧, 右侧) => {
+        const 左侧顺序 = 顺序表.get(左侧.resourceKey);
+        const 右侧顺序 = 顺序表.get(右侧.resourceKey);
+        if (左侧顺序 !== undefined && 右侧顺序 !== undefined) return 左侧顺序 - 右侧顺序;
+        if (左侧顺序 !== undefined) return -1;
+        if (右侧顺序 !== undefined) return 1;
+        return 左侧.sortIndex - 右侧.sortIndex || 左侧.addedAt - 右侧.addedAt;
+      })
+      .map((项目, 索引) => ({ ...项目, sortIndex: 索引 })),
+    updatedAt: Date.now(),
+  };
+  数据.virtualFolders = 数据.virtualFolders.map((项目) => 项目.id === folderId ? 更新后文件夹 : 项目);
+  await 保存应用数据(数据);
+  return 更新后文件夹;
+}
+
+export async function 移动虚拟文件夹项目(
+  输入: { fromFolderId: string; toFolderId: string; item: VirtualFolderItemInput },
+): Promise<{ virtualFolders: VirtualFolder[]; targetAlreadyHad: boolean; addedToTarget: boolean }> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移动虚拟文件夹项目(输入));
+  const fromFolderId = 读取字符串(输入.fromFolderId);
+  const toFolderId = 读取字符串(输入.toFolderId);
+  if (!fromFolderId || !toFolderId) throw new Error("INVALID_VIRTUAL_FOLDER_MOVE_TARGET");
+  if (fromFolderId === toFolderId) throw new Error("SAME_VIRTUAL_FOLDER");
+
+  const 数据 = await 读取应用数据();
+  const 来源文件夹 = 数据.virtualFolders.find((项目) => 项目.id === fromFolderId);
+  const 目标文件夹 = 数据.virtualFolders.find((项目) => 项目.id === toFolderId);
+  if (!来源文件夹 || !目标文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
+
+  const resourceKey = 读取字符串(输入.item.resourceKey);
+  const sourcePath = 读取字符串(输入.item.sourcePath);
+  const sourceType = 读取资源类型(输入.item.sourceType);
+  const title = 读取字符串(输入.item.title);
+  if (!resourceKey || !sourcePath || !sourceType || !title) throw new Error("INVALID_VIRTUAL_FOLDER_ITEM");
+
+  const 当前时间 = Date.now();
+  const 来源项目 = 来源文件夹.items.find((项目) => 项目.resourceKey === resourceKey);
+  if (!来源项目) throw new Error("VIRTUAL_FOLDER_ITEM_NOT_FOUND");
+  const 来源移除后项目 = 来源文件夹.items.filter((项目) => 项目.resourceKey !== resourceKey);
+  const targetAlreadyHad = 目标文件夹.items.some((项目) => 项目.resourceKey === resourceKey);
+  const addedToTarget = !targetAlreadyHad;
+
+  const 更新后来源文件夹: VirtualFolder = {
+    ...来源文件夹,
+    coverResourceKey: 来源文件夹.coverResourceKey && 来源移除后项目.some((项目) => 项目.resourceKey === 来源文件夹.coverResourceKey)
+      ? 来源文件夹.coverResourceKey
+      : undefined,
+    items: 来源移除后项目.map((项目, 索引) => ({ ...项目, sortIndex: 索引 })),
+    updatedAt: 来源移除后项目.length === 来源文件夹.items.length ? 来源文件夹.updatedAt : 当前时间,
+  };
+  const 新目标项目: VirtualFolderItem | null = targetAlreadyHad
+    ? null
+    : {
+        id: 创建虚拟文件夹项目ID(toFolderId, resourceKey),
+        folderId: toFolderId,
+        resourceKey,
+        sourcePath: 来源项目?.sourcePath ?? sourcePath,
+        sourceType: 来源项目?.sourceType ?? sourceType,
+        title: 来源项目?.title ?? title,
+        addedAt: 当前时间,
+        sortIndex: 目标文件夹.items.length,
+      };
+  const 更新后目标文件夹: VirtualFolder = {
+    ...目标文件夹,
+    items: 新目标项目 ? [...目标文件夹.items, 新目标项目] : 目标文件夹.items,
+    updatedAt: 新目标项目 ? 当前时间 : 目标文件夹.updatedAt,
+  };
+
+  数据.virtualFolders = 数据.virtualFolders.map((项目) => {
+    if (项目.id === fromFolderId) return 更新后来源文件夹;
+    if (项目.id === toFolderId) return 更新后目标文件夹;
+    return 项目;
+  });
+  if (来源移除后项目.length !== 来源文件夹.items.length || 新目标项目) await 保存应用数据(数据);
+  return { virtualFolders: 数据.virtualFolders, targetAlreadyHad, addedToTarget };
+}
+
+export async function 移动虚拟文件夹项目列表(
+  输入: { fromFolderId: string; toFolderId: string; items: VirtualFolderItemInput[] },
+): Promise<{ virtualFolders: VirtualFolder[]; targetAlreadyHadCount: number; addedCount: number; movedCount: number }> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移动虚拟文件夹项目列表(输入));
+  const fromFolderId = 读取字符串(输入.fromFolderId);
+  const toFolderId = 读取字符串(输入.toFolderId);
+  if (!fromFolderId || !toFolderId) throw new Error("INVALID_VIRTUAL_FOLDER_MOVE_TARGET");
+  if (fromFolderId === toFolderId) throw new Error("SAME_VIRTUAL_FOLDER");
+
+  const 数据 = await 读取应用数据();
+  const 来源文件夹 = 数据.virtualFolders.find((项目) => 项目.id === fromFolderId);
+  const 目标文件夹 = 数据.virtualFolders.find((项目) => 项目.id === toFolderId);
+  if (!来源文件夹 || !目标文件夹) throw new Error("VIRTUAL_FOLDER_NOT_FOUND");
+
+  const 输入表 = new Map<string, VirtualFolderItemInput>();
+  for (const item of 输入.items) {
+    const resourceKey = 读取字符串(item.resourceKey);
+    const sourcePath = 读取字符串(item.sourcePath);
+    const sourceType = 读取资源类型(item.sourceType);
+    const title = 读取字符串(item.title);
+    if (!resourceKey || !sourcePath || !sourceType || !title) continue;
+    if (!输入表.has(resourceKey)) 输入表.set(resourceKey, { resourceKey, sourcePath, sourceType, title });
+  }
+  if (输入表.size === 0) throw new Error("INVALID_VIRTUAL_FOLDER_ITEM");
+
+  const 当前时间 = Date.now();
+  const 目标已有集合 = new Set(目标文件夹.items.map((项目) => 项目.resourceKey));
+  const 来源移除集合 = new Set<string>();
+  const 新目标项目: VirtualFolderItem[] = [];
+  let targetAlreadyHadCount = 0;
+
+  for (const 来源项目 of 来源文件夹.items) {
+    const 输入项目 = 输入表.get(来源项目.resourceKey);
+    if (!输入项目) continue;
+    来源移除集合.add(来源项目.resourceKey);
+    if (目标已有集合.has(来源项目.resourceKey)) {
+      targetAlreadyHadCount += 1;
+      continue;
+    }
+    新目标项目.push({
+      id: 创建虚拟文件夹项目ID(toFolderId, 来源项目.resourceKey),
+      folderId: toFolderId,
+      resourceKey: 来源项目.resourceKey,
+      sourcePath: 来源项目.sourcePath ?? 输入项目.sourcePath,
+      sourceType: 来源项目.sourceType ?? 输入项目.sourceType,
+      title: 来源项目.title ?? 输入项目.title,
+      addedAt: 当前时间,
+      sortIndex: 目标文件夹.items.length + 新目标项目.length,
+    });
+    目标已有集合.add(来源项目.resourceKey);
+  }
+
+  if (来源移除集合.size === 0) throw new Error("VIRTUAL_FOLDER_ITEM_NOT_FOUND");
+
+  const 来源移除后项目 = 来源文件夹.items.filter((项目) => !来源移除集合.has(项目.resourceKey));
+  const 更新后来源文件夹: VirtualFolder = {
+    ...来源文件夹,
+    coverResourceKey: 来源文件夹.coverResourceKey && 来源移除后项目.some((项目) => 项目.resourceKey === 来源文件夹.coverResourceKey)
+      ? 来源文件夹.coverResourceKey
+      : undefined,
+    items: 来源移除后项目.map((项目, 索引) => ({ ...项目, sortIndex: 索引 })),
+    updatedAt: 当前时间,
+  };
+  const 更新后目标文件夹: VirtualFolder = {
+    ...目标文件夹,
+    items: [...目标文件夹.items, ...新目标项目],
+    updatedAt: 新目标项目.length > 0 ? 当前时间 : 目标文件夹.updatedAt,
+  };
+
+  数据.virtualFolders = 数据.virtualFolders.map((项目) => {
+    if (项目.id === fromFolderId) return 更新后来源文件夹;
+    if (项目.id === toFolderId) return 更新后目标文件夹;
+    return 项目;
+  });
+  await 保存应用数据(数据);
+  return {
+    virtualFolders: 数据.virtualFolders,
+    targetAlreadyHadCount,
+    addedCount: 新目标项目.length,
+    movedCount: 来源移除集合.size,
+  };
+}
+
 export async function 获取书签列表(): Promise<BookmarkItem[]> {
   const 数据 = await 读取应用数据();
   return 数据.bookmarks;
 }
 
 export async function 切换书签(
-  输入: Omit<BookmarkItem, "id" | "createdAt" | "updatedAt">,
+  输入: Omit<BookmarkItem, "id" | "createdAt" | "updatedAt" | "sortIndex">,
 ): Promise<{ bookmarked: boolean; bookmark?: BookmarkItem }> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 切换书签(输入));
   const 数据 = await 读取应用数据();
   const totalPages = Math.max(1, Math.floor(输入.totalPages));
   const pageIndex = Math.min(Math.max(0, Math.floor(输入.pageIndex)), totalPages - 1);
@@ -1225,24 +2012,29 @@ export async function 切换书签(
     tags: 修正标签列表(输入.tags),
     createdAt: 当前时间,
     updatedAt: 当前时间,
+    sortIndex: 0,
   };
   数据.bookmarks = [
     书签,
     ...数据.bookmarks.filter(
       (项目) => !(项目.resourceKey === 书签.resourceKey && 项目.pageIndex === 书签.pageIndex),
     ),
-  ];
+  ].map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   await 保存应用数据(数据);
   return { bookmarked: true, bookmark: 书签 };
 }
 
 export async function 移除书签(id: string): Promise<void> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移除书签(id));
   const 数据 = await 读取应用数据();
-  数据.bookmarks = 数据.bookmarks.filter((项目) => 项目.id !== id);
+  数据.bookmarks = 数据.bookmarks
+    .filter((项目) => 项目.id !== id)
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   await 保存应用数据(数据);
 }
 
 export async function 更新书签整理信息(id: string, 输入: 整理信息输入): Promise<BookmarkItem> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新书签整理信息(id, 输入));
   const 数据 = await 读取应用数据();
   const 书签 = 数据.bookmarks.find((项目) => 项目.id === id);
   if (!书签) throw new Error("BOOKMARK_NOT_FOUND");
@@ -1257,9 +2049,33 @@ export async function 更新书签整理信息(id: string, 输入: 整理信息�
   数据.bookmarks = [
     更新后书签,
     ...数据.bookmarks.filter((项目) => 项目.id !== id),
-  ];
+  ].map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   await 保存应用数据(数据);
   return 更新后书签;
+}
+
+export async function 重排书签(orderedIds: string[]): Promise<BookmarkItem[]> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 重排书签(orderedIds));
+  const 数据 = await 读取应用数据();
+  const 顺序表 = new Map<string, number>();
+  orderedIds.forEach((id, 索引) => {
+    const bookmarkId = id.trim();
+    if (bookmarkId && !顺序表.has(bookmarkId)) 顺序表.set(bookmarkId, 索引);
+  });
+  if (顺序表.size === 0) return 数据.bookmarks;
+
+  数据.bookmarks = [...数据.bookmarks]
+    .sort((左侧, 右侧) => {
+      const 左侧顺序 = 顺序表.get(左侧.id);
+      const 右侧顺序 = 顺序表.get(右侧.id);
+      if (左侧顺序 !== undefined && 右侧顺序 !== undefined) return 左侧顺序 - 右侧顺序;
+      if (左侧顺序 !== undefined) return -1;
+      if (右侧顺序 !== undefined) return 1;
+      return 左侧.sortIndex - 右侧.sortIndex || 右侧.updatedAt - 左侧.updatedAt;
+    })
+    .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
+  await 保存应用数据(数据);
+  return 数据.bookmarks;
 }
 
 export async function 当前页已书签(resourceKey: string, pageIndex: number): Promise<boolean> {
