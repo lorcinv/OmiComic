@@ -60,8 +60,12 @@ test('real PDF worker renders, changes page and releases its session',async({pag
  await expect(page.getByRole('spinbutton',{name:'页码'})).toHaveValue('2');
  const hasInk=await canvas.evaluate((element:HTMLCanvasElement)=>{const pixels=element.getContext('2d')!.getImageData(0,0,element.width,element.height).data;for(let i=0;i<pixels.length;i+=4){if(pixels[i+3]>0&&pixels[i]<240)return true;}return false;});
  expect(hasInk).toBe(true);
+ const pageTwoPixels=await canvas.evaluate((element:HTMLCanvasElement)=>element.toDataURL());
  await page.getByRole('button',{name:'下一页',exact:true}).click();
- await expect(page.getByRole('spinbutton',{name:'页码'})).toHaveValue('3');await expect(canvas).toBeVisible();
+ await expect(page.getByRole('spinbutton',{name:'页码'})).toHaveValue('3');
+ await expect(canvas).toBeVisible();
+ await expect.poll(()=>canvas.evaluate((element:HTMLCanvasElement)=>element.toDataURL())).not.toBe(pageTwoPixels);
+ await expect(page.locator('.document-reader-viewport')).toHaveAttribute('aria-busy','false');
  await page.screenshot({path:'test-results/pdf-render.png',fullPage:true});
  await page.getByRole('button',{name:'返回资源库',exact:true}).click();await expect(page.locator('.document-reader')).toHaveCount(0);
  await expect.poll(()=>page.evaluate(()=>(window as any).__closedDocuments.length)).toBeGreaterThan(0);

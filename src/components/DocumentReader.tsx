@@ -19,6 +19,7 @@ export default function DocumentReader({ sourcePath, type, initialPageIndex = 0,
   const [html, setHtml] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
+  const [renderedIndex, setRenderedIndex] = useState(-1);
   const [zoom, setZoom] = useState(1);
   const [width, setWidth] = useState(900);
   const viewport = useRef<HTMLDivElement>(null);
@@ -38,7 +39,7 @@ export default function DocumentReader({ sourcePath, type, initialPageIndex = 0,
     const id = crypto.randomUUID();
     let loading: ReturnType<typeof getDocument> | undefined;
     let transport: PDFDataRangeTransport | undefined;
-    setReady(undefined); setTotal(0); setError(""); setBusy(true); setHtml("");
+    setRenderedIndex(-1); setReady(undefined); setTotal(0); setError(""); setBusy(true); setHtml("");
     currentRender.current?.cancel();
     void (async () => {
       const opened = await window.omicomic.openDocument({ path: sourcePath, type, id });
@@ -116,7 +117,7 @@ export default function DocumentReader({ sourcePath, type, initialPageIndex = 0,
         if (!result.ok) throw new Error(result.error.message);
         setHtml(result.data);
       }
-      if (alive) { setBusy(false); viewport.current?.scrollTo(0, 0); }
+      if (alive) { setRenderedIndex(index); setBusy(false); viewport.current?.scrollTo(0, 0); }
     }).catch((reason) => { if (alive && reason?.name !== "RenderingCancelledException") { setError(reason instanceof Error ? reason.message : "页面加载失败。"); setBusy(false); } });
     return () => { alive = false; currentRender.current?.cancel(); };
   }, [ready, index, renderWidth, zoom, total]);
@@ -142,7 +143,7 @@ export default function DocumentReader({ sourcePath, type, initialPageIndex = 0,
     {error && <p role="alert" className="document-reader-message">{error}</p>}
     {busy && !error && <p role="status" className="document-reader-message">正在加载{type === "pdf" ? "页面" : "章节"}…</p>}
     <div ref={viewport} className="document-reader-viewport" aria-busy={busy}>
-      {type === "pdf" ? <canvas ref={canvas} style={{ visibility: busy || !!error ? "hidden" : "visible" }} aria-label={`第 ${index + 1} 页`} /> : html && <iframe key={`${ready?.id}:${index}`} title={`第 ${index + 1} 章`} sandbox="" referrerPolicy="no-referrer" srcDoc={html} />}
+      {type === "pdf" ? <canvas ref={canvas} style={{ visibility: busy || renderedIndex !== index || !!error ? "hidden" : "visible" }} aria-label={`第 ${index + 1} 页`} /> : html && <iframe key={`${ready?.id}:${index}`} title={`第 ${index + 1} 章`} sandbox="" referrerPolicy="no-referrer" srcDoc={html} />}
     </div>
   </section>;
 }
