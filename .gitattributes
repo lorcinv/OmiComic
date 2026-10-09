@@ -1,0 +1,3 @@
+*.pdf binary
+# Keep upstream notices byte-for-byte, including their original line endings.
+licenses/* -text whitespace=cr-at-eol,-blank-at-eof

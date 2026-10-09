@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 dist/
 build/
 out/
@@ -18,11 +18,12 @@ Thumbs.db
 
 # Electron/Vite build output
 dist-electron/
-dist/
-build/
-out/
 
 # Logs and env
-*.log
-.env
-.env.*
+
+# Generated offline PDF.js fonts, maps, and decoders
+public/pdfjs/
+
+# Reproducible test outputs
+test-results/
+playwright-report/

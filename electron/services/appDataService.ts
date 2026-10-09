@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 
-export type 阅读资源类型 = "folder" | "image" | "archive";
+export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 每页数量 = 60 | 100 | 150 | 200;
@@ -561,7 +561,7 @@ function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
       || !sourcePath
       || !title
       || totalPages <= 0
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
     ) {
       continue;
     }
@@ -622,7 +622,7 @@ function 修正最近打开(
       || totalPages <= 0
       || 已加入.has(resourceKey)
       || 已移除资源Key集合.has(resourceKey)
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
     ) {
       continue;
     }
@@ -693,7 +693,7 @@ function 修正收藏列表(输入: unknown): FavoriteItem[] {
       || !sourcePath
       || !title
       || 已加入.has(resourceKey)
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
     ) {
       continue;
     }
@@ -744,7 +744,7 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
       || !title
       || totalPages <= 0
       || 已加入.has(`${resourceKey}:${pageIndex}`)
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
     ) {
       continue;
     }
@@ -1394,7 +1394,7 @@ export async function 更新资源整理信息(输入: ResourceMetaInput): Promi
         ...收藏,
         title: 输入.title || 收藏.title,
         sourcePath: 输入.sourcePath || 收藏.sourcePath,
-        sourceType: 输入.sourceType === "folder" || 输入.sourceType === "archive"
+        sourceType: 输入.sourceType === "folder" || 输入.sourceType === "archive" || 输入.sourceType === "pdf" || 输入.sourceType === "epub"
           ? 输入.sourceType
           : 收藏.sourceType,
         note: 整理信息.note,

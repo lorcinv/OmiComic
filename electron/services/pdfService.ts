@@ -1,46 +1,31 @@
-export type PDF错误代码 =
-  | "PDF_READING_DISABLED"
-  | "PDF_THUMBNAIL_DISABLED";
+import { open, type FileHandle } from "node:fs/promises";
 
-export class PDF服务错误 extends Error {
-  constructor(
-    public readonly code: PDF错误代码,
-    message: string,
-  ) {
-    super(message);
-    this.name = "PDF服务错误";
+/** Only byte ranges cross IPC; pdf.js parses in its dedicated renderer worker. */
+export class PDFDocumentSource {
+  private constructor(private file: FileHandle, readonly size: number) {}
+  static async open(filePath: string): Promise<PDFDocumentSource> {
+    const file = await open(filePath, "r");
+    try {
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.size < 5 || stat.size > 2 * 1024 ** 3) throw new Error("PDF 文件为空或超过 2 GB 安全上限。");
+      const signature = Buffer.alloc(5);
+      await file.read(signature, 0, 5, 0);
+      if (signature.toString() !== "%PDF-") throw new Error("文件不是有效的 PDF。");
+      return new PDFDocumentSource(file, stat.size);
+    } catch (error) { await file.close(); throw error; }
   }
+  async range(begin: number, end: number): Promise<Uint8Array> {
+    if (!Number.isInteger(begin) || !Number.isInteger(end) || begin < 0 || end <= begin || end > this.size || end - begin > 1024 * 1024) throw new Error("PDF 读取范围无效。");
+    const bytes = Buffer.alloc(end - begin);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await this.file.read(bytes, offset, bytes.length - offset, begin + offset);
+      if (!result.bytesRead) throw new Error("PDF 文件读取中断。");
+      offset += result.bytesRead;
+    }
+    return bytes;
+  }
+  close(): Promise<void> { return this.file.close(); }
 }
-
-export async function 获取PDF页数(): Promise<number> {
-  throw new PDF服务错误(
-    "PDF_READING_DISABLED",
-    "PDF 阅读支持已暂时关闭，将在后续版本重新评估。",
-  );
-}
-
-export async function 获取PDF页面列表(): Promise<never[]> {
-  throw new PDF服务错误(
-    "PDF_READING_DISABLED",
-    "PDF 阅读支持已暂时关闭，将在后续版本重新评估。",
-  );
-}
-
-export async function 渲染PDF页面(): Promise<string> {
-  throw new PDF服务错误(
-    "PDF_READING_DISABLED",
-    "PDF 阅读支持已暂时关闭，将在后续版本重新评估。",
-  );
-}
-
-export async function 渲染PDF首页缩略图(): Promise<string | null> {
-  return null;
-}
-
-export async function 释放PDF资源(): Promise<void> {
-  return undefined;
-}
-
-export function 是PDF服务错误(错误: unknown): 错误 is PDF服务错误 {
-  return 错误 instanceof PDF服务错误;
-}
+// Thumbnails are optional and must never trigger whole-document rasterization.
+export async function 渲染PDF首页缩略图(): Promise<null> { return null; }

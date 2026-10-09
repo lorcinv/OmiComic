@@ -1,14 +1,37 @@
-export interface EPUB基础信息 {
-  path: string;
-  supported: false;
-  message: string;
-}
+import { Worker } from "node:worker_threads";
+import path from "node:path";
 
-export function 获取EPUB预留信息(文件路径: string): EPUB基础信息 {
-  return {
-    path: 文件路径,
-    supported: false,
-    message: "EPUB 当前仅识别显示，暂不支持阅读。",
-  };
+export interface EPUBChapter { name: string; index: number }
+export class EPUBDocumentSource {
+  private worker: Worker;
+  private counter = 0;
+  private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private closed = false;
+  constructor(filePath: string) {
+    this.worker = new Worker(path.join(__dirname, "epubWorker.js"), { workerData: { filePath }, resourceLimits: { maxOldGenerationSizeMb: 192 } });
+    this.worker.on("message", ({ id, data, error }) => {
+      const task = this.pending.get(id);
+      if (!task) return;
+      clearTimeout(task.timer); this.pending.delete(id);
+      if (error) task.reject(new Error(error)); else task.resolve(data);
+    });
+    this.worker.on("error", (error) => this.fail(error));
+    this.worker.on("exit", () => this.fail(new Error("EPUB 阅读任务已结束。")));
+  }
+  private fail(error: Error) {
+    this.closed = true;
+    for (const task of this.pending.values()) { clearTimeout(task.timer); task.reject(error); }
+    this.pending.clear();
+  }
+  request<T>(method: "index" | "chapter", index?: number): Promise<T> {
+    if (this.closed) return Promise.reject(new Error("EPUB 已关闭。"));
+    if (this.pending.size >= 2) return Promise.reject(new Error("请等待当前章节加载完成。"));
+    return new Promise<T>((resolve, reject) => {
+      const id = ++this.counter;
+      const timer = setTimeout(() => { this.fail(new Error("EPUB 解析超时，文件可能已损坏。")); void this.worker.terminate(); }, 30000);
+      this.pending.set(id, { resolve, reject, timer });
+      this.worker.postMessage({ id, method, index });
+    });
+  }
+  async close() { this.fail(new Error("EPUB 已关闭。")); await this.worker.terminate(); }
 }
-

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="680" viewBox="0 0 600 680" fill="none">
+  <title>A quiet chapter</title>
+  <desc>Original OmiComic illustration. A long-haired girl in a loose cardigan, holding an open book, drawn with fine warm ink lines.</desc>
+  <defs><linearGradient id="fade" x1="300" y1="390" x2="300" y2="630" gradientUnits="userSpaceOnUse"><stop stop-color="#f9f8f5"/><stop offset="1" stop-color="#f0f0e9"/></linearGradient></defs>
+  <g stroke="#737e78" stroke-linecap="round" stroke-linejoin="round">
+    <!-- A long, softly imperfect silhouette. -->
+    <path d="M204 318c-24-29-34-75-29-119 3-30 15-60 38-80 23-25 63-35 100-27 37 5 64 32 78 64 22 48 11 86 13 124 1 51 31 96 20 148-5 29-27 52-52 68L193 479c-30-23-44-54-30-93 8-23 36-45 41-68Z" fill="#f1f1e9" stroke-width="1.8"/>
+    <path d="M224 122c-32 22-45 49-44 86-1 36 7 63 22 97m123-205c38 13 64 42 71 82 8 41-4 69 2 112 3 23 10 46 17 65m-229-31c-1 36-28 62-25 95 1 27 14 46 32 60" stroke-width=".8"/>
+    <!-- Neck and face. -->
+    <path d="M256 294c6 29 6 49-9 62l35 39 62-38c-27-13-34-27-30-65" fill="#faf9f4" stroke-width="1.5"/>
+    <path d="M263 326c10 8 25 11 35 6" stroke-width=".9"/>
+    <path d="M216 203c-5 31 0 56 13 81 12 21 33 43 51 45 15-1 43-16 62-39 22-28 28-65 21-95l-74-52-73 60Z" fill="#faf9f4" stroke-width="1.7"/>
+    <path d="M217 226c-10-10-19-4-16 10 1 13 8 20 17 23m-8-24c-3-3-5 2-3 7m144-26c12-12 21-5 16 9-3 12-11 20-18 21" fill="#faf9f4" stroke-width="1.2"/>
+    <!-- Sweeping fringe. -->
+    <path d="M201 216c-8-57 18-101 66-107 36-7 76 9 88 36 16 22 18 57 5 80-2-34-10-59-32-75 1 29-9 49-28 65 3-18 2-30-1-41-5 23-24 39-46 48 13-23 17-42 14-54-14 33-29 49-54 60l10-42c-10 18-15 28-22 30Z" fill="#f1f1e9" stroke-width="1.7"/>
+    <path d="M268 123c-24 20-32 51-40 70m66-69c1 31-7 58-23 77m39-66c13 14 19 33 18 51m-16-68c24 7 44 24 50 49" stroke-width=".75"/>
+    <path d="M221 248c10-9 24-10 35-2m44-3c11-9 26-11 37-6" stroke-width="2"/>
+    <path d="m221 248-5-4m8 2-4-5m112-3 6-6m-9 5 3-5" stroke-width="1.2"/>
+    <path d="M230 246c-1 11 9 17 16 9l3-9m58-4c-1 10 9 15 15 6l2-9" fill="#9aa59a" stroke-width="1.1"/>
+    <path d="M236 247v5m77-11v5" stroke-width="2.3"/>
+    <path d="M225 257c8 6 18 5 25 1m57-5c7 3 15 1 20-4m-95-17c8-4 16-3 22 0m47-4c7-5 16-6 24-4" stroke-width=".7"/>
+    <path d="m278 260-4 12 5 2m-12 20c7 4 15 3 21-1" stroke-width="1.1"/>
+    <path d="m236 270 2 4m4-6 2 4m75-9 2 4m4-6 2 4" stroke="#c0aca0" stroke-width="1.1"/>
+    <!-- Side locks frame her cheeks. -->
+    <path d="M208 211c-4 55 20 71 15 115-1 16-8 31-20 43 32-12 41-37 29-68-9-24-21-47-17-78m143-38c20 45-1 78-13 101-9 26-2 54 15 75-1-18 2-37 10-50 12-20 23-41 20-68" fill="#f1f1e9" stroke-width="1.5"/>
+    <path d="M213 283c17 31 17 46 1 69m157-123c1 28-16 51-21 74-4 17 1 27 2 36" stroke-width=".7"/>
+    <!-- Small hair ribbon and its two quiet ends. -->
+    <path d="m370 183-10-20c18-1 29 5 33 16 9-10 18-12 29-9l-13 22-20-6-19-3Z" fill="#bac9c8" stroke-width="1.1"/>
+    <path d="m385 184 4 43 8-8 6 6-3-40m-15-6 10 6m-6-10 3 11" fill="#bac9c8" stroke-width=".9"/>
+    <!-- Soft cardigan shoulders and blouse. -->
+    <path d="M247 346c-24 2-53 17-74 29-26 25-28 88-35 138-2 22 10 44 36 48l37 43h178c33-28 67-43 64-78-4-32-24-102-46-136-17-24-38-34-66-44l-51 32-43-32Z" fill="url(#fade)" stroke-width="1.8"/>
+    <path d="m244 349 25 50 23-22 17 21 34-50m-88 29-17 106m91-105 10 45m-47-46 4 78" stroke-width="1.1"/>
+    <path d="m249 348-22 21 9 26-12 24 18 53m102-124 20 21-9 27 11 22-10 27M179 392c-12 20-14 60-17 85m238-71c9 17 17 42 19 63m-239-64 11 39m-26 28 12 17m231-38 18 25" stroke-width=".9"/>
+    <path d="M284 397c-7 13-18 14-24 6 7-9 15-9 24-6Zm6 0c10 2 15 11 12 20-11 0-18-6-12-20Z" fill="#bbc8c4" stroke-width="1"/>
+    <path d="m284 400-9 29 10-7 5 5-1-28" fill="#bbc8c4" stroke-width=".8"/>
+    <!-- Open book: simple blocks of muted blue and ivory. -->
+    <path d="M206 420c33-7 69 5 91 23 34-18 76-20 115-9l-22 114c-33-8-63-6-88 8-30-20-64-28-98-25l2-111Z" fill="#829caa" stroke-width="1.5"/>
+    <path d="M216 414c31-1 61 10 82 28 31-17 69-19 105-12l-23 108c-29-4-57 0-77 11-27-16-57-25-88-23l1-112Z" fill="#fbfaf5" stroke-width="1.2"/>
+    <path d="m298 442 5 107m-79-125c28 2 46 9 65 20m28 0c23-9 48-11 74-7m-162-4c24 2 42 9 58 17m29 1c24-9 45-10 73-7m-165 10c21 1 39 7 59 17m-60-9c21 1 40 7 58 17m35-19c22-7 43-8 66-6m-68 15c22-7 43-8 65-6m-66 15c21-7 42-8 65-6m-164-20-1 35 60 22 1-35-60-22Zm4 28 13-10 10 13 12-6 14 20m26-1c19-5 38-7 59-4m-60 13c17-5 37-7 58-4m-144-1 52 19m-52-10 52 19" stroke="#a8b2a8" stroke-width=".7"/>
+    <!-- Hands curled naturally around the book edges. -->
+    <path d="M187 478c8-7 8-19 18-22 7-2 13 1 18 2l17 8c8 5 4 11-2 9l-14-4c3 10 3 18 0 24l-13 19-16-4-8-32Z" fill="#faf9f4" stroke-width="1.3"/>
+    <path d="m202 466 16 5m-18 4 15 5m-18 4 14 4m-12 9 11 0" stroke-width=".8"/>
+    <path d="M400 479c0-10 8-15 12-20 5-5 11-3 10 3l-9 15c10 1 15 6 14 14-3 12-18 24-31 28l-12-22 16-18Z" fill="#faf9f4" stroke-width="1.3"/>
+    <path d="m407 480 10-3m-12 11 16-8m-14 16 16-9m-15 17 12-9" stroke-width=".8"/>
+    <!-- Crossing sleeves and loose folds finish the half-body crop. -->
+    <path d="m177 490 22 17 13-5 19 32c-17 19-38 25-57 26-26 0-36-19-33-39 2-15 8-21 18-36l18 5Z" fill="#f3f3ec" stroke-width="1.5"/>
+    <path d="m184 499 18 38m-13-43 23 40m-58-17c8 18 26 25 44 23m-34-36c3 11 11 18 20 22m-33 5c8 13 17 19 32 21" stroke-width=".8"/>
+    <path d="m390 500 10 15 14-7 17 24c-7 26-38 41-66 37-16-2-36-16-50-25l17-28c21 7 40 4 58-16Z" fill="#f3f3ec" stroke-width="1.5"/>
+    <path d="m389 507 14 27m-7-31 15 29m-72 11c20 11 40 14 63 4m-48 10c20 5 35 5 49-4m-188 0-6 50m36-63-6 40m129-11 9 35" stroke-width=".8"/>
+    <path d="M206 603c56 8 122 8 179 0" stroke-width="1.1"/>
+    <!-- Sparse pen hatching: deliberately unfilled, not a stock icon. -->
+    <g stroke-width=".55" opacity=".55"><path d="m189 247 8 19m-9-8 9 20m-3-2 6 12m187-53-3 23m7-12-4 28m-181 99-6 15m10-11-5 14m-42 75-3 20m7-9-3 16m281 6 4 15m-8-7 4 16"/></g>
+    <!-- Two tiny floating leaves, like marks in the margin. -->
+    <path d="M119 266c-12-9-16-20-13-33 14 7 19 17 13 33Zm0 0-9-20m326 100c12-3 20-11 24-23-15 1-24 8-24 23Zm0 0 16-15" stroke="#9daa98" stroke-width="1"/>
+    <path d="m437 121 0 12m-6-6h12m-311 232v8m-4-4h8" stroke="#aeb7a9" stroke-width="1"/>
+  </g>
+</svg>

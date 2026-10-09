@@ -1,4 +1,5 @@
 import { nativeImage } from "electron";
+import { safeRasterImage } from "./documentImageSafety";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
@@ -10,7 +11,7 @@ import {
 } from "./archiveService";
 
 const 图片扩展名 = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
-const 压缩包扩展名 = new Set(["zip", "cbz"]);
+const 压缩包扩展名 = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 const 自然排序器 = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 const 缩略图最大字节数 = 12 * 1024 * 1024;
 const 缩略图优先字节数 = 4 * 1024 * 1024;
@@ -421,6 +422,7 @@ async function 读取图片为DataUrl(图片路径: string, 显示名称 = 图�
 }
 
 function 图片数据转缩略图DataUrl(图片数据: Buffer, 显示名称: string): string | null {
+  if (图片数据.length > 缩略图最大字节数 || !safeRasterImage(图片数据)) return null;
   let 原图 = nativeImage.createFromBuffer(图片数据);
   if (原图.isEmpty() && path.extname(显示名称).slice(1).toLowerCase() === "gif") {
     const 静态首帧 = decodeGifFirstFrame(图片数据);

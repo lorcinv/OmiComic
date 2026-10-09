@@ -1,7 +1,9 @@
-﻿import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import ArrowIcon from "../ArrowIcon";
+import 资源详情缩略图 from "../components/DetailPagePreview";
+import { useBoundedRecord } from "../hooks/useBoundedRecord";
 import GlassSelect from "../GlassSelect";
 import type { GlassSelectOption } from "../GlassSelect";
 import OmiBrandIcon, { type OmiBrandOriginGetter } from "../OmiBrandIcon";
@@ -52,6 +54,7 @@ interface LibraryPageProps {
     context?: 阅读打开上下文,
     transitionOrigin?: OmiBrandOriginGetter,
   ) => void;
+  onHome: () => void;
   refreshToken: number;
   isActive: boolean;
 }
@@ -221,130 +224,6 @@ function SidebarIcon({ name }: { name: 侧栏图标名称 }) {
         </>
       )}
     </svg>
-  );
-}
-
-interface 资源详情缩略图Props {
-  page: 阅读页面项;
-  selected: boolean;
-  onSelect: () => void;
-  onOpen: () => void;
-}
-
-interface 资源详情缩略图加载任务 {
-  cancelled: () => boolean;
-  run: () => Promise<void>;
-}
-
-const 资源详情缩略图加载队列: 资源详情缩略图加载任务[] = [];
-const 资源详情缩略图最大并发数 = 4;
-let 资源详情缩略图加载中数量 = 0;
-
-function 推进资源详情缩略图加载队列(): void {
-  while (资源详情缩略图加载中数量 < 资源详情缩略图最大并发数 && 资源详情缩略图加载队列.length > 0) {
-    const 任务 = 资源详情缩略图加载队列.shift();
-    if (!任务 || 任务.cancelled()) continue;
-    资源详情缩略图加载中数量 += 1;
-    void 任务.run()
-      .catch(() => undefined)
-      .finally(() => {
-        资源详情缩略图加载中数量 -= 1;
-        推进资源详情缩略图加载队列();
-      });
-  }
-}
-
-function 调度资源详情缩略图加载(run: () => Promise<void>): () => void {
-  let 已取消 = false;
-  资源详情缩略图加载队列.push({
-    cancelled: () => 已取消,
-    run,
-  });
-  推进资源详情缩略图加载队列();
-  return () => {
-    已取消 = true;
-  };
-}
-
-function 资源详情缩略图({ page, selected, onSelect, onOpen }: 资源详情缩略图Props) {
-  const 容器 = useRef<HTMLButtonElement>(null);
-  const [状态, 设置状态] = useState<缩略图状态>({ status: "idle", url: null });
-
-  useEffect(() => {
-    const 元素 = 容器.current;
-    if (!元素) return;
-    let 已取消 = false;
-    let 已开始 = false;
-    let 取消排队: (() => void) | null = null;
-
-    function 加载(): void {
-      if (已开始) return;
-      已开始 = true;
-      设置状态({ status: "loading", url: null });
-      取消排队 = 调度资源详情缩略图加载(async () => {
-        if (已取消) return;
-        try {
-          const 结果 = await window.omicomic.getPageImage({
-            sourcePath: page.sourcePath,
-            virtualPath: page.virtualPath,
-            archiveInnerPath: page.archiveInnerPath,
-            type: page.type,
-          });
-          if (已取消) return;
-          设置状态(结果.ok && 结果.data.url
-            ? { status: "loaded", url: 结果.data.url }
-            : { status: "error", url: null });
-        } catch {
-          if (!已取消) 设置状态({ status: "error", url: null });
-        }
-      });
-    }
-
-    if (typeof IntersectionObserver !== "function") {
-      加载();
-      return () => {
-        已取消 = true;
-        取消排队?.();
-      };
-    }
-
-    const 观察器 = new IntersectionObserver((记录) => {
-      if (!记录.some((项目) => 项目.isIntersecting)) return;
-      观察器.disconnect();
-      加载();
-    }, { rootMargin: "280px" });
-    观察器.observe(元素);
-    return () => {
-      已取消 = true;
-      取消排队?.();
-      观察器.disconnect();
-    };
-  }, [page.archiveInnerPath, page.sourcePath, page.type, page.virtualPath]);
-
-  return (
-    <button
-      ref={容器}
-      type="button"
-      className={`resource-detail-thumbnail ${selected ? "is-selected" : ""}`}
-      aria-pressed={selected}
-      aria-label={`第 ${page.index + 1} 页：${page.name}`}
-      onClick={onSelect}
-      onDoubleClick={onOpen}
-    >
-      <span className={`resource-detail-thumbnail-image thumbnail-${状态.status}`}>
-        {状态.status === "loaded" && 状态.url ? (
-          <img src={状态.url} alt="" draggable={false} />
-        ) : 状态.status === "error" ? (
-          <span aria-hidden="true">!</span>
-        ) : (
-          <span className="resource-detail-thumbnail-skeleton" aria-hidden="true" />
-        )}
-      </span>
-      <span className="resource-detail-thumbnail-caption">
-        <strong>{String(page.index + 1).padStart(3, "0")}</strong>
-        <span>{page.name}</span>
-      </span>
-    </button>
   );
 }
 
@@ -630,7 +509,7 @@ function 格式化日期时间(时间戳: number): string {
 }
 
 function 支持真实缩略图(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
 }
 
 function 获取父目录路径(文件路径: string): string {
@@ -655,14 +534,14 @@ function 获取文件资源Key(文件: 文件条目): string | null {
 }
 
 function 支持收藏(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
 }
 
 function 获取文件收藏输入(文件: 文件条目): Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex"> | null {
   if (!支持收藏(文件.type)) return null;
   const resourceKey = 获取文件资源Key(文件);
   if (!resourceKey) return null;
-  const sourceType = 文件.type === "archive" ? "archive" : "folder";
+  const sourceType = 文件.type === "pdf" || 文件.type === "epub" || 文件.type === "archive" ? 文件.type : "folder";
 
   return {
     resourceKey,
@@ -952,15 +831,15 @@ function 获取可阅读页数Key(文件: 文件条目): string | null {
 }
 
 function 支持可阅读页数统计(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
 }
 
 function 可作为阅读资源(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
 }
 
-function 获取文件阅读类型(文件: 文件条目): "folder" | "image" | "archive" | null {
-  if (文件.type === "folder" || 文件.type === "image" || 文件.type === "archive") return 文件.type;
+function 获取文件阅读类型(文件: 文件条目): "folder" | "image" | "archive" | "pdf" | "epub" | null {
+  if (文件.type === "folder" || 文件.type === "image" || 文件.type === "archive" || 文件.type === "pdf" || 文件.type === "epub") return 文件.type;
   return null;
 }
 
@@ -1036,7 +915,7 @@ function 获取卡片进度显示状态(
   };
 }
 
-function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps) {
+function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPageProps) {
   const [根目录列表, 设置根目录列表] = useState<LibraryRoot[]>([]);
   const [当前根目录, 设置当前根目录] = useState<string | null>(null);
   const [当前目录, 设置当前目录] = useState<目录结果 | null>(null);
@@ -1080,9 +959,9 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
   const [图书切换按钮透明度, 设置图书切换按钮透明度] = useState<图书切换按钮透明度>(默认设置.bookSwitchButtonOpacity);
   const [当前页, 设置当前页] = useState(1);
   const [页码输入, 设置页码输入] = useState("1");
-  const [缩略图表, 设置缩略图表] = useState<Record<string, 缩略图状态>>({});
-  const [书签预览表, 设置书签预览表] = useState<Record<string, 缩略图状态>>({});
-  const [可阅读页数表, 设置可阅读页数表] = useState<Record<string, 可阅读页数状态>>({});
+  const [缩略图表, 设置缩略图表] = useBoundedRecord<缩略图状态>(512);
+  const [书签预览表, 设置书签预览表] = useBoundedRecord<缩略图状态>(512);
+  const [可阅读页数表, 设置可阅读页数表] = useBoundedRecord<可阅读页数状态>(4096);
   const [阅读进度表, 设置阅读进度表] = useState<Record<string, ReadingProgress>>({});
   const [最近打开列表, 设置最近打开列表] = useState<RecentOpenedItem[]>([]);
   const [收藏列表, 设置收藏列表] = useState<FavoriteItem[]>([]);
@@ -1182,13 +1061,13 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
   const [资源详情阅读资源, 设置资源详情阅读资源] = useState<阅读资源结果 | null>(null);
   const [资源详情加载状态, 设置资源详情加载状态] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const [资源详情所选页, 设置资源详情所选页] = useState(0);
+  const [资源详情预览页, 设置资源详情预览页] = useState(0);
   const [资源详情缩略图尺寸, 设置资源详情缩略图尺寸] = useState<资源详情缩略图尺寸>("medium");
   const [资源详情顶部折叠, 设置资源详情顶部折叠] = useState(false);
   const [资源详情编辑模式, 设置资源详情编辑模式] = useState(false);
   const [资源详情路径浮层打开, 设置资源详情路径浮层打开] = useState(false);
   const 资源详情滚动容器 = useRef<HTMLElement>(null);
   const 资源详情预览滚动容器 = useRef<HTMLElement>(null);
-  const 资源详情编辑区域 = useRef<HTMLElement>(null);
   const 资源详情编辑快照 = useRef<{ note: string; tags: string } | null>(null);
   const 资源详情加载序号 = useRef(0);
   const [整理备注输入, 设置整理备注输入] = useState("");
@@ -2235,11 +2114,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     return 标签匹配 && 搜索匹配;
   }), [最近打开列表, 最近搜索内容, 已选标签列表, 资源元数据表, 搜索模式]);
   const 最近打开卡片项目 = useMemo(() => 筛选后最近打开列表.map((项目) => {
-    const 文件类型: 资源类型 = 项目.sourceType === "archive"
-      ? "archive"
-      : 项目.sourceType === "image"
-        ? "image"
-        : "folder";
+    const 文件类型: 资源类型 = 项目.sourceType;
     const 扩展名 = 文件类型 === "folder" ? "" : 获取文件扩展名(项目.sourcePath);
 
     return {
@@ -2254,11 +2129,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     };
   }), [筛选后最近打开列表]);
   const 收藏卡片项目 = useMemo(() => 筛选后收藏列表.map((项目) => {
-    const 文件类型: 资源类型 = 项目.sourceType === "archive"
-      ? "archive"
-      : 项目.sourceType === "image"
-        ? "image"
-        : "folder";
+    const 文件类型: 资源类型 = 项目.sourceType;
     const 扩展名 = 文件类型 === "folder" ? "" : 获取文件扩展名(项目.sourcePath);
 
     return {
@@ -2273,11 +2144,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     };
   }), [筛选后收藏列表]);
   const 书签卡片项目 = useMemo(() => 筛选后书签列表.map((项目) => {
-    const 文件类型: 资源类型 = 项目.sourceType === "archive"
-      ? "archive"
-      : 项目.sourceType === "image"
-        ? "image"
-        : "folder";
+    const 文件类型: 资源类型 = 项目.sourceType;
     const 扩展名 = 文件类型 === "folder" ? "" : 获取文件扩展名(项目.sourcePath);
 
     return {
@@ -2309,26 +2176,6 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     })
     .filter((项目): 项目 is { 文件夹: VirtualFolder; 预览资源: VirtualFolderItem; 文件: 文件条目 } => 项目 !== null),
   [筛选后书架文件夹列表]);
-  const 书架文件夹缩略图候选项目 = useMemo(() => {
-    const 文件表 = new Map<string, 文件条目>();
-    const 加入候选 = (文件夹: VirtualFolder, 项目: VirtualFolderItem | null): void => {
-      if (!项目 || 文件表.has(项目.sourcePath)) return;
-      文件表.set(项目.sourcePath, {
-        id: `${文件夹.id}:${项目.resourceKey}`,
-        name: 项目.title,
-        path: 项目.sourcePath,
-        type: 项目.sourceType,
-        extension: 项目.sourceType === "folder" ? "" : 获取文件扩展名(项目.sourcePath),
-      });
-    };
-
-    for (const 文件夹 of 筛选后书架文件夹列表) {
-      加入候选(文件夹, 获取书架文件夹设定封面资源(文件夹));
-      加入候选(文件夹, 文件夹.items[0] ?? null);
-    }
-
-    return Array.from(文件表.values());
-  }, [筛选后书架文件夹列表]);
   const 虚拟文件夹卡片项目 = useMemo(() => 筛选后虚拟文件夹项目.map((项目) => {
     const 文件类型 = 项目.sourceType;
     const 扩展名 = 文件类型 === "folder" ? "" : 获取文件扩展名(项目.sourcePath);
@@ -2385,6 +2232,26 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     () => 获取当前分页切片(虚拟文件夹卡片项目),
     [安全当前页, 实际每页数量, 虚拟文件夹卡片项目],
   );
+  const 书架文件夹缩略图候选项目 = useMemo(() => {
+    const 文件表 = new Map<string, 文件条目>();
+    const 加入候选 = (文件夹: VirtualFolder, 项目: VirtualFolderItem | null): void => {
+      if (!项目 || 文件表.has(项目.sourcePath)) return;
+      文件表.set(项目.sourcePath, {
+        id: `${文件夹.id}:${项目.resourceKey}`,
+        name: 项目.title,
+        path: 项目.sourcePath,
+        type: 项目.sourceType,
+        extension: 项目.sourceType === "folder" ? "" : 获取文件扩展名(项目.sourcePath),
+      });
+    };
+
+    for (const 文件夹 of 当前页书架文件夹列表) {
+      加入候选(文件夹, 获取书架文件夹设定封面资源(文件夹));
+      加入候选(文件夹, 文件夹.items[0] ?? null);
+    }
+
+    return Array.from(文件表.values());
+  }, [当前页书架文件夹列表]);
   const 全部标签列表 = useMemo(() => {
     const 标签集合 = new Set<string>();
     for (const 元数据 of Object.values(资源元数据表)) {
@@ -2464,11 +2331,11 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
   ), [筛选后收藏列表]);
   const 虚拟文件夹阅读队列 = useMemo<阅读相邻资源项[]>(() => (
     筛选后虚拟文件夹项目
-      .filter((项目) => 项目.sourceType === "folder" || 项目.sourceType === "image" || 项目.sourceType === "archive")
+      .filter((项目) => 项目.sourceType === "folder" || 项目.sourceType === "image" || 项目.sourceType === "archive" || 项目.sourceType === "pdf" || 项目.sourceType === "epub")
       .map((项目) => ({
         key: 项目.resourceKey,
         path: 项目.sourcePath,
-        type: 项目.sourceType as "folder" | "image" | "archive",
+        type: 项目.sourceType as "folder" | "image" | "archive" | "pdf" | "epub",
         title: 项目.title,
       }))
   ), [筛选后虚拟文件夹项目]);
@@ -3207,7 +3074,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       const 目标 = 事件.target;
       if (!(目标 instanceof Node)) return;
       if (
-        资源详情编辑区域.current?.contains(目标)
+        (目标 instanceof Element && !!目标.closest(".resource-detail-direct-summary textarea, .resource-detail-direct-tags button"))
         || 标签添加浮层.current?.contains(目标)
         || 标签添加触发区.current?.contains(目标)
         || (目标 instanceof Element && 目标.closest(".resource-detail-back"))
@@ -3818,6 +3685,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     设置可阅读页数表((原表) => {
       const 新表: Record<string, 可阅读页数状态> = { ...原表 };
       for (const key of 当前显示Key集合) {
+        delete 新表[key]; // Promote currently visible entries before applying the cache bound.
         新表[key] = 原表[key] ?? { status: "loading", count: null };
       }
       return 新表;
@@ -4032,18 +3900,12 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
   async function 打开资源(文件: 文件条目): Promise<void> {
     if (!当前根目录) return;
     const 本次打开序号 = ++打开阅读请求序号.current;
-    if (文件.type === "pdf") {
-      设置错误信息("PDF 阅读支持已暂时关闭，将在后续版本重新评估。");
-      return;
-    }
-    if (文件.type === "epub") {
-      设置错误信息("当前版本暂不支持 EPUB 阅读。");
-      return;
-    }
     if (
       文件.type !== "folder"
       && 文件.type !== "image"
       && 文件.type !== "archive"
+      && 文件.type !== "pdf"
+      && 文件.type !== "epub"
     ) return;
 
     设置错误信息(null);
@@ -4055,7 +3917,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
           const 已进入目录 = await 打开目录(文件.path, 当前根目录);
           if (本次打开序号 !== 打开阅读请求序号.current) return;
           if (已进入目录) {
-            设置错误信息(结果.error.message);
+            设置错误信息(null);
           }
         } else {
           设置错误信息(结果.error.message);
@@ -4070,7 +3932,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 已保存进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = 已保存进度
-        ? Math.min(Math.max(已保存进度.currentPageIndex, 0), Math.max(0, 结果.data.total - 1))
+        ? Math.min(Math.max(已保存进度.currentPageIndex, 0), (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)))
         : 默认起始页;
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
@@ -4107,7 +3969,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       const 进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = Math.min(
         Math.max(进度?.currentPageIndex ?? 项目.currentPageIndex ?? 0, 0),
-        Math.max(0, 结果.data.total - 1),
+        (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)),
       );
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
@@ -4145,7 +4007,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       const 进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = Math.min(
         Math.max(进度?.currentPageIndex ?? 0, 0),
-        Math.max(0, 结果.data.total - 1),
+        (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)),
       );
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
@@ -4165,15 +4027,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       设置错误信息("书架中的资源原路径已失效或不可读取，不会进入阅读器。此记录不会自动删除，可右键从当前书架移除。");
       return;
     }
-    if (项目.sourceType === "pdf") {
-      设置错误信息("PDF 阅读支持已暂时关闭，将在后续版本重新评估。");
-      return;
-    }
-    if (项目.sourceType === "epub") {
-      设置错误信息("当前版本暂不支持 EPUB 阅读。");
-      return;
-    }
-    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive") return;
+    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive" && 项目.sourceType !== "pdf" && 项目.sourceType !== "epub") return;
 
     设置错误信息(null);
     try {
@@ -4192,7 +4046,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       const 进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = Math.min(
         Math.max(进度?.currentPageIndex ?? 0, 0),
-        Math.max(0, 结果.data.total - 1),
+        (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)),
       );
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
@@ -4224,7 +4078,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
         return;
       }
 
-      const 起始页 = Math.min(Math.max(项目.pageIndex, 0), Math.max(0, 结果.data.total - 1));
+      const 起始页 = Math.min(Math.max(项目.pageIndex, 0), (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)));
       if (项目.pageIndex !== 起始页) {
         设置错误信息("书签页码已超出当前资源页数，已跳转到最后一页。");
       }
@@ -4274,16 +4128,6 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     }
     书架备注悬停Key.current = null;
     设置书架备注悬浮窗(null);
-  }
-
-  async function 继续上次阅读(转场原点: OmiBrandOriginGetter): Promise<void> {
-    if (!数据已加载) return;
-    const 上次阅读 = 最近打开列表[0];
-    if (!上次阅读) {
-      设置错误信息("暂无最近阅读记录。");
-      return;
-    }
-    await 打开最近项目(上次阅读, 转场原点);
   }
 
   function 获取书架备注悬浮窗样式(备注: string, x: number, y: number): CSSProperties {
@@ -4970,7 +4814,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
   }
 
   function 转为收藏输入(项目: VirtualFolderItemInput): 收藏输入 | null {
-    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive") return null;
+    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive" && 项目.sourceType !== "pdf" && 项目.sourceType !== "epub") return null;
     return {
       resourceKey: 项目.resourceKey,
       sourcePath: 项目.sourcePath,
@@ -5562,13 +5406,14 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       设置整理备注输入(整理信息.note);
       设置整理标签输入(整理信息.tags.join(", "));
     }
+    设置资源详情预览页(0);
     设置资源详情阅读资源(null);
     设置资源详情加载状态("loading");
     设置资源详情所选页(目标.kind === "bookmark" ? 目标.item.pageIndex : 0);
     const 本次加载序号 = ++资源详情加载序号.current;
     const 路径 = 目标.kind === "bookmark" ? 目标.item.sourcePath : 目标.input.sourcePath;
     const 类型 = 目标.kind === "bookmark" ? 目标.item.sourceType : 目标.fileType;
-    if (类型 !== "folder" && 类型 !== "image" && 类型 !== "archive") {
+    if (类型 !== "folder" && 类型 !== "image" && 类型 !== "archive" && 类型 !== "pdf" && 类型 !== "epub") {
       设置资源详情加载状态("error");
       return;
     }
@@ -5581,7 +5426,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
           return;
         }
         设置资源详情阅读资源(结果.data);
-        设置资源详情所选页((原页) => Math.min(Math.max(原页, 0), Math.max(0, 结果.data.total - 1)));
+        设置资源详情所选页((原页) => Math.min(Math.max(原页, 0), (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1))));
         设置资源详情加载状态("loaded");
       })
       .catch(() => {
@@ -5609,7 +5454,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
 
   function 打开资源详情阅读器(页码 = 资源详情所选页): void {
     if (!资源详情阅读资源) return;
-    const 起始页 = Math.min(Math.max(页码, 0), Math.max(0, 资源详情阅读资源.total - 1));
+    const 起始页 = Math.min(Math.max(页码, 0), (资源详情阅读资源.sourceType === "pdf" || 资源详情阅读资源.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 资源详情阅读资源.total - 1)));
     void 保存资源当前进度(资源详情阅读资源, 起始页);
     打开阅读器(资源详情阅读资源, 起始页);
   }
@@ -6940,7 +6785,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
     const 当前标签 = 解析标签输入(整理标签输入);
     const 资源Key = 是书签 ? 资源信息目标.item.resourceKey : 资源信息目标.input.resourceKey;
     const 阅读进度 = 阅读进度表[资源Key] ?? null;
-    const 总页数 = 资源详情阅读资源?.total ?? (是书签 ? 资源信息目标.item.totalPages : 阅读进度?.totalPages ?? 0);
+    const 总页数 = 资源详情阅读资源?.total || (是书签 ? 资源信息目标.item.totalPages : 阅读进度?.totalPages ?? 0);
     const 当前页索引 = 是书签
       ? 资源信息目标.item.pageIndex
       : Math.min(Math.max(阅读进度?.currentPageIndex ?? 0, 0), Math.max(0, 总页数 - 1));
@@ -7015,7 +6860,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
               <div className="resource-detail-reading-status">
                 <div className="resource-detail-progress-copy">
                   <span>阅读进度</span>
-                  <strong>{总页数 > 0 ? `第 ${当前页索引 + 1} 页 / 共 ${总页数} 页` : "等待页面清单"}</strong>
+                  <strong>{总页数 > 0 ? `第 ${当前页索引 + 1} 页 / 共 ${总页数} 页` : (类型 === "pdf" || 类型 === "epub" ? "打开后按需加载" : "等待页面清单")}</strong>
                   <em>{Math.round(进度百分比)}%</em>
                 </div>
                 <span className="resource-detail-progress-track" aria-hidden="true">
@@ -7035,7 +6880,6 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
               </div>
             </div>
             <section
-              ref={资源详情编辑区域}
               className={`resource-detail-direct-editor ${资源详情编辑模式 ? "is-editing" : "is-readonly"} ${资源详情有未保存修改 ? "is-dirty" : ""}`}
               aria-label={资源详情编辑模式 ? "资源信息编辑" : "资源信息摘要，双击编辑"}
               tabIndex={资源详情编辑模式 ? -1 : 0}
@@ -7068,7 +6912,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
                     )) : <span className="drawer-muted">未设置标签</span>}
                   </div>
                 </div>
-                {资源详情编辑模式 && (
+                {(
                   <div className="resource-detail-field-actions">
                     <span className={`tag-add-wrap ${标签添加弹窗打开 ? "is-open" : ""}`} ref={标签添加触发区}>
                       <button
@@ -7078,6 +6922,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
                         onClick={(事件) => {
                           事件.preventDefault();
                           事件.stopPropagation();
+                          开始资源详情信息编辑();
                           设置资源详情路径浮层打开(false);
                           if (标签添加弹窗打开) {
                             关闭标签添加弹窗();
@@ -7088,7 +6933,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
                           设置标签添加弹窗打开(true);
                           window.requestAnimationFrame(更新标签添加浮层位置);
                         }}
-                      ><span className="tag-add-symbol" aria-hidden="true">+</span></button>
+                      ><span className="tag-add-symbol" aria-hidden="true">+</span><span>添加标签</span></button>
                     </span>
                   </div>
                 )}
@@ -7168,6 +7013,15 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
                 <p>{总页数 > 0 ? `共 ${总页数} 页 · 单击选择，双击从该页阅读` : "正在读取页面清单"}</p>
               </div>
               <div className="resource-detail-preview-controls">
+                {资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && (
+                  <nav className="detail-pagination" aria-label="预览分页">
+                    <button type="button" aria-label="上一组预览" disabled={资源详情预览页 === 0}
+                      onClick={() => { 设置资源详情预览页((页) => Math.max(0, 页 - 1)); 资源详情预览滚动容器.current?.scrollTo({ top: 0 }); }}>‹</button>
+                    <span>{资源详情预览页 + 1} / {Math.ceil(资源详情阅读资源.pages.length / 48)}</span>
+                    <button type="button" aria-label="下一组预览" disabled={(资源详情预览页 + 1) * 48 >= 资源详情阅读资源.pages.length}
+                      onClick={() => { 设置资源详情预览页((页) => 页 + 1); 资源详情预览滚动容器.current?.scrollTo({ top: 0 }); }}>›</button>
+                  </nav>
+                )}
                 <div className="resource-detail-path-control" ref={资源详情路径控件}>
                   <button
                     type="button"
@@ -7224,7 +7078,10 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
                   <span>{整理错误 ?? "请返回后重新打开资源信息。"}</span>
                 </div>
               )}
-              {资源详情阅读资源?.pages.map((页面) => (
+              {资源详情加载状态 === "loaded" && 资源详情阅读资源 && (类型 === "pdf" || 类型 === "epub") && (
+                <div className="resource-detail-preview-empty"><strong>{信息.label} 按需阅读</strong><span>打开后按需加载页面，避免大文件一次性占用内存。</span></div>
+              )}
+              {资源详情阅读资源?.pages.slice(资源详情预览页 * 48, (资源详情预览页 + 1) * 48).map((页面) => (
                 <资源详情缩略图
                   key={`${资源详情阅读资源.resourceKey}:${页面.index}`}
                   page={页面}
@@ -7245,12 +7102,12 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
       <aside className="library-sidebar">
         <div className="sidebar-brand">
           <OmiBrandIcon
-            onActivate={继续上次阅读}
+            onActivate={onHome}
             disabled={!数据已加载 || !isActive}
-            ariaLabel={最近打开列表[0] ? `继续阅读：${最近打开列表[0].title}` : "暂无上次阅读"}
+            ariaLabel="返回首页"
           />
           <span className="sidebar-brand-copy">
-            <strong id="library-title">OmiComic</strong>
+            <button type="button" className="brand-home-button" onClick={onHome} id="library-title">OmiComic</button>
           </span>
         </div>
 
@@ -8248,11 +8105,11 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
                       url: null,
                     };
                     const 收藏输入: Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex"> | null =
-                      文件.type === "folder" || 文件.type === "archive" || 文件.type === "image"
+                      文件.type === "folder" || 文件.type === "archive" || 文件.type === "image" || 文件.type === "pdf" || 文件.type === "epub"
                         ? {
                             resourceKey: 项目.resourceKey,
                             sourcePath: 项目.sourcePath,
-                            sourceType: 文件.type === "archive" ? "archive" : "folder",
+                            sourceType: 文件.type === "pdf" || 文件.type === "epub" || 文件.type === "archive" ? 文件.type : "folder",
                             title: 项目.title,
                           }
                         : null;
@@ -8385,7 +8242,7 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
             <div className="empty-library">
               <div className="empty-illustration" aria-hidden="true">▦</div>
               <h2>从本地目录开始浏览</h2>
-              <p>选择漫画根目录后，这里会显示文件夹、图片、ZIP、CBZ、PDF、EPUB 和未知文件。</p>
+              <p>选择漫画根目录后，这里会显示文件夹、图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF、EPUB 和未知文件。</p>
               <button className="primary-action empty-primary" onClick={() => void 添加目录()}>
                 添加漫画目录
               </button>
@@ -8486,9 +8343,9 @@ function LibraryPage({ onOpenReader, refreshToken, isActive }: LibraryPageProps)
                           : 文件.type === "archive"
                             ? `双击阅读压缩包：${文件.name}`
                             : 文件.type === "pdf"
-                              ? `PDF 暂不支持阅读：${文件.name}`
+                              ? `双击阅读 PDF：${文件.name}`
                               : 文件.type === "epub"
-                                ? `EPUB 暂不支持阅读：${文件.name}`
+                                ? `双击阅读 EPUB：${文件.name}`
                           : 文件.name
                     }
                   >

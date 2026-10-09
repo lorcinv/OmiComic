@@ -5,6 +5,7 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import ArrowIcon from "../ArrowIcon";
+import { advanceInertia, estimateReleaseVelocity, trimPrefetchBuffer, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
 import type {
   AppSettings,
   ReaderViewState,
@@ -100,6 +101,7 @@ interface 页面图片调度任务 {
   调度代号: number;
   promise: Promise<页面图片任务结果>;
   完成: (结果: 页面图片任务结果) => void;
+  消费者取消检查: Array<() => boolean>;
 }
 
 interface 模式2页面几何 {
@@ -116,13 +118,10 @@ interface 模式2几何上下文 {
 
 const 跨页横图比例阈值 = 1.3;
 const 页组加载超时毫秒 = 10000;
-const NeeView惯性最小速度 = 0.11;
-const NeeView轻甩减速度 = 0.0075;
-const NeeView重甩减速度 = 0.0035;
+const NeeView惯性最小速度 = MIN_MOTION_SPEED;
 const NeeView最大惯性速度 = 3.2;
-const NeeView速度采样窗口毫秒 = 80;
+const NeeView速度采样窗口毫秒 = MOTION_SAMPLE_WINDOW_MS;
 const NeeView速度采样上限 = 96;
-const NeeView惯性最长毫秒 = 720;
 const 模式2跳转动画毫秒 = 190;
 const 模式2快速预热最小间隔毫秒 = 70;
 let 下一个阅读器会话Id = Date.now();
@@ -376,6 +375,7 @@ function ReaderPage({
   const 模式2预热结果提交定时器 = useRef<number | null>(null);
   const 模式2预热代号 = useRef(0);
   const 模式2上次快速预热时间 = useRef(0);
+  const 模式2上次运动预热时间 = useRef(0);
   const 安全索引引用 = useRef(0);
   const 资源Key引用 = useRef<string | null>(null);
   const 页面图片状态引用 = useRef<Record<number, 页面图片状态>>({});
@@ -592,7 +592,7 @@ function ReaderPage({
     const 页面长度: number[] = [];
     const 页面前缀长度: number[] = [0];
     const 页面中心: number[] = [];
-    const 页面总数 = resource?.total ?? 0;
+    const 页面总数 = 模式2 ? resource?.total ?? 0 : 0;
 
     for (let 索引 = 0; 索引 < 页面总数; 索引 += 1) {
       const 原始尺寸 = 页面尺寸表[`${resource?.resourceKey ?? "none"}:${索引}`]
@@ -631,6 +631,7 @@ function ReaderPage({
     return { 页面尺寸, 页面长度, 页面前缀长度, 页面中心 };
   }, [
     resource,
+    模式2,
     页面尺寸表,
     缩放模式,
     模式2可用宽度,
@@ -643,6 +644,7 @@ function ReaderPage({
   if (
     模式2
     && 几何上下文未切换
+    && 上次模式2几何 !== 模式2页面几何
     && 上次模式2几何.页面长度.length === 模式2页面几何.页面长度.length
     && 模式2页面几何.页面长度.length > 0
   ) {
@@ -1099,13 +1101,6 @@ function ReaderPage({
     });
   }
 
-  function 限制全景速度(velocityX: number, velocityY: number): { x: number; y: number } {
-    const 限速 = (速度: number) => Math.max(-NeeView最大惯性速度, Math.min(NeeView最大惯性速度, 速度));
-    return 垂直阅读
-      ? { x: 0, y: 限速(velocityY) }
-      : { x: 限速(velocityX), y: 0 };
-  }
-
   function 记录全景速度采样(拖动: 全景拖动状态, x: number, y: number, time: number): void {
     const 末采样 = 拖动.samples[拖动.samples.length - 1];
     const 安全时间 = Number.isFinite(time) && time > 0 ? time : performance.now();
@@ -1136,58 +1131,7 @@ function ReaderPage({
   }
 
   function 计算全景采样速度(采样列表: 全景速度采样[]): { x: number; y: number } {
-    if (采样列表.length < 2) return { x: 0, y: 0 };
-    const 末采样 = 采样列表[采样列表.length - 1];
-    const 起始时间 = 末采样.time - NeeView速度采样窗口毫秒;
-    const 有效采样 = 采样列表.filter((采样) => 采样.time >= 起始时间);
-    if (有效采样.length < 2) return { x: 0, y: 0 };
-
-    let 最后移动时间 = 有效采样[0].time;
-    let 移动参考位置 = 垂直阅读 ? 有效采样[0].y : 有效采样[0].x;
-    for (let 索引 = 1; 索引 < 有效采样.length; 索引 += 1) {
-      const 当前项 = 有效采样[索引];
-      const 当前轴向位置 = 垂直阅读 ? 当前项.y : 当前项.x;
-      if (Math.abs(当前轴向位置 - 移动参考位置) >= 0.35) {
-        最后移动时间 = 当前项.time;
-        移动参考位置 = 当前轴向位置;
-      }
-    }
-    if (末采样.time - 最后移动时间 > 50) return { x: 0, y: 0 };
-
-    const 基准时间 = 有效采样[0].time;
-    let 权重和 = 0;
-    let 时间均值分子 = 0;
-    let x均值分子 = 0;
-    let y均值分子 = 0;
-    const 采样时间跨度 = Math.max(1, 末采样.time - 有效采样[0].time);
-    for (let 索引 = 0; 索引 < 有效采样.length; 索引 += 1) {
-      const 采样 = 有效采样[索引];
-      const 时间权重 = (采样.time - 有效采样[0].time) / 采样时间跨度;
-      const 权重 = 0.35 + 时间权重 * 0.65;
-      const 相对时间 = 采样.time - 基准时间;
-      权重和 += 权重;
-      时间均值分子 += 相对时间 * 权重;
-      x均值分子 += 采样.x * 权重;
-      y均值分子 += 采样.y * 权重;
-    }
-    if (权重和 <= 0) return { x: 0, y: 0 };
-    const 时间均值 = 时间均值分子 / 权重和;
-    const x均值 = x均值分子 / 权重和;
-    const y均值 = y均值分子 / 权重和;
-    let 时间方差 = 0;
-    let x协方差 = 0;
-    let y协方差 = 0;
-    for (let 索引 = 0; 索引 < 有效采样.length; 索引 += 1) {
-      const 采样 = 有效采样[索引];
-      const 时间权重 = (采样.time - 有效采样[0].time) / 采样时间跨度;
-      const 权重 = 0.35 + 时间权重 * 0.65;
-      const 时间差 = (采样.time - 基准时间) - 时间均值;
-      时间方差 += 权重 * 时间差 * 时间差;
-      x协方差 += 权重 * 时间差 * (采样.x - x均值);
-      y协方差 += 权重 * 时间差 * (采样.y - y均值);
-    }
-    if (时间方差 < 0.01) return { x: 0, y: 0 };
-    return 限制全景速度(x协方差 / 时间方差, y协方差 / 时间方差);
+    return estimateReleaseVelocity(采样列表, 垂直阅读);
   }
 
   function 计算全景甩动强度(采样列表: 全景速度采样[]): number {
@@ -1197,6 +1141,9 @@ function ReaderPage({
   }
 
   function 应用全景拖动位置(拖动: 全景拖动状态): void {
+    const 速度 = 计算全景采样速度(拖动.samples);
+    拖动.velocityX = 速度.x;
+    拖动.velocityY = 速度.y;
     const 拖动距离 = 垂直阅读
       ? 拖动.currentY - 拖动.startY
       : 拖动.currentX - 拖动.startX;
@@ -1204,18 +1151,9 @@ function ReaderPage({
     尝试重心化模式2窗口();
     安排模式2运动预热(
       垂直阅读 ? 拖动.velocityY : 拖动.velocityX,
-      计算全景甩动强度(拖动.samples),
+      Math.min(1, Math.abs(垂直阅读 ? 速度.y : 速度.x) / NeeView最大惯性速度),
       拖动距离,
     );
-  }
-
-  function 计算全景惯性减速度(速度绝对值: number): number {
-    const 速度强度 = Math.min(
-      1,
-      Math.max(0, (速度绝对值 - 0.5) / Math.max(0.01, NeeView最大惯性速度 - 0.5)),
-    );
-    const 曲线强度 = 速度强度 * 速度强度;
-    return NeeView轻甩减速度 - (NeeView轻甩减速度 - NeeView重甩减速度) * 曲线强度;
   }
 
   function 启动全景惯性滚动(velocityX: number, velocityY: number, 甩动强度 = 0): void {
@@ -1232,12 +1170,12 @@ function ReaderPage({
     全景惯性上帧时间.current = 开始时间;
 
     const 推进惯性 = (当前时间: number) => {
-      const 间隔 = Math.min(48, Math.max(1, 当前时间 - 全景惯性上帧时间.current));
+      const 间隔 = Math.max(0, 当前时间 - 全景惯性上帧时间.current);
       全景惯性上帧时间.current = 当前时间;
       const 速度绝对值 = Math.abs(当前速度);
       if (
         速度绝对值 < NeeView惯性最小速度
-        || 当前时间 - 开始时间 >= NeeView惯性最长毫秒
+        || 间隔 > 250 // A suspended/backgrounded frame should settle, not jump.
       ) {
         全景惯性动画帧.current = null;
         全景惯性上帧时间.current = 0;
@@ -1245,18 +1183,15 @@ function ReaderPage({
         return;
       }
 
-      const 方向 = 当前速度 >= 0 ? 1 : -1;
-      const 当前减速度 = 计算全景惯性减速度(速度绝对值);
-      const 有效时长 = Math.min(间隔, 速度绝对值 / 当前减速度);
-      const 移动距离 = 方向 * (速度绝对值 * 有效时长 - 0.5 * 当前减速度 * 有效时长 * 有效时长);
+      const 下一步 = advanceInertia(当前速度, 间隔);
+      const 移动距离 = 下一步.distance;
       const 原偏移 = 全景偏移引用.current;
       设置全景偏移值(原偏移 + 移动距离);
       尝试重心化模式2窗口();
       安排模式2运动预热(当前速度, 甩动强度, 移动距离);
 
       const 已到边界 = Math.abs(全景偏移引用.current - 原偏移) < 0.01;
-      const 下一速度绝对值 = Math.max(0, 速度绝对值 - 当前减速度 * 有效时长);
-      当前速度 = 已到边界 ? 0 : 方向 * 下一速度绝对值;
+      当前速度 = 已到边界 ? 0 : 下一步.velocity;
 
       if (Math.abs(当前速度) < NeeView惯性最小速度) {
         全景惯性动画帧.current = null;
@@ -1414,7 +1349,7 @@ function ReaderPage({
       const 任务 = 页面图片加载队列.current.shift();
       if (!任务) break;
       页面图片排队任务.current.delete(任务.页面.index);
-      if (任务.调度代号 !== 页面图片调度代号.current) {
+      if (任务.调度代号 !== 页面图片调度代号.current || 任务.消费者取消检查.every((已取消) => 已取消())) {
         if (页面图片读取任务.current.get(任务.页面.index) === 任务.promise) {
           页面图片读取任务.current.delete(任务.页面.index);
           活动页面加载索引.current.delete(任务.页面.index);
@@ -1449,13 +1384,29 @@ function ReaderPage({
     }
   }
 
+  function 清除过期排队图片(): void {
+    页面图片加载队列.current = 页面图片加载队列.current.filter((任务) => {
+      if (!任务.消费者取消检查.every((已取消) => 已取消())) return true;
+      if (页面图片读取任务.current.get(任务.页面.index) === 任务.promise) {
+        页面图片读取任务.current.delete(任务.页面.index);
+        页面图片排队任务.current.delete(任务.页面.index);
+        活动页面加载索引.current.delete(任务.页面.index);
+      }
+      任务.完成(创建已取消页面图片结果(任务.页面.index));
+      return false;
+    });
+  }
+
   function 读取页面图片状态任务(
     页面: 阅读页面项,
     优先级: 页面图片任务优先级 = 1,
+    已取消: () => boolean = () => false,
   ): Promise<页面图片任务结果> {
+    清除过期排队图片();
     const 已有任务 = 页面图片读取任务.current.get(页面.index);
     if (已有任务) {
       const 已排队任务 = 页面图片排队任务.current.get(页面.index);
+      已排队任务?.消费者取消检查.push(已取消);
       if (已排队任务 && 优先级 < 已排队任务.优先级) {
         已排队任务.优先级 = 优先级;
         排序页面图片加载队列();
@@ -1474,6 +1425,7 @@ function ReaderPage({
       调度代号: 页面图片调度代号.current,
       promise,
       完成: 完成任务,
+      消费者取消检查: [已取消],
     };
     页面图片读取任务.current.set(页面.index, promise);
     页面图片排队任务.current.set(页面.index, 任务);
@@ -1528,7 +1480,7 @@ function ReaderPage({
         const 页面 = 页面列表[游标];
         游标 += 1;
         if (!页面) return;
-        const 结果 = await 读取页面图片状态任务(页面, 选项.优先级 ?? 1);
+        const 结果 = await 读取页面图片状态任务(页面, 选项.优先级 ?? 1, 已取消);
         if (!已取消() || 选项.提交已完成结果) 写入结果(结果);
       }
     }));
@@ -1568,13 +1520,19 @@ function ReaderPage({
     });
   }
 
-  async function 确保页面图片就绪(页面索引: number): Promise<boolean> {
+  async function 确保页面图片就绪(页面索引: number, 已取消: () => boolean = () => false): Promise<boolean> {
     if (!resource || resource.total <= 0) return false;
     const 操作资源Key = resource.resourceKey;
     const 安全页 = 限制索引(页面索引, resource.total);
     const 页面 = resource.pages[安全页];
     if (!页面) return false;
 
+    const 已缓冲 = 模式2预热结果缓冲.current.get(安全页);
+    if (已缓冲?.url || 已缓冲?.error) {
+      模式2预热结果缓冲.current.delete(安全页);
+      设置页面图片状态表((原表) => ({ ...原表, [安全页]: 已缓冲 }));
+      return !已取消() && 资源Key引用.current === 操作资源Key;
+    }
     const 已有状态 = 页面图片状态引用.current[安全页];
     if (已有状态?.error) return true;
     if (已有状态?.url) return 资源Key引用.current === 操作资源Key;
@@ -1584,8 +1542,8 @@ function ReaderPage({
       [安全页]: { url: "", error: null, loading: true },
     }));
 
-    const 结果 = await 读取页面图片状态任务(页面, 0);
-    if (资源Key引用.current !== 操作资源Key) return false;
+    const 结果 = await 读取页面图片状态任务(页面, 0, 已取消);
+    if (已取消() || 资源Key引用.current !== 操作资源Key) return false;
     设置页面图片状态表((原表) => ({
       ...原表,
       [结果.pageIndex]: 结果.state,
@@ -1618,9 +1576,9 @@ function ReaderPage({
         if (!状态.url) continue;
         const 索引 = Number(索引文本);
         if (!Number.isFinite(索引)) continue;
-        if (必留索引.has(索引)) continue;
         const 字节 = 估算页面图片缓存字节(状态);
         总字节 += 字节;
+        if (必留索引.has(索引)) continue;
 
         const 身后 = 方向 > 0
           ? 索引 < 中心页 - 身后保留页数
@@ -1712,13 +1670,30 @@ function ReaderPage({
     if (!resource || resource.total <= 0) return;
     const 操作资源Key = resource.resourceKey;
     const 索引列表 = 获取模式2预热索引(请求.centerIndex, 请求.direction, 请求.intensity);
+    const 缓冲上限 = Math.min(32 * 1024 * 1024, 内存缓存上限字节 * 0.2);
+    let 缓冲字节 = 0;
+    let 已用字节 = 0;
+    let 单页估计 = 4 * 1024 * 1024;
+    for (const 状态 of Object.values(页面图片状态引用.current)) {
+      const 字节 = 估算页面图片缓存字节(状态);
+      已用字节 += 字节;
+      单页估计 = Math.max(单页估计, 字节);
+    }
+    for (const 状态 of 模式2预热结果缓冲.current.values()) {
+      const 字节 = 估算页面图片缓存字节(状态);
+      缓冲字节 += 字节;
+      单页估计 = Math.max(单页估计, 字节);
+    }
+    已用字节 += 缓冲字节;
 
     const 待加载页面 = 索引列表
       .map((索引) => resource.pages[索引])
       .filter((页面): 页面 is 阅读页面项 => Boolean(页面))
       .filter((页面) => {
         if (页面仍在活动加载(页面.index)) return false;
-        const 状态 = 页面图片状态引用.current[页面.index];
+        if (Math.abs(页面.index - 请求.centerIndex) > 2
+          && (已用字节 + 单页估计 > 内存缓存上限字节 || 缓冲字节 + 单页估计 > 缓冲上限)) return false;
+        const 状态 = 模式2预热结果缓冲.current.get(页面.index) ?? 页面图片状态引用.current[页面.index];
         return !状态 || (!状态.url && !状态.error);
       });
     if (待加载页面.length === 0) return;
@@ -1746,6 +1721,7 @@ function ReaderPage({
             return;
           }
           模式2预热结果缓冲.current.set(结果.pageIndex, 结果.state);
+          trimPrefetchBuffer(模式2预热结果缓冲.current, 请求.centerIndex, Math.min(32 * 1024 * 1024, 内存缓存上限字节 * 0.2), 估算页面图片缓存字节);
           安排刷新模式2预热结果();
         },
         () => 资源Key引用.current !== 操作资源Key || 模式2预热代号.current !== 执行代号,
@@ -1851,6 +1827,9 @@ function ReaderPage({
 
   function 安排模式2运动预热(轴向速度: number, 甩动强度 = 0, 轴向位移 = 0): void {
     if (!resource || !模式2 || resource.total <= 0) return;
+    const 当前时间 = performance.now();
+    if (当前时间 - 模式2上次运动预热时间.current < 模式2快速预热最小间隔毫秒) return;
+    模式2上次运动预热时间.current = 当前时间;
     const 方向 = 计算模式2索引方向(轴向速度, 轴向位移);
     if (方向 === 0) return;
     预热模式2窗口(计算模式2偏移最近索引(), {
@@ -1872,7 +1851,7 @@ function ReaderPage({
   ): Promise<boolean> {
     if (!resource || resource.total <= 0) return false;
     const 目标页 = 限制索引(目标索引, resource.total);
-    const 已准备 = await 确保页面图片就绪(目标页);
+    const 已准备 = await 确保页面图片就绪(目标页, () => 资源Key引用.current !== 操作资源Key || 全景导航序号.current !== 导航序号);
     if (
       !已准备
       || 资源Key引用.current !== 操作资源Key
@@ -2425,9 +2404,6 @@ function ReaderPage({
     if (!拖动.active || 拖动.pointerId !== 事件.pointerId) return;
     记录全景指针采样(拖动, 事件);
     const 当前时间 = 事件.nativeEvent.timeStamp;
-    const 采样速度 = 计算全景采样速度(拖动.samples);
-    拖动.velocityX = 采样速度.x;
-    拖动.velocityY = 采样速度.y;
     拖动.lastX = 事件.clientX;
     拖动.lastY = 事件.clientY;
     拖动.lastTime = 当前时间;
@@ -2985,7 +2961,7 @@ function ReaderPage({
       .filter((页面): 页面 is 阅读页面项 => Boolean(页面))
       .filter((页面) => {
         if (页面仍在活动加载(页面.index)) return false;
-        const 状态 = 页面图片状态引用.current[页面.index];
+        const 状态 = 模式2预热结果缓冲.current.get(页面.index) ?? 页面图片状态引用.current[页面.index];
         return !状态 || (!状态.url && !状态.error);
       });
     if (待预加载页面.length === 0) return;
@@ -3038,20 +3014,27 @@ function ReaderPage({
     const 必留索引 = 计算缓存必留索引集合();
     设置页面图片状态表((原表) => {
       let 总字节 = 0;
+      const 过期空项: string[] = [];
       const 可移除项: Array<{ 索引: number; 字节: number; 距离: number }> = [];
 
       for (const [索引文本, 状态] of Object.entries(原表)) {
-        if (!状态.url) continue;
         const 索引 = Number(索引文本);
-        if (!Number.isFinite(索引) || 必留索引.has(索引)) continue;
+        if (!状态.url) {
+          if (!必留索引.has(索引) && !页面图片读取任务.current.has(索引)
+            && (!状态.error || Math.abs(索引 - 安全索引) > 40)) 过期空项.push(索引文本);
+          continue;
+        }
+        if (!Number.isFinite(索引)) continue;
         const 字节 = 估算页面图片缓存字节(状态);
         总字节 += 字节;
+        if (必留索引.has(索引)) continue;
         可移除项.push({ 索引, 字节, 距离: Math.abs(索引 - 安全索引) });
       }
 
-      if (总字节 <= 内存缓存上限字节) return 原表;
+      if (总字节 <= 内存缓存上限字节 && 过期空项.length === 0) return 原表;
       const 新表 = { ...原表 };
-      let 已变更 = false;
+      for (const 索引 of 过期空项) delete 新表[Number(索引)];
+      let 已变更 = 过期空项.length > 0;
       可移除项.sort((左侧, 右侧) => 右侧.距离 - 左侧.距离 || 右侧.索引 - 左侧.索引);
 
       for (const 项 of 可移除项) {

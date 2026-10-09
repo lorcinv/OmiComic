@@ -8,7 +8,7 @@
 
 ![Version](https://img.shields.io/badge/version-0.1.3-708090)
 ![Platform](https://img.shields.io/badge/platform-Windows-5f7184)
-![Electron](https://img.shields.io/badge/Electron-39-47848f)
+![Electron](https://img.shields.io/badge/Electron-43-47848f)
 ![React](https://img.shields.io/badge/React-18-5c7080)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-66788a)
 
@@ -22,6 +22,11 @@ OmiComic 是一个本地优先的桌面漫画阅读器。它不会上传漫画�
 
 ## 主要功能
 
+### 首页
+
+- 最近三本漫画、阅读进度与原创手绘线稿插画。
+- 点击资源库中的 OmiComic 文字或图标返回首页。
+
 ### 资源浏览与整理
 
 - 添加多个漫画根目录，并以缩略图网格浏览本地资源。
@@ -33,7 +38,8 @@ OmiComic 是一个本地优先的桌面漫画阅读器。它不会上传漫画�
 ### 阅读详情与缩略图预览
 
 - 展示封面、页数、阅读进度、标签和简介。
-- 支持续读入口、页面缩略图浏览及快速跳转。
+- 支持续读入口、每组最多 48 页的按需缩略预览及原页码跳转。
+- 无标签时可直接添加；简介点击编辑框外保存退出。
 - 详情信息可直接整理，阅读状态会在资源库中同步更新。
 
 ### 阅读器
@@ -54,12 +60,13 @@ OmiComic 是一个本地优先的桌面漫画阅读器。它不会上传漫画�
 | 图片文件夹 | 支持 | 按文件名自然排序读取目录中的图片 |
 | 单张图片 | 支持 | 从所在目录建立连续阅读列表 |
 | ZIP / CBZ | 支持 | 读取压缩包内的图片；暂不支持加密压缩包 |
-| PDF | 暂不支持阅读 | 可以在资源库中识别，阅读功能当前关闭 |
-| EPUB | 暂不支持阅读 | 可以在资源库中识别，尚未实现阅读 |
+| RAR / CBR、7z / CB7 | 支持 | 7-Zip 后台按页读取；密码、多卷归档不支持 |
+| PDF | 开发版支持 | PDF.js worker、分段读取、按需单页渲染 |
+| EPUB | 开发版支持 | 后台按章解析，净化文本/位图，隔离显示 |
 
 支持的图片格式：`JPG`、`JPEG`、`PNG`、`WebP`、`BMP`、`GIF`。
 
-> ZIP/CBZ 内单张解压图片设有 256 MiB 的安全读取上限。
+> 归档单张解压图片上限 256 MiB，条目最多 20,000，另有压缩比/总展开大小/超时限制；详情预览使用更低限制。见 [压缩包测试与边界](tests/ARCHIVE_STRESS.md)。
 
 ## 从源码运行
 
@@ -74,7 +81,7 @@ OmiComic 是一个本地优先的桌面漫画阅读器。它不会上传漫画�
 ```powershell
 git clone https://github.com/lorcinv/OmiComic.git
 cd OmiComic
-npm install
+npm ci
 npm run dev
 ```
 
@@ -97,6 +104,9 @@ npm start
 | `npm run build:electron` | 构建 Electron 主进程与预加载脚本 |
 | `npm run build` | 执行完整类型检查与构建 |
 | `npm start` | 启动已构建的桌面应用 |
+| `npm test` | 运行算法、文件系统、归档及文档回归/压力测试 |
+| `npm run test:dom` | React DOM 交互回归 |
+| `npm run test:ui` | 可用 Chromium 环境下的浏览器界面回归 |
 
 ## 项目结构
 
@@ -130,8 +140,12 @@ OmiComic/
 ## 当前限制
 
 - 目前仅面向 Windows 开发和验证。
-- PDF 与 EPUB 阅读尚未启用。
-- 不支持 RAR、7z 或加密 ZIP/CBZ。
+- 新 PDF/EPUB 界面按单页/章节阅读；图片阅读器的全景、双页和页级书签不适用于此界面。
+- EPUB 出版方样式、SVG、交互及远程内容会被移除；不支持 DRM。
+- 文档封面保持格式占位；页数在实际打开时读取。
+- 不支持加密、多卷压缩包；超限文件会安全失败。
+- 本轮新增功能在 Linux 做了自动化测试；Windows 视觉、鼠标手感及安装包验证仍需完成。
+- 可见大图可能超过用户设置的缓存预算；此设置不是整个进程的内存硬上限。
 - 仓库目前没有安装包生成与自动发布流程。
 
 ## 参与开发
@@ -148,9 +162,13 @@ OmiComic/
 ```powershell
 npm run typecheck
 npm run build
+npm test
+npm run test:dom
 ```
 
 ## 许可证
+
+第三方 7-Zip 的 LGPL/BSD/unRAR 限制及 npm 封装许可证见 `licenses/`；未来分发安装包须保留声明并满足对应源码提供义务。
 
 本项目目前尚未提供开源许可证。除非仓库后续明确加入许可证文件，否则代码的使用、复制和分发仍受默认版权规则约束。
 

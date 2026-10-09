@@ -8,7 +8,7 @@ export interface 应用信息 {
 
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
 export type 阅读页类型 = "folder-image" | "archive-image";
-export type 阅读资源类型 = "folder" | "image" | "archive";
+export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 每页数量 = 60 | 100 | 150 | 200;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
@@ -260,6 +260,7 @@ export interface 阅读资源结果 {
 }
 
 export interface 获取页面图片输入 {
+  preview?: boolean;
   sourcePath: string;
   virtualPath?: string;
   archiveInnerPath?: string;
@@ -312,6 +313,10 @@ export type 操作结果<T> =
   | { ok: false; error: { code: string; message: string } };
 
 contextBridge.exposeInMainWorld("omicomic", {
+  openDocument: (input: { path: string; type: "pdf" | "epub"; id: string }) => ipcRenderer.invoke("document:open", input),
+  readDocumentRange: (id: string, begin: number, end: number) => ipcRenderer.invoke("document:range", id, begin, end),
+  readDocumentChapter: (id: string, index: number) => ipcRenderer.invoke("document:chapter", id, index),
+  closeDocument: (id: string) => ipcRenderer.invoke("document:close", id),
   getAppInfo: (): Promise<应用信息> => ipcRenderer.invoke("应用:获取信息"),
   getAppData: (): Promise<操作结果<OmiComicAppData>> =>
     ipcRenderer.invoke("数据:获取应用数据"),

@@ -1,4 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { scanDirectory, listDirectoryImages } from "./services/directoryService";
+import { registerDocumentIpc } from "./services/documentService";
+import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage } from "electron";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 import {
@@ -57,24 +59,11 @@ import { 获取缩略图 } from "./services/thumbnailService";
 const 开发服务地址 = process.env.VITE_DEV_SERVER_URL;
 const 已授权根目录 = new Set<string>();
 const 图片扩展名 = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
-const 压缩包扩展名 = new Set(["zip", "cbz"]);
-const EPUB扩展名 = new Set(["epub"]);
+const 压缩包扩展名 = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 const 自然排序器 = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 let 当前阅读器会话Id = 0;
 
 type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
-
-interface 文件条目 {
-  id: string;
-  name: string;
-  path: string;
-  type: 资源类型;
-  extension: string;
-  size?: number;
-  modifiedAt?: number;
-  hasError?: boolean;
-  errorMessage?: string;
-}
 
 interface 可阅读页数输入 {
   path: string;
@@ -98,7 +87,7 @@ function 查找所属根目录(目标路径: string): string | null {
 
   for (const 根目录 of 已授权根目录) {
     const 相对路径 = path.relative(根目录, 规范路径);
-    if (相对路径 === "" || (!相对路径.startsWith("..") && !path.isAbsolute(相对路径))) {
+    if (相对路径 === "" || (相对路径 !== ".." && !相对路径.startsWith(`..${path.sep}`) && !path.isAbsolute(相对路径))) {
       return 根目录;
     }
   }
@@ -106,33 +95,23 @@ function 查找所属根目录(目标路径: string): string | null {
   return null;
 }
 
+async function 是已授权实际路径(目标路径: string): Promise<boolean> {
+  const 根目录 = 查找所属根目录(目标路径);
+  if (!根目录) return false;
+  try {
+    const [真实目录, 真实路径] = await Promise.all([文件系统.realpath(根目录), 文件系统.realpath(目标路径)]);
+    const 相对路径 = path.relative(真实目录, 真实路径);
+    return 相对路径 === "" || (相对路径 !== ".." && !相对路径.startsWith(`..${path.sep}`) && !path.isAbsolute(相对路径));
+  } catch { return false; }
+}
+
+
 function 授权根目录列表(根目录列表: Array<{ path: string }>): void {
   for (const 根目录 of 根目录列表) {
     if (typeof 根目录.path === "string" && 根目录.path.trim() !== "") {
       已授权根目录.add(规范化路径(根目录.path));
     }
   }
-}
-
-function 识别资源类型(名称: string, 是否目录: boolean): 资源类型 {
-  if (是否目录) {
-    return "folder";
-  }
-
-  const 扩展名 = path.extname(名称).slice(1).toLowerCase();
-  if (图片扩展名.has(扩展名)) {
-    return "image";
-  }
-  if (压缩包扩展名.has(扩展名)) {
-    return "archive";
-  }
-  if (扩展名 === "pdf") {
-    return "pdf";
-  }
-  if (EPUB扩展名.has(扩展名)) {
-    return "epub";
-  }
-  return "unknown";
 }
 
 function 是支持的图片(名称: string): boolean {
@@ -314,9 +293,22 @@ function 创建页面DataUrl(图片数据: Buffer, 显示名称: string): string
   return `data:${媒体类型};base64,${图片数据.toString("base64")}`;
 }
 
+function 创建受限页面预览(数据: Buffer): { url: string; width?: number; height?: number } {
+  // Refuse huge originals before native decoding; previews must never allocate full comic libraries.
+  const 尺寸 = 读取图片像素尺寸(数据);
+  if (数据.length > 12 * 1024 * 1024 || !尺寸 || 尺寸.width * 尺寸.height > 16_000_000) {
+    throw new Error("PREVIEW_TOO_LARGE");
+  }
+  const 图片 = nativeImage.createFromBuffer(数据);
+  if (图片.isEmpty()) throw new Error("PREVIEW_INVALID");
+  const 比例 = Math.min(1, 360 / Math.max(尺寸.width, 尺寸.height));
+  const 缩略图 = 图片.resize({ width: Math.max(1, Math.round(尺寸.width * 比例)), height: Math.max(1, Math.round(尺寸.height * 比例)), quality: "good" });
+  return { url: `data:image/jpeg;base64,${缩略图.toJPEG(78).toString("base64")}`, width: 缩略图.getSize().width, height: 缩略图.getSize().height };
+}
+
 async function 读取文件夹书签页预览(输入: 书签页预览输入, 来源路径: string): Promise<string> {
   const 图片目录 = 输入.sourceType === "folder" ? 来源路径 : path.dirname(来源路径);
-  if (!查找所属根目录(图片目录)) {
+  if (!(await 是已授权实际路径(图片目录))) {
     throw new Error("PATH_NOT_ALLOWED");
   }
 
@@ -375,33 +367,6 @@ async function 读取压缩包书签页预览(输入: 书签页预览输入, 来
 
   const 图片数据 = await 读取压缩包单张图片(来源路径, 内部路径);
   return 创建页面DataUrl(图片数据, 内部路径);
-}
-
-async function 读取文件条目(父目录: string, 名称: string, 是否目录: boolean): Promise<文件条目> {
-  const 完整路径 = path.join(父目录, 名称);
-  const 扩展名 = 是否目录 ? "" : path.extname(名称).slice(1).toLowerCase();
-  const 基础条目: 文件条目 = {
-    id: 完整路径,
-    name: 名称,
-    path: 完整路径,
-    type: 识别资源类型(名称, 是否目录),
-    extension: 扩展名,
-  };
-
-  try {
-    const 状态 = await 文件系统.stat(完整路径);
-    return {
-      ...基础条目,
-      size: 状态.size,
-      modifiedAt: 状态.mtimeMs,
-    };
-  } catch {
-    return {
-      ...基础条目,
-      hasError: true,
-      errorMessage: "无法读取该项目的详细信息。",
-    };
-  }
 }
 
 function 注册安全通道(): void {
@@ -635,6 +600,8 @@ function 注册安全通道(): void {
         输入.sourceType !== "folder"
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
+        && 输入.sourceType !== "pdf"
+        && 输入.sourceType !== "epub"
       )
     ) {
       return {
@@ -710,6 +677,8 @@ function 注册安全通道(): void {
         输入.sourceType !== "folder"
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
+        && 输入.sourceType !== "pdf"
+        && 输入.sourceType !== "epub"
       )
     ) {
       return {
@@ -1547,7 +1516,7 @@ function 注册安全通道(): void {
     }
 
     const 来源路径 = 规范化路径(输入.sourcePath);
-    if (!查找所属根目录(来源路径)) {
+    if (!(await 是已授权实际路径(来源路径))) {
       return {
         ok: false,
         error: { code: "PATH_NOT_ALLOWED", message: "当前书签资源不在已授权的漫画目录内。" },
@@ -1622,7 +1591,8 @@ function 注册安全通道(): void {
     }
   });
 
-  ipcMain.handle("目录:读取", async (_事件, 输入路径: unknown) => {
+  const 目录扫描任务 = new Map<number, AbortController>();
+  ipcMain.handle("目录:读取", async (事件, 输入路径: unknown) => {
     if (typeof 输入路径 !== "string" || 输入路径.trim() === "") {
       return {
         ok: false,
@@ -1639,19 +1609,13 @@ function 注册安全通道(): void {
       };
     }
 
+    目录扫描任务.get(事件.sender.id)?.abort();
+    const 扫描控制器 = new AbortController();
+    目录扫描任务.set(事件.sender.id, 扫描控制器);
+    const 取消扫描 = () => 扫描控制器.abort();
+    事件.sender.once("destroyed", 取消扫描);
     try {
-      const 目录项 = await 文件系统.readdir(目标路径, { withFileTypes: true });
-      const 文件列表 = await Promise.all(
-        目录项.map((目录项信息) =>
-          读取文件条目(目标路径, 目录项信息.name, 目录项信息.isDirectory()),
-        ),
-      );
-
-      文件列表.sort((左侧, 右侧) => {
-        if (左侧.type === "folder" && 右侧.type !== "folder") return -1;
-        if (左侧.type !== "folder" && 右侧.type === "folder") return 1;
-        return 自然排序器.compare(左侧.name, 右侧.name);
-      });
+      const 文件列表 = await scanDirectory(目标路径, { authorizedRoot: 所属根目录, signal: 扫描控制器.signal });
 
       const 是否位于根目录 = path.relative(所属根目录, 目标路径) === "";
       return {
@@ -1664,6 +1628,7 @@ function 注册安全通道(): void {
         },
       };
     } catch {
+      if (扫描控制器.signal.aborted) return { ok: false, error: { code: "SCAN_CANCELLED", message: "目录扫描已取消。" } };
       return {
         ok: false,
         error: {
@@ -1671,6 +1636,9 @@ function 注册安全通道(): void {
           message: "无法读取该文件夹，请检查权限或路径是否存在。",
         },
       };
+    } finally {
+      事件.sender.removeListener("destroyed", 取消扫描);
+      if (目录扫描任务.get(事件.sender.id) === 扫描控制器) 目录扫描任务.delete(事件.sender.id);
     }
   });
 
@@ -1696,31 +1664,20 @@ function 注册安全通道(): void {
     }
 
     const 资源路径 = 规范化路径(输入.path);
-    if (!查找所属根目录(资源路径)) {
+    if (!(await 是已授权实际路径(资源路径))) {
       return {
         ok: false,
         error: { code: "PATH_NOT_ALLOWED", message: "当前文件不在已授权的漫画目录内。" },
       };
     }
 
-    if (输入.type === "pdf") {
-      return {
-        ok: false,
-        error: {
-          code: "PDF_READING_DISABLED",
-          message: "PDF 阅读支持已暂时关闭，将在后续版本重新评估。",
-        },
-      };
-    }
-
-    if (输入.type === "epub") {
-      return {
-        ok: false,
-        error: {
-          code: "EPUB_READING_DISABLED",
-          message: "当前版本暂不支持 EPUB 阅读。",
-        },
-      };
+    if (输入.type === "pdf" || 输入.type === "epub") {
+      // The document worker discovers pages lazily; never parse a large document on the main thread.
+      return { ok: true, data: {
+        key: `${输入.type}:${资源路径}`, resourceKey: `${输入.type}:${资源路径}`,
+        title: path.basename(资源路径), sourcePath: 资源路径, sourceType: 输入.type,
+        pages: [], total: 0,
+      } };
     }
 
     if (输入.type === "archive") {
@@ -1784,7 +1741,7 @@ function 注册安全通道(): void {
 
     const 图片目录 = 输入.type === "folder" ? 资源路径 : path.dirname(资源路径);
     const 图片资源Key = `folder:${图片目录}`;
-    if (!查找所属根目录(图片目录)) {
+    if (!(await 是已授权实际路径(图片目录))) {
       return {
         ok: false,
         error: { code: "PATH_NOT_ALLOWED", message: "无法读取未添加目录中的图片。" },
@@ -1792,11 +1749,7 @@ function 注册安全通道(): void {
     }
 
     try {
-      const 目录项 = await 文件系统.readdir(图片目录, { withFileTypes: true });
-      const 图片名称 = 目录项
-        .filter((项目) => 项目.isFile() && 是支持的图片(项目.name))
-        .map((项目) => 项目.name)
-        .sort((左侧, 右侧) => 自然排序器.compare(左侧, 右侧));
+      const 图片名称 = await listDirectoryImages(图片目录, { authorizedRoot: 查找所属根目录(图片目录)! });
 
       if (图片名称.length === 0) {
         return {
@@ -1894,7 +1847,7 @@ function 注册安全通道(): void {
     if (会话已过期()) return 创建过期会话结果();
 
     const 来源路径 = 规范化路径(输入.sourcePath);
-    if (!查找所属根目录(来源路径)) {
+    if (!(await 是已授权实际路径(来源路径))) {
       return {
         ok: false,
         error: { code: "PATH_NOT_ALLOWED", message: "当前文件不在已授权的漫画目录内。" },
@@ -1919,8 +1872,9 @@ function 注册安全通道(): void {
       }
 
       try {
-        const 图片数据 = await 读取压缩包单张图片(来源路径, 内部路径);
+        const 图片数据 = await 读取压缩包单张图片(来源路径, 内部路径, "preview" in 输入 && 输入.preview === true ? 12 * 1024 * 1024 : undefined);
         if (会话已过期()) return 创建过期会话结果();
+        if ("preview" in 输入 && 输入.preview === true) return { ok: true, data: 创建受限页面预览(图片数据) };
         const 媒体类型 = 获取图片媒体类型(内部路径);
         const 图片尺寸 = 读取图片像素尺寸(图片数据);
         return {
@@ -1956,7 +1910,11 @@ function 注册安全通道(): void {
     }
 
     try {
+      const 文件状态 = await 文件系统.stat(来源路径);
+      const 是预览 = "preview" in 输入 && 输入.preview === true;
+      if (文件状态.size > (是预览 ? 12 : 256) * 1024 * 1024) throw new Error("IMAGE_TOO_LARGE");
       const 图片数据 = await 文件系统.readFile(来源路径);
+      if (是预览) return { ok: true, data: 创建受限页面预览(图片数据) };
       if (会话已过期()) return 创建过期会话结果();
       const 媒体类型 = 获取图片媒体类型(来源路径);
       const 图片尺寸 = 读取图片像素尺寸(图片数据);
@@ -2002,7 +1960,7 @@ function 注册安全通道(): void {
     }
 
     const 目标路径 = 规范化路径(输入.path);
-    if (!查找所属根目录(目标路径)) {
+    if (!(await 是已授权实际路径(目标路径))) {
       return {
         ok: false,
         error: { code: "PATH_NOT_ALLOWED", message: "当前文件不在已授权的漫画目录内。" },
@@ -2037,7 +1995,7 @@ function 注册安全通道(): void {
     }
 
     const 目标路径 = 规范化路径(输入.path);
-    if (!查找所属根目录(目标路径)) {
+    if (!(await 是已授权实际路径(目标路径))) {
       return {
         ok: true,
         data: {
@@ -2097,7 +2055,7 @@ function 注册安全通道(): void {
     }
 
     const 目标路径 = 规范化路径(输入.path);
-    if (!查找所属根目录(目标路径)) {
+    if (!(await 是已授权实际路径(目标路径))) {
       return {
         ok: false,
         error: { code: "PATH_NOT_ALLOWED", message: "当前文件不在已授权的漫画目录内。" },
@@ -2131,7 +2089,7 @@ function 注册安全通道(): void {
     }
 
     const 目标路径 = 规范化路径(输入路径);
-    if (!查找所属根目录(目标路径)) {
+    if (!(await 是已授权实际路径(目标路径))) {
       return {
         ok: false,
         error: { code: "PATH_NOT_ALLOWED", message: "当前文件不在已授权的漫画目录内。" },
@@ -2187,6 +2145,7 @@ function 创建主窗口(): void {
 
 app.whenReady().then(() => {
   注册安全通道();
+  registerDocumentIpc(查找所属根目录);
   创建主窗口();
 
   app.on("activate", () => {

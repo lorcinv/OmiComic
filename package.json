@@ -11,24 +11,37 @@
     "build": "npm run typecheck && npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.electron.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.electron.json",
+    "test": "npm run build:electron && node --test --test-concurrency=1 tests/*.test.cjs src/reader/*.test.cjs electron/services/*.test.cjs",
+    "test:dom": "vitest run --config tests/dom.config.ts",
+    "test:ui": "playwright test",
+    "verify": "npm run build && npm test && npm run test:dom"
   },
   "dependencies": {
+    "7zip-bin-full": "26.4.1",
+    "fast-xml-parser": "^5.11.2",
+    "pdfjs-dist": "^6.4.299",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sanitize-html": "^2.18.0",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/sanitize-html": "^2.16.2",
     "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
-    "electron": "39.8.5",
+    "electron": "43.7.9",
+    "jsdom": "^26.1.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
+    "vitest": "5.0.3",
     "wait-on": "^8.0.1"
   }
 }

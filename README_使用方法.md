@@ -1,3 +1,5 @@
+> 本文件是项目早期的开发轮次提示归档，包含已完成阶段和当时的范围限制。当前功能与运行方式以 README.md、PROJECT_STATUS.md 为准。
+
 # OmiComic Codex 提示词使用方法
 
 ## 1. 文件说明
