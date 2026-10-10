@@ -61,10 +61,12 @@ PDF/EPUB 共用阅读窗口；EPUB 以完整章节为阅读单元，进度和书
 ```powershell
 git clone https://github.com/lorcinv/OmiComic.git
 cd OmiComic
-git checkout v0.2.0
+git checkout feat/reader-library-experience
 npm ci
 npm run dev
 ```
+
+该维护分支包含 0.2.0 发布后的新版 npm 依赖锁兼容补充；安装包对应 `v0.2.0`，使用 Node.js 24.7.0 / npm 11.5.1 构建。
 
 | 命令 | 用途 |
 | --- | --- |
