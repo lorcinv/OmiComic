@@ -1,275 +1,193 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+interface PointerPosition { x: number; y: number }
 interface TooltipState {
-  text: string;
-  left: number;
-  top: number;
-  transform: string;
-}
-
-interface ActiveTitle {
   element: HTMLElement;
   text: string;
-}
-
-interface PointerPosition {
-  x: number;
-  y: number;
+  pointer: PointerPosition | null;
 }
 
 const TOOLTIP_DELAY = 320;
-const TOOLTIP_DISABLED_ATTRIBUTE = "data-tooltip-disabled";
+const DISABLED = "data-tooltip-disabled";
+const OWNER_SELECTOR = '[data-tooltip], [title], button, a[href], input, textarea, select, summary, [role="button"], [role="slider"], [role="checkbox"], [contenteditable="true"]';
 
 function GlobalTooltip() {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const activeTitleRef = useRef<ActiveTitle | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const pointerPositionRef = useRef<PointerPosition | null>(null);
+  const popup = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!tooltip || !popup.current) return;
+    const box = popup.current.getBoundingClientRect();
+    const anchor = tooltip.element.getBoundingClientRect();
+    const padding = 12;
+    const compact = anchor.width < 180 && anchor.height < 80;
+    const x = tooltip.pointer?.x ?? anchor.left + anchor.width / 2;
+    const below = tooltip.pointer && !compact ? tooltip.pointer.y + 18 : anchor.bottom + 8;
+    const above = tooltip.pointer && !compact ? tooltip.pointer.y - 12 : anchor.top - 8;
+    let left = tooltip.pointer ? x + 14 : x - box.width / 2;
+    if (left + box.width > innerWidth - padding) left = x - box.width - 14;
+    let top = below + box.height <= innerHeight - padding ? below : above - box.height;
+    // 小按钮优先向侧面让开，三个点的提示不会压在下方收藏按钮上。
+    if (compact && (anchor.right + box.width + 8 <= innerWidth - padding || anchor.left - box.width - 8 >= padding)) {
+      left = anchor.right + box.width + 8 <= innerWidth - padding ? anchor.right + 8 : anchor.left - box.width - 8;
+      top = anchor.top + (anchor.height - box.height) / 2;
+    }
+    // 按实际渲染尺寸避让触发控件，并限制在窗口内；长路径也不越界。
+    popup.current.style.left = `${Math.max(padding, Math.min(left, innerWidth - box.width - padding))}px`;
+    popup.current.style.top = `${Math.max(padding, Math.min(top, innerHeight - box.height - padding))}px`;
+  }, [tooltip]);
 
   useEffect(() => {
+    let active: TooltipState | null = null;
+    let timer: number | null = null;
+    let dismissed: HTMLElement | null = null;
     let lastPointerDownAt = 0;
 
-    const isTooltipDisabled = (element: HTMLElement) => (
-      element.hasAttribute(TOOLTIP_DISABLED_ATTRIBUTE)
-      || Boolean(element.closest(`[${TOOLTIP_DISABLED_ATTRIBUTE}]`))
-    );
-
     const clearTimer = () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
     };
-
-    const restoreActiveTitle = () => {
-      const activeTitle = activeTitleRef.current;
-      if (
-        activeTitle
-        && activeTitle.element.isConnected
-        && !isTooltipDisabled(activeTitle.element)
-        && !activeTitle.element.hasAttribute("title")
-      ) {
-        activeTitle.element.setAttribute("title", activeTitle.text);
-      }
-      activeTitleRef.current = null;
-    };
-
-    const hideTooltip = () => {
+    const hide = () => {
       clearTimer();
-      restoreActiveTitle();
-      pointerPositionRef.current = null;
+      active = null;
       setTooltip(null);
     };
-
-    const dismissTooltip = () => {
-      clearTimer();
-      setTooltip(null);
+    const dismiss = () => {
+      dismissed = active?.element ?? null;
+      hide();
     };
-
-    const positionTooltip = (
-      element: HTMLElement,
-      text: string,
-      pointerPosition: PointerPosition | null,
-    ): TooltipState => {
-      const rect = element.getBoundingClientRect();
-      const viewportPadding = 12;
-      const viewportWidth = Math.max(120, window.innerWidth - viewportPadding * 2);
-      const estimatedWidth = Math.min(480, viewportWidth, Math.max(120, Array.from(text).length * 12 + 24));
-      const estimatedHeight = Math.max(34, Math.ceil(Array.from(text).length / 36) * 18 + 16);
-
-      if (pointerPosition) {
-        const horizontalGap = 14;
-        const verticalGap = 18;
-        const placeLeft = pointerPosition.x + horizontalGap + estimatedWidth > window.innerWidth - viewportPadding;
-        const placeAbove = pointerPosition.y + verticalGap + estimatedHeight > window.innerHeight - viewportPadding;
-        return {
-          text,
-          left: placeLeft ? pointerPosition.x - horizontalGap : pointerPosition.x + horizontalGap,
-          top: placeAbove ? pointerPosition.y - 12 : pointerPosition.y + verticalGap,
-          transform: placeLeft
-            ? placeAbove ? "translate(-100%, -100%)" : "translateX(-100%)"
-            : placeAbove ? "translateY(-100%)" : "none",
-        };
-      }
-
-      const center = rect.left + rect.width / 2;
-      const minimumCenter = viewportPadding + estimatedWidth / 2;
-      const maximumCenter = Math.max(minimumCenter, window.innerWidth - viewportPadding - estimatedWidth / 2);
-      const left = Math.min(maximumCenter, Math.max(minimumCenter, center));
-      const placeAbove = rect.bottom + estimatedHeight + 12 > window.innerHeight && rect.top > estimatedHeight + 12;
-
-      return {
-        text,
-        left,
-        top: placeAbove ? rect.top - 8 : rect.bottom + 8,
-        transform: placeAbove ? "translate(-50%, -100%)" : "translateX(-50%)",
-      };
+    const findOwner = (target: EventTarget | null): HTMLElement | null => {
+      if (!(target instanceof Element) || target.closest(`[${DISABLED}]`)) return null;
+      // 先取最近交互元素；没有自己的提示时也不能穿透到父卡片。
+      const owner = target.closest<HTMLElement>(OWNER_SELECTOR);
+      return owner?.dataset.tooltip?.trim() ? owner : null;
     };
-
-    const showTooltip = (element: HTMLElement, delay: number, pointerPosition: PointerPosition | null) => {
-      if (activeTitleRef.current?.element === element) {
-        pointerPositionRef.current = pointerPosition;
-        const refreshedText = element.getAttribute("title")?.trim();
-        if (refreshedText) {
-          activeTitleRef.current.text = refreshedText;
-          element.removeAttribute("title");
-        }
+    const show = (element: HTMLElement, delay: number, pointer: PointerPosition | null) => {
+      const text = element.dataset.tooltip?.trim();
+      if (dismissed === element || !text) return;
+      dismissed = null;
+      if (active?.element === element && active.text === text) {
+        active = { element, text, pointer };
+        setTooltip(current => current ? active : null);
         return;
       }
-
-      hideTooltip();
-      pointerPositionRef.current = pointerPosition;
-      const text = element.getAttribute("title")?.trim();
-      if (!text) return;
-
-      element.removeAttribute("title");
-      activeTitleRef.current = { element, text };
-      timerRef.current = window.setTimeout(() => {
-        timerRef.current = null;
-        const activeTitle = activeTitleRef.current;
-        if (activeTitle?.element !== element || !element.isConnected) return;
-        if (isTooltipDisabled(element)) {
-          activeTitleRef.current = null;
-          pointerPositionRef.current = null;
-          setTooltip(null);
-          return;
+      hide();
+      active = { element, text, pointer };
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (active?.element === element && element.isConnected && !element.closest(`[${DISABLED}]`)) {
+          setTooltip({ ...active });
         }
-        setTooltip(positionTooltip(element, activeTitle.text, pointerPositionRef.current));
       }, delay);
     };
 
-    const findTitledElement = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return null;
-      if (target.closest(`[${TOOLTIP_DISABLED_ATTRIBUTE}]`)) return null;
-      return target.closest<HTMLElement>("[title]");
-    };
-
-    const clearDisabledRegionTitle = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return false;
-      const disabledRegion = target.closest<HTMLElement>(`[${TOOLTIP_DISABLED_ATTRIBUTE}]`);
-      if (!disabledRegion) return false;
-      const titledElement = target.closest<HTMLElement>("[title]");
-      if (titledElement && disabledRegion.contains(titledElement)) titledElement.removeAttribute("title");
-      hideTooltip();
-      return true;
-    };
-
-    const clearDisabledTooltipState = () => {
-      document.querySelectorAll<HTMLElement>(
-        `[${TOOLTIP_DISABLED_ATTRIBUTE}][title], [${TOOLTIP_DISABLED_ATTRIBUTE}] [title]`,
-      ).forEach((element) => element.removeAttribute("title"));
-
-      const activeTitle = activeTitleRef.current;
-      if (!activeTitle) {
-        clearTimer();
-        pointerPositionRef.current = null;
-        setTooltip(null);
-        return;
-      }
-      if (activeTitle.element.isConnected && !isTooltipDisabled(activeTitle.element)) return;
-      clearTimer();
-      activeTitleRef.current = null;
-      pointerPositionRef.current = null;
-      setTooltip(null);
-    };
-
-    const handlePointerOver = (event: PointerEvent) => {
-      if (clearDisabledRegionTitle(event.target)) return;
-      const titledElement = findTitledElement(event.target);
-      if (titledElement) showTooltip(titledElement, TOOLTIP_DELAY, { x: event.clientX, y: event.clientY });
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (clearDisabledRegionTitle(event.target)) return;
-      const activeTitle = activeTitleRef.current;
-      if (!activeTitle) return;
-      if (!(event.target instanceof Node) || !activeTitle.element.contains(event.target)) {
-        hideTooltip();
-        return;
-      }
-      pointerPositionRef.current = { x: event.clientX, y: event.clientY };
-      setTooltip((current) => current
-        ? positionTooltip(activeTitle.element, activeTitle.text, pointerPositionRef.current)
-        : current);
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      lastPointerDownAt = performance.now();
-      const activeTitle = activeTitleRef.current;
-      if (activeTitle && event.target instanceof Node && activeTitle.element.contains(event.target)) {
-        dismissTooltip();
-      } else {
-        hideTooltip();
+    // 提前接管原生 title，而不是悬停时删除/离开时恢复。
+    // 保留空 title 阻断浏览器的父级提示继承，React 后续更新仍由观察器同步。
+    const convertTitle = (element: HTMLElement) => {
+      // iframe 的 title 是文档的无障碍名称，不属于应用工具提示。
+      if (element instanceof HTMLIFrameElement) return;
+      const text = element.getAttribute("title")?.trim();
+      if (text) {
+        element.dataset.tooltip = text;
+        element.dataset.tooltipNative = "";
+        element.setAttribute("title", "");
+      } else if (element.hasAttribute("data-tooltip-native")) {
+        element.removeAttribute("data-tooltip");
+        element.removeAttribute("data-tooltip-native");
       }
     };
+    const convertTree = (node: Node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.getAttribute("title")) convertTitle(node);
+      node.querySelectorAll<HTMLElement>('[title]:not([title=""])').forEach(convertTitle);
+    };
+    const observer = new MutationObserver(records => {
+      // 暂停观察自身的属性转换，避免把内部清空 title 当作业务删除。
+      observer.disconnect();
+      const changedTitles = new Set<HTMLElement>();
+      for (const record of records) {
+        if (record.attributeName === "title" && record.target instanceof HTMLElement) changedTitles.add(record.target);
+      }
+      changedTitles.forEach(convertTitle);
+      for (const record of records) {
+        if (record.type === "childList") record.addedNodes.forEach(convertTree);
+      }
+      observe();
+      if (!active) return;
+      if (!active.element.isConnected || active.element.closest(`[${DISABLED}]`) || !active.element.dataset.tooltip) hide();
+      else if (active.text !== active.element.dataset.tooltip) {
+        active = { ...active, text: active.element.dataset.tooltip };
+        setTooltip(current => current ? active : null);
+      }
+    });
+    const observe = () => observer.observe(document.documentElement, {
+      subtree: true, childList: true, attributes: true,
+      attributeFilter: [DISABLED, "title", "data-tooltip"],
+    });
+    convertTree(document.documentElement);
+    observe();
 
+    const handlePointer = (event: PointerEvent) => {
+      // Ctrl 悬停由备注浮层负责，避免与普通提示叠加。
+      if (event.ctrlKey || event.buttons) { hide(); return; }
+      const owner = findOwner(event.target);
+      if (owner !== dismissed) dismissed = null;
+      if (!owner) { hide(); return; }
+      show(owner, TOOLTIP_DELAY, { x: event.clientX, y: event.clientY });
+    };
     const handlePointerOut = (event: PointerEvent) => {
-      const activeTitle = activeTitleRef.current;
-      if (!activeTitle) return;
-      if (event.relatedTarget instanceof Node && activeTitle.element.contains(event.relatedTarget)) return;
-      if (event.target instanceof Node && activeTitle.element.contains(event.target)) hideTooltip();
+      if (active && findOwner(event.relatedTarget) !== active.element) hide();
+      if (findOwner(event.relatedTarget) !== dismissed) dismissed = null;
     };
-
-    const handleFocusIn = (event: FocusEvent) => {
-      if (clearDisabledRegionTitle(event.target)) return;
+    const handlePointerDown = () => { lastPointerDownAt = performance.now(); dismiss(); };
+    const handleFocus = (event: FocusEvent) => {
       if (performance.now() - lastPointerDownAt < 500) return;
-      const titledElement = findTitledElement(event.target);
-      if (titledElement) showTooltip(titledElement, 100, null);
+      const owner = findOwner(event.target);
+      if (owner) { dismissed = null; show(owner, 100, null); }
+      else hide();
     };
-
-    const handleFocusOut = (event: FocusEvent) => {
-      const activeTitle = activeTitleRef.current;
-      if (!activeTitle) return;
-      if (event.relatedTarget instanceof Node && activeTitle.element.contains(event.relatedTarget)) return;
-      if (event.target instanceof Node && activeTitle.element.contains(event.target)) hideTooltip();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" || event.key === "Control") dismiss();
     };
-
-    document.addEventListener("pointerover", handlePointerOver, true);
-    document.addEventListener("pointermove", handlePointerMove, true);
+    document.addEventListener("pointerover", handlePointer, true);
+    document.addEventListener("pointermove", handlePointer, true);
     document.addEventListener("pointerout", handlePointerOut, true);
     document.addEventListener("pointerdown", handlePointerDown, true);
-    document.addEventListener("focusin", handleFocusIn, true);
-    document.addEventListener("focusout", handleFocusOut, true);
-    window.addEventListener("scroll", hideTooltip, true);
-    window.addEventListener("resize", hideTooltip);
-    window.addEventListener("blur", hideTooltip);
-    const tooltipGuardObserver = new MutationObserver(clearDisabledTooltipState);
-    tooltipGuardObserver.observe(document.documentElement, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: [TOOLTIP_DISABLED_ATTRIBUTE, "title"],
-    });
-    clearDisabledTooltipState();
-
+    document.addEventListener("focusin", handleFocus, true);
+    document.addEventListener("focusout", hide, true);
+    document.addEventListener("keydown", handleKey, true);
+    window.addEventListener("wheel", dismiss, { capture: true, passive: true });
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("blur", dismiss);
     return () => {
-      tooltipGuardObserver.disconnect();
-      document.removeEventListener("pointerover", handlePointerOver, true);
-      document.removeEventListener("pointermove", handlePointerMove, true);
+      observer.disconnect();
+      document.removeEventListener("pointerover", handlePointer, true);
+      document.removeEventListener("pointermove", handlePointer, true);
       document.removeEventListener("pointerout", handlePointerOut, true);
       document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("focusin", handleFocusIn, true);
-      document.removeEventListener("focusout", handleFocusOut, true);
-      window.removeEventListener("scroll", hideTooltip, true);
-      window.removeEventListener("resize", hideTooltip);
-      window.removeEventListener("blur", hideTooltip);
+      document.removeEventListener("focusin", handleFocus, true);
+      document.removeEventListener("focusout", hide, true);
+      document.removeEventListener("keydown", handleKey, true);
+      window.removeEventListener("wheel", dismiss, true);
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("blur", dismiss);
       clearTimer();
-      restoreActiveTitle();
+      document.querySelectorAll<HTMLElement>("[data-tooltip-native]").forEach(element => {
+        element.setAttribute("title", element.dataset.tooltip ?? "");
+        element.removeAttribute("data-tooltip");
+        element.removeAttribute("data-tooltip-native");
+      });
     };
   }, []);
 
   if (!tooltip) return null;
-
   return createPortal(
-    <div
-      className="global-glass-tooltip"
-      role="tooltip"
-      style={{ left: tooltip.left, top: tooltip.top, transform: tooltip.transform }}
-    >
+    <div ref={popup} className="global-glass-tooltip" role="tooltip" style={{ left: 0, top: 0 }}>
       {tooltip.text}
-    </div>,
-    document.body,
+    </div>, document.body,
   );
 }
 

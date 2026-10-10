@@ -1,8 +1,10 @@
 import { scanDirectory, listDirectoryImages } from "./services/directoryService";
 import { registerDocumentIpc } from "./services/documentService";
-import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu } from "electron";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
+import { 识别外部资源, 外部资源授权路径, 资源所在目录 } from "./services/externalPaths";
+import type { 操作结果, 阅读资源结果 } from "./preload";
 import {
   读取压缩包单张图片,
   读取压缩包图片列表,
@@ -13,6 +15,8 @@ import {
   添加虚拟文件夹项目,
   添加收藏,
   保存阅读进度,
+  记录临时打开,
+  移除临时打开,
   当前页已书签,
   切换书签,
   创建书架,
@@ -57,11 +61,35 @@ import {
 import { 获取缩略图 } from "./services/thumbnailService";
 
 const 开发服务地址 = process.env.VITE_DEV_SERVER_URL;
+app.setAppUserModelId("io.github.lorcinv.omicomic");
+// Packaged smoke tests use an isolated profile and never display or focus a window.
+const 后台验证 = process.env.OMICOMIC_TEST_HEADLESS === "1" && !!process.env.OMICOMIC_TEST_PROFILE;
+if (后台验证) app.setPath("userData", path.resolve(process.env.OMICOMIC_TEST_PROFILE!));
 const 已授权根目录 = new Set<string>();
 const 图片扩展名 = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
 const 压缩包扩展名 = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 const 自然排序器 = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 let 当前阅读器会话Id = 0;
+const 待打开外部文件: string[] = [];
+let 正在领取外部文件 = false;
+
+function 接收外部文件(文件列表: string[]): void {
+  for (const 文件 of 文件列表) {
+    if (文件 && !待打开外部文件.includes(文件)) 待打开外部文件.push(文件);
+  }
+  if (!app.isReady()) return;
+  for (const 窗口 of BrowserWindow.getAllWindows()) {
+    if (窗口.isMinimized()) 窗口.restore();
+    if (!后台验证) { 窗口.show(); 窗口.focus(); }
+    窗口.webContents.send("外部文件:待打开");
+  }
+}
+
+function 接收启动参数(参数: string[], 工作目录: string): void {
+  接收外部文件(参数.slice(app.isPackaged ? 1 : 2)
+    .filter(项 => 项 && !项.startsWith("-"))
+    .map(项 => path.resolve(工作目录, 项)));
+}
 
 type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
 
@@ -369,7 +397,236 @@ async function 读取压缩包书签页预览(输入: 书签页预览输入, 来
   return 创建页面DataUrl(图片数据, 内部路径);
 }
 
+async function 读取阅读资源(输入: unknown): Promise<操作结果<阅读资源结果>> {
+    if (
+      typeof 输入 !== "object"
+      || 输入 === null
+      || !("path" in 输入)
+      || !("type" in 输入)
+      || typeof 输入.path !== "string"
+      || (
+        输入.type !== "folder"
+        && 输入.type !== "image"
+        && 输入.type !== "archive"
+        && 输入.type !== "pdf"
+        && 输入.type !== "epub"
+      )
+    ) {
+      return {
+        ok: false,
+        error: { code: "INVALID_RESOURCE", message: "无法打开该阅读资源。" },
+      };
+    }
+
+    const 资源路径 = 规范化路径(输入.path);
+    if (!(await 是已授权实际路径(资源路径))) {
+      return {
+        ok: false,
+        error: { code: "PATH_NOT_ALLOWED", message: "当前文件不在已授权的漫画目录内。" },
+      };
+    }
+
+    if (输入.type === "pdf" || 输入.type === "epub") {
+      // The document worker discovers pages lazily; never parse a large document on the main thread.
+      return { ok: true, data: {
+        key: `${输入.type}:${资源路径}`, resourceKey: `${输入.type}:${资源路径}`,
+        title: path.basename(资源路径), sourcePath: 资源路径, sourceType: 输入.type,
+        pages: [], total: 0,
+      } };
+    }
+
+    if (输入.type === "archive") {
+      if (!是支持的压缩包(资源路径)) {
+        return {
+          ok: false,
+          error: { code: "UNSUPPORTED_ARCHIVE", message: "压缩包格式不受支持。" },
+        };
+      }
+
+      try {
+        const 压缩包图片 = await 读取压缩包图片列表(资源路径);
+        if (压缩包图片.length === 0) {
+          return {
+            ok: false,
+            error: { code: "NO_ARCHIVE_IMAGES", message: "压缩包内未找到可阅读图片。" },
+          };
+        }
+
+        const 页面 = 压缩包图片.map((图片, 索引) => ({
+          index: 索引,
+          name: 图片.virtualPath,
+          sourcePath: 资源路径,
+          virtualPath: 图片.virtualPath,
+          archiveInnerPath: 图片.virtualPath,
+          type: "archive-image" as const,
+        }));
+
+        return {
+          ok: true,
+          data: {
+            key: `archive:${资源路径}`,
+            resourceKey: `archive:${资源路径}`,
+            title: path.basename(资源路径),
+            sourcePath: 资源路径,
+            sourceType: "archive" as const,
+            pages: 页面,
+            total: 页面.length,
+          },
+        };
+      } catch (错误) {
+        const 是加密压缩包 = 是压缩包服务错误(错误) && 错误.code === "ARCHIVE_ENCRYPTED";
+        return {
+          ok: false,
+          error: {
+            code: 是加密压缩包 ? "ARCHIVE_ENCRYPTED" : "ARCHIVE_READ_FAILED",
+            message: 是加密压缩包
+              ? "暂不支持加密压缩包。"
+              : "压缩包读取失败，文件可能已损坏或格式不受支持。",
+          },
+        };
+      }
+    }
+
+    if (输入.type === "image" && !是支持的图片(资源路径)) {
+      return {
+        ok: false,
+        error: { code: "UNSUPPORTED_IMAGE", message: "该图片格式暂不受支持。" },
+      };
+    }
+
+    const 图片目录 = 输入.type === "folder" ? 资源路径 : path.dirname(资源路径);
+    const 图片资源Key = `folder:${图片目录}`;
+    if (!(await 是已授权实际路径(图片目录))) {
+      return {
+        ok: false,
+        error: { code: "PATH_NOT_ALLOWED", message: "无法读取未添加目录中的图片。" },
+      };
+    }
+
+    try {
+      const 图片名称 = await listDirectoryImages(图片目录, { authorizedRoot: 查找所属根目录(图片目录)! });
+
+      if (图片名称.length === 0) {
+        return {
+          ok: false,
+          error: { code: "NO_IMAGES", message: "未在该文件夹中找到可阅读图片。" },
+        };
+      }
+
+      const 页面 = 图片名称.map((名称, 索引) => ({
+        index: 索引,
+        name: 名称,
+        sourcePath: path.join(图片目录, 名称),
+        type: "folder-image" as const,
+      }));
+
+      if (输入.type === "image") {
+        const 规范资源路径 = process.platform === "win32"
+          ? 资源路径.toLocaleLowerCase()
+          : 资源路径;
+        const 选中图片仍然存在 = 页面.some((项目) => {
+          const 页面路径 = process.platform === "win32"
+            ? 项目.sourcePath.toLocaleLowerCase()
+            : 项目.sourcePath;
+          return 页面路径 === 规范资源路径;
+        });
+
+        if (!选中图片仍然存在) {
+          return {
+            ok: false,
+            error: { code: "IMAGE_NOT_FOUND", message: "无法打开该图片，文件可能已被移动或删除。" },
+          };
+        }
+      }
+
+      return {
+        ok: true,
+        data: {
+          key: 图片资源Key,
+          resourceKey: 图片资源Key,
+          title: path.basename(图片目录) || 图片目录,
+          sourcePath: 资源路径,
+          sourceType: 输入.type,
+          pages: 页面,
+          total: 页面.length,
+        },
+      };
+    } catch {
+      return {
+        ok: false,
+        error: {
+          code: "READ_IMAGES_FAILED",
+          message: "无法读取该文件夹中的图片，请检查权限或路径是否存在。",
+        },
+      };
+    }
+  }
+
 function 注册安全通道(): void {
+  ipcMain.handle("外部文件:领取", async () => {
+    if (正在领取外部文件 || 待打开外部文件.length === 0) return { ok: true, data: null };
+    正在领取外部文件 = true;
+    const 路径 = 待打开外部文件.shift()!;
+    try {
+      const 输入 = await 识别外部资源(路径);
+      已授权根目录.add(外部资源授权路径({ sourcePath: 输入.path, sourceType: 输入.type }));
+      const 结果 = await 读取阅读资源(输入);
+      if (!结果.ok) return 结果;
+      const resource = 结果.data;
+      const 数据 = await 读取应用数据();
+      const 已有进度 = 数据.readingProgress[resource.resourceKey];
+      const 起始页 = 输入.type === "image"
+        ? Math.max(0, resource.pages.findIndex(页 => 页.sourcePath === 输入.path))
+        : 已有进度?.currentPageIndex ?? 0;
+      const initialPageIndex = Math.min(起始页, resource.total > 0 ? resource.total - 1 : Number.MAX_SAFE_INTEGER);
+      await 记录临时打开({ resourceKey: resource.resourceKey, sourcePath: resource.sourcePath,
+        sourceType: resource.sourceType, title: resource.title, currentPageIndex: initialPageIndex,
+        totalPages: Math.max(1, resource.total), updatedAt: Date.now() });
+      if (resource.total > 0) {
+        await 保存阅读进度({ resourceKey: resource.resourceKey, sourcePath: resource.sourcePath,
+          sourceType: resource.sourceType, title: resource.title, currentPageIndex: initialPageIndex,
+          totalPages: resource.total, currentPageName: resource.pages[initialPageIndex]?.name,
+          percent: Math.round((initialPageIndex + 1) / resource.total * 100),
+          completed: initialPageIndex >= resource.total - 1, hasStartedReading: true,
+          firstReadAt: 已有进度?.firstReadAt ?? Date.now(), updatedAt: Date.now(),
+          readerViewState: 已有进度?.readerViewState });
+      }
+      return { ok: true, data: { resource, initialPageIndex } };
+    } catch {
+      return { ok: false, error: { code: "EXTERNAL_OPEN_FAILED", message: `无法打开文件：${path.basename(路径)}。请检查文件是否存在及格式是否受支持。` } };
+    } finally {
+      正在领取外部文件 = false;
+    }
+  });
+  ipcMain.handle("外部文件:选择", async 事件 => {
+    try {
+      const 选项 = { title: "直接打开文件", properties: ["openFile", "multiSelections"] as Array<"openFile" | "multiSelections">,
+        filters: [{ name: "漫画、图片与文档", extensions: ["jpg", "jpeg", "png", "webp", "bmp", "gif", "zip", "cbz", "rar", "cbr", "7z", "cb7", "pdf", "epub"] }] };
+      const 窗口 = BrowserWindow.fromWebContents(事件.sender);
+      const 结果 = 窗口 ? await dialog.showOpenDialog(窗口, 选项) : await dialog.showOpenDialog(选项);
+      if (!结果.canceled) 接收外部文件(结果.filePaths);
+      return { ok: true, data: null };
+    } catch { return { ok: false, error: { code: "OPEN_DIALOG_FAILED", message: "无法打开文件选择窗口。" } }; }
+  });
+  ipcMain.handle("外部文件:移除引用", async (_事件, key: unknown) => {
+    if (typeof key !== "string" || !key) return { ok: false, error: { code: "INVALID_KEY", message: "临时记录标识无效。" } };
+    try {
+      await 移除临时打开(key);
+      return { ok: true, data: null };
+    } catch { return { ok: false, error: { code: "REMOVE_TEMP_FAILED", message: "临时引用移除失败。" } }; }
+  });
+  ipcMain.handle("外部文件:加入资源库", async (_事件, key: unknown) => {
+    try {
+      const 数据 = await 读取应用数据();
+      const 项目 = 数据.temporaryOpened.find(项 => 项.resourceKey === key);
+      if (!项目) throw new Error("记录不存在");
+      const 目录 = 资源所在目录(项目);
+      if (!(await 文件系统.stat(目录)).isDirectory()) throw new Error("目录不存在");
+      await 添加或更新根目录(目录, path.basename(目录) || 目录);
+      已授权根目录.add(目录);
+      return { ok: true, data: await 读取应用数据() };
+    } catch { return { ok: false, error: { code: "PROMOTE_TEMP_FAILED", message: "无法将所在目录加入资源库，请检查原目录是否仍然存在。" } }; }
+  });
   ipcMain.handle("应用:获取信息", () => ({
     name: "OmiComic",
     version: app.getVersion(),
@@ -446,6 +703,7 @@ function 注册安全通道(): void {
     try {
       const 数据 = await 读取应用数据();
       授权根目录列表(数据.library.roots);
+      for (const 项目 of 数据.externalReadGrants) 已授权根目录.add(外部资源授权路径(项目));
       return { ok: true, data: 数据 };
     } catch {
       return {
@@ -1371,6 +1629,8 @@ function 注册安全通道(): void {
         输入.sourceType !== "folder"
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
+        && 输入.sourceType !== "pdf"
+        && 输入.sourceType !== "epub"
       )
     ) {
       return {
@@ -1507,6 +1767,8 @@ function 注册安全通道(): void {
         输入.sourceType !== "folder"
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
+        && 输入.sourceType !== "pdf"
+        && 输入.sourceType !== "epub"
       )
     ) {
       return {
@@ -1523,6 +1785,11 @@ function 注册安全通道(): void {
       };
     }
 
+    // Document cards retain their format placeholder; opening the bookmark uses
+    // the same on-demand page/chapter source as ordinary reading.
+    if (输入.sourceType === "pdf" || 输入.sourceType === "epub") {
+      return { ok: true, data: { dataUrl: "" } };
+    }
     const 预览输入: 书签页预览输入 = {
       sourcePath: 来源路径,
       sourceType: 输入.sourceType,
@@ -1642,170 +1909,7 @@ function 注册安全通道(): void {
     }
   });
 
-  ipcMain.handle("阅读:获取图片列表", async (_事件, 输入: unknown) => {
-    if (
-      typeof 输入 !== "object"
-      || 输入 === null
-      || !("path" in 输入)
-      || !("type" in 输入)
-      || typeof 输入.path !== "string"
-      || (
-        输入.type !== "folder"
-        && 输入.type !== "image"
-        && 输入.type !== "archive"
-        && 输入.type !== "pdf"
-        && 输入.type !== "epub"
-      )
-    ) {
-      return {
-        ok: false,
-        error: { code: "INVALID_RESOURCE", message: "无法打开该阅读资源。" },
-      };
-    }
-
-    const 资源路径 = 规范化路径(输入.path);
-    if (!(await 是已授权实际路径(资源路径))) {
-      return {
-        ok: false,
-        error: { code: "PATH_NOT_ALLOWED", message: "当前文件不在已授权的漫画目录内。" },
-      };
-    }
-
-    if (输入.type === "pdf" || 输入.type === "epub") {
-      // The document worker discovers pages lazily; never parse a large document on the main thread.
-      return { ok: true, data: {
-        key: `${输入.type}:${资源路径}`, resourceKey: `${输入.type}:${资源路径}`,
-        title: path.basename(资源路径), sourcePath: 资源路径, sourceType: 输入.type,
-        pages: [], total: 0,
-      } };
-    }
-
-    if (输入.type === "archive") {
-      if (!是支持的压缩包(资源路径)) {
-        return {
-          ok: false,
-          error: { code: "UNSUPPORTED_ARCHIVE", message: "压缩包格式不受支持。" },
-        };
-      }
-
-      try {
-        const 压缩包图片 = await 读取压缩包图片列表(资源路径);
-        if (压缩包图片.length === 0) {
-          return {
-            ok: false,
-            error: { code: "NO_ARCHIVE_IMAGES", message: "压缩包内未找到可阅读图片。" },
-          };
-        }
-
-        const 页面 = 压缩包图片.map((图片, 索引) => ({
-          index: 索引,
-          name: 图片.virtualPath,
-          sourcePath: 资源路径,
-          virtualPath: 图片.virtualPath,
-          archiveInnerPath: 图片.virtualPath,
-          type: "archive-image" as const,
-        }));
-
-        return {
-          ok: true,
-          data: {
-            key: `archive:${资源路径}`,
-            resourceKey: `archive:${资源路径}`,
-            title: path.basename(资源路径),
-            sourcePath: 资源路径,
-            sourceType: "archive" as const,
-            pages: 页面,
-            total: 页面.length,
-          },
-        };
-      } catch (错误) {
-        const 是加密压缩包 = 是压缩包服务错误(错误) && 错误.code === "ARCHIVE_ENCRYPTED";
-        return {
-          ok: false,
-          error: {
-            code: 是加密压缩包 ? "ARCHIVE_ENCRYPTED" : "ARCHIVE_READ_FAILED",
-            message: 是加密压缩包
-              ? "暂不支持加密压缩包。"
-              : "压缩包读取失败，文件可能已损坏或格式不受支持。",
-          },
-        };
-      }
-    }
-
-    if (输入.type === "image" && !是支持的图片(资源路径)) {
-      return {
-        ok: false,
-        error: { code: "UNSUPPORTED_IMAGE", message: "该图片格式暂不受支持。" },
-      };
-    }
-
-    const 图片目录 = 输入.type === "folder" ? 资源路径 : path.dirname(资源路径);
-    const 图片资源Key = `folder:${图片目录}`;
-    if (!(await 是已授权实际路径(图片目录))) {
-      return {
-        ok: false,
-        error: { code: "PATH_NOT_ALLOWED", message: "无法读取未添加目录中的图片。" },
-      };
-    }
-
-    try {
-      const 图片名称 = await listDirectoryImages(图片目录, { authorizedRoot: 查找所属根目录(图片目录)! });
-
-      if (图片名称.length === 0) {
-        return {
-          ok: false,
-          error: { code: "NO_IMAGES", message: "未在该文件夹中找到可阅读图片。" },
-        };
-      }
-
-      const 页面 = 图片名称.map((名称, 索引) => ({
-        index: 索引,
-        name: 名称,
-        sourcePath: path.join(图片目录, 名称),
-        type: "folder-image" as const,
-      }));
-
-      if (输入.type === "image") {
-        const 规范资源路径 = process.platform === "win32"
-          ? 资源路径.toLocaleLowerCase()
-          : 资源路径;
-        const 选中图片仍然存在 = 页面.some((项目) => {
-          const 页面路径 = process.platform === "win32"
-            ? 项目.sourcePath.toLocaleLowerCase()
-            : 项目.sourcePath;
-          return 页面路径 === 规范资源路径;
-        });
-
-        if (!选中图片仍然存在) {
-          return {
-            ok: false,
-            error: { code: "IMAGE_NOT_FOUND", message: "无法打开该图片，文件可能已被移动或删除。" },
-          };
-        }
-      }
-
-      return {
-        ok: true,
-        data: {
-          key: 图片资源Key,
-          resourceKey: 图片资源Key,
-          title: path.basename(图片目录) || 图片目录,
-          sourcePath: 资源路径,
-          sourceType: 输入.type,
-          pages: 页面,
-          total: 页面.length,
-        },
-      };
-    } catch {
-      return {
-        ok: false,
-        error: {
-          code: "READ_IMAGES_FAILED",
-          message: "无法读取该文件夹中的图片，请检查权限或路径是否存在。",
-        },
-      };
-    }
-  });
+  ipcMain.handle("阅读:获取图片列表", (_事件, 输入: unknown) => 读取阅读资源(输入));
 
   ipcMain.handle("阅读:设置会话", async (_事件, 输入: unknown) => {
     const 会话Id = typeof 输入 === "number" && Number.isFinite(输入) ? Math.floor(输入) : 0;
@@ -2107,6 +2211,7 @@ function 创建主窗口(): void {
     minWidth: 960,
     minHeight: 640,
     title: "OmiComic 本地漫画阅读器",
+    icon: app.isPackaged ? path.join(process.resourcesPath, "icon.ico") : path.join(__dirname, "..", "resources", "icon.ico"),
     backgroundColor: "#e9ebee",
     autoHideMenuBar: true,
     frame: false,
@@ -2120,7 +2225,7 @@ function 创建主窗口(): void {
     },
   });
 
-  主窗口.once("ready-to-show", () => 主窗口.show());
+  主窗口.once("ready-to-show", () => { if (!后台验证) 主窗口.show(); });
 
   主窗口.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://")) {
@@ -2143,7 +2248,14 @@ function 创建主窗口(): void {
   }
 }
 
+const 获得单实例锁 = app.requestSingleInstanceLock();
+if (!获得单实例锁) app.quit();
+else {
+接收启动参数(process.argv, process.cwd());
+app.on("second-instance", (_事件, 参数, 工作目录) => 接收启动参数(参数, 工作目录));
+app.on("open-file", (事件, 文件) => { 事件.preventDefault(); 接收外部文件([文件]); });
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   注册安全通道();
   registerDocumentIpc(查找所属根目录);
   创建主窗口();
@@ -2154,6 +2266,7 @@ app.whenReady().then(() => {
     }
   });
 });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

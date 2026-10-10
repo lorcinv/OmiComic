@@ -10,7 +10,9 @@ export function installMock({count}: {count:number}) {
   const pages=Array.from({length:count},(_,index)=>({index,name:`page${index}.png`,sourcePath:`/comics/Book/page${index}.png`,type:'folder-image'}));
   (window as any).__previewCalls=0;(window as any).__saved=[];
   (window as any).omicomic = new Proxy({
+   takeExternalOpen:async()=>ok(null),onExternalOpen:()=>()=>{},
    getAppInfo:async()=>({name:'OmiComic',version:'test',platform:'linux'}),getAppData:async()=>ok(data),
+   updateSettings:async(input:any)=>{Object.assign(settings,input);return ok(settings);},
    getThumbnail:async()=>ok({url:image}),getReadablePageCount:async()=>ok(count),getReadingProgress:async()=>ok(null),
    listDirectory:async(path:string)=>ok({path,parentPath:path==='/comics'?null:'/comics',items:path==='/comics'?items:[file('Nested','folder',path)],total:path==='/comics'?items.length:1}),
    getResourcePages:async({path}:any)=>path.includes('Parent')?{ok:false,error:{code:'NO_IMAGES',message:'未在该文件夹中找到可阅读图片。'}}:ok({key:`folder:${path}`,resourceKey:`folder:${path}`,title:'Book',sourcePath:path,sourceType:'folder',pages,total:pages.length}),

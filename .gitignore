@@ -27,3 +27,7 @@ public/pdfjs/
 # Reproducible test outputs
 test-results/
 playwright-report/
+
+# Windows distribution staging and installers
+.packaged-app/
+release/

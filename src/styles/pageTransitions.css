@@ -1,0 +1,84 @@
+@property --page-reveal-radius {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+html.is-home-library-transition .omi-page-brand {
+  view-transition-name: omi-page-brand;
+}
+
+html.is-home-library-transition .window-controls {
+  view-transition-name: omi-window-controls;
+}
+
+html.is-home-library-transition::view-transition-group(root),
+html.is-home-library-transition::view-transition-old(root),
+html.is-home-library-transition::view-transition-new(root),
+html.is-home-library-transition::view-transition-group(reader-content),
+html.is-home-library-transition::view-transition-new(reader-content),
+html.is-home-library-transition::view-transition-group(omi-page-brand),
+html.is-home-library-transition::view-transition-new(omi-page-brand),
+html.is-home-library-transition::view-transition-group(omi-window-controls),
+html.is-home-library-transition::view-transition-new(omi-window-controls) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html.is-home-library-transition::view-transition-old(root),
+html.is-home-library-transition::view-transition-old(omi-page-brand),
+html.is-home-library-transition::view-transition-old(omi-window-controls) {
+  display: none;
+}
+
+html.is-home-library-transition::view-transition-new(reader-content) {
+  z-index: 1;
+}
+
+/* The outgoing page dissolves from its edges toward the stationary brand. */
+html.is-home-library-transition::view-transition-old(reader-content) {
+  z-index: 2;
+  mix-blend-mode: normal;
+  mask-image: radial-gradient(circle at var(--page-origin-x) var(--page-origin-y),
+    #000 max(0px, calc(var(--page-reveal-radius) - 180px)),
+    transparent max(0px, var(--page-reveal-radius)));
+  animation: page-dissolve-to-brand 780ms cubic-bezier(.32, 0, .18, 1) both;
+}
+
+/* 返回首页时，新画面从同一品牌位置向外展开。 */
+html.is-home-library-transition.is-revealing-home::view-transition-old(reader-content) {
+  z-index: 1;
+  mask-image: none;
+  animation: none;
+}
+html.is-home-library-transition.is-revealing-home::view-transition-new(reader-content) {
+  z-index: 2;
+  mask-image: radial-gradient(circle at var(--page-origin-x) var(--page-origin-y),
+    #000 max(0px, calc(var(--page-reveal-radius) - 180px)),
+    transparent max(0px, var(--page-reveal-radius)));
+  animation: page-expand-from-brand 780ms cubic-bezier(.32, 0, .18, 1) both;
+}
+@keyframes page-expand-from-brand {
+  from { --page-reveal-radius: 0px; }
+  to { --page-reveal-radius: var(--page-reveal-max); }
+}
+
+html.is-home-library-transition::view-transition-group(omi-page-brand) {
+  z-index: 3;
+}
+
+html.is-home-library-transition::view-transition-group(omi-window-controls) {
+  z-index: 4;
+}
+
+@keyframes page-dissolve-to-brand {
+  from { --page-reveal-radius: var(--page-reveal-max); }
+  to { --page-reveal-radius: 0px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.is-home-library-transition::view-transition-old(reader-content) {
+    animation: none;
+    opacity: 0;
+  }
+}

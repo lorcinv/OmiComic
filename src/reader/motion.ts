@@ -1,9 +1,20 @@
 /** Pure, frame-rate independent reader motion. Velocities are CSS pixels/ms. */
 export interface MotionSample { x: number; y: number; time: number }
 export const MOTION_SAMPLE_WINDOW_MS = 120;
-export const MAX_MOTION_SPEED = 3.2;
+export const MAX_MOTION_SPEED = 12;
 export const MIN_MOTION_SPEED = 0.015;
 const DECAY_TIME_MS = 240;
+
+/** CSS pointer coordinates already include the OS mouse curve. Keep slow drags
+ * precise and add a continuous gain for deliberate fast mouse sweeps. */
+export function mouseDragGain(speed: number): number {
+  const progress = Math.max(0, Math.min(1, (Math.abs(speed) - 0.45) / 3.55));
+  return 1 + 1.6 * progress * progress * (3 - 2 * progress);
+}
+
+export function acceleratedMouseVelocity(speed: number): number {
+  return Math.max(-MAX_MOTION_SPEED, Math.min(MAX_MOTION_SPEED, speed * mouseDragGain(speed)));
+}
 
 export function estimateReleaseVelocity(samples: readonly MotionSample[], vertical: boolean): { x: number; y: number } {
   if (samples.length < 2) return { x: 0, y: 0 };

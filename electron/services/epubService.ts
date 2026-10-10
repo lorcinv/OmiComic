@@ -8,7 +8,9 @@ export class EPUBDocumentSource {
   private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   private closed = false;
   constructor(filePath: string) {
-    this.worker = new Worker(path.join(__dirname, "epubWorker.js"), { workerData: { filePath }, resourceLimits: { maxOldGenerationSizeMb: 192 } });
+    // Worker runs from a real file in installed builds; development keeps the same sibling layout.
+    const workerPath = path.join(__dirname, "epubWorker.js").replace(/app\.asar([\\/])/, "app.asar.unpacked$1");
+    this.worker = new Worker(workerPath, { workerData: { filePath }, resourceLimits: { maxOldGenerationSizeMb: 192 } });
     this.worker.on("message", ({ id, data, error }) => {
       const task = this.pending.get(id);
       if (!task) return;

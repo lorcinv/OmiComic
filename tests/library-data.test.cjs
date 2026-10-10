@@ -41,6 +41,41 @@ function ordered(items, values, field = 'resourceKey') {
   assert.deepEqual(items.map(item => item.sortIndex), values.map((_, index) => index));
 }
 
+test('temporary files persist, deduplicate and retain progress when only their reference is deleted', async t => {
+  const f = await fixture(t);
+  const item = resource(f.dir, 'outside.cbz');
+  await fs.writeFile(item.sourcePath, 'original bytes');
+  await f.service.记录临时打开(progress(item));
+  await f.service.记录临时打开(progress(item));
+  await f.service.保存阅读进度(progress(item, 5));
+  await f.service.更新资源整理信息({ ...item, tags: ['保留标签'], note: '保留简介' });
+  const restored = await f.load().读取应用数据();
+  assert.equal(restored.temporaryOpened.length, 1);
+  assert.equal(restored.temporaryOpened[0].currentPageIndex, 5);
+  assert.equal(restored.library.roots.length, 0);
+  await f.service.移除临时打开(item.resourceKey);
+  await f.service.保存阅读进度(progress(item, 6));
+  const after = await f.load().读取应用数据();
+  assert.deepEqual(after.temporaryOpened, []);
+  assert.equal(after.readingProgress[item.resourceKey].currentPageIndex, 6);
+  assert.deepEqual(after.resourceMeta[item.resourceKey].tags, ['保留标签']);
+  assert.equal(await fs.readFile(item.sourcePath, 'utf8'), 'original bytes');
+});
+
+test('adding a library directory absorbs only its temporary files, including after restart', async t => {
+  const f = await fixture(t);
+  const root = path.join(f.dir, 'Comics');
+  const included = resource(root, 'one.cbz');
+  const sibling = resource(path.join(f.dir, 'Comics-other'), 'two.cbz');
+  await f.service.记录临时打开(progress(included));
+  await f.service.记录临时打开(progress(sibling));
+  await f.service.添加或更新根目录(root, 'Comics');
+  await f.service.记录临时打开(progress(included));
+  const data = await f.load().读取应用数据();
+  assert.deepEqual(data.temporaryOpened.map(item => item.resourceKey), [sibling.resourceKey]);
+  assert.equal(data.library.roots[0].path, root);
+});
+
 test('legacy JSON gains defaults while preserving old library, progress and folder descriptions', async t => {
   const item = resource('/legacy', '漫画.cbz');
   const f = await fixture(t, {
@@ -54,6 +89,7 @@ test('legacy JSON gains defaults while preserving old library, progress and fold
   const data = await f.service.读取应用数据();
   assert.equal(data.library.roots[0].name, '旧资源库');
   assert.equal(data.settings.cardSize, 'large');
+  assert.equal(data.settings.colorTheme, 'mist');
   assert.equal(data.settings.pageSize, 100);
   assert.equal(data.settings.readerDefaultFitMode, 'fit-height');
   assert.equal(data.settings.readerPageMode, 'single');
@@ -90,6 +126,52 @@ test('invalid legacy values are bounded and malformed records do not erase valid
   assert.equal(data.virtualFolders[0].items.length, 1);
   assert.equal(data.virtualFolders[0].coverResourceKey, undefined);
   assert.equal(data.virtualFolders[0].bookshelfId, data.bookshelves[0].id);
+});
+
+test('theme choices survive a fresh service load, preserve other settings and reject unknown values', async t => {
+  const f = await fixture(t);
+  await f.service.更新设置({ cardSize: 'large', readerPreloadPages: 8 });
+  for (const colorTheme of ['nord', 'sand', 'night', 'mist']) {
+    await f.service.更新设置({ colorTheme });
+    const restored = await f.load().读取应用数据();
+    assert.equal(restored.settings.colorTheme, colorTheme);
+    assert.equal(restored.settings.cardSize, 'large');
+    assert.equal(restored.settings.readerPreloadPages, 8);
+  }
+  for (const colorTheme of ['unknown-theme', 'sage', 'mauve']) {
+    await f.service.更新设置({ colorTheme });
+    assert.equal((await f.load().读取应用数据()).settings.colorTheme, 'mist');
+  }
+});
+
+test('retired saved themes fall back without changing reading or library preferences', async t => {
+  for (const colorTheme of ['sage', 'mauve']) {
+    const f = await fixture(t, { settings: { colorTheme, cardSize: 'large', readerPreloadPages: 8 } });
+    const { settings } = await f.service.读取应用数据();
+    assert.equal(settings.colorTheme, 'mist');
+    assert.equal(settings.cardSize, 'large');
+    assert.equal(settings.readerPreloadPages, 8);
+  }
+});
+
+test('continuous card scales persist independently, bound invalid values and upgrade old settings', async t => {
+  const f = await fixture(t, { settings: { cardSize: 'small', colorTheme: 'sand' } });
+  const initial = (await f.service.读取应用数据()).settings;
+  assert.equal(initial.cardScale, 100);
+  assert.equal(initial.detailThumbnailScale, 100);
+  await f.service.更新设置({ cardScale: 87, detailThumbnailScale: 134 });
+  let saved = (await f.load().读取应用数据()).settings;
+  assert.equal(saved.cardScale, 87);
+  assert.equal(saved.detailThumbnailScale, 134);
+  assert.equal(saved.colorTheme, 'sand');
+  await f.service.更新设置({ cardScale: -20, detailThumbnailScale: 999 });
+  saved = (await f.load().读取应用数据()).settings;
+  assert.equal(saved.cardScale, 40);
+  assert.equal(saved.detailThumbnailScale, 200);
+  await f.service.更新设置({ cardScale: null, detailThumbnailScale: 'bad' });
+  saved = (await f.load().读取应用数据()).settings;
+  assert.equal(saved.cardScale, 100);
+  assert.equal(saved.detailThumbnailScale, 100);
 });
 
 test('Unicode notes and deduplicated tags persist, synchronize favorites and delete across record types', async t => {

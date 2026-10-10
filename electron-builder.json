@@ -1,0 +1,40 @@
+{
+  "appId": "io.github.lorcinv.omicomic",
+  "productName": "OmiComic",
+  "copyright": "Copyright © 2026 Lorcin",
+  "directories": { "app": ".packaged-app", "output": "release", "buildResources": "resources" },
+  "electronDist": "node_modules/electron/dist",
+  "electronVersion": "43.7.9",
+  "electronLanguages": ["zh-CN", "zh-TW", "en-US"],
+  "compression": "maximum",
+  "asar": true,
+  "asarUnpack": ["dist-electron/epubWorker.js"],
+  "files": ["dist/**/*", "dist-electron/**/*", "licenses/**/*", "THIRD_PARTY_NOTICES.txt", "package.json", "!node_modules{,/**/*}"],
+  "extraResources": [
+    { "from": "resources/icon.ico", "to": "icon.ico" },
+    { "from": "node_modules/7zip-bin-full/win/${arch}", "to": "7zip", "filter": ["7z.exe", "7z.dll", "License.txt", "readme.txt"] }
+  ],
+  "npmRebuild": false,
+  "win": {
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
+    "icon": "resources/icon.ico",
+    "executableName": "OmiComic",
+    "requestedExecutionLevel": "asInvoker",
+    "artifactName": "OmiComic-Setup-${version}-${arch}.${ext}"
+  },
+  "nsis": {
+    "include": "resources/installer.nsh",
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "OmiComic",
+    "uninstallDisplayName": "OmiComic",
+    "installerLanguages": ["zh_CN", "en_US"],
+    "language": "2052",
+    "runAfterFinish": false,
+    "deleteAppDataOnUninstall": false
+  }
+}

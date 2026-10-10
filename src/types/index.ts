@@ -1,9 +1,10 @@
 export type 页面名称 = "首页" | "资源库" | "阅读器";
 
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
-export type 阅读页类型 = "folder-image" | "archive-image";
+export type 阅读页类型 = "folder-image" | "archive-image" | "pdf-page" | "epub-chapter";
 export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
 export type 卡片尺寸 = "small" | "medium" | "large";
+export type 主题配色 = "mist" | "nord" | "sand" | "night";
 export type 每页数量 = 60 | 100 | 150 | 200;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
 export type 进度文本模式 = "page" | "percent";
@@ -30,7 +31,10 @@ export interface LibraryRoot {
 }
 
 export interface AppSettings {
+  colorTheme: 主题配色;
   cardSize: 卡片尺寸;
+  cardScale: number;
+  detailThumbnailScale: number;
   pageSize: 每页数量;
   sortMode: 排序方式;
   sortDirection: "asc" | "desc";
@@ -201,6 +205,7 @@ export interface OmiComicAppData {
   settings: AppSettings;
   readingProgress: Record<string, ReadingProgress>;
   recentOpened: RecentOpenedItem[];
+  temporaryOpened: RecentOpenedItem[];
   removedRecentResourceKeys: string[];
   favorites: FavoriteItem[];
   bookmarks: BookmarkItem[];
@@ -331,6 +336,11 @@ export type 操作结果<T> =
   | { ok: false; error: 操作错误 };
 
 export interface OmiComicApi {
+  takeExternalOpen(): Promise<操作结果<{ resource: 阅读资源结果; initialPageIndex: number } | null>>;
+  onExternalOpen(callback: () => void): () => void;
+  chooseExternalFiles(): Promise<操作结果<null>>;
+  removeTemporaryOpened(resourceKey: string): Promise<操作结果<null>>;
+  promoteTemporaryOpened(resourceKey: string): Promise<操作结果<OmiComicAppData>>;
   openDocument(input: { path: string; type: "pdf" | "epub"; id: string }): Promise<操作结果<{ size: number; chapters: { name: string; index: number }[] }>>;
   readDocumentRange(id: string, begin: number, end: number): Promise<操作结果<Uint8Array>>;
   readDocumentChapter(id: string, index: number): Promise<操作结果<string>>;

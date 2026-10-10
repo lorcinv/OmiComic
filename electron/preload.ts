@@ -7,7 +7,7 @@ export interface 应用信息 {
 }
 
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
-export type 阅读页类型 = "folder-image" | "archive-image";
+export type 阅读页类型 = "folder-image" | "archive-image" | "pdf-page" | "epub-chapter";
 export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 每页数量 = 60 | 100 | 150 | 200;
@@ -37,6 +37,8 @@ export interface LibraryRoot {
 
 export interface AppSettings {
   cardSize: 卡片尺寸;
+  cardScale: number;
+  detailThumbnailScale: number;
   pageSize: 每页数量;
   sortMode: 排序方式;
   sortDirection: "asc" | "desc";
@@ -207,6 +209,7 @@ export interface OmiComicAppData {
   settings: AppSettings;
   readingProgress: Record<string, ReadingProgress>;
   recentOpened: RecentOpenedItem[];
+  temporaryOpened: RecentOpenedItem[];
   removedRecentResourceKeys: string[];
   favorites: FavoriteItem[];
   bookmarks: BookmarkItem[];
@@ -313,6 +316,15 @@ export type 操作结果<T> =
   | { ok: false; error: { code: string; message: string } };
 
 contextBridge.exposeInMainWorld("omicomic", {
+  takeExternalOpen: (): Promise<操作结果<{ resource: 阅读资源结果; initialPageIndex: number } | null>> => ipcRenderer.invoke("外部文件:领取"),
+  onExternalOpen: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("外部文件:待打开", listener);
+    return () => ipcRenderer.removeListener("外部文件:待打开", listener);
+  },
+  chooseExternalFiles: (): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:选择"),
+  removeTemporaryOpened: (key: string): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:移除引用", key),
+  promoteTemporaryOpened: (key: string): Promise<操作结果<OmiComicAppData>> => ipcRenderer.invoke("外部文件:加入资源库", key),
   openDocument: (input: { path: string; type: "pdf" | "epub"; id: string }) => ipcRenderer.invoke("document:open", input),
   readDocumentRange: (id: string, begin: number, end: number) => ipcRenderer.invoke("document:range", id, begin, end),
   readDocumentChapter: (id: string, index: number) => ipcRenderer.invoke("document:chapter", id, index),

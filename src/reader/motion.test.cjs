@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, 'motion.ts'), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
 const exportsObject = {};
 vm.runInNewContext(compiled.outputText, { exports: exportsObject });
-const { advanceInertia, estimateReleaseVelocity, trimPrefetchBuffer, MIN_MOTION_SPEED } = exportsObject;
+const { advanceInertia, estimateReleaseVelocity, trimPrefetchBuffer, mouseDragGain, acceleratedMouseVelocity, MAX_MOTION_SPEED, MIN_MOTION_SPEED } = exportsObject;
 const near = (actual, expected, tolerance = 1e-8) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} differs from ${expected}`);
 
 function travel(intervals, speed = 3.2) {
@@ -64,8 +64,20 @@ test('holding still, a tap, and empty samples do not initiate inertia', () => {
 
 test('high-rate coalesced pointer samples remain bounded in velocity', () => {
   const samples = Array.from({ length: 96 }, (_, i) => ({ time: 1 + i / 8, x: -i * 4, y: i * 8 }));
-  near(estimateReleaseVelocity(samples, false).x, -3.2);
-  near(estimateReleaseVelocity(samples, true).y, 3.2);
+  near(estimateReleaseVelocity(samples, false).x, -MAX_MOTION_SPEED);
+  near(estimateReleaseVelocity(samples, true).y, MAX_MOTION_SPEED);
+});
+
+test('fast mouse sweeps gain speed while precise drags remain one-to-one', () => {
+  near(mouseDragGain(0.2), 1);
+  assert.ok(mouseDragGain(2) > mouseDragGain(1));
+  assert.ok(mouseDragGain(4) > mouseDragGain(2));
+  assert.ok(acceleratedMouseVelocity(4) > acceleratedMouseVelocity(2) * 2);
+  near(acceleratedMouseVelocity(-2), -acceleratedMouseVelocity(2));
+  near(acceleratedMouseVelocity(100), MAX_MOTION_SPEED);
+  const medium = estimateReleaseVelocity(swipe(0).map(sample => ({ ...sample, x: sample.x * 4 })), false).x;
+  const fast = estimateReleaseVelocity(swipe(0).map(sample => ({ ...sample, x: sample.x * 8 })), false).x;
+  assert.ok(fast > medium * 1.9, 'fast swipes must not plateau at the old 3.2px/ms cap');
 });
 
 test('100,000-page speculative traversal does not grow buffer with library size', () => {

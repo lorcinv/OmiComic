@@ -1,4 +1,5 @@
-:root {
+:root,
+[data-color-theme="mist"] {
   --背景色: #f1f3f6;
   --面板色: #ffffff;
   --深色面板: #f7f8f9;
@@ -8,6 +9,84 @@
   --强调色: #476184;
   --强调浅色: #edf2f8;
   --阅读背景: #e2e5e9;
+  --控件背景: #f1f3f5;
+  --控件悬停: #e5e8ec;
+  --控件边框: #d6dbe1;
+  --控件文字: #505966;
+  --玻璃基色: #f4f6f8;
+  --玻璃边缘: #cfd4db;
+  --进度强调色: #8bb6bd;
+  --首页插画滤镜: none;
+  --高光色: #ffffff;
+  --强调文字: #ffffff;
+}
+
+/* 配色来源与适配说明见 docs/design/themes.md。 */
+[data-color-theme="nord"] {
+  --背景色: #eceff4;
+  --面板色: #f8fafc;
+  --深色面板: #eceff4;
+  --主文字: #2e3440;
+  --次文字: #4c566a;
+  --边框色: #d8dee9;
+  --强调色: #4c566a;
+  --强调浅色: #e5e9f0;
+  --阅读背景: #d8dee9;
+  --控件背景: #e5e9f0;
+  --控件悬停: #d8dee9;
+  --控件边框: #c4cedd;
+  --控件文字: #4c566a;
+  --玻璃基色: #eceff4;
+  --玻璃边缘: #c4cedd;
+  --进度强调色: #81a1c1;
+  --首页插画滤镜: none;
+}
+
+[data-color-theme="sand"] {
+  --背景色: #f2f0e7;
+  --面板色: #fdfdfc;
+  --深色面板: #faf9f2;
+  --主文字: #21201c;
+  --次文字: #63635e;
+  --边框色: #e2e1de;
+  --强调色: #71624b;
+  --强调浅色: #eae6db;
+  --阅读背景: #e9e8e6;
+  --控件背景: #f1f0ef;
+  --控件悬停: #e9e8e6;
+  --控件边框: #cfceca;
+  --控件文字: #63635e;
+  --玻璃基色: #faf9f2;
+  --玻璃边缘: #cfceca;
+  --进度强调色: #b9a88d;
+  --首页插画滤镜: hue-rotate(-185deg) saturate(0.45);
+}
+
+[data-color-theme="night"] {
+  color-scheme: dark;
+  --背景色: #2e3440;
+  --面板色: #363e4c;
+  --深色面板: #323a47;
+  --主文字: #e5e9f0;
+  --次文字: #b0bac9;
+  --边框色: #4c566a;
+  --强调色: #88c0d0;
+  --强调浅色: #3b4b5e;
+  --阅读背景: #292f3a;
+  --控件背景: #3b4252;
+  --控件悬停: #434c5e;
+  --控件边框: #58657a;
+  --控件文字: #d8dee9;
+  --玻璃基色: #3b4252;
+  --玻璃边缘: #718095;
+  --进度强调色: #8fbcbb;
+  --首页插画滤镜: grayscale(0.25) brightness(0.62) contrast(1.1);
+  --高光色: #65748a;
+  --强调文字: #2e3440;
+}
+
+:root {
+  color-scheme: light;
   --阴影: 0 18px 50px rgba(28, 33, 40, 0.10);
   color: var(--主文字);
   background: var(--背景色);
@@ -15,3 +94,5 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
+
+:root[data-color-theme="night"] { color-scheme: dark; }

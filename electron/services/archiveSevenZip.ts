@@ -1,8 +1,12 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { path7z } from "7zip-bin-full";
 import { promises as fs } from "node:fs";
 import { ARCHIVE_LIMITS, createEntryGuard, failLimit, isImage, 压缩包服务错误, type ArchiveEntry } from "./archiveSafety";
+
+declare const __OMICOMIC_BUNDLED__: boolean | undefined;
+const path7z: string = typeof __OMICOMIC_BUNDLED__ !== "undefined" && __OMICOMIC_BUNDLED__
+  ? path.join(process.resourcesPath, "7zip", "7z.exe")
+  : require("7zip-bin-full").path7z;
 
 // Only the bundled executable is used. No shell, user-supplied options, disk extraction or prompts.
 function run(args: string[], maxBytes: number): Promise<Buffer> {

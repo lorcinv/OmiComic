@@ -2,10 +2,12 @@ import { app } from "electron";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
+import { 路径位于目录, 外部资源授权路径 } from "./externalPaths";
 
 export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
 export type 卡片尺寸 = "small" | "medium" | "large";
+export type 主题配色 = "mist" | "nord" | "sand" | "night";
 export type 每页数量 = 60 | 100 | 150 | 200;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
 export type 排序方向 = "asc" | "desc";
@@ -33,7 +35,10 @@ export interface LibraryRoot {
 }
 
 export interface AppSettings {
+  colorTheme: 主题配色;
   cardSize: 卡片尺寸;
+  cardScale: number;
+  detailThumbnailScale: number;
   pageSize: 每页数量;
   sortMode: 排序方式;
   sortDirection: 排序方向;
@@ -204,6 +209,8 @@ export interface OmiComicAppData {
   settings: AppSettings;
   readingProgress: Record<string, ReadingProgress>;
   recentOpened: RecentOpenedItem[];
+  temporaryOpened: RecentOpenedItem[];
+  externalReadGrants: Array<{ sourcePath: string; sourceType: 阅读资源类型 }>;
   removedRecentResourceKeys: string[];
   favorites: FavoriteItem[];
   bookmarks: BookmarkItem[];
@@ -231,10 +238,14 @@ const 整理侧边栏透明度选项 = new Set<number>([70, 80, 90, 100]);
 const 书架备注悬停延迟选项 = new Set<number>([0, 500, 1000, 1500, 2000]);
 const 最近打开记录上限选项 = new Set<number>([50, 100, 150, 200]);
 const 标签搜索模式选项 = new Set<string>(["fuzzy", "exact"]);
+const 主题配色选项 = new Set<string>(["mist", "nord", "sand", "night"]);
 const 资源类型选项 = new Set<string>(["folder", "image", "archive", "pdf", "epub", "unknown"]);
 
 const 默认设置: AppSettings = {
+  colorTheme: "mist",
   cardSize: "medium",
+  cardScale: 100,
+  detailThumbnailScale: 100,
   pageSize: 60,
   sortMode: "name-asc",
   sortDirection: "asc",
@@ -304,6 +315,8 @@ function 创建默认数据(): OmiComicAppData {
     settings: { ...默认设置 },
     readingProgress: {},
     recentOpened: [],
+    temporaryOpened: [],
+    externalReadGrants: [],
     removedRecentResourceKeys: [],
     favorites: [],
     bookmarks: [],
@@ -320,6 +333,14 @@ function 是对象(值: unknown): 值 is Record<string, unknown> {
 
 function 读取字符串(值: unknown): string | undefined {
   return typeof 值 === "string" && 值.trim() !== "" ? 值 : undefined;
+}
+
+function 修正外部阅读授权(输入: unknown): OmiComicAppData["externalReadGrants"] {
+  if (!Array.isArray(输入)) return [];
+  return 输入.filter((项): 项 is OmiComicAppData["externalReadGrants"][number] => 是对象(项)
+    && typeof 项.sourcePath === "string" && path.isAbsolute(项.sourcePath)
+    && ["folder", "image", "archive", "pdf", "epub"].includes(String(项.sourceType)))
+    .map(({ sourcePath, sourceType }) => ({ sourcePath, sourceType }));
 }
 
 function 读取可空文本(值: unknown): string {
@@ -359,6 +380,9 @@ function 读取范围整数(值: unknown, 默认值: number, 最小值: number, 
 
 function 修正设置(输入: unknown): AppSettings {
   const 设置 = 是对象(输入) ? 输入 : {};
+  const colorTheme = 主题配色选项.has(String(设置.colorTheme))
+    ? 设置.colorTheme as 主题配色
+    : 默认设置.colorTheme;
   const 删除前确认 = 是对象(设置.confirmBeforeBatchDelete) ? 设置.confirmBeforeBatchDelete : {};
   const 跳过批量删除确认 = 是对象(设置.skipBatchDeleteConfirm) ? 设置.skipBatchDeleteConfirm : {};
   const cardSize = 卡片尺寸选项.has(String(设置.cardSize))
@@ -426,7 +450,10 @@ function 修正设置(输入: unknown): AppSettings {
   );
 
   return {
+    colorTheme,
     cardSize,
+    cardScale: 读取范围整数(设置.cardScale, 默认设置.cardScale, 40, 200),
+    detailThumbnailScale: 读取范围整数(设置.detailThumbnailScale, 默认设置.detailThumbnailScale, 40, 200),
     pageSize,
     sortMode,
     sortDirection: 设置.sortDirection === "desc" ? "desc" : "asc",
@@ -601,7 +628,7 @@ function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
 function 修正最近打开(
   输入: unknown,
   进度表: Record<string, ReadingProgress>,
-  上限: 最近打开记录上限,
+  上限: number,
   已移除资源Key集合: ReadonlySet<string> = new Set(),
 ): RecentOpenedItem[] {
   if (!Array.isArray(输入)) return [];
@@ -984,6 +1011,9 @@ function 修正应用数据(输入: unknown): OmiComicAppData {
     },
     settings,
     readingProgress: 进度表,
+    temporaryOpened: 修正最近打开(输入.temporaryOpened, 进度表, Number.MAX_SAFE_INTEGER)
+      .filter(项目 => !修正根目录列表(library.roots).some(根 => 路径位于目录(项目.sourcePath, 根.path))),
+    externalReadGrants: 修正外部阅读授权(输入.externalReadGrants ?? 输入.temporaryOpened),
     recentOpened: 修正最近打开并补足历史(
       输入.recentOpened,
       进度表,
@@ -1088,6 +1118,7 @@ export async function 添加或更新根目录(根路径: string, 名称: string
   ];
   数据.library.lastActiveRootPath = 根路径;
   数据.library.lastCurrentPath = 根路径;
+  数据.temporaryOpened = 数据.temporaryOpened.filter(项目 => !路径位于目录(项目.sourcePath, 根路径));
   await 保存应用数据(数据);
   return 根目录;
 }
@@ -1226,6 +1257,8 @@ export async function 保存阅读进度(进度: ReadingProgress): Promise<Readi
   };
 
   数据.readingProgress[修正进度.resourceKey] = 修正进度;
+  数据.temporaryOpened = 数据.temporaryOpened.map(项目 => 项目.resourceKey === 修正进度.resourceKey
+    ? { ...项目, currentPageIndex, totalPages, updatedAt } : 项目);
   数据.removedRecentResourceKeys = 数据.removedRecentResourceKeys.filter(
     (resourceKey) => resourceKey !== 修正进度.resourceKey,
   );
@@ -1244,6 +1277,26 @@ export async function 保存阅读进度(进度: ReadingProgress): Promise<Readi
 
   await 保存应用数据(数据);
   return 修正进度;
+}
+
+export async function 记录临时打开(项目: RecentOpenedItem): Promise<void> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 记录临时打开(项目));
+  const 数据 = await 读取应用数据();
+  if (数据.library.roots.some(根 => 路径位于目录(项目.sourcePath, 根.path))) return;
+  const 授权路径 = 外部资源授权路径(项目);
+  if (!数据.externalReadGrants.some(授权 => 授权.sourcePath === 授权路径)) {
+    数据.externalReadGrants.push({ sourcePath: 授权路径, sourceType: 项目.sourceType === "image" ? "folder" : 项目.sourceType });
+  }
+  数据.temporaryOpened = [项目, ...数据.temporaryOpened.filter(旧项 => 旧项.resourceKey !== 项目.resourceKey)];
+  await 保存应用数据(数据);
+}
+
+export async function 移除临时打开(resourceKey: string): Promise<void> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 移除临时打开(resourceKey));
+  const 数据 = await 读取应用数据();
+  数据.temporaryOpened = 数据.temporaryOpened.filter(项目 => 项目.resourceKey !== resourceKey);
+  // 只移除此列表的引用；进度、收藏、标签与磁盘文件均保留。
+  await 保存应用数据(数据);
 }
 
 export async function 获取最近打开(): Promise<RecentOpenedItem[]> {
@@ -1767,6 +1820,7 @@ export async function 清理失效资源记录(输入: { sourcePaths: string[]; 
   const 当前时间 = Date.now();
 
   数据.recentOpened = 数据.recentOpened.filter((项目) => !应清理(项目));
+  数据.temporaryOpened = 数据.temporaryOpened.filter((项目) => !应清理(项目));
   数据.favorites = 数据.favorites
     .filter((项目) => !应清理(项目))
     .map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
