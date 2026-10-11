@@ -1,0 +1,8 @@
+{
+  "libarchive": {
+    "version": "1.1.7",
+    "url": "https://repo.maven.apache.org/maven2/me/zhanghai/android/libarchive/library/1.1.7/library-1.1.7.aar",
+    "sha256": "060587bbec1b6b79f8b1fd02eebfbe638174d7889a6c3cfd6ce3f34b5da4d46b",
+    "abis": ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"]
+  }
+}

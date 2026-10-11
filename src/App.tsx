@@ -22,6 +22,20 @@ function App() {
   const 应用已挂载 = useRef(false);
 
   useEffect(() => {
+    const back = () => {
+      if (当前页面 === "阅读器") { window.dispatchEvent(new Event("omi-reader-back")); return; }
+      if (当前页面 === "资源库") {
+        const event = new Event("omi-library-back", { cancelable: true });
+        if (window.dispatchEvent(event)) void 切换主界面("首页");
+        return;
+      }
+      window.omicomic.minimizeWindow();
+    };
+    window.addEventListener("omi-back",back);
+    return () => window.removeEventListener("omi-back",back);
+  });
+
+  useEffect(() => {
     应用已挂载.current = true;
     const 接收文件 = async () => {
       if (外部请求处理中.current) return;

@@ -35,7 +35,7 @@ function WindowControls() {
     };
   }, []);
 
-  if (全屏状态) return null;
+  if (全屏状态 || document.documentElement.dataset.platform === "android") return null;
 
   return (
     <div className="window-controls" role="group" aria-label="窗口操作">

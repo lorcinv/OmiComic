@@ -3,6 +3,9 @@ import { registerDocumentIpc } from "./services/documentService";
 import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu } from "electron";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
+import { changeLocalResource } from "./services/localFileService";
+import { withinPath } from "./services/resourceRecords";
+import { 恢复已移除索引 } from "./services/appDataService";
 import { 识别外部资源, 外部资源授权路径, 资源所在目录 } from "./services/externalPaths";
 import type { 操作结果, 阅读资源结果 } from "./preload";
 import {
@@ -563,6 +566,25 @@ async function 读取阅读资源(输入: unknown): Promise<操作结果<阅读�
   }
 
 function 注册安全通道(): void {
+  ipcMain.handle("资源:文件操作", async (event, input: unknown) => {
+    if (event.senderFrame !== event.sender.mainFrame) return { ok: false, error: { code: "UNTRUSTED_FRAME", message: "不允许从文档内容操作文件。" } };
+    try {
+      const result = await changeLocalResource(input as Parameters<typeof changeLocalResource>[0], [...已授权根目录]);
+      if (result.newPath) {
+        for (const grant of result.appData.externalReadGrants) 已授权根目录.add(grant.sourcePath);
+      }
+      return { ok: true, data: result };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const message = code === "ENOENT" ? "文件已不存在，请刷新目录。" : code === "EPERM" || code === "EACCES" || code === "EBUSY"
+        ? "文件正在使用或没有写入权限，请关闭阅读器或占用文件的程序后重试。" : error instanceof Error ? error.message : "文件操作失败。";
+      return { ok: false, error: { code: "LOCAL_FILE_OPERATION_FAILED", message } };
+    }
+  });
+  ipcMain.handle("资源:恢复索引", async () => {
+    try { return { ok: true, data: await 恢复已移除索引() }; }
+    catch { return { ok: false, error: { code: "RESTORE_INDEX_FAILED", message: "恢复索引失败。" } }; }
+  });
   ipcMain.handle("外部文件:领取", async () => {
     if (正在领取外部文件 || 待打开外部文件.length === 0) return { ok: true, data: null };
     正在领取外部文件 = true;
@@ -1882,7 +1904,9 @@ function 注册安全通道(): void {
     const 取消扫描 = () => 扫描控制器.abort();
     事件.sender.once("destroyed", 取消扫描);
     try {
-      const 文件列表 = await scanDirectory(目标路径, { authorizedRoot: 所属根目录, signal: 扫描控制器.signal });
+      const 扫描列表 = await scanDirectory(目标路径, { authorizedRoot: 所属根目录, signal: 扫描控制器.signal });
+      const 隐藏路径 = (await 读取应用数据()).excludedResourcePaths ?? [];
+      const 文件列表 = 扫描列表.filter(item => !隐藏路径.some(p => withinPath(item.path, p)));
 
       const 是否位于根目录 = path.relative(所属根目录, 目标路径) === "";
       return {

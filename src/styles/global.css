@@ -7699,3 +7699,20 @@ a,
 .resource-progress { align-self: end; }
 .document-save-error { position: absolute; z-index: 40; bottom: 16px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); display: flex; gap: 12px; align-items: center; padding: 10px 16px; border: 1px solid #dbb5a5; border-radius: 12px; background: light-dark(#fff5ed, var(--面板色)); color: light-dark(#713d2e, #efb6ad); font-size: 13px; box-shadow: var(--阴影); }
 .document-save-error button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 20px; }
+/* File actions use the same glass surfaces as the rest of the library. */
+.local-file-overlay { z-index: 1200; }
+.local-file-dialog { width: min(520px, calc(100vw - 32px)); max-height: 85dvh; overflow-y: auto; }
+.local-file-path { overflow-wrap: anywhere; font-size: 12px; opacity: .75; }
+.local-file-name { display: grid; gap: 8px; }
+.local-file-name input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border-color, #aab2bc); border-radius: 12px; background: var(--surface, #f5f6f8); color: inherit; }
+.local-file-option { display: flex; align-items: flex-start; gap: 12px; padding: 16px; margin: 12px 0; border: 1px solid transparent; border-radius: 14px; background: rgba(128,144,164,.08); cursor: pointer; }
+.local-file-option.is-selected { border-color: #8b9daf; background: rgba(128,144,164,.17); }
+.local-file-option input { margin-top: 4px; accent-color: #5e758c; }
+.local-file-option span { display: grid; gap: 5px; }
+.local-file-option small { line-height: 1.6; opacity: .8; }
+.local-file-error { color: #ae3a3a; }
+.resource-detail-primary-actions { gap: 8px; }
+.resource-detail-primary-actions .resource-detail-read-button { order:-1; flex:1; min-width:100px; width:auto; }
+.resource-detail-file-action { flex:0 0 auto; padding:8px 10px; border:1px solid var(--控件边框); border-radius:10px; background:var(--控件背景); font-size:12px; white-space:nowrap; }
+.resource-detail-primary-actions > button { min-height: 40px; }
+.restore-index-button { flex-shrink: 0; }

@@ -962,6 +962,40 @@ function ReaderPage({
     onBack();
   }
 
+  useEffect(() => {
+    const pause = () => 立即保存待保存进度(false);
+    window.addEventListener("omi-reader-back", 返回资源库);
+    window.addEventListener("omi-pause", pause);
+    window.addEventListener("pagehide", pause);
+    return () => {
+      window.removeEventListener("omi-reader-back", 返回资源库);
+      window.removeEventListener("omi-pause", pause);
+      window.removeEventListener("pagehide", pause);
+    };
+  });
+
+  const 手机触点 = useRef<{ id: number; x: number; y: number; time: number } | null>(null);
+  function 开始手机触控(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "touch" || (event.target as HTMLElement).closest("button,input")) return;
+    if (!event.isPrimary) { 手机触点.current = null; return; }
+    手机触点.current = {id:event.pointerId,x:event.clientX,y:event.clientY,time:event.timeStamp};
+  }
+  function 结束手机触控(event: ReactPointerEvent<HTMLDivElement>) {
+    const start=手机触点.current;手机触点.current=null;
+    if(!start||start.id!==event.pointerId||阅读视图初始化中)return;
+    const dx=event.clientX-start.x,dy=event.clientY-start.y;
+    if(!模式2&&Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.5&&event.timeStamp-start.time<1000){
+      const next=阅读器设置.doublePageDirection === "right-to-left"?dx>0:dx<0;
+      if(next)下一页();else 上一页();
+    }else if(Math.hypot(dx,dy)<12&&event.timeStamp-start.time<400){
+      const rect=event.currentTarget.getBoundingClientRect(),fraction=(event.clientX-rect.left)/rect.width;
+      if(!模式2&&(fraction<.25||fraction>.75)){
+        const next=阅读器设置.doublePageDirection === "right-to-left"?fraction<.25:fraction>.75;
+        if(next)下一页();else 上一页();
+      }else{显示顶部栏();显示底部栏();}
+    }
+  }
+
   function 应用沉浸界面状态(启用: boolean): void {
     设置沉浸模式(启用);
     设置顶部栏可见(!启用);
@@ -3694,10 +3728,10 @@ function ReaderPage({
         } ${全景拖动中 ? "is-panorama-dragging" : ""} ${
           全景动画启用 ? "is-panorama-animated" : "is-panorama-static"
         }`}
-        onPointerDown={开始全景拖动}
+        onPointerDown={(event) => { 开始手机触控(event); 开始全景拖动(event); }}
         onPointerMove={拖动全景}
-        onPointerUp={结束全景指针}
-        onPointerCancel={取消全景指针}
+        onPointerUp={(event) => { 结束全景指针(event); 结束手机触控(event); }}
+        onPointerCancel={(event) => { 手机触点.current=null; 取消全景指针(event); }}
         onLostPointerCapture={取消全景指针}
         onPointerLeave={(事件) => {
           if (事件.buttons === 0) 结束全景指针(事件);

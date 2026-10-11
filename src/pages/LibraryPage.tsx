@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import ArrowIcon from "../ArrowIcon";
+import LocalFileDialog, { type LocalFileTarget } from "../components/LocalFileDialog";
 import 资源详情缩略图 from "../components/DetailPagePreview";
 import { useBoundedRecord } from "../hooks/useBoundedRecord";
 import { useDetailPreviewWheel } from "../hooks/useDetailPreviewWheel";
@@ -96,7 +97,7 @@ const 设置分类选项: Array<{ id: 设置分类; label: string; description: 
 ];
 
 type 资源信息目标 =
-  | { kind: "resource"; input: ResourceMetaInput; fileType: 资源类型; progressText?: string | null; thumbnailUrl?: string | null }
+  | { kind: "resource"; input: ResourceMetaInput; fileType: 资源类型; localPath?: string; progressText?: string | null; thumbnailUrl?: string | null }
   | { kind: "bookmark"; item: BookmarkItem; fileType: 资源类型; thumbnailUrl?: string | null };
 
 interface 缩略图状态 {
@@ -916,6 +917,21 @@ function 获取卡片进度显示状态(
 }
 
 function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPageProps) {
+  const [本地文件目标, 设置本地文件目标] = useState<LocalFileTarget | null>(null);
+  const [移除索引数量, 设置移除索引数量] = useState(0);
+  useEffect(() => {
+    const back = (event: Event) => {
+      if (!isActive) return;
+      if (本地文件目标) { event.preventDefault(); return; }
+      if (资源信息目标) { 关闭资源详情页面(); event.preventDefault(); return; }
+      if (当前右侧抽屉) { 设置当前右侧抽屉(null); event.preventDefault(); return; }
+      if (当前视图 === "directory" && 当前目录?.parentPath && 当前根目录) {
+        void 打开目录(当前目录.parentPath,当前根目录); event.preventDefault();
+      }
+    };
+    window.addEventListener("omi-library-back",back);
+    return () => window.removeEventListener("omi-library-back",back);
+  });
   const [根目录列表, 设置根目录列表] = useState<LibraryRoot[]>([]);
   const [当前根目录, 设置当前根目录] = useState<string | null>(null);
   const [当前目录, 设置当前目录] = useState<目录结果 | null>(null);
@@ -987,6 +1003,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     input: ResourceMetaInput;
     fileType: 资源类型;
     itemKey: string;
+    localPath: string;
     progressText?: string | null;
     thumbnailUrl?: string | null;
   } | null>(null);
@@ -2697,6 +2714,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       }
 
       应用界面设置(结果.data.settings);
+      设置移除索引数量(结果.data.excludedResourcePaths?.length ?? 0);
       设置根目录列表(结果.data.library.roots);
       设置阅读进度表(结果.data.readingProgress);
       设置最近打开列表(结果.data.recentOpened);
@@ -4793,6 +4811,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 同步应用数据状态(数据: OmiComicAppData): void {
+    设置移除索引数量(数据.excludedResourcePaths?.length ?? 0);
     设置根目录列表(数据.library.roots);
     设置最近打开列表(数据.recentOpened);
     设置临时存放列表(数据.temporaryOpened ?? []);
@@ -4803,6 +4822,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     设置虚拟文件夹列表(数据.virtualFolders);
     设置资源元数据表(数据.resourceMeta);
     设置标签顺序(数据.tagOrder);
+  }
+
+  async function 同步文件操作(数据: OmiComicAppData): Promise<void> {
+    同步应用数据状态(数据);
+    关闭资源详情页面();
+    退出选择模式();
+    if (当前目录) {
+      const 刷新 = await window.omicomic.listDirectory(当前目录.path);
+      if (刷新.ok) 设置当前目录(刷新.data);
+    }
+    显示成功提示("资源已更新。");
   }
 
   function 收集内部资源记录(): VirtualFolderItemInput[] {
@@ -6899,6 +6929,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 是书签 = 资源信息目标.kind === "bookmark";
     const 标题 = 是书签 ? 资源信息目标.item.title : 资源信息目标.input.title;
     const 路径 = 是书签 ? 资源信息目标.item.sourcePath : 资源信息目标.input.sourcePath;
+    const 操作路径 = 资源信息目标.kind === "resource" ? 资源信息目标.localPath ?? 路径 : 路径;
     const 类型 = 资源信息目标.fileType;
     const 阅读单位 = 类型 === "epub" ? "章" : "页";
     const 信息 = 类型信息[类型];
@@ -6977,6 +7008,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 </span>
               </div>
               <div className="resource-detail-primary-actions">
+                <button type="button" className="resource-detail-file-action" aria-label="重命名本地文件" onClick={() => 设置本地文件目标({ path: 操作路径, title: 标题, mode: "rename" })}>重命名</button>
+                <button type="button" className="resource-detail-file-action" onClick={() => 设置本地文件目标({ path: 操作路径, title: 标题, mode: "delete" })}>删除…</button>
                 <button
                   type="button"
                   className="primary-action resource-detail-read-button"
@@ -7201,7 +7234,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     );
   }
   return (
-    <section className="library-layout" aria-labelledby="library-title">
+    <section className="library-layout" aria-labelledby="library-title" onClickCapture={event => {
+      if (!window.matchMedia("(pointer: coarse)").matches || 选择模式) return;
+      const target=event.target as HTMLElement;
+      if(target.closest(".resource-info-button,.favorite-button,.selection-check,.preview-tag-more")) return;
+      const card=target.closest<HTMLElement>(".resource-card");
+      if(card) card.dispatchEvent(new MouseEvent("dblclick",{bubbles:true,cancelable:true}));
+    }}>
       <aside className="library-sidebar">
         <OmiPageBrand onActivate={onHome} onRead={origin => {
           const 最近项目 = [...最近打开列表].sort((a, b) => b.updatedAt - a.updatedAt)[0];
@@ -7276,6 +7315,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           <button
             ref={设置触发按钮}
             className={`sidebar-item sidebar-settings-button ${当前右侧抽屉 === "settings" ? "is-active" : ""}`}
+            aria-label="设置"
             type="button"
             onClick={打开设置窗口}
           >
@@ -7292,6 +7332,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         <h1 className="visually-hidden">{视图标题}</h1>
 
         {!资源信息目标 && <div className="library-controls">
+          {移除索引数量 > 0 && <button className="restore-index-button" onClick={async () => {
+            const 结果 = await window.omicomic.restoreResourceIndex();
+            if (结果.ok) await 同步文件操作(结果.data);
+            else 设置错误信息(结果.error.message);
+          }}>恢复文件索引 ({移除索引数量})</button>}
           <div className="search-shell">
             <label className="search-control">
               <span aria-hidden="true">⌕</span>
@@ -8335,7 +8380,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             <div className="empty-library">
               <div className="empty-illustration" aria-hidden="true">▦</div>
               <h2>从本地目录开始浏览</h2>
-              <p>选择漫画根目录后，这里会显示文件夹、图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF、EPUB 和未知文件。</p>
+              <p>{document.documentElement.dataset.platform === "android" ? "选择漫画目录，直接阅读图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF 和 EPUB。" : "选择漫画根目录后，这里会显示文件夹、图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF、EPUB 和未知文件。"}</p>
               <button className="primary-action empty-primary" onClick={() => void 添加目录()}>
                 添加漫画目录
               </button>
@@ -8422,6 +8467,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         x: 事件.clientX,
                         y: 事件.clientY,
                         input: 资源整理输入,
+                        localPath: 文件.path,
                         fileType: 文件.type,
                         progressText: 进度显示状态.文本,
                         thumbnailUrl: 缩略图.url,
@@ -8475,6 +8521,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       {渲染资源信息按钮(资源整理输入 ? {
                         kind: "resource",
                         input: 资源整理输入,
+                        localPath: 文件.path,
                         fileType: 文件.type,
                         progressText: 进度显示状态.文本,
                         thumbnailUrl: 缩略图.url,
@@ -9372,6 +9419,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "rename" }); 设置资源菜单(null); }}>重命名本地文件</button>
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "delete" }); 设置资源菜单(null); }}>删除资源…</button>
             <button
               type="button"
               role="menuitem"
@@ -9379,6 +9428,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 打开资源详情页面({
                   kind: "resource",
                   input: 资源菜单.input,
+                  localPath: 资源菜单.localPath,
                   fileType: 资源菜单.fileType,
                   progressText: 资源菜单.progressText,
                   thumbnailUrl: 资源菜单.thumbnailUrl,
@@ -10645,6 +10695,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             </div>
           </div>
         )}
+        {本地文件目标 && <LocalFileDialog target={本地文件目标} onClose={() => 设置本地文件目标(null)} onChanged={同步文件操作} />}
         {书架备注悬浮窗 && createPortal(
           <div
             className="bookshelf-note-popover"

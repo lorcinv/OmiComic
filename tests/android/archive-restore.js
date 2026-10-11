@@ -1,0 +1,11 @@
+const api=window.omicomic;
+const data=(await api.getAppData()).data;
+const root=data.library.roots.find(r=>r.name==='OmiSmoke');if(!root)throw new Error('Directory grant lost');
+const names=['RAR4.rar','RAR5.cbr','Seven.7z','Solid.cb7'];
+for(const name of names)if(!Object.values(data.readingProgress).some(p=>p.sourcePath.endsWith(name)&&p.currentPageIndex===1))throw new Error('Archive progress lost: '+name);
+const wait=async(fn)=>{const end=Date.now()+30000;while(!fn()){if(Date.now()>end)throw new Error('Archive resume timeout');await new Promise(r=>setTimeout(r,100));}};
+document.querySelector('[aria-label="打开资源库"]').click();
+await wait(()=>document.querySelector('.page-panel.is-visible .resource-card'));
+const card=[...document.querySelectorAll('.page-panel.is-visible .resource-card')].find(c=>c.textContent.includes('RAR5.cbr'));if(!card)throw new Error('Missing CBR card');card.click();
+await wait(()=>document.querySelector('.reader-footer input[aria-label]')?.value==='2'&&[...document.querySelectorAll('.reader-page-spread img')].some(i=>i.complete&&i.naturalWidth===800));
+return {restart:true,archivesRestored:4,resumedRAR5Page:2};

@@ -316,6 +316,8 @@ export type 操作结果<T> =
   | { ok: false; error: { code: string; message: string } };
 
 contextBridge.exposeInMainWorld("omicomic", {
+  changeLocalResource: (input: { path: string; action: "rename" | "trash" | "index"; name?: string }) => ipcRenderer.invoke("资源:文件操作", input),
+  restoreResourceIndex: () => ipcRenderer.invoke("资源:恢复索引"),
   takeExternalOpen: (): Promise<操作结果<{ resource: 阅读资源结果; initialPageIndex: number } | null>> => ipcRenderer.invoke("外部文件:领取"),
   onExternalOpen: (callback: () => void): (() => void) => {
     const listener = () => callback();

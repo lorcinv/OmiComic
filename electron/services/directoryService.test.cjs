@@ -50,22 +50,31 @@ test('11,000-image directory stress, natural sort, errors, root security and rap
     for (let i = 0; i < files.length; i += 64) await Promise.all(files.slice(i, i + 64).map(file => fs.writeFile(file, image)));
     await fs.writeFile(path.join(root, 'notes.txt'), 'synthetic fixture');
     await fs.writeFile(path.join(root, 'book.pdf'), '%PDF-fixture');
-    await fs.symlink(path.join(root, 'missing'), path.join(root, 'broken.png'));
     await fs.writeFile(path.join(outside, 'secret.png'), png);
-    await fs.symlink(path.join(outside, 'secret.png'), path.join(root, 'escaped.png'));
-    await fs.symlink(outside, path.join(root, 'escaped-folder'));
+    let fileLinks = true;
+    try {
+      await fs.symlink(path.join(root, 'missing'), path.join(root, 'broken.png'));
+      await fs.symlink(path.join(outside, 'secret.png'), path.join(root, 'escaped.png'));
+    } catch (error) {
+      if (process.platform !== 'win32' || error.code !== 'EPERM') throw error;
+      fileLinks = false;
+      t.diagnostic('Windows file symlink cases unavailable without Developer Mode; directory escape is tested with a junction.');
+    }
+    await fs.symlink(outside, path.join(root, 'escaped-folder'), process.platform === 'win32' ? 'junction' : 'dir');
     metrics.fixtureMs = performance.now() - start;
 
     let time = performance.now();
     const entries = await service.scanDirectory(root, { authorizedRoot: root, stat: measuredStat });
     metrics.scanMs = performance.now() - time;
-    assert.equal(entries.length, 10015);
+    assert.equal(entries.length, fileLinks ? 10015 : 10013);
     assert.equal(entries[0].name, 'chapter1');
     assert.equal(entries[9].name, 'chapter10');
     assert.ok(entries.findIndex(entry => entry.name === 'page2.png') < entries.findIndex(entry => entry.name === 'page10.png'));
     assert.equal(entries.find(entry => entry.name === 'page10000.png').size, 8192);
-    assert.equal(entries.find(entry => entry.name === 'broken.png').hasError, true);
-    assert.equal(entries.find(entry => entry.name === 'escaped.png').hasError, true);
+    if (fileLinks) {
+      assert.equal(entries.find(entry => entry.name === 'broken.png').hasError, true);
+      assert.equal(entries.find(entry => entry.name === 'escaped.png').hasError, true);
+    }
     assert.equal(entries.find(entry => entry.name === 'escaped-folder').hasError, true);
 
     time = performance.now();
@@ -105,7 +114,7 @@ test('11,000-image directory stress, natural sort, errors, root security and rap
     }
     const outcomes = await Promise.all(scans);
     metrics.rapidScansMs = performance.now() - time;
-    assert.equal(outcomes[11].result.length, 10015);
+    assert.equal(outcomes[11].result.length, fileLinks ? 10015 : 10013);
     assert.ok(outcomes.slice(0, 11).every(outcome => outcome.error?.name === 'AbortError'));
     assert.ok(metrics.maxActiveStats <= service.DIRECTORY_STAT_CONCURRENCY);
 

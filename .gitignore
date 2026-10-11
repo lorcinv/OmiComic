@@ -31,3 +31,6 @@ playwright-report/
 # Windows distribution staging and installers
 .packaged-app/
 release/
+dist-android/
+android/build/
+.android-signing/

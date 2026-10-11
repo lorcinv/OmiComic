@@ -200,6 +200,7 @@ export interface VirtualFolderItemInput {
 }
 
 export interface OmiComicAppData {
+  excludedResourcePaths?: string[];
   version: number;
   library: {
     roots: LibraryRoot[];
@@ -1003,6 +1004,7 @@ function 修正应用数据(输入: unknown): OmiComicAppData {
   const 已移除最近资源Key集合 = new Set(removedRecentResourceKeys);
 
   return {
+    excludedResourcePaths: Array.isArray(输入.excludedResourcePaths) ? 输入.excludedResourcePaths.filter((p): p is string => typeof p === "string" && path.isAbsolute(p)) : [],
     version: 数据版本,
     library: {
       roots: 修正根目录列表(library.roots),
@@ -1038,8 +1040,26 @@ async function 安全写入JSON(文件路径: string, 数据: OmiComicAppData): 
 }
 
 async function 直接保存应用数据(数据: OmiComicAppData): Promise<void> {
-  数据缓存 = 修正应用数据(数据);
-  await 安全写入JSON(获取数据文件路径(), 数据缓存);
+  const 新数据 = 修正应用数据(数据);
+  await 安全写入JSON(获取数据文件路径(), 新数据);
+  数据缓存 = 新数据;
+}
+
+export async function 执行资源文件事务<T>(操作: (数据: OmiComicAppData, 保存: (数据: OmiComicAppData) => Promise<void>) => Promise<T>): Promise<T> {
+  return 排队执行数据变更(async () => {
+    const 数据 = await 读取应用数据();
+    await 安全写入JSON(`${获取数据文件路径()}.before-file-operation.json`, 数据);
+    return 操作(structuredClone(数据), 直接保存应用数据);
+  });
+}
+
+export async function 恢复已移除索引(): Promise<OmiComicAppData> {
+  return 排队执行数据变更(async () => {
+    const 数据 = structuredClone(await 读取应用数据());
+    数据.excludedResourcePaths = [];
+    await 直接保存应用数据(数据);
+    return 数据;
+  });
 }
 
 async function 从磁盘读取应用数据(): Promise<OmiComicAppData> {

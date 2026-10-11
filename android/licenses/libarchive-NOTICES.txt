@@ -1,0 +1,25 @@
+libarchive-android 1.1.7
+https://github.com/zhanghai/libarchive-android/tree/v1.1.7
+Copyright 2023 Google LLC. Apache-2.0.
+Maven AAR SHA-256: 060587bbec1b6b79f8b1fd02eebfbe638174d7889a6c3cfd6ce3f34b5da4d46b
+
+The upstream JNI library statically includes the following components:
+libarchive: BSD (see libarchive-LICENSE.txt)
+  https://github.com/libarchive/libarchive/tree/7219b0134d771dc4b51bf86b4d01761b87398b1b
+bzip2: bzip2 license (see bzip2-LICENSE.txt)
+  https://gitlab.com/bzip2/bzip2/-/tree/6a8690fc8d26c815e798c588f796eabe9d684cf0
+liblzma / XZ Utils: 0BSD (see xz-COPYING.txt and xz-0BSD.txt)
+  https://github.com/tukaani-project/xz/tree/d3e650e63c110e830fd5391e7f8b45df0b91d3da
+LZ4: BSD-2-Clause (see lz4-LICENSE.txt)
+  https://github.com/lz4/lz4/tree/ebb370ca83af193212df4dcbadcc5d87bc0de2f0
+Zstandard: BSD-3-Clause option (see zstd-LICENSE.txt)
+  https://github.com/facebook/zstd/tree/f8745da6ff1ad1e7bab384bd1f9d742439278e99
+Mbed TLS / libmbedcrypto: Apache-2.0 option (see mbedtls-LICENSE.txt)
+  https://github.com/Mbed-TLS/mbedtls/tree/068ff080b369adfac81509f9b57b2afabaf82dc5
+Android NDK zlib: zlib license (see zlib-LICENSE.txt)
+BLAKE2 reference implementation bundled by libarchive: Apache-2.0 option
+  Copyright 2012 Samuel Neves; see blake2-NOTICE.txt and libarchive-android-LICENSE.txt.
+
+OmiComic uses the upstream Java bindings and native libraries unchanged.
+The OmiComic archive adapter is independently implemented. EhViewer was
+consulted for its per-page archive reading design; no EhViewer source was copied.

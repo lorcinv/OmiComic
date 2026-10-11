@@ -196,6 +196,7 @@ export interface VirtualFolderItemInput {
 }
 
 export interface OmiComicAppData {
+  excludedResourcePaths?: string[];
   version: number;
   library: {
     roots: LibraryRoot[];
@@ -336,6 +337,8 @@ export type 操作结果<T> =
   | { ok: false; error: 操作错误 };
 
 export interface OmiComicApi {
+  changeLocalResource(input: { path: string; action: "rename" | "trash" | "index"; name?: string }): Promise<操作结果<{ appData: OmiComicAppData; newPath: string | null }>>;
+  restoreResourceIndex(): Promise<操作结果<OmiComicAppData>>;
   takeExternalOpen(): Promise<操作结果<{ resource: 阅读资源结果; initialPageIndex: number } | null>>;
   onExternalOpen(callback: () => void): () => void;
   chooseExternalFiles(): Promise<操作结果<null>>;

@@ -1,0 +1,56 @@
+const assert=(value,message)=>{if(!value)throw new Error(message);};
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const wait=async(fn,label)=>{const end=Date.now()+20000;while(!await fn()){if(Date.now()>end)throw new Error('Timeout: '+label);await pause(100);}};
+const api=window.omicomic;
+const value=async promise=>{const r=await promise;assert(r.ok,JSON.stringify(r));return r.data;};
+const initial=await value(api.getAppData());
+const root=initial.library.roots.find(r=>r.name==='OmiSmoke');
+assert(root,'Authorize the generated Download/OmiSmoke fixture directory before running.');
+let listing=await value(api.listDirectory(root.path));
+assert(listing.items.length===6,'Expected six generated fixture entries');
+assert(!(await api.openDocument({path:root.path+'/Unsafe.epub',type:'epub',id:'xxe-test'})).ok,'EPUB external entity declarations rejected');
+const results=[];
+for(const name of ['Picture Book','Comic.cbz','Document.pdf','Story.epub']) {
+  const resource=await value(api.getResourcePages({path:root.path+'/'+name}));
+  await value(api.saveReadingProgress({resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:0,totalPages:name.endsWith('.epub')?2:3}));
+}
+document.querySelector('[aria-label="打开资源库"]').click();
+await wait(()=>document.querySelector('.page-panel.is-visible .resource-card'),'library');
+for(const name of ['Picture Book','Comic.cbz','Document.pdf','Story.epub']) {
+  const cards=[...document.querySelectorAll('.page-panel.is-visible .resource-card')];
+  const card=cards.find(c=>c.textContent.includes(name));assert(card,'Missing card '+name);
+  card.click();
+  await wait(()=>document.querySelector('.reader-layout'),'reader '+name);
+  const input=()=>document.querySelector('.reader-footer input[aria-label]');
+  await wait(()=>input()?.value==='1','first page '+name);
+  if(name.endsWith('.epub'))await wait(()=>document.querySelector('.reader-chapter iframe')?.contentDocument?.body.textContent.includes('Android Chapter One'),'EPUB text');
+  else if(name.endsWith('.pdf'))await wait(()=>document.querySelector('.reader-page-spread canvas')?.width>0,'PDF canvas');
+  else await wait(()=>[...document.querySelectorAll('.reader-page-spread img')].some(i=>i.complete&&i.naturalWidth>0),'image decoded');
+  const next=[...document.querySelectorAll('.reader-layout button')].find(b=>b.getAttribute('aria-label')==='下一页'||b.textContent.trim()==='下一页');assert(next,'Next button');next.click();
+  await wait(()=>input()?.value==='2','second page '+name);
+  await wait(async()=>Object.values((await value(api.getAppData())).readingProgress).some(p=>p.sourcePath.endsWith(name)&&p.currentPageIndex===1),'persisted progress '+name);
+  if(name.endsWith('.epub'))await wait(()=>document.querySelector('.reader-chapter iframe')?.contentDocument?.body.textContent.includes('Android Chapter Two'),'EPUB second chapter');
+  results.push({format:name,page:2});
+  window.dispatchEvent(new Event('omi-back'));
+  await wait(()=>!document.querySelector('.reader-layout'),'reader released');
+}
+const path=root.path+'/Comic.cbz';
+await value(api.addFavorite({resourceKey:'archive:'+path,sourcePath:path,sourceType:'archive',title:'Comic.cbz'}));
+const renamed=await value(api.changeLocalResource({path,action:'rename',name:'Renamed.cbz'}));
+assert(renamed.newPath.endsWith('/Renamed.cbz'),'rename destination');
+assert(renamed.appData.readingProgress['archive:'+renamed.newPath]?.currentPageIndex===1,'rename preserves progress');
+assert(renamed.appData.favorites.some(f=>f.sourcePath===renamed.newPath),'rename preserves favorite');
+assert(!(await value(api.checkResourcePath({path}))).exists,'old file name absent');
+await value(api.changeLocalResource({path:renamed.newPath,action:'index'}));
+assert(!(await value(api.listDirectory(root.path))).items.some(i=>i.path===renamed.newPath),'index hidden');
+assert((await value(api.checkResourcePath({path:renamed.newPath}))).exists,'index retains original');
+await value(api.restoreResourceIndex());
+assert((await value(api.listDirectory(root.path))).items.some(i=>i.path===renamed.newPath),'index restored');
+await value(api.changeLocalResource({path:root.path+'/Disposable.cbz',action:'trash'}));
+assert(!(await value(api.checkResourcePath({path:root.path+'/Disposable.cbz'}))).exists,'local deletion');
+assert(!(await api.changeLocalResource({path:root.path,action:'trash'})).ok,'root protected');
+assert(!window.hacked,'EPUB scripts blocked');
+assert(document.documentElement.scrollWidth<=innerWidth,'phone viewport fits');
+window.dispatchEvent(new Event('omi-back'));
+await wait(()=>document.querySelector('.omi-home'),'home');
+return {formats:results,rename:true,indexRestore:true,delete:true,rootProtection:true,scriptIsolation:true,viewport:innerWidth};

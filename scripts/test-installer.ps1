@@ -1,8 +1,10 @@
-param([string]$Installer = 'release/OmiComic-Setup-0.2.0-x64.exe')
+param([string]$Installer)
 $ErrorActionPreference = 'Stop'
 $omiWorkspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $omiWorkspace
-$omiGuid = (& node -e 'const {UUID}=require("builder-util-runtime"); process.stdout.write(UUID.v5("io.github.lorcinv.omicomic", UUID.parse("50e065bc-3134-11e6-9bab-38c9862bdaf3")));').Trim()
+$omiVersion = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version
+if (!$Installer) { $Installer = 'release/OmiComic-Setup-' + $omiVersion + '-x64.exe' }
+$omiGuid = ('const {UUID}=require("builder-util-runtime"); process.stdout.write(UUID.v5("io.github.lorcinv.omicomic", UUID.parse("50e065bc-3134-11e6-9bab-38c9862bdaf3")));' | & node).Trim()
 $omiUninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $omiGuid
 $omiRegistryKeys = @($omiUninstallKey, ('HKCU:\Software\' + $omiGuid), 'HKCU:\Software\Classes\OmiComic.Document', 'HKCU:\Software\Classes\Applications\OmiComic.exe', 'HKCU:\Software\OmiComic\Capabilities')
 $omiShortcuts = @((Join-Path ([Environment]::GetFolderPath('Desktop')) 'OmiComic.lnk'), (Join-Path ([Environment]::GetFolderPath('Programs')) 'OmiComic.lnk'))
@@ -37,7 +39,7 @@ try {
     $omiInstalledExe = Join-Path $omiResolved 'OmiComic.exe'
     if (-not (Test-Path -LiteralPath $omiInstalledExe)) { throw 'Installed executable missing.' }
     $omiEntry = Get-ItemProperty -LiteralPath $omiUninstallKey
-    if ($omiEntry.DisplayName -ne 'OmiComic' -or $omiEntry.DisplayVersion -ne '0.2.0') { throw 'Installed Apps metadata mismatch.' }
+    if ($omiEntry.DisplayName -ne 'OmiComic' -or $omiEntry.DisplayVersion -ne $omiVersion) { throw 'Installed Apps metadata mismatch.' }
     $omiShell = New-Object -ComObject WScript.Shell
     foreach ($omiShortcut in $omiShortcuts) {
         if (-not (Test-Path -LiteralPath $omiShortcut)) { throw 'Installer did not create its shortcut.' }

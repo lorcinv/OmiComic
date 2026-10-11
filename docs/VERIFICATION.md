@@ -1,73 +1,55 @@
-# 0.2.0 验证记录
+# 1.0.0 验证记录
 
-验证日期：2026-10-11。环境：本地 Windows x64、Node.js 24、Electron 43.7.9；浏览器布局检查使用系统 Edge。
+验证日期：2026-10-11。Windows 11 x64、Node.js 24、Electron 43.7.9；Android 15 / API 35 x86_64 模拟器、WebView 124.0.6367.219。未连接实体手机。
 
-安装包对应 `v0.2.0`（`403f19c`），构建工具为 Node.js 24.7.0 / npm 11.5.1。发布后的源码维护补全了 npm 11.19 检查要求的可选打包依赖锁记录，本地 npm 11.19 干净安装预检通过；线上结果以维护分支最新检查为准。
+Windows 和 Android 的源码版本、应用信息、安装包、当前文档统一为 **1.0.0**。Android versionCode 为 **10000**，发布密钥与此前版本一致。Android 应用信息直接引用项目版本，避免两端版本遗漏同步。
 
-## 构建与回归
+## 本轮验证
 
-| 检查 | 结果与范围 |
+| 检查 | 结果 |
 | --- | --- |
-| 类型检查及完整构建 | 通过，包含 React、Electron 主进程与 preload |
-| React DOM 回归 | 12 项通过，覆盖状态、导航、数据与编辑 |
-| 完整浏览器 UI 回归 | 45 项全部通过，覆盖启动、档位、详情折叠、转场、主题、临时存放、提示浮层、文档共用窗口、真实 PDF worker、全景连续性和惯性 |
-| 服务及算法回归 | 58 项：56 通过、1 跳过、1 因 Windows 符号链接权限失败 |
-| 打包 EXE | 实际 isPackaged=true、版本 0.2.0；图片、ZIP、7z、PDF、EPUB 打开、翻页与进度保存通过 |
-| 安装后的 EXE | 同样五种格式读取与恢复通过，保留 5 条临时记录；原图片内容校验未变化 |
-| 安装器往返 | 安装、系统应用信息、快捷方式、打开方式、卸载及默认关联保留通过 |
+| Windows 与 Android 完整构建、类型检查 | 通过 |
+| React DOM | 16 项通过，含 Android 数据保存及 EPUB 净化 |
+| Windows 实际打包 EXE | 应用版本 1.0.0；图片、CBZ、CB7、PDF、EPUB 读取、翻页和续读通过 |
+| Windows 安装后的 EXE | 再次通过上述真实文件读取测试 |
+| Windows 本地文件操作 | 重命名、进度迁移、索引隐藏/恢复、回收站删除及根目录保护通过 |
+| Windows 安装与卸载 | 系统应用信息为 1.0.0；两处快捷方式、14 种打开方式、默认关联保留及卸载清理通过 |
+| Android 升级与版本 | 从 0.3.1 覆盖安装成功，应用元数据与界面 API 均为 1.0.0，保留系统目录授权及原有进度 |
+| Android 压缩包 | RAR4/RAR5/7z/CB7 实际解码通过，覆盖固实 RAR5、固实 7z、中文路径和自然排序 |
+| Android 跳页及封面 | 逐个归档按 3→1→2 页读取，校验 PNG 尺寸与像素；封面解码通过 |
+| Android 实际阅读器 | 四种归档从封面进入阅读、翻至第 2 页并保存；CB7 重命名后继续读取 |
+| Android 重启续读 | 四种归档进度保留，重新启动后继续 RAR5 第 2 页 |
+| Android 异常文件 | 加密、损坏及空归档返回错误 |
+| Android 图标与包内容 | 自适应和单色图标存在，四种 ABI 齐全，原生库与锁定 AAR 一致、16 KB 对齐，第三方许可齐全，无签名私钥和测试脚本 |
+| Android 签名 | APK v2 / v3 验证通过；证书沿用此前版本 |
 
-服务测试的失败发生在 `electron/services/directoryService.test.cjs` 创建损坏文件符号链接的准备阶段，Windows 返回 `EPERM`。现有 7z 字面通配符用例继续跳过。二者均未作为“通过”统计，也没有通过删除或跳过失败断言伪装成功。
+安装测试使用独立目录及生成的文件，不改动用户漫画或已有安装。Windows 安装回归入口同时修复了 Windows PowerShell 5.1 传递内嵌 JavaScript 引号的问题，已在该版本 PowerShell 实际运行通过。
 
-UI 回归使用模拟 IPC，实际 PDF.js worker 在浏览器执行；真实 EXE 回归另行覆盖本地桥接、归档读取、EPUB worker 以及用户数据落盘。它们分别验证对应层级，不互相替代。
+## 交付文件
 
-## 安装验证
+| 文件 | 字节数 | SHA-256 |
+| --- | ---: | --- |
+| OmiComic-Setup-1.0.0-x64.exe | 100385195 | `586488b985d997fe72be2ba572bf8b04936d0da038b87ae422ce2ed8653fc4a8` |
+| OmiComic-1.0.0-android.apk | 14266725 | `0acfb7e83bb0566cb1f0cc5925d1e27e1c1d13c8b76c22be647190f10c2a6686` |
+| 7z2604-src.tar.xz | 1560440 | `9691944c0fe0d01bb49373a704fb983fd33bc98b1738695179dfbf99ac1734f6` |
 
-使用实际 `OmiComic-Setup-0.2.0-x64.exe` 安装到独立临时目录：
+下载入口：[GitHub v1.0.0](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.0)。Windows EXE 按用户要求保持未签名。Android 证书 SHA-256：`31d30425848de4b32a69e27873756562f400996ef647cba83443b6b20ad9db43`。密钥仅保存在被忽略的本地 `.android-signing` 目录，不提交 GitHub。
 
-- “已安装的应用”登记 OmiComic、0.2.0 和 Lorcin，并提供卸载程序。
-- 桌面及开始菜单共两个快捷方式指向安装目录中的真实 EXE。
-- 14 种扩展名的 Open With / Default Apps 能力注册成功；安装和卸载前后默认文件关联相同。
-- 安装后的应用在隐藏窗口与独立 userData 下读取五种测试资源，并恢复进度。
-- 静默卸载后程序、应用登记和本次快捷方式均清理完成，用户漫画与原有数据不参与测试。
-
-安装器和 EXE 的文件版本、产品名及图标已核对；Authenticode 状态为 **NotSigned**。没有声称具备微软签名信任、通过 SmartScreen 信誉检查或完成全新电脑验证。
-
-## 启动与体积
-
-| 项目 | 优化前 | 优化后 |
-| --- | ---: | ---: |
-| 首页首屏 JavaScript | 434,385 字节 | 169,431 字节 |
-| 首页场景图片 | 2,557,669 字节 PNG | 1,612,808 字节无损 WebP |
-| 打包应用文件总量 | 502,662,105 字节 | 341,319,771 字节 |
-| EXE 安装包 | — | 100,384,129 字节 |
-| 首页就绪中位耗时 | 440.5 ms | 421.6 ms |
-| DOMContentLoaded 中位耗时 | 129.4 ms | 108.1 ms |
-
-启动测量为相同机器上的 5 次新进程、独立空资源库、隐藏窗口、已缓存文件系统；不是冷开机测试，也不代表大型真实资源库的绝对耗时。就绪耗时从进程启动计时，DOMContentLoaded 从 renderer 导航计时。原始结果写入被忽略的 `test-results/startup-before.json` 与 `startup-after.json`。
-
-结构改动比微小的时间差更稳定：首次进入才加载资源库/阅读器，首页不初始化隐藏目录扫描；首屏脚本减少约 61%，初始应用数据读取由两次变为一次。图片转换通过解码像素比较，差异为 0。应用文件减少约 32%，安装包约 96 MiB；体积基线与最终产物使用同一 Electron 版本。
-
-## 复现入口
+## 复现与范围
 
 ```powershell
-npm run build
-npm test
-npm run test:dom
-npm run test:ui
-node scripts/measure-startup.cjs test-results/startup.json
 npm run dist:win
 node --test tests/packaged.electron.cjs
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-installer.ps1
+./scripts/test-installer.ps1
+npm run dist:android
+node scripts/verify-android.cjs
+./scripts/test-android.ps1 -Mode archives
+./scripts/test-android.ps1 -Mode archive-restore
+npm run test:dom
 ```
 
-安装回归会拒绝覆盖已有同名安装或快捷方式。实际 EXE 测试通过环境变量开启隔离测试目录和隐藏窗口；普通启动不受影响。生成文件与截图位于 `test-results/`，不提交私人漫画、阅读数据或缓存。
+GitHub 主分支的工作流另行执行干净 `npm ci`、构建、服务/算法及 DOM 测试和完整浏览器 UI 回归。Android 模拟器及示例准备见 [Android 说明](ANDROID.md)。
 
-更大资源集的检查入口与边界：
+本轮没有实体手机、其他 Android 版本、16 KB 页大小系统或私人大型漫画库的运行结果；16 KB 仅验证 ELF 和 APK 对齐。不支持密码或分卷归档。手机单个归档/文档上限 1 GB，单页图片数据上限 64 MB，原生归档展开总量上限 8 GB。
 
-- [目录与图片](../tests/DIRECTORY_STRESS.md)
-- [压缩包与许可](../tests/ARCHIVE_STRESS.md)
-- [文档压力测试](document-stress-results.md)
-- [数据兼容](library-data-regression-tests.md)
-- [运行时迁移](runtime-security.md)
-
-这些文档保留各自测量时间与样本，历史结果不等同于本版本全部重新执行。真实文档性能脚本为 `tests/document-panorama.electron.cjs`，通过 `COMIC_PERF_FILE` 指定只读测试文件。
+此前完整功能回归及历史交付哈希分别保留在 [0.3.1](verification-0.3.1.md)、[0.3.0](verification-0.3.0.md)、[0.2.0](verification-0.2.0.md)。历史记录保留原版本号，用于追溯。
