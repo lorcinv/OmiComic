@@ -98,7 +98,7 @@ test('PDF and EPUB share the real reader, persist modes/bookmarks and leave sour
   await expect(page.getByRole('button', { name: '取消当前页书签', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '当前单页，点击切换双页', exact: true }).click();
   await expect(page.locator('.reader-page-frame canvas')).toHaveCount(2);
-  await page.getByRole('button', { name: '适应宽度', exact: true }).click();
+  await page.getByRole('combobox', { name: '缩放方式' }).click(); await page.getByRole('option', { name: '适应宽度', exact: true }).click();
   await page.screenshot({ path: 'test-results/pdf-native-shared-reader.png' });
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await expect.poll(async () => (await page.evaluate(() => window.omicomic.getAppData())).data.bookmarks.length).toBe(1);
@@ -114,8 +114,8 @@ test('PDF and EPUB share the real reader, persist modes/bookmarks and leave sour
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
   await expect(page.locator('.reader-page-frame canvas')).toHaveCount(2);
   await expect(page.getByRole('button', { name: '取消当前页书签', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '适应宽度', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: '适应高度', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '缩放方式' })).toContainText('适应宽度');
+  await page.getByRole('combobox', { name: '缩放方式' }).click(); await page.getByRole('option', { name: '适应高度', exact: true }).click();
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await verifyProgressAnimation(page, 'pdf');
   await electron.close(); electron = null;
@@ -132,7 +132,8 @@ test('PDF and EPUB share the real reader, persist modes/bookmarks and leave sour
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await verifyProgressAnimation(page, 'epub');
   await page.getByRole('button', { name: '当前横向阅读，点击切换纵向阅读', exact: true }).click();
-  await page.getByRole('button', { name: '适应宽度', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '缩放方式' })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: '缩放方式' })).toContainText('适应宽度');
   await expect(page.locator('[data-reader-page-index="1"] .reader-chapter')).toBeVisible();
   await page.screenshot({ path: 'test-results/epub-native-shared-reader.png' });
   await page.getByRole('button', { name: '沉浸', exact: true }).click();

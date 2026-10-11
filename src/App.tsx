@@ -23,6 +23,22 @@ function App() {
   const 应用已挂载 = useRef(false);
 
   useEffect(() => {
+    const root = document.documentElement;
+    const hideFocusRing = () => { root.dataset.focusRing = "off"; };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") hideFocusRing();
+      else if (event.key === "Tab" || event.key.startsWith("Arrow")) root.dataset.focusRing = "on";
+    };
+    document.addEventListener("keydown", handleKey, true);
+    document.addEventListener("pointerdown", hideFocusRing, true);
+    return () => {
+      document.removeEventListener("keydown", handleKey, true);
+      document.removeEventListener("pointerdown", hideFocusRing, true);
+      delete root.dataset.focusRing;
+    };
+  }, []);
+
+  useEffect(() => {
     const back = () => {
       if (当前页面 === "阅读器") { window.dispatchEvent(new Event("omi-reader-back")); return; }
       if (当前页面 === "资源库") {

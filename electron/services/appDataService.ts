@@ -13,7 +13,7 @@ export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" |
 export type 排序方向 = "asc" | "desc";
 export type 进度文本模式 = "page" | "percent";
 export type 进度条粗细 = "thin" | "normal" | "thick";
-export type 阅读器缩放模式 = "fit-width" | "fit-height" | "original";
+export type 阅读器缩放模式 = "fit-window" | "fit-width" | "fit-height" | "original";
 export type 阅读器页模式 = "single" | "double";
 export type 双页阅读方向 = "left-to-right" | "right-to-left";
 export type 阅读流向 = "horizontal" | "vertical";
@@ -230,7 +230,7 @@ const 卡片尺寸选项 = new Set<string>(["small", "medium", "large"]);
 const 排序方式选项 = new Set<string>(["name-asc", "name-desc", "time-asc", "time-desc", "type"]);
 const 进度文本模式选项 = new Set<string>(["page", "percent"]);
 const 进度条粗细选项 = new Set<string>(["thin", "normal", "thick"]);
-const 阅读器缩放模式选项 = new Set<string>(["fit-width", "fit-height", "original"]);
+const 阅读器缩放模式选项 = new Set<string>(["fit-window", "fit-width", "fit-height", "original"]);
 const 阅读器页模式选项 = new Set<string>(["single", "double"]);
 const 双页阅读方向选项 = new Set<string>(["left-to-right", "right-to-left"]);
 const 阅读流向选项 = new Set<string>(["horizontal", "vertical"]);
@@ -257,7 +257,7 @@ const 默认设置: AppSettings = {
   showProgressText: true,
   progressTextMode: "page",
   progressBarThickness: "normal",
-  readerDefaultFitMode: "fit-height",
+  readerDefaultFitMode: "fit-window",
   readerPageMode: "single",
   readerDefaultFlow: "horizontal",
   readerDefaultPanorama: false,

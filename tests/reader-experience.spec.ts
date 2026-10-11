@@ -81,7 +81,9 @@ test('wide and tall pages fit height in single, double and panorama modes withou
         const stage = document.querySelector('.reader-stage')!;
         const style = getComputedStyle(stage);
         const available = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-        return Math.abs(image.getBoundingClientRect().height - available);
+        const width = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        const expected = stage.classList.contains('is-panorama') ? available : Math.min(available, width * image.naturalHeight / image.naturalWidth);
+        return Math.abs(image.getBoundingClientRect().height - expected);
       })).toBeLessThanOrEqual(2);
       const dimensions = await img.evaluate((image: HTMLImageElement) => ({ width: image.width, height: image.height, ratio: image.naturalWidth / image.naturalHeight }));
       expect(Math.abs(dimensions.width / dimensions.height - dimensions.ratio)).toBeLessThan(.01);

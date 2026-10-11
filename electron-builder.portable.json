@@ -1,5 +1,6 @@
 {
   "extends": "./electron-builder.json",
+  "compression": "normal",
   "win": {
     "target": [{ "target": "zip", "arch": ["x64"] }],
     "artifactName": "OmiComic-Portable-${version}-${arch}.${ext}"

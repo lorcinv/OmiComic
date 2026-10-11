@@ -108,4 +108,9 @@ test('view options dismiss outside, retain nested selectors, and refresh follows
   await expect(page.locator('.library-footer').getByRole('button', { name: '刷新并检测失效资源' })).toHaveCount(0);
   const selection = await page.getByRole('button', { name: '选择', exact: true }).boundingBox();
   expect((await refresh.boundingBox())!.x).toBeGreaterThan(selection!.x);
+  const refreshBox = (await refresh.boundingBox())!, iconBox = (await refresh.locator('svg').boundingBox())!;
+  expect(Math.abs(refreshBox.y + refreshBox.height / 2 - selection!.y - selection!.height / 2)).toBeLessThan(1);
+  expect(Math.abs(iconBox.x + iconBox.width / 2 - refreshBox.x - refreshBox.width / 2)).toBeLessThan(1);
+  expect(Math.abs(iconBox.y + iconBox.height / 2 - refreshBox.y - refreshBox.height / 2)).toBeLessThan(1);
+  await page.screenshot({ path: 'test-results/library-toolbar-refresh.png' });
 });

@@ -1,15 +1,14 @@
 # 当前项目状态
 
-**Windows 1.0.2 / Android 1.0.1 · 2026-10-11**。Windows 下载见 [1.0.2 发布页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.2)，已签名 Android APK 见 [1.0.1 发布页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。
+**Windows 1.0.3 / Android 1.0.1 · 2026-10-11**。Windows 下载见 [1.0.3 发布页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.3)，已签名 Android APK 见 [1.0.1 发布页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。
 
 ## Windows 本次完成
 
-- 补充 ZIP 免安装包，解压运行 `OmiComic.exe`，沿用当前电脑的本地阅读记录；发行包不包含用户数据。
-- 视图菜单支持外部点击和 Esc 关闭；刷新及失效检测移到顶部“选择”右侧。
-- 首尾跨本按钮使用三角图形，尝试越界翻页后显示；位置随阅读方向换边。
-- 双页从进入页配对，开头 1+2，从第 6 页切换为 6+7、8+9；宽跨页独立。保存配对起点以恢复续读。
-- 最后一组包含尾页就显示最终页码，阅读器与资源库同步为 100%/读完。
-- 合集文件夹使用首个可读子资源封面，类型显示项目数；PDF/EPUB 生成实际封面，缺失封面使用对应格式图标。
+- 缩放改用下拉菜单，默认适应窗口；普通模式完整显示超宽图，短图居中。
+- 双页只有在窗口能完整容纳时合并，支持窗口变化与尾页续读。
+- 全景横向适应高度、纵向适应宽度，普通缩放设置独立保存；长图两端均可到达。
+- 清除 Esc 后的按钮描边，刷新按钮统一颜色、大小和对齐。
+- 交付 ZIP 免安装版，完整解压后运行，沿用本机记录，包中没有用户数据。
 
 ## 已有能力
 
@@ -19,7 +18,7 @@
 
 ## 验证与范围
 
-类型检查、生产构建、核心 65 项及 DOM 16 项通过；相关浏览器回归与实际打包 EXE 的双页、封面、多格式读取及数据持久化通过。完整测试证据与范围见 [验证记录](docs/VERIFICATION.md)。
+类型检查、生产构建、核心 69 项及 DOM 16 项通过；相关浏览器回归与实际打包 EXE 的双页、封面、多格式读取及数据持久化通过。完整测试证据与范围见 [验证记录](docs/VERIFICATION.md)。
 
 本轮没有重新构建 APK；手机发布版本保持 1.0.1。Windows 实际程序使用独立测试数据运行，没有覆盖本机既有安装或用户漫画。
 
@@ -32,4 +31,4 @@
 
 ## 构建
 
-Windows：`npm run dist:win`。Android：`npm run dist:android`，依赖与签名说明见 [Android 文档](docs/ANDROID.md)。功能规则见 [功能与交互](功能以及交互逻辑.md)，使用方式见 [使用方法](README_使用方法.md)。
+Windows 免安装版：`npm run dist:portable`；安装器构建命令仍为 `npm run dist:win`。Android：`npm run dist:android`，依赖与签名说明见 [Android 文档](docs/ANDROID.md)。功能规则见 [功能与交互](功能以及交互逻辑.md)，使用方式见 [使用方法](README_使用方法.md)。

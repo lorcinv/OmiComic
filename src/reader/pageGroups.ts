@@ -2,6 +2,7 @@ export interface PageGroupSettings {
   readerPageMode: "single" | "double";
   smartDetectSpreadPage: boolean;
   pairingAnchor?: number;
+  canPair?: (first: number, second: number) => boolean;
 }
 
 export function clampPage(index: number, total: number): number {
@@ -10,6 +11,7 @@ export function clampPage(index: number, total: number): number {
 
 function groupLength(start: number, total: number, settings: PageGroupSettings, spread: (index: number) => boolean): number {
   if (settings.readerPageMode === "single" || start + 1 >= total) return 1;
+  if (settings.canPair && !settings.canPair(start, start + 1)) return 1;
   return settings.smartDetectSpreadPage && (spread(start) || spread(start + 1)) ? 1 : 2;
 }
 
@@ -30,7 +32,7 @@ export function normalizeGroup(index: number, total: number, settings: PageGroup
     let end = anchor;
     while (end > 0) {
       const last = end - 1;
-      const start = last > 0 && (!settings.smartDetectSpreadPage || (!spread(last) && !spread(last - 1))) ? last - 1 : last;
+      const start = last > 0 && groupLength(last - 1, total, settings, spread) === 2 ? last - 1 : last;
       if (target >= start) return start;
       end = start;
     }

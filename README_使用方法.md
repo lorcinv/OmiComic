@@ -1,8 +1,8 @@
 # OmiComic 使用方法
 
-适用版本：Windows 1.0.2（x64）/ Android 1.0.1（Android 8.0 及以上）。
+适用版本：Windows 1.0.3（x64）/ Android 1.0.1（Android 8.0 及以上）。
 
-## Windows 安装与启动
+## Windows 旧版安装程序（1.0.2）
 
 1. 从 [GitHub 发布页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.2) 下载 `OmiComic-Setup-1.0.2-x64.exe`。
 2. 运行安装包，选择安装目录并完成安装。
@@ -12,9 +12,9 @@
 
 源码用户应先 `npm run build` 再 `npm start`；只更新源码不会改变已经生成的程序。安装版使用安装目录中的程序，开发用的 `OmiComic.cmd` 使用当前项目的构建文件。
 
-## Windows 免安装版
+## Windows 1.0.3 免安装版
 
-下载 [OmiComic-Portable-1.0.2-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.0.2/OmiComic-Portable-1.0.2-x64.zip)，完整解压后双击 `OmiComic.exe`。不能在 ZIP 中直接运行，也不要单独移动 EXE；同目录的 DLL、`resources`、`locales` 都需要保留。
+下载 [OmiComic-Portable-1.0.3-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.0.3/OmiComic-Portable-1.0.3-x64.zip)，完整解压后双击 `OmiComic.exe`。不能在 ZIP 中直接运行，也不要单独移动 EXE；同目录的 DLL、`resources`、`locales` 都需要保留。
 
 免安装版无需 Node.js，不运行安装向导、不创建快捷方式、不注册文件关联。更新时关闭程序，将新版解压到新文件夹即可；移除时删除解压目录。
 
@@ -103,6 +103,13 @@ Android 的阅读数据保存在应用私有目录，卸载会删除这些记录
 
 EPUB 按完整章节计数，不按窗口宽度重新分页；PDF 按文档页码计数。Windows PDF 封面取第一页，EPUB 优先使用声明的封面图，再尝试首章图片；无法提取时显示格式图标。详情逐页预览仍使用格式图标。
 
+### Windows 1.0.3 缩放与全景
+
+- 普通阅读的缩放下拉菜单包含适应窗口（默认）、适应宽度、适应高度、原始尺寸。适应窗口完整显示页面；适应高度也会限制宽度，超宽图不再被截断；短横图保持居中。
+- 双页只有在当前窗口能完整容纳时合并；放不下会逐页显示，调整窗口大小后自动重算。
+- 横向全景自动适应高度，纵向全景自动适应宽度，沿阅读方向拖动查看长图。全景期间缩放下拉菜单禁用；退出后恢复普通阅读的选择。
+- Esc 关闭菜单或退出沉浸后不再留下按钮描边；使用 Tab 导航仍会显示键盘焦点。
+
 ## 整理与设置
 
 - 书架保存软件内引用，可以移动、复制、重命名和排序，不移动真实漫画文件。
@@ -113,8 +120,8 @@ EPUB 按完整章节计数，不按窗口宽度重新分页；PDF 按文档页�
 
 ## 备份、更新与卸载
 
-设置、资源库引用和阅读记录位于 Electron 用户数据目录中的 `omicomic-data.json`。Windows 通常位于 `%APPDATA%\omicomic`；备份时保留整个目录。
+设置、资源库引用和阅读记录位于 Electron 用户数据目录中的 `omicomic-data.json`。Windows 位于 `%APPDATA%\OmiComic`；备份时保留整个目录。
 
-更新可使用新版本安装包。卸载入口位于 Windows“设置 → 应用 → 已安装的应用 → OmiComic”，卸载保留漫画文件和用户数据。
+免安装版更新时关闭程序，把新 ZIP 完整解压到新目录后运行；本机记录会继续保留。安装版可使用新版本安装包更新。卸载入口位于 Windows“设置 → 应用 → 已安装的应用 → OmiComic”，卸载保留漫画文件和用户数据。
 
 遇到问题时，请提供版本、资源格式、复现步骤和不含私人内容的截图。已知边界与本次检查结果见 [项目状态](PROJECT_STATUS.md) 和 [验证记录](docs/VERIFICATION.md)。

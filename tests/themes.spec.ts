@@ -109,7 +109,7 @@ test('themes preview globally, persist after reload and keep light and dark cont
     if (id === 'night') {
       await expect(page.locator('.reader-page-jump input')).toHaveCSS('background-color', 'rgb(54, 62, 76)');
       await expect(page.locator('.reader-page-jump input')).toHaveCSS('color', 'rgb(229, 233, 240)');
-      await expect(page.locator('.reader-zoom-actions button.is-active').first()).toHaveCSS('color', 'rgb(46, 52, 64)');
+      await expect(page.getByRole('combobox', { name: '缩放方式' })).toHaveCSS('color', await page.locator('.reader-back').evaluate(button => getComputedStyle(button).color));
       await page.screenshot({ path: 'test-results/theme-night-reader.png' });
     }
     await page.locator('.reader-back').click();

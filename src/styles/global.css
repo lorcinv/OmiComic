@@ -5569,17 +5569,25 @@ a,
   flex: 0 0 34px;
   width: 34px;
   height: 34px;
-  padding: 7px;
+  padding: 0;
   border: 1px solid var(--控件边框);
   border-radius: 9px;
   background: var(--控件背景);
-  color: var(--主文字);
+  color: var(--控件文字);
+  align-self: center;
+  box-shadow: none;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
-.library-refresh-button:hover:not(:disabled) { border-color: var(--强调色); }
-.library-refresh-button:focus-visible { outline: 2px solid var(--强调色); outline-offset: 2px; }
-.library-refresh-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.library-refresh-button:hover:not(:disabled) { border-color: var(--控件边框); background: var(--控件悬停); color: var(--主文字); }
+.library-refresh-button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框)); outline-offset: 2px; }
+.library-refresh-button svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.library-refresh-button.is-refreshing .navigation-refresh-icon { animation: navigation-refresh-spin 900ms linear infinite; }
+
+button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框)); outline-offset: 2px; }
+:root[data-focus-ring="off"] :is(button, [role="button"], summary):focus { outline: none; }
+
+.reader-fit-select { --glass-select-width: 146px; --glass-select-height: 32px; }
 
 .reader-image {
   display: block;
@@ -5706,12 +5714,6 @@ a,
   object-fit: none;
 }
 
-.reader-stage.zoom-stage-fit-height {
-  overflow-x: auto;
-  overflow-y: hidden;
-  justify-items: safe center;
-}
-
 .reader-chapter {
   position: relative;
   flex: 0 0 auto;
@@ -5726,50 +5728,32 @@ a,
   pointer-events: none;
 }
 
-.reader-stage.zoom-stage-fit-height:not(.is-panorama) .reader-page-spread {
-  width: max-content;
-  max-width: none;
-}
-
-.reader-stage.zoom-stage-fit-height:not(.is-panorama) .reader-page-frame {
-  flex: 0 0 auto;
-}
-
-.reader-stage.zoom-stage-fit-height .reader-page-spread {
-  max-height: 100%;
-}
-
-.reader-stage.zoom-stage-fit-height .reader-page-spread.is-spread-single {
-  width: max-content;
-  height: 100%;
-}
-
-.reader-stage.zoom-stage-fit-width,
-.reader-stage.zoom-stage-original {
-  place-items: start center;
+.reader-stage:not(.is-panorama) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
   overflow: auto;
 }
 
-.reader-stage.zoom-stage-fit-width .reader-page-spread,
-.reader-stage.zoom-stage-original .reader-page-spread {
-  align-items: flex-start;
+.reader-stage:not(.is-panorama) .reader-page-spread {
+  flex: 0 0 auto;
+  width: max-content;
+  height: max-content;
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  align-items: center;
 }
 
-.reader-stage.zoom-stage-fit-width .reader-page-spread.is-spread-single {
-  width: 100%;
-  justify-content: center;
+.reader-stage:not(.is-panorama) .reader-page-frame {
+  flex: 0 0 auto;
 }
 
-.reader-stage.is-panorama.zoom-stage-fit-height,
-.reader-stage.is-panorama.zoom-stage-fit-width,
-.reader-stage.is-panorama.zoom-stage-original,
-.reader-stage.is-panorama.is-flow-horizontal,
-.reader-stage.is-panorama.is-flow-vertical {
-  overflow: hidden;
-}
+.reader-stage.is-panorama { overflow: hidden; }
 
 .reader-error {
   max-width: 460px;
+  margin: auto;
   padding: 28px;
   color: light-dark(#505966, var(--次文字));
   text-align: center;

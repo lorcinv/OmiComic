@@ -10,7 +10,7 @@ const yauzl = require('yauzl');
 const asar = require('@electron/asar');
 const { path7z } = require('7zip-bin-full');
 
-test('portable ZIP contains only the runtime and reads all formats after extraction', { timeout: 150000 }, async t => {
+test('portable ZIP contains only the runtime and reads all formats after extraction', { timeout: 240000 }, async t => {
   assert.equal(process.platform, 'win32');
   const version = require('../package.json').version;
   const archive = path.resolve(`release/OmiComic-Portable-${version}-x64.zip`);
@@ -54,6 +54,13 @@ test('portable ZIP contains only the runtime and reads all formats after extract
   assert.equal(runtimeResult.version, version);
   assert.deepEqual(runtimeResult.formats.map(result => result.format), ['.png', '.cbz', '.cb7', '.pdf', '.epub']);
   assert.equal(runtimeResult.persistedTemporaryRecords, 5);
+  const layoutOutput = execFileSync(process.execPath, ['--test', 'tests/reader-layout.electron.cjs'], {
+    env: runtimeEnv, windowsHide: true, encoding: 'utf8', timeout: 120000, stdio: 'pipe',
+  });
+  t.diagnostic(layoutOutput.trim());
+  const layoutResult = JSON.parse(await fs.readFile('test-results/reader-layout-smoke.json', 'utf8'));
+  assert.equal(layoutResult.executable, executable);
+  assert.equal(layoutResult.layoutPassed, true);
   const bytes = await fs.readFile(archive);
   const result = { version, archive, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), zipEntries: entries.length, userDataFilesIncluded: false, uninstallerIncluded: false, extractedRuntimePassed: true };
   await fs.writeFile('test-results/portable-smoke.json', JSON.stringify(result, null, 2) + '\n');

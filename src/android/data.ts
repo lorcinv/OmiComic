@@ -8,7 +8,7 @@ const defaults: AppSettings = {
   colorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
   pageSize: 60, sortMode: "name-asc", sortDirection: "asc", folderFirst: true,
   hideBookshelfItemsInLibrary: true, showProgressBar: true, showProgressText: true,
-  progressTextMode: "page", progressBarThickness: "normal", readerDefaultFitMode: "fit-height",
+  progressTextMode: "page", progressBarThickness: "normal", readerDefaultFitMode: "fit-window",
   readerPageMode: "single", readerDefaultFlow: "horizontal", readerDefaultPanorama: false,
   readerDefaultImmersive: false, doublePageFirstSingle: true, doublePageDirection: "left-to-right",
   smartDetectSpreadPage: true, wheelPageTurn: false, immersiveAutoHide: false, immersiveAutoHideDelay: 3000,

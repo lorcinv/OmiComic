@@ -6,6 +6,8 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import ArrowIcon from "../ArrowIcon";
+import GlassSelect from "../GlassSelect";
+import { canPairPages, fitPage, fitSpread, fitPanorama, panoramaScrollBounds } from "../reader/layout";
 import { clampPage as 限制索引, normalizeGroup as 规范化页组主索引, groupIndices as 计算页组索引, nextGroup as 计算下一页组主索引, previousGroup as 计算上一页组主索引 } from "../reader/pageGroups";
 import ReaderChapter from "../components/ReaderChapter";
 import ReaderCanvas from "../components/ReaderCanvas";
@@ -146,6 +148,7 @@ function 计算模式2几何补偿偏移(
   新几何: 模式2页面几何,
   锚点索引: number,
   原偏移: number,
+  视口长度: number,
 ): number {
   const 页面总数 = Math.min(原几何.页面长度.length, 新几何.页面长度.length);
   if (页面总数 <= 0) return 原偏移;
@@ -172,9 +175,10 @@ function 计算模式2几何补偿偏移(
   const 未限制偏移 = 新锚点 - 新视口中心;
   const 首页中心 = 新几何.页面中心[0] ?? 新锚点;
   const 尾页中心 = 新几何.页面中心[页面总数 - 1] ?? 新锚点;
+  const 边界 = panoramaScrollBounds(首页中心, 尾页中心, 新几何.页面长度[0], 新几何.页面长度[页面总数 - 1], 视口长度, 新锚点);
   return Math.min(
-    Math.max(未限制偏移, -(尾页中心 - 新锚点)),
-    -(首页中心 - 新锚点),
+    Math.max(未限制偏移, 边界.min),
+    边界.max,
   );
 }
 
@@ -186,7 +190,7 @@ const 默认阅读器设置: Pick<
   | "readerHideFooterControls" | "readerHideImmersiveProgress" | "readerMemoryCacheSizeMb"
   | "readerPreloadPages" | "readerImageLoadConcurrency" | "bookSwitchButtonOpacity"
 > = {
-  readerDefaultFitMode: "fit-height",
+  readerDefaultFitMode: "fit-window",
   readerPageMode: "single",
   readerDefaultFlow: "horizontal",
   readerDefaultPanorama: false,
@@ -241,7 +245,7 @@ function ReaderPage({
   const [进度保存错误, 设置进度保存错误] = useState<string | null>(null);
   const [当前页已书签, 设置当前页已书签] = useState(false);
   const [书签处理中, 设置书签处理中] = useState(false);
-  const [缩放模式, 设置缩放模式] = useState<阅读器缩放模式>("fit-height");
+  const [缩放模式, 设置缩放模式] = useState<阅读器缩放模式>("fit-window");
   const [可用区域, 设置可用区域] = useState<可用区域尺寸>({ width: 0, height: 0 });
   const [页码输入, 设置页码输入] = useState("1");
   const [阅读器设置, 设置阅读器设置] = useState(默认阅读器设置);
@@ -401,6 +405,9 @@ function ReaderPage({
     ...阅读器设置,
     readerPageMode: 有效页模式,
     pairingAnchor: 双页配对起点,
+    canPair: (first: number, second: number) => canPairPages(
+      获取已知页面原始尺寸(first), 获取已知页面原始尺寸(second), 可用区域, 全景模式 ? "fit-height" : 缩放模式,
+    ),
   };
   const 是跨页横图 = (索引: number): boolean => (
     有效阅读器设置.smartDetectSpreadPage
@@ -468,53 +475,6 @@ function ReaderPage({
   const 图书切换按钮基础透明度 = 阅读器设置.bookSwitchButtonOpacity / 100;
 
   const 页组间距 = 0;
-  const 当前显示跨页尺寸 = 当前显示跨页横图
-    ? 获取已知页面原始尺寸(显示页组索引[0] ?? -1)
-    : null;
-  const 单页可用宽度 = 有效阅读器设置.readerPageMode === "double" && 显示页组页面.length === 2
-    ? Math.max(0, (可用区域.width - 页组间距) / 2)
-    : 可用区域.width;
-  const 图片样式: CSSProperties = 缩放模式 === "fit-height"
-    ? {
-        width: "auto",
-        height: 可用区域.height > 0 ? `${可用区域.height}px` : "100%",
-        maxWidth: "none",
-        maxHeight: "none",
-      }
-    : 缩放模式 === "fit-width"
-      ? {
-          width: 单页可用宽度 > 0 ? `${单页可用宽度}px` : "100%",
-          height: "auto",
-          maxWidth: "none",
-          maxHeight: "none",
-        }
-      : {
-          width: "auto",
-          height: "auto",
-          maxWidth: "none",
-          maxHeight: "none",
-      };
-  const 跨页图片样式: CSSProperties | null = 当前显示跨页横图 && 当前显示跨页尺寸
-    ? 缩放模式 === "fit-height"
-      ? (() => {
-          const 缩放比例 = 可用区域.height > 0 ? 可用区域.height / 当前显示跨页尺寸.height : 1;
-          return {
-            width: `${Math.max(1, Math.floor(当前显示跨页尺寸.width * 缩放比例))}px`,
-            height: `${Math.max(1, Math.floor(当前显示跨页尺寸.height * 缩放比例))}px`,
-            maxWidth: "none",
-            maxHeight: "none",
-          };
-        })()
-      : 缩放模式 === "fit-width"
-        ? {
-            width: 单页可用宽度 > 0 ? `${单页可用宽度}px` : "100%",
-            height: "auto",
-            maxWidth: "none",
-            maxHeight: "none",
-          }
-        : null
-    : null;
-  const 当前图片样式 = 跨页图片样式 ?? 图片样式;
   const 垂直阅读 = 阅读流向 === "vertical";
   const 模式2 = 全景模式;
   const 预加载页数 = Math.min(Math.max(Math.round(阅读器设置.readerPreloadPages), 0), 20);
@@ -547,22 +507,8 @@ function ReaderPage({
       let 尺寸: { width: number; height: number };
       if (!原始尺寸 || 原始尺寸.width <= 0 || 原始尺寸.height <= 0) {
         尺寸 = { width: 模式2可用宽度, height: 模式2可用高度 };
-      } else if (缩放模式 === "fit-width") {
-        尺寸 = {
-          width: 模式2可用宽度,
-          height: Math.max(1, Math.round(原始尺寸.height * (模式2可用宽度 / 原始尺寸.width))),
-        };
-      } else if (缩放模式 === "fit-height") {
-        const 缩放比例 = 模式2可用高度 / 原始尺寸.height;
-        尺寸 = {
-          width: Math.max(1, Math.round(原始尺寸.width * 缩放比例)),
-          height: Math.max(1, Math.round(原始尺寸.height * 缩放比例)),
-        };
       } else {
-        尺寸 = {
-          width: Math.max(1, Math.round(原始尺寸.width)),
-          height: Math.max(1, Math.round(原始尺寸.height)),
-        };
+        尺寸 = fitPanorama(原始尺寸, { width: 模式2可用宽度, height: 模式2可用高度 }, 垂直阅读);
       }
 
       const 长度 = 垂直阅读 ? 尺寸.height : 尺寸.width;
@@ -598,6 +544,7 @@ function ReaderPage({
       模式2页面几何,
       安全索引,
       原偏移,
+      垂直阅读 ? 模式2可用高度 : 模式2可用宽度,
     );
     const 补偿差值 = 补偿偏移 - 原偏移;
     if (Math.abs(补偿差值) > 0.01) {
@@ -666,9 +613,9 @@ function ReaderPage({
     const 锚点 = 页面中心[限制索引(锚点索引, resource.total)] ?? 0;
     const 首页面中心 = 页面中心[0] ?? 锚点;
     const 尾页面中心 = 页面中心[Math.max(0, resource.total - 1)] ?? 锚点;
-    const 最小偏移 = -(尾页面中心 - 锚点);
-    const 最大偏移 = -(首页面中心 - 锚点);
-    return Math.min(Math.max(偏移, 最小偏移), 最大偏移);
+    const 长度 = 模式2页面几何引用.current.页面长度;
+    const 边界 = panoramaScrollBounds(首页面中心, 尾页面中心, 长度[0], 长度[resource.total - 1], 垂直阅读 ? 模式2可用高度 : 模式2可用宽度, 锚点);
+    return Math.min(Math.max(偏移, 边界.min), 边界.max);
   }
 
   function 限制模式2偏移(偏移: number): number {
@@ -774,40 +721,18 @@ function ReaderPage({
   }
 
   function 计算页面图片样式(页面索引: number): CSSProperties {
+    let 尺寸 = 获取已知页面原始尺寸(页面索引);
     if (模式2) {
-      const 尺寸 = 计算模式2页面尺寸(页面索引);
-      return {
-        width: `${尺寸.width}px`,
-        height: `${尺寸.height}px`,
-        maxWidth: "none",
-        maxHeight: "none",
-      };
+      尺寸 = 计算模式2页面尺寸(页面索引);
+    } else if (尺寸) {
+      const 页组尺寸 = 显示页组索引.map(获取已知页面原始尺寸);
+      尺寸 = 页组尺寸.every((size): size is 页面原始尺寸 => Boolean(size))
+        ? fitSpread(页组尺寸, 可用区域, 缩放模式)[显示页组索引.indexOf(页面索引)]
+        : fitPage(尺寸, 可用区域, 缩放模式);
     }
-    if (文档源 && 缩放模式 !== "fit-height") {
-      const 尺寸 = 获取已知页面原始尺寸(页面索引);
-      if (尺寸) {
-        const 比例 = 缩放模式 === "fit-width" && 单页可用宽度 > 0 ? 单页可用宽度 / 尺寸.width : 1;
-        return { width: `${尺寸.width * 比例}px`, height: `${尺寸.height * 比例}px`, maxWidth: "none", maxHeight: "none" };
-      }
-    }
-    if (缩放模式 !== "fit-height") return 当前图片样式;
-    const 原始尺寸 = 获取已知页面原始尺寸(页面索引);
-    if (!原始尺寸 || 原始尺寸.width <= 0 || 原始尺寸.height <= 0 || 可用区域.height <= 0) {
-      return 当前图片样式;
-    }
-
-    const 可用宽度 = 当前显示跨页横图 && 显示页组索引[0] === 页面索引
-      ? 可用区域.width
-      : 单页可用宽度;
-    if (可用宽度 <= 0) return 当前图片样式;
-
-    const 缩放比例 = 可用区域.height / 原始尺寸.height;
-    return {
-      width: `${Math.max(1, Math.round(原始尺寸.width * 缩放比例))}px`,
-      height: `${Math.max(1, Math.round(原始尺寸.height * 缩放比例))}px`,
-      maxWidth: "none",
-      maxHeight: "none",
-    };
+    return 尺寸
+      ? { width: `${尺寸.width}px`, height: `${尺寸.height}px`, maxWidth: "none", maxHeight: "none" }
+      : { width: "auto", height: "auto", maxWidth: `${可用区域.width / Math.max(1, 显示页组索引.length)}px`, maxHeight: `${可用区域.height}px` };
   }
 
   function 创建当前阅读进度(): ReadingProgress | null {
@@ -1245,11 +1170,9 @@ function ReaderPage({
     const 样式 = window.getComputedStyle(区域元素);
     const 水平内边距 = Number.parseFloat(样式.paddingLeft) + Number.parseFloat(样式.paddingRight);
     const 垂直内边距 = Number.parseFloat(样式.paddingTop) + Number.parseFloat(样式.paddingBottom);
-    const 区域矩形 = 区域元素.getBoundingClientRect();
-
     return {
-      width: Math.max(0, 区域矩形.width - 水平内边距),
-      height: Math.max(0, 区域矩形.height - 垂直内边距),
+      width: Math.max(0, 区域元素.clientWidth - 水平内边距),
+      height: Math.max(0, 区域元素.clientHeight - 垂直内边距),
     };
   }
 
@@ -1280,11 +1203,7 @@ function ReaderPage({
   }
 
   function 选择缩放模式(模式: 阅读器缩放模式): void {
-    if (阅读视图初始化中) return;
-    if (全景模式引用.current || 全景模式启用中.current) {
-      取消全景异步导航(true);
-      if (全景模式引用.current) 提交模式2自由位置();
-    }
+    if (阅读视图初始化中 || 全景模式引用.current || 全景模式启用中.current) return;
     设置缩放模式(模式);
     安排刷新阅读区可用尺寸();
   }
@@ -2714,11 +2633,6 @@ function ReaderPage({
           readerImageLoadConcurrency: 应用设置.readerImageLoadConcurrency,
           bookSwitchButtonOpacity: 应用设置.bookSwitchButtonOpacity,
         };
-        const 强制单页 = 阅读视图.panorama && 阅读视图.flow === "vertical";
-        const 初始化有效设置 = {
-          ...新阅读器设置,
-          readerPageMode: 强制单页 ? "single" as const : 新阅读器设置.readerPageMode,
-        };
         const 待恢复索引 = Math.min(
           Math.max(initialPageIndex, 0),
           Math.max(0, resource.total - 1),
@@ -2726,14 +2640,9 @@ function ReaderPage({
         const 配对起点 = 已保存进度?.currentPageIndex === 待恢复索引
           ? 限制索引(阅读视图.pairingAnchor ?? 待恢复索引, 总页数) : 待恢复索引;
         设置双页配对起点(配对起点);
-        const 恢复索引 = 阅读视图.panorama
-          ? 限制索引(待恢复索引, resource.total)
-          : 规范化页组主索引(
-              待恢复索引,
-              resource.total,
-              { ...初始化有效设置, pairingAnchor: 配对起点 },
-              页面是跨页横图,
-            );
+        // Keep the saved page until dimensions decide whether it can pair.
+        // Pre-normalizing here could discard the last page on a narrower window.
+        const 恢复索引 = 限制索引(待恢复索引, resource.total);
 
         设置阅读器设置(新阅读器设置);
         设置缩放模式(阅读视图.fitMode);
@@ -2878,21 +2787,6 @@ function ReaderPage({
     设置页码输入(String(安全索引 + 1));
   }, [安全索引]);
 
-  useEffect(() => {
-    if (!全景模式引用.current) {
-      设置当前索引((索引) => 规范化页组主索引(
-        索引,
-        总页数,
-        有效阅读器设置,
-        页面是跨页横图,
-      ));
-    }
-  }, [
-    总页数,
-    有效阅读器设置.readerPageMode,
-    阅读器设置.doublePageFirstSingle,
-    阅读器设置.smartDetectSpreadPage,
-  ]);
 
   useEffect(() => {
     if (!resource || resource.total <= 0) {
@@ -2938,6 +2832,14 @@ function ReaderPage({
       尺寸观察器.disconnect();
     };
   }, [isActive]);
+
+  useLayoutEffect(() => {
+    const 区域 = 阅读区域.current;
+    if (!区域) return;
+    区域.scrollLeft = 0;
+    区域.scrollTop = 0;
+    安排刷新阅读区可用尺寸();
+  }, [全景模式, 阅读流向, 缩放模式, 当前页组Key]);
 
   useEffect(() => {
     if (!isActive || !resource || 阅读视图初始化中 || 当前页组页面.length === 0) {
@@ -3212,6 +3114,7 @@ function ReaderPage({
 
     function 处理快捷键(事件: KeyboardEvent): void {
       const 目标元素 = 事件.target as HTMLElement | null;
+      if (事件.defaultPrevented || (事件.key !== "Escape" && 目标元素?.closest('[role="combobox"], [role="listbox"]'))) return;
       if (
         目标元素
         && (目标元素.tagName === "INPUT" || 目标元素.tagName === "TEXTAREA")
@@ -3284,6 +3187,8 @@ function ReaderPage({
     当前页组包含尾页,
     双页配对起点,
     阅读视图初始化中,
+    可用区域,
+    页面尺寸表,
   ]);
 
   function 上一页(): void {
@@ -3435,20 +3340,8 @@ function ReaderPage({
     if (局部设置.readerPageMode === "double") 设置双页配对起点(新配对起点);
     const 新设置 = { ...阅读器设置, ...局部设置 };
     设置阅读器设置(新设置);
-    if (
-      局部设置.readerPageMode
-      || 局部设置.doublePageFirstSingle !== undefined
-      || 局部设置.smartDetectSpreadPage !== undefined
-    ) {
-      const 新有效设置 = 全景竖向强制单页
-        ? { ...新设置, readerPageMode: "single" as const }
-        : 新设置;
-      设置当前索引((索引) => 规范化页组主索引(
-        索引,
-        总页数,
-        { ...新有效设置, pairingAnchor: 新配对起点 },
-        页面是跨页横图,
-      ));
+    if (局部设置.readerPageMode || 局部设置.smartDetectSpreadPage !== undefined) {
+      设置当前索引(安全索引);
     }
   }
 
@@ -3616,30 +3509,20 @@ function ReaderPage({
                 <path d="M8.4 9.2h.1" />
               </svg>
             </button>
-            <button
-              className={缩放模式 === "fit-width" ? "is-active" : ""}
-              onClick={() => 选择缩放模式("fit-width")}
-              disabled={阅读视图初始化中}
-              aria-pressed={缩放模式 === "fit-width"}
-            >
-              适应宽度
-            </button>
-            <button
-              className={缩放模式 === "fit-height" ? "is-active" : ""}
-              onClick={() => 选择缩放模式("fit-height")}
-              disabled={阅读视图初始化中}
-              aria-pressed={缩放模式 === "fit-height"}
-            >
-              适应高度
-            </button>
-            <button
-              className={缩放模式 === "original" ? "is-active" : ""}
-              onClick={() => 选择缩放模式("original")}
-              disabled={阅读视图初始化中}
-              aria-pressed={缩放模式 === "original"}
-            >
-              原始尺寸
-            </button>
+            <GlassSelect<阅读器缩放模式>
+              className="reader-fit-select"
+              value={全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式}
+              options={[
+                { value: "fit-window", label: "适应窗口（默认）" },
+                { value: "fit-width", label: "适应宽度" },
+                { value: "fit-height", label: "适应高度" },
+                { value: "original", label: "原始尺寸" },
+              ]}
+              ariaLabel="缩放方式"
+              title={全景模式 ? `全景${垂直阅读 ? "纵向自动适应宽度" : "横向自动适应高度"}` : "普通阅读缩放方式"}
+              disabled={阅读视图初始化中 || 全景模式}
+              onChange={选择缩放模式}
+            />
             <button
               className={沉浸模式 ? "is-active" : ""}
               onClick={() => {
@@ -3666,7 +3549,7 @@ function ReaderPage({
 
       <div
         ref={阅读区域}
-        className={`reader-stage zoom-stage-${缩放模式} is-flow-${阅读流向} ${
+        className={`reader-stage zoom-stage-${全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式} is-flow-${阅读流向} ${
           模式2 ? "is-panorama" : ""
         } ${全景拖动中 ? "is-panorama-dragging" : ""} ${
           全景动画启用 ? "is-panorama-animated" : "is-panorama-static"
@@ -3687,7 +3570,7 @@ function ReaderPage({
           }
           if (Math.abs(事件.deltaY) < 8) return;
 
-          if (缩放模式 !== "fit-height") {
+          if (缩放模式 === "fit-width" || 缩放模式 === "original") {
             const 最大滚动距离 = 事件.currentTarget.scrollHeight - 事件.currentTarget.clientHeight;
             const 可以继续向下滚动 = 事件.deltaY > 0
               && 事件.currentTarget.scrollTop < 最大滚动距离 - 2;
@@ -3790,7 +3673,7 @@ function ReaderPage({
                         <ReaderChapter html={状态.html} title={页面.name} width={状态.width} height={状态.height} style={计算页面图片样式(页面.index)} />
                       ) : 状态.url ? (
                         <img
-                          className={`reader-image zoom-${缩放模式}`}
+                          className={`reader-image zoom-${全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式}`}
                           src={状态.url}
                           alt={页面.name}
                           style={计算页面图片样式(页面.index)}

@@ -325,6 +325,7 @@ const 翻页方向下拉选项: readonly GlassSelectOption<双页阅读方向>[]
   { value: "right-to-left", label: "从右到左" },
 ];
 const 缩放模式下拉选项: readonly GlassSelectOption<阅读器缩放模式>[] = [
+  { value: "fit-window", label: "适应窗口（默认）" },
   { value: "fit-height", label: "适应高度" },
   { value: "fit-width", label: "适应宽度" },
   { value: "original", label: "原始尺寸" },
@@ -447,7 +448,7 @@ const 默认设置: AppSettings = {
   showProgressText: true,
   progressTextMode: "page",
   progressBarThickness: "normal",
-  readerDefaultFitMode: "fit-height",
+  readerDefaultFitMode: "fit-window",
   readerDefaultFlow: "horizontal",
   readerDefaultPanorama: false,
   readerDefaultImmersive: false,

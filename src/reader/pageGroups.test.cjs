@@ -10,6 +10,25 @@ const { groupIndices, nextGroup, previousGroup, normalizeGroup } = api;
 const settings = anchor => ({ readerPageMode: 'double', smartDetectSpreadPage: true, pairingAnchor: anchor });
 const indices = (...args) => Array.from(groupIndices(...args));
 
+test('viewport-rejected pairs keep complete reversible navigation from every entry page', () => {
+  for (let anchor = 0; anchor < 10; anchor++) {
+    const config = { ...settings(anchor), canPair: (a, b) => ![2, 5, 8].includes(a) && ![2, 5, 8].includes(b) };
+    const groups = new Map();
+    for (let page = 0; page < 10; page++) {
+      const start = normalizeGroup(page, 10, config), group = indices(page, 10, config);
+      assert.ok(group.includes(page));
+      if (group.length === 2) assert.ok(config.canPair(...group));
+      groups.set(start, group);
+    }
+    assert.deepEqual([...groups.values()].flat(), Array.from({ length: 10 }, (_, i) => i));
+    const starts = [...groups.keys()];
+    for (let i = 1; i < starts.length; i++) {
+      assert.equal(nextGroup(starts[i - 1], 10, config), starts[i]);
+      assert.equal(previousGroup(starts[i], 10, config), starts[i - 1]);
+    }
+  }
+});
+
 test('double-page starts with 1+2 and reaches complete final pairs for even and odd books', () => {
   for (const count of [1, 2, 7, 8, 79, 80]) {
     const seen = []; let at = 0;

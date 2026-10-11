@@ -91,7 +91,7 @@ test('legacy JSON gains defaults while preserving old library, progress and fold
   assert.equal(data.settings.cardSize, 'large');
   assert.equal(data.settings.colorTheme, 'mist');
   assert.equal(data.settings.pageSize, 100);
-  assert.equal(data.settings.readerDefaultFitMode, 'fit-height');
+  assert.equal(data.settings.readerDefaultFitMode, 'fit-window');
   assert.equal(data.settings.readerPageMode, 'single');
   assert.equal(data.settings.readerMemoryCacheSizeMb, 200);
   assert.deepEqual(data.settings.confirmBeforeBatchDelete, { favorites: false, bookmarks: true, recent: true });
