@@ -6,7 +6,7 @@
 
 Windows 与 Android 本地漫画、图片与电子书阅读器。
 
-![Version](https://img.shields.io/badge/Windows-1.1.1-708090)
+![Version](https://img.shields.io/badge/Windows-1.1.2-708090)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64_%7C_Android-5f7184)
 
 [使用方法](README_使用方法.md) · [Android 说明](docs/ANDROID.md) · [版本更新](CHANGELOG.md)
@@ -17,7 +17,7 @@ Windows 与 Android 本地漫画、图片与电子书阅读器。
 
 旧版 Windows 安装包（1.0.2）：[OmiComic-Setup-1.0.2-x64.exe](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.2)。Android 安装包：[OmiComic-1.0.1-android.apk](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。本地构建输出在 `release/`。
 
-Windows 免安装版：[OmiComic-Portable-1.1.1-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.1.1/OmiComic-Portable-1.1.1-x64.zip)。完整解压后双击 `OmiComic.exe`，保留同目录的 DLL、`resources` 和 `locales` 文件夹；无需 Node.js 或安装向导，不创建快捷方式或文件关联。
+Windows 免安装版：[OmiComic-Portable-1.1.2-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.1.2/OmiComic-Portable-1.1.2-x64.zip)。完整解压后双击 `OmiComic.exe`，保留同目录的 DLL、`resources` 和 `locales` 文件夹；无需 Node.js 或安装向导，不创建快捷方式或文件关联。
 
 免安装版和安装版均将记录保存在本机 `%APPDATA%\OmiComic\omicomic-data.json`，在同一台电脑上运行会沿用旧记录。发行包不包含用户漫画与阅读记录；复制程序文件夹不会自动迁移这些记录。免安装版仍未签名，首次运行也可能出现 Windows 安全提示。
 

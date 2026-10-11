@@ -69,6 +69,13 @@ test('portable ZIP contains only the runtime and reads all formats after extract
   assert.equal(toolsResult.executable, executable);
   assert.equal(toolsResult.workerPassed, true);
   assert.equal(toolsResult.restartPassed, true);
+  const libraryOutput = execFileSync(process.execPath, ['--test', 'tests/library-continuous.electron.cjs'], {
+    env: runtimeEnv, windowsHide: true, encoding: 'utf8', timeout: 100000, stdio: 'pipe',
+  });
+  t.diagnostic(libraryOutput.trim());
+  const libraryResult = JSON.parse(await fs.readFile('test-results/library-continuous-smoke.json', 'utf8'));
+  assert.equal(libraryResult.executable, executable);
+  assert.equal(libraryResult.libraryPassed, true);
   const bytes = await fs.readFile(archive);
   const result = { version, archive, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), zipEntries: entries.length, userDataFilesIncluded: false, uninstallerIncluded: false, extractedRuntimePassed: true };
   await fs.writeFile('test-results/portable-smoke.json', JSON.stringify(result, null, 2) + '\n');

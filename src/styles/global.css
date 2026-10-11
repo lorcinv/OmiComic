@@ -1928,6 +1928,10 @@ a,
   overscroll-behavior: contain;
 }
 
+.resource-list-scroll.is-continuous { overflow-anchor: none; scrollbar-gutter: stable; }
+.library-virtual-canvas { position: relative; width: 100%; }
+.page-size-effective { color: var(--次文字); font-size: 11px; white-space: nowrap; }
+
 .resource-list-scroll.is-selection-dragging-enabled,
 .resource-list-scroll.is-selection-dragging-enabled * {
   user-select: none;
@@ -5591,7 +5595,7 @@ a,
 button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框)); outline-offset: 2px; }
 :root[data-focus-ring="off"] :is(button, [role="button"], summary):focus { outline: none; }
 
-.reader-fit-select { --glass-select-width: 146px; --glass-select-height: 32px; }
+.reader-fit-select { --glass-select-width: 96px; --glass-select-height: 32px; }
 
 .reader-image {
   display: block;

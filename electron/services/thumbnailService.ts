@@ -465,7 +465,10 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
   try {
     if (depth > 6 || budget.remaining-- <= 0 || Date.now() > budget.deadline) return { url: null };
     const 目录项 = await 文件系统.readdir(文件夹路径, { withFileTypes: true });
-    const itemCount = 目录项.length;
+    const 子目录数 = 目录项.filter(item => item.isDirectory() && !item.isSymbolicLink()).length;
+    const 独立漫画数 = 目录项.filter(item => item.isFile() && (是支持的压缩包(item.name) || /\.(pdf|epub)$/i.test(item.name))).length;
+    // Image pages belong to one comic, not separate books in a collection.
+    const itemCount = 子目录数 > 0 || 独立漫画数 > 1 ? 子目录数 + 独立漫画数 : undefined;
     const 图片列表 = 目录项
       .filter((项目) => 项目.isFile() && 是支持的图片(项目.name))
       .map((项目) => ({ name: 项目.name, path: path.join(文件夹路径, 项目.name) }))

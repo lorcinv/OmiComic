@@ -1,3 +1,4 @@
+import { useContinuousLibrary } from '../hooks/useContinuousLibrary';
 import BookReaderSettings from '../components/BookReaderSettings';
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail } from "../reader/thumbnailClient";
@@ -987,6 +988,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const [图书切换按钮透明度, 设置图书切换按钮透明度] = useState<图书切换按钮透明度>(默认设置.bookSwitchButtonOpacity);
   const [当前页, 设置当前页] = useState(1);
   const [页码输入, 设置页码输入] = useState("1");
+  const [正在输入页码, 设置正在输入页码] = useState(false);
   const [缩略图表, 设置缩略图表] = useBoundedRecord<缩略图状态>(512);
   const [书签预览表, 设置书签预览表] = useBoundedRecord<缩略图状态>(512);
   const [可阅读页数表, 设置可阅读页数表] = useBoundedRecord<可阅读页数状态>(4096);
@@ -1559,7 +1561,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     });
   }, [当前目录, 搜索内容, 排序, 文件夹优先, 资源元数据表, 已选标签列表, 搜索模式, 隐藏已加入书架资源, 已加入书架资源集合]);
 
-  const 实际每页数量 = 每页数量;
+  const 目录连续列表 = useContinuousLibrary(列表容器, isActive && 当前视图 === "directory" && !资源信息目标 && !正在读取,
+    筛选排序后项目.length, 获取卡片列数(卡片缩放), 每页数量,
+    JSON.stringify([当前目录?.path, 搜索内容, 排序, 文件夹优先, 隐藏已加入书架资源, 已选标签列表]));
+  const 实际每页数量 = 当前视图 === "directory" ? 目录连续列表.pageSize : 每页数量;
   const 筛选后收藏列表 = useMemo(() => {
     return 收藏列表.filter((项目) => {
       const 整理信息 = 获取资源整理信息({
@@ -2281,14 +2286,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             ? 虚拟文件夹卡片项目.length
             : 筛选排序后项目.length;
   const 总页数 = Math.max(1, Math.ceil(当前分页项目总数 / 实际每页数量));
-  const 安全当前页 = Math.min(Math.max(当前页, 1), 总页数);
+  const 安全当前页 = 当前视图 === "directory" ? 目录连续列表.page : Math.min(Math.max(当前页, 1), 总页数);
   const 获取当前分页切片 = <T,>(项目列表: T[]): T[] => {
     const 起始位置 = (安全当前页 - 1) * 实际每页数量;
     return 项目列表.slice(起始位置, 起始位置 + 实际每页数量);
   };
   const 当前页项目 = useMemo(
-    () => 获取当前分页切片(筛选排序后项目),
-    [安全当前页, 实际每页数量, 筛选排序后项目],
+    () => 当前视图 === "directory" ? 筛选排序后项目.slice(目录连续列表.start, 目录连续列表.end) : 获取当前分页切片(筛选排序后项目),
+    [当前视图, 目录连续列表.start, 目录连续列表.end, 安全当前页, 实际每页数量, 筛选排序后项目],
   );
   const 当前页最近打开卡片项目 = useMemo(
     () => 获取当前分页切片(最近打开卡片项目),
@@ -2427,13 +2432,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     ? 当前目录 ? "directory" : null
     : 当前视图;
   const 当前选择视图Key列表 = useMemo(() => {
-    if (当前视图 === "directory") return 当前页项目.map((项目) => 项目.id);
+    if (当前视图 === "directory") return 筛选排序后项目.map((项目) => 项目.id);
     if (当前视图 === "recent") return 当前页最近打开卡片项目.map(({ 项目 }) => 项目.resourceKey);
     if (当前视图 === "favorites") return 当前页收藏卡片项目.map(({ 项目 }) => 项目.resourceKey);
     if (当前视图 === "bookmarks") return 当前页书签卡片项目.map(({ 项目 }) => 项目.id);
     if (当前视图 === "virtual-folder") return 当前页虚拟文件夹卡片项目.map(({ 项目 }) => 项目.resourceKey);
     return [];
-  }, [当前视图, 当前页项目, 当前页最近打开卡片项目, 当前页收藏卡片项目, 当前页书签卡片项目, 当前页虚拟文件夹卡片项目]);
+  }, [当前视图, 筛选排序后项目, 当前页项目, 当前页最近打开卡片项目, 当前页收藏卡片项目, 当前页书签卡片项目, 当前页虚拟文件夹卡片项目]);
   const 左下统计文本 = useMemo(() => {
     if (当前视图 === "recent") return `${阅读记录标题} ${当前阅读记录列表.length} 项`;
     if (当前视图 === "favorites") return `收藏 ${收藏列表.length} 项`;
@@ -2471,29 +2476,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
   useEffect(() => {
     if (当前页 !== 安全当前页) {
-      待恢复滚动位置.current = "top";
+      if (当前视图 !== "directory") 待恢复滚动位置.current = "top";
       设置当前页(安全当前页);
     }
     设置页码输入(String(安全当前页));
   }, [安全当前页, 当前页]);
 
-  useLayoutEffect(() => {
-    if (当前视图 !== "directory") return;
-    if (待恢复滚动位置.current) return;
-
-    自动翻页锁定.current = false;
-    自动翻页冷却截止.current = 0;
-    列表容器.current?.scrollTo({ top: 0, behavior: "auto" });
-  }, [
-    当前视图,
-    当前目录?.path,
-    搜索内容,
-    排序,
-    文件夹优先,
-    隐藏已加入书架资源,
-    每页数量,
-    实际每页数量,
-  ]);
 
   useEffect(() => {
     if (当前选择视图 && 选择模式 === 当前选择视图) {
@@ -2560,6 +2548,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 容器 = 列表容器.current;
     const 目标位置 = 待恢复滚动位置.current;
     if (!容器 || !目标位置) return;
+    if (当前视图 === "directory") { 待恢复滚动位置.current = null; return; }
 
     容器.scrollTo({
       top: 目标位置 === "bottom" ? 容器.scrollHeight : 0,
@@ -3425,7 +3414,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }, [待删除标签列表, 批量删除确认, 待删除根目录, 待删除书架, 待删除书架列表, 书架弹窗, 待删除虚拟文件夹, 待清空虚拟文件夹, 待清空无效资源, 待全局清空无效资源, 虚拟文件夹弹窗, 加入虚拟文件夹目标, 移动到书架目标, 删除确认处理中, 删除标签不再提醒, 批量删除不再提醒, 当前虚拟文件夹无效资源Key]);
 
   useEffect(() => {
-    if (!isActive || 当前视图 !== "virtual-folder") return;
+    if (!isActive || (当前视图 !== "virtual-folder" && 当前视图 !== "directory")) return;
 
     function 正在编辑文本(目标: EventTarget | null): boolean {
       return 目标 instanceof HTMLElement
@@ -3436,7 +3425,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
 
     function 处理书架内部返回快捷键(事件: KeyboardEvent): void {
-      if (事件.key !== "Escape") return;
+      if (事件.key !== "Escape" || 事件.defaultPrevented || 事件.repeat) return;
+      if (资源信息目标 || 本地文件目标 || 目录空白菜单 || 根目录下拉打开 || 主搜索建议可见 || 视图菜单容器.current?.open || document.querySelector('[role="listbox"], [role="dialog"]')) return;
       if (正在编辑文本(事件.target)) return;
       if (
         当前右侧抽屉
@@ -3471,12 +3461,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       ) return;
 
       事件.preventDefault();
-      返回书架根层();
+      if (当前视图 === "virtual-folder") 返回书架根层();
+      else if (当前目录?.parentPath && 当前根目录 && !正在读取) void 打开目录(当前目录.parentPath, 当前根目录);
     }
 
     window.addEventListener("keydown", 处理书架内部返回快捷键);
     return () => window.removeEventListener("keydown", 处理书架内部返回快捷键);
   }, [
+    当前目录, 当前根目录, 正在读取, 资源信息目标, 本地文件目标, 目录空白菜单, 根目录下拉打开, 主搜索建议可见,
     当前视图,
     isActive,
     当前右侧抽屉,
@@ -3890,21 +3882,20 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   useEffect(() => {
     function 处理分页快捷键(事件: KeyboardEvent): void {
       if (!isActive) return;
-      if (!是否显示分页) return;
+      if (!是否显示分页 || 事件.defaultPrevented || 当前右侧抽屉 || 资源信息目标 || 本地文件目标) return;
+      if (事件.target instanceof Element && 事件.target.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="dialog"], [role="menu"]')) return;
       if (事件.key === "PageUp") {
         事件.preventDefault();
-        待恢复滚动位置.current = "top";
-        设置当前页((页码) => Math.max(1, 页码 - 1));
+        跳转页码(安全当前页 - 1);
       } else if (事件.key === "PageDown") {
         事件.preventDefault();
-        待恢复滚动位置.current = "top";
-        设置当前页((页码) => Math.min(总页数, 页码 + 1));
+        跳转页码(安全当前页 + 1);
       }
     }
 
     window.addEventListener("keydown", 处理分页快捷键);
     return () => window.removeEventListener("keydown", 处理分页快捷键);
-  }, [是否显示分页, 总页数, isActive]);
+  }, [是否显示分页, 总页数, 安全当前页, 当前视图, 每页数量, 卡片缩放, isActive, 当前右侧抽屉, 资源信息目标, 本地文件目标]);
 
   async function 打开目录(
     目录路径: string,
@@ -4240,6 +4231,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 修正页码 = Number.isFinite(输入页码)
       ? Math.min(Math.max(输入页码, 1), 总页数)
       : 安全当前页;
+    if (当前视图 === "directory") { 设置页码输入(String(修正页码)); 目录连续列表.jump(修正页码); return; }
     待恢复滚动位置.current = "top";
     退出选择模式();
     设置当前页(修正页码);
@@ -4247,6 +4239,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 跳转页码(目标页码: number): void {
+    if (当前视图 === "directory") { 目录连续列表.jump(目标页码); return; }
     待恢复滚动位置.current = "top";
     退出选择模式();
     设置当前页(Math.min(Math.max(目标页码, 1), 总页数));
@@ -4260,6 +4253,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 回到当前页顶部(): void {
+    if (当前视图 === "directory") { 目录连续列表.jump(安全当前页); return; }
     自动翻页锁定.current = false;
     自动翻页冷却截止.current = Date.now() + 250;
     待恢复滚动位置.current = null;
@@ -6131,7 +6125,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   function 获取已选资源输入(视图: 选择视图): VirtualFolderItemInput[] {
     const 已选 = 已选项目Key集合;
     if (视图 === "directory") {
-      return 当前页项目
+      return 筛选排序后项目
         .filter((文件) => 已选.has(文件.id))
         .map((文件) => {
           const 输入 = 获取文件资源元数据输入(文件);
@@ -6874,7 +6868,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 处理网格滚轮(事件: ReactWheelEvent<HTMLDivElement>): void {
-    if (事件.ctrlKey || !是否显示分页 || Math.abs(事件.deltaY) < 1) return;
+    if (当前视图 === "directory" || 事件.ctrlKey || !是否显示分页 || Math.abs(事件.deltaY) < 1) return;
 
     if (滚轮停止定时器.current !== null) {
       window.clearTimeout(滚轮停止定时器.current);
@@ -8494,9 +8488,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           ) : (
             <div
               ref={列表容器}
-              className={`resource-list-scroll ${选择模式 === "directory" ? "is-selection-dragging-enabled" : ""}`}
+              className={`resource-list-scroll is-continuous ${选择模式 === "directory" ? "is-selection-dragging-enabled" : ""}`}
               aria-label="当前目录文件列表"
-              onWheel={处理网格滚轮}
+              onScroll={目录连续列表.sync}
               onMouseDown={(事件) => 开始框选(事件, "directory")}
               onMouseMove={更新框选}
               onMouseUp={结束框选}
@@ -8511,8 +8505,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 设置目录空白菜单({ x: 事件.clientX, y: 事件.clientY });
               }}
             >
-              <div className={`resource-list size-${缩略图尺寸}`}>
-              {当前页项目.map((文件) => {
+              <div className="library-virtual-canvas" style={{ height: 目录连续列表.height }}>
+              <div className={`resource-list size-${缩略图尺寸}`} style={{ position: "absolute", top: 目录连续列表.offset }}>
+              {当前页项目.map((文件, 可见索引) => {
                 const 信息 = 类型信息[文件.type];
                 const 资源Key = 获取文件资源Key(文件);
                 const 阅读进度 = 资源Key ? 阅读进度表[资源Key] : null;
@@ -8534,6 +8529,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 return (
                   <button
                     key={文件.id}
+                    data-library-index={目录连续列表.start + 可见索引}
                     data-selection-key={文件.id}
                     className={`resource-card resource-${文件.type} ${
                       进度显示状态.已完成 ? "progress-completed" : 进度显示状态.显示进度条 ? "progress-reading" : ""
@@ -8643,6 +8639,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 );
               })}
               </div>
+              </div>
             </div>
           )}
         </div>
@@ -8750,13 +8747,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 <span>第</span>
                 <input
                   inputMode="numeric"
-                  value={页码输入}
+                  value={正在输入页码 ? 页码输入 : String(安全当前页)}
                   aria-label="当前页码"
+                  onFocus={() => { 设置页码输入(String(安全当前页)); 设置正在输入页码(true); }}
                   onChange={(事件) => 设置页码输入(事件.target.value.replace(/\D/g, ""))}
-                  onBlur={应用页码输入}
+                  onBlur={() => { 设置正在输入页码(false); 应用页码输入(); }}
                   onKeyDown={(事件) => {
                     if (事件.key === "Enter") {
-                      应用页码输入();
+                      事件.preventDefault();
                       事件.currentTarget.blur();
                     }
                   }}
@@ -8782,9 +8780,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   onChange={(新每页数量) => {
                     设置每页数量(新每页数量);
                     保存界面设置({ pageSize: 新每页数量 });
-                    回到第一页();
+                    if (当前视图 !== "directory") 回到第一页();
                   }}
                 />
+                {当前视图 === "directory" && <span className="page-size-effective" title="按完整行向上取整，每页不拆行">实际 {实际每页数量} 项</span>}
               </div>
             </div>
           )}
@@ -8894,10 +8893,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       onChange={(新每页数量) => {
                         设置每页数量(新每页数量);
                         保存界面设置({ pageSize: 新每页数量 });
-                        回到第一页();
+                        if (当前视图 !== "directory") 回到第一页();
                       }}
                     />
                   </div>
+                  <p className="settings-help">资源库连续滚动，页码用于定位。每页数量按完整行向上取整，例如 7 列、每页 60 时实际为 63 项。</p>
                   <div className="settings-row">
                     <span>最近打开记录上限</span>
                     <GlassSelect
