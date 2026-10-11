@@ -68,6 +68,9 @@ test('real PDF worker renders, changes page and releases its session',async({pag
  await expect.poll(()=>current().evaluate((canvas:HTMLCanvasElement)=>canvas.toDataURL())).not.toBe(pageTwoPixels);
  await expect(page.locator('.reader-layout')).toHaveAttribute('aria-busy','false');
  await page.getByRole('button',{name:'当前单页，点击切换双页',exact:true}).click();
+ // The current last page is the new pairing anchor, so it stays alone.
+ await expect(page.locator('.reader-page-frame canvas')).toHaveCount(1);
+ const pairStart=page.getByRole('textbox',{name:'跳转到页码'});await pairStart.fill('2');await pairStart.press('Enter');
  await expect(page.locator('.reader-page-frame canvas')).toHaveCount(2);
  await page.getByRole('button',{name:'适应宽度',exact:true}).click();
  await expect(page.locator('.reader-stage')).toHaveClass(/zoom-stage-fit-width/);

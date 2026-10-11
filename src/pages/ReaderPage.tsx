@@ -6,6 +6,7 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import ArrowIcon from "../ArrowIcon";
+import { clampPage as 限制索引, normalizeGroup as 规范化页组主索引, groupIndices as 计算页组索引, nextGroup as 计算下一页组主索引, previousGroup as 计算上一页组主索引 } from "../reader/pageGroups";
 import ReaderChapter from "../components/ReaderChapter";
 import ReaderCanvas from "../components/ReaderCanvas";
 import { useReaderDocument } from "../reader/useReaderDocument";
@@ -190,7 +191,7 @@ const 默认阅读器设置: Pick<
   readerDefaultFlow: "horizontal",
   readerDefaultPanorama: false,
   readerDefaultImmersive: false,
-  doublePageFirstSingle: true,
+  doublePageFirstSingle: false,
   doublePageDirection: "left-to-right",
   smartDetectSpreadPage: true,
   wheelPageTurn: true,
@@ -213,85 +214,6 @@ function 创建默认阅读视图(设置: AppSettings | typeof 默认阅读器�
     panorama: 设置.readerDefaultPanorama,
     immersive: 设置.readerDefaultImmersive,
   };
-}
-
-function 限制索引(索引: number, 总页数: number): number {
-  if (总页数 <= 0) return 0;
-  return Math.min(Math.max(Math.floor(索引), 0), 总页数 - 1);
-}
-
-function 规范化页组主索引(
-  索引: number,
-  总页数: number,
-  设置: Pick<AppSettings, "readerPageMode" | "doublePageFirstSingle" | "smartDetectSpreadPage">,
-  是跨页横图: (索引: number) => boolean = () => false,
-): number {
-  const 目标索引 = 限制索引(索引, 总页数);
-  if (设置.readerPageMode === "single" || 总页数 <= 0) return 目标索引;
-
-  let 页组起点 = 0;
-  while (页组起点 < 总页数) {
-    if (目标索引 === 页组起点) return 页组起点;
-    const 页组长度 = 设置.doublePageFirstSingle && 页组起点 === 0
-      ? 1
-      : 设置.smartDetectSpreadPage && 是跨页横图(页组起点)
-        ? 1
-        : 设置.smartDetectSpreadPage
-          && 页组起点 + 1 < 总页数
-          && 是跨页横图(页组起点 + 1)
-          ? 1
-          : Math.min(2, 总页数 - 页组起点);
-    if (目标索引 < 页组起点 + 页组长度) return 页组起点;
-    页组起点 += Math.max(1, 页组长度);
-  }
-  return 目标索引;
-}
-
-function 计算页组索引(
-  主索引: number,
-  总页数: number,
-  设置: Pick<AppSettings, "readerPageMode" | "doublePageFirstSingle" | "smartDetectSpreadPage">,
-  是跨页横图: (索引: number) => boolean = () => false,
-): number[] {
-  if (总页数 <= 0) return [];
-  const 起点 = 规范化页组主索引(主索引, 总页数, 设置, 是跨页横图);
-  if (设置.readerPageMode === "single") return [起点];
-  if (设置.doublePageFirstSingle && 起点 === 0) return [0];
-  if (设置.smartDetectSpreadPage && 是跨页横图(起点)) return [起点];
-  if (设置.smartDetectSpreadPage && 起点 + 1 < 总页数 && 是跨页横图(起点 + 1)) return [起点];
-  return [起点, 起点 + 1].filter((索引) => 索引 < 总页数);
-}
-
-function 计算下一页组主索引(
-  主索引: number,
-  总页数: number,
-  设置: Pick<AppSettings, "readerPageMode" | "doublePageFirstSingle" | "smartDetectSpreadPage">,
-  是跨页横图: (索引: number) => boolean,
-): number {
-  if (设置.readerPageMode === "single") return 规范化页组主索引(主索引 + 1, 总页数, 设置, 是跨页横图);
-  const 当前页组长度 = Math.max(1, 计算页组索引(主索引, 总页数, 设置, 是跨页横图).length);
-  return 规范化页组主索引(主索引 + 当前页组长度, 总页数, 设置, 是跨页横图);
-}
-
-function 计算上一页组主索引(
-  主索引: number,
-  总页数: number,
-  设置: Pick<AppSettings, "readerPageMode" | "doublePageFirstSingle" | "smartDetectSpreadPage">,
-  是跨页横图: (索引: number) => boolean,
-): number {
-  if (设置.readerPageMode === "single") return 规范化页组主索引(主索引 - 1, 总页数, 设置, 是跨页横图);
-  const 安全索引 = 规范化页组主索引(主索引, 总页数, 设置, 是跨页横图);
-  if (安全索引 <= 0) return 0;
-
-  let 游标 = 0;
-  let 上一组起点 = 0;
-  while (游标 < 安全索引) {
-    上一组起点 = 游标;
-    const 页组长度 = Math.max(1, 计算页组索引(游标, 总页数, 设置, 是跨页横图).length);
-    游标 += 页组长度;
-  }
-
-  return 规范化页组主索引(上一组起点, 总页数, 设置, 是跨页横图);
 }
 
 function ReaderPage({
@@ -329,6 +251,8 @@ function ReaderPage({
   const [页码输入聚焦, 设置页码输入聚焦] = useState(false);
   const [阅读流向, 设置阅读流向] = useState<阅读流向>("horizontal");
   const [全景模式, 设置全景模式] = useState(false);
+  const [双页配对起点, 设置双页配对起点] = useState(initialPageIndex);
+  const [跨本提示, 设置跨本提示] = useState<"previous" | "next" | null>(null);
   const [阅读视图已加载资源Key, 设置阅读视图已加载资源Key] = useState<string | null>(null);
   const [全景拖动中, 设置全景拖动中] = useState(false);
   const [全景窗口中心索引, 设置全景窗口中心索引] = useState(0);
@@ -476,6 +400,7 @@ function ReaderPage({
   const 有效阅读器设置 = {
     ...阅读器设置,
     readerPageMode: 有效页模式,
+    pairingAnchor: 双页配对起点,
   };
   const 是跨页横图 = (索引: number): boolean => (
     有效阅读器设置.smartDetectSpreadPage
@@ -525,6 +450,7 @@ function ReaderPage({
   const 当前页组包含尾页 = 总页数 > 0 && (
     全景模式 ? 显示阅读索引 === 总页数 - 1 : 当前页组索引.includes(总页数 - 1)
   );
+  const 显示进度索引 = 当前页组包含尾页 ? 总页数 - 1 : 显示阅读索引;
   const 页模式按钮文本 = 有效阅读器设置.readerPageMode === "double" ? "2" : "1";
   const 从右到左阅读 = 阅读器设置.doublePageDirection === "right-to-left";
   const 文件名栏文本 = resource
@@ -699,7 +625,7 @@ function ReaderPage({
         "--reader-panorama-translate": `${全景偏移引用.current - 模式2当前锚点}px`,
       } as CSSProperties)
     : ({ gap: `${页组间距}px` } as CSSProperties);
-  const 进度百分比 = 总页数 > 1 ? (显示阅读索引 / (总页数 - 1)) * 100 : 0;
+  const 进度百分比 = 总页数 > 1 ? (显示进度索引 / (总页数 - 1)) * 100 : 总页数 === 1 ? 100 : 0;
   const 显示进度百分比 = 进度拖动比例 === null ? 进度百分比 : 进度拖动比例 * 100;
 
   function 计算模式2页面尺寸(页面索引: number): { width: number; height: number } {
@@ -886,17 +812,17 @@ function ReaderPage({
 
   function 创建当前阅读进度(): ReadingProgress | null {
     if (!resource || !显示阅读页面 || resource.total <= 0) return null;
-    const percent = Math.round(((显示阅读索引 + 1) / Math.max(1, resource.total)) * 100);
+    const percent = Math.round(((显示进度索引 + 1) / Math.max(1, resource.total)) * 100);
     const 当前时间 = Date.now();
-    const completed = 显示阅读索引 >= resource.total - 1;
+    const completed = 当前页组包含尾页;
     return {
       resourceKey: resource.resourceKey,
       sourcePath: resource.sourcePath,
       sourceType: resource.sourceType,
       title: resource.title,
-      currentPageIndex: 显示阅读索引,
+      currentPageIndex: 显示进度索引,
       totalPages: resource.total,
-      currentPageName: 显示阅读页面.name,
+      currentPageName: resource.pages[显示进度索引]?.name ?? 显示阅读页面.name,
       percent,
       completed,
       hasStartedReading: 显示阅读索引 > 0 || completed,
@@ -905,6 +831,7 @@ function ReaderPage({
       readerViewState: {
         fitMode: 缩放模式,
         pageMode: 阅读器设置.readerPageMode,
+        pairingAnchor: 双页配对起点,
         pageDirection: 阅读器设置.doublePageDirection,
         flow: 阅读流向,
         panorama: 全景模式,
@@ -2315,10 +2242,12 @@ function ReaderPage({
     return true;
   }
 
-  function 跳转到页面索引(索引: number, 回退比例?: number): Promise<void> {
+  function 跳转到页面索引(索引: number, 回退比例?: number, 重新配对 = false): Promise<void> {
     if (阅读视图初始化中) return Promise.resolve();
     if (!resource || resource.total <= 0) return Promise.resolve();
-    const 目标索引 = 模式2
+    if (重新配对) 设置双页配对起点(限制索引(索引, resource.total));
+    设置跨本提示(null);
+    const 目标索引 = 模式2 || 重新配对
       ? 限制索引(索引, resource.total)
       : 规范化页组主索引(
           索引,
@@ -2621,6 +2550,9 @@ function ReaderPage({
     if (Math.abs(原始增量) < 0.01) return;
     事件.preventDefault();
     if (全景拖动.current.active) return;
+    if (原始增量 < 0 && 当前页组包含首页 && 上一本资源) 设置跨本提示("previous");
+    else if (原始增量 > 0 && 当前页组包含尾页 && 下一本资源) 设置跨本提示("next");
+    else 设置跨本提示(null);
 
     const 新滚轮会话 = 全景滚轮结束定时器.current === null;
     if (新滚轮会话) {
@@ -2791,12 +2723,15 @@ function ReaderPage({
           Math.max(initialPageIndex, 0),
           Math.max(0, resource.total - 1),
         );
+        const 配对起点 = 已保存进度?.currentPageIndex === 待恢复索引
+          ? 限制索引(阅读视图.pairingAnchor ?? 待恢复索引, 总页数) : 待恢复索引;
+        设置双页配对起点(配对起点);
         const 恢复索引 = 阅读视图.panorama
           ? 限制索引(待恢复索引, resource.total)
           : 规范化页组主索引(
               待恢复索引,
               resource.total,
-              初始化有效设置,
+              { ...初始化有效设置, pairingAnchor: 配对起点 },
               页面是跨页横图,
             );
 
@@ -2853,6 +2788,8 @@ function ReaderPage({
     当前页面,
     阅读视图已加载资源Key,
     显示阅读索引,
+    显示进度索引,
+    双页配对起点,
     缩放模式,
     阅读器设置.readerPageMode,
     阅读器设置.doublePageDirection,
@@ -2905,6 +2842,8 @@ function ReaderPage({
     沉浸模式,
     阅读器设置.immersiveAutoHideDelay,
   ]);
+
+  useEffect(() => { 设置跨本提示(null); }, [resource?.resourceKey, 当前页组Key, 全景模式, 从右到左阅读]);
 
   useEffect(() => {
     if (!全景模式) {
@@ -3340,23 +3279,31 @@ function ReaderPage({
     有效页模式,
     阅读器设置.doublePageFirstSingle,
     阅读器设置.smartDetectSpreadPage,
+    当前页组Key,
+    当前页组包含首页,
+    当前页组包含尾页,
+    双页配对起点,
     阅读视图初始化中,
   ]);
 
   function 上一页(): void {
     if (阅读视图初始化中) return;
+    if (当前页组包含首页) { if (上一本资源) 设置跨本提示("previous"); return; }
+    设置跨本提示(null);
     if (全景滚屏到相邻页(-1)) return;
     跳转到页面索引(计算上一页组主索引(安全索引, 总页数, 有效阅读器设置, 是跨页横图));
   }
 
   function 下一页(): void {
     if (阅读视图初始化中) return;
+    if (当前页组包含尾页) { if (下一本资源) 设置跨本提示("next"); return; }
+    设置跨本提示(null);
     if (全景滚屏到相邻页(1)) return;
     跳转到页面索引(计算下一页组主索引(安全索引, 总页数, 有效阅读器设置, 是跨页横图));
   }
 
   function 跳到首页(): void {
-    跳转到页面索引(0);
+    void 跳转到页面索引(0, undefined, true);
   }
 
   function 跳到尾页(): void {
@@ -3411,15 +3358,9 @@ function ReaderPage({
     }
 
     const 修正页码 = Math.min(Math.max(输入页码, 1), resource.total);
-    const 目标索引 = 模式2
-      ? 限制索引(修正页码 - 1, resource.total)
-      : 规范化页组主索引(
-          修正页码 - 1,
-          resource.total,
-          有效阅读器设置,
-          页面是跨页横图,
-        );
-    跳转到页面索引(目标索引);
+    const 目标索引 = 限制索引(修正页码 - 1, resource.total);
+    if (目标索引 === 显示进度索引) return;
+    void 跳转到页面索引(目标索引, undefined, true);
     设置页码输入(String(目标索引 + 1));
   }
 
@@ -3490,6 +3431,8 @@ function ReaderPage({
       取消全景异步导航(true);
       提交模式2自由位置();
     }
+    const 新配对起点 = 局部设置.readerPageMode === "double" ? 安全索引 : 双页配对起点;
+    if (局部设置.readerPageMode === "double") 设置双页配对起点(新配对起点);
     const 新设置 = { ...阅读器设置, ...局部设置 };
     设置阅读器设置(新设置);
     if (
@@ -3503,7 +3446,7 @@ function ReaderPage({
       设置当前索引((索引) => 规范化页组主索引(
         索引,
         总页数,
-        新有效设置,
+        { ...新有效设置, pairingAnchor: 新配对起点 },
         页面是跨页横图,
       ));
     }
@@ -3761,28 +3704,28 @@ function ReaderPage({
           else 上一页();
         }}
       >
-        {resource && 当前页组包含首页 && 上一本资源 && (
+        {resource && 跨本提示 === "previous" && 当前页组包含首页 && 上一本资源 && (
           <button
             type="button"
-            className="reader-book-switch reader-book-switch-previous"
+            className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "right" : "left"}`}
             style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
             title={`上一本：${上一本资源.title}`}
             aria-label={`上一本：${上一本资源.title}`}
             onClick={() => void 切换相邻资源("previous")}
           >
-            <ArrowIcon direction="left" />
+            <svg viewBox="0 0 24 32" aria-hidden="true"><path d={从右到左阅读 ? "M4 3L22 16L4 29Z" : "M20 3L2 16L20 29Z"} /></svg>
           </button>
         )}
-        {resource && 当前页组包含尾页 && 下一本资源 && (
+        {resource && 跨本提示 === "next" && 当前页组包含尾页 && 下一本资源 && (
           <button
             type="button"
-            className="reader-book-switch reader-book-switch-next"
+            className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "left" : "right"}`}
             style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
             title={`下一本：${下一本资源.title}`}
             aria-label={`下一本：${下一本资源.title}`}
             onClick={() => void 切换相邻资源("next")}
           >
-            <ArrowIcon direction="right" />
+            <svg viewBox="0 0 24 32" aria-hidden="true"><path d={从右到左阅读 ? "M20 3L2 16L20 29Z" : "M4 3L22 16L4 29Z"} /></svg>
           </button>
         )}
         {文档错误 ? (
@@ -3902,7 +3845,7 @@ function ReaderPage({
           aria-label="阅读进度"
           aria-valuemin={1}
           aria-valuemax={Math.max(1, 总页数)}
-          aria-valuenow={Math.min(Math.max(显示阅读索引 + 1, 1), Math.max(1, 总页数))}
+          aria-valuenow={Math.min(Math.max(显示进度索引 + 1, 1), Math.max(1, 总页数))}
           onPointerDown={开始进度条拖动}
           onPointerMove={预览进度条拖动}
           onPointerUp={完成进度条拖动}
@@ -3913,7 +3856,7 @@ function ReaderPage({
           <span className="reader-progress-thumb" aria-hidden="true" />
         </div>
         {阅读器设置.readerHideFooterControls && (
-          <span className="reader-progress-count">{总页数 > 0 ? 显示阅读索引 + 1 : 0} / {总页数}</span>
+          <span className="reader-progress-count">{总页数 > 0 ? 显示进度索引 + 1 : 0} / {总页数}</span>
         )}
         <div className="reader-footer-controls previous-controls" aria-hidden={阅读器设置.readerHideFooterControls}>
           {从右到左阅读 ? (
@@ -3934,11 +3877,11 @@ function ReaderPage({
               inputMode="numeric"
               aria-label={resource?.sourceType === "epub" ? "跳转到章节" : "跳转到页码"}
               disabled={阅读视图初始化中 || !resource}
-              value={resource ? (页码输入聚焦 ? 页码输入 : String(显示阅读索引 + 1)) : "0"}
+              value={resource ? (页码输入聚焦 ? 页码输入 : String(显示进度索引 + 1)) : "0"}
               onChange={(事件) => 设置页码输入(事件.target.value)}
               onFocus={(事件) => {
                 设置页码输入聚焦(true);
-                设置页码输入(String(显示阅读索引 + 1));
+                设置页码输入(String(显示进度索引 + 1));
                 设置底部栏可见(true);
                 清理底部栏隐藏定时器();
                 事件.currentTarget.select();

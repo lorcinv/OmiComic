@@ -1,3 +1,5 @@
+import { getResourceThumbnail } from "../reader/thumbnailClient";
+import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
@@ -102,6 +104,7 @@ type 资源信息目标 =
   | { kind: "bookmark"; item: BookmarkItem; fileType: 资源类型; thumbnailUrl?: string | null };
 
 interface 缩略图状态 {
+  itemCount?: number;
   sourceVersion?: string;
   status: 缩略图加载状态;
   url: string | null;
@@ -167,7 +170,7 @@ type 中键拖拽悬浮卡片 =
       kind: "resource";
       title: string;
       subtitle: string;
-      icon: string;
+      icon: ReturnType<typeof ResourcePlaceholder>;
       typeLabel: string;
       thumbnailUrl: string | null;
       x: number;
@@ -449,7 +452,7 @@ const 默认设置: AppSettings = {
   readerDefaultPanorama: false,
   readerDefaultImmersive: false,
   readerPageMode: "single",
-  doublePageFirstSingle: true,
+  doublePageFirstSingle: false,
   doublePageDirection: "left-to-right",
   smartDetectSpreadPage: true,
   wheelPageTurn: true,
@@ -481,13 +484,13 @@ const 类型顺序: Record<资源类型, number> = {
   unknown: 5,
 };
 
-const 类型信息: Record<资源类型, { label: string; icon: string }> = {
-  folder: { label: "文件夹", icon: "夹" },
-  image: { label: "图片", icon: "图" },
-  archive: { label: "压缩包", icon: "包" },
-  pdf: { label: "PDF", icon: "文" },
-  epub: { label: "EPUB", icon: "书" },
-  unknown: { label: "未知文件", icon: "?" },
+const 类型信息: Record<资源类型, { label: string; icon: ReturnType<typeof ResourcePlaceholder> }> = {
+  folder: { label: "文件夹", icon: <ResourcePlaceholder type="folder" /> },
+  image: { label: "图片", icon: <ResourcePlaceholder type="image" /> },
+  archive: { label: "压缩包", icon: <ResourcePlaceholder type="archive" /> },
+  pdf: { label: "PDF", icon: <ResourcePlaceholder type="pdf" /> },
+  epub: { label: "EPUB", icon: <ResourcePlaceholder type="epub" /> },
+  unknown: { label: "未知文件", icon: <ResourcePlaceholder type="unknown" /> },
 };
 
 function 获取目录名称(目录路径: string): string {
@@ -969,7 +972,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const [默认开启全景, 设置默认开启全景] = useState(默认设置.readerDefaultPanorama);
   const [默认开启沉浸, 设置默认开启沉浸] = useState(默认设置.readerDefaultImmersive);
   const [阅读器默认页模式, 设置阅读器默认页模式] = useState<阅读器页模式>(默认设置.readerPageMode);
-  const [双页首页单独显示, 设置双页首页单独显示] = useState(默认设置.doublePageFirstSingle);
   const [双页阅读方向, 设置双页阅读方向] = useState<双页阅读方向>(默认设置.doublePageDirection);
   const [智能识别跨页图, 设置智能识别跨页图] = useState(默认设置.smartDetectSpreadPage);
   const [滚轮翻页, 设置滚轮翻页] = useState(默认设置.wheelPageTurn);
@@ -1126,6 +1128,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const 主搜索输入框 = useRef<HTMLInputElement>(null);
   const 设置触发按钮 = useRef<HTMLButtonElement>(null);
   const 设置窗口元素 = useRef<HTMLElement>(null);
+  const 视图菜单容器 = useRef<HTMLDetailsElement>(null);
   const 根目录下拉容器 = useRef<HTMLDivElement>(null);
   const 书架分类控件 = useRef<HTMLDivElement>(null);
   const 书架分类展开按钮 = useRef<HTMLButtonElement>(null);
@@ -1234,7 +1237,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     设置默认开启全景(设置.readerDefaultPanorama);
     设置默认开启沉浸(设置.readerDefaultImmersive);
     设置阅读器默认页模式(设置.readerPageMode);
-    设置双页首页单独显示(设置.doublePageFirstSingle);
     设置双页阅读方向(设置.doublePageDirection);
     设置智能识别跨页图(设置.smartDetectSpreadPage);
     设置滚轮翻页(设置.wheelPageTurn);
@@ -2798,6 +2800,30 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }, [默认侧栏浏览顺序]);
 
   useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      const menu = 视图菜单容器.current;
+      const list = (event.target as Element | null)?.closest?.('[role="listbox"]');
+      const owner = list?.getAttribute("aria-labelledby");
+      if (owner && menu?.contains(document.getElementById(owner))) return;
+      if (menu?.open && !menu.contains(event.target as Node)) menu.open = false;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      const menu = 视图菜单容器.current;
+      if (event.key === "Escape" && menu?.open) {
+        if (menu.querySelector('[role="combobox"][aria-expanded="true"]')) return;
+        event.preventDefault(); event.stopPropagation(); menu.open = false;
+        menu.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", closeOutside, true);
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside, true);
+      document.removeEventListener("keydown", closeOnEscape, true);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!根目录下拉打开) return;
 
     function 处理下拉外部点击(事件: MouseEvent): void {
@@ -3264,7 +3290,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       if (!资源信息目标) return;
       if (资源信息目标.kind === "resource") {
         if (!支持真实缩略图(资源信息目标.fileType)) return;
-        const 结果 = await window.omicomic.getThumbnail({
+        const 结果 = await getResourceThumbnail({
           path: 资源信息目标.input.sourcePath,
           type: 资源信息目标.fileType,
         });
@@ -3511,7 +3537,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 [文件.path]: { status: "loading", url: null },
               };
             });
-            const 结果 = await window.omicomic.getThumbnail({ path: 文件.path, type: 文件.type });
+            const 结果 = await getResourceThumbnail({ path: 文件.path, type: 文件.type });
             if (本次序号 !== 缩略图请求序号.current) return;
 
             设置缩略图表((原表) => {
@@ -3519,8 +3545,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               return {
                 ...原表,
                 [文件.path]: 结果.ok && 结果.data.url
-                  ? { status: "loaded", url: 结果.data.url, sourceVersion: 版本(文件) }
-                  : { status: "error", url: null, sourceVersion: 版本(文件) },
+                  ? { status: "loaded", url: 结果.data.url, itemCount: 结果.data.itemCount, sourceVersion: 版本(文件) }
+                  : { status: "error", url: null, itemCount: 结果.ok ? 结果.data.itemCount : undefined, sourceVersion: 版本(文件) },
               };
             });
           } catch {
@@ -4629,7 +4655,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     resourceKey: string,
     title: string,
     subtitle: string,
-    icon: string,
+    icon: ReturnType<typeof ResourcePlaceholder>,
     typeLabel: string,
     thumbnailUrl: string | null,
   ): void {
@@ -4690,7 +4716,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   function 开始收藏中键拖拽(
     事件: ReactMouseEvent<HTMLElement>,
     项目: FavoriteItem,
-    icon: string,
+    icon: ReturnType<typeof ResourcePlaceholder>,
     typeLabel: string,
     thumbnailUrl: string | null,
   ): void {
@@ -4723,7 +4749,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   function 开始书签中键拖拽(
     事件: ReactMouseEvent<HTMLElement>,
     项目: BookmarkItem,
-    icon: string,
+    icon: ReturnType<typeof ResourcePlaceholder>,
     typeLabel: string,
     thumbnailUrl: string | null,
   ): void {
@@ -4925,6 +4951,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       }
 
       if (当前视图 === "directory" && 当前目录 && 当前根目录) {
+        设置缩略图表({});
         await 打开目录(当前目录.path, 当前根目录, "none", false);
       }
     } catch {
@@ -7435,7 +7462,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           />
 
           <div className="view-selection-group">
-          <details className="view-options-menu">
+          <details className="view-options-menu" ref={视图菜单容器}>
             <summary title="调整缩略图和进度显示">
               <span className="view-options-icon" aria-hidden="true">▦</span>
               <span>视图</span>
@@ -7508,6 +7535,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             </div>
           )}
           </div>
+                <button
+                  type="button"
+                  className={`library-refresh-button ${正在读取 || 正在检查全局无效资源 ? "is-refreshing" : ""}`}
+                  disabled={正在读取 || 正在检查全局无效资源}
+                  onClick={() => void 处理刷新按钮()}
+                  title="刷新并检测失效资源"
+                  aria-label="刷新并检测失效资源"
+                  aria-busy={正在读取 || 正在检查全局无效资源}
+                >
+                  <svg className="navigation-refresh-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <path d="M15.6 7.5A6 6 0 1 0 16 11M15.6 3.8v3.9h-3.9" />
+                  </svg>
+                </button>
 
         </div>}
 
@@ -8558,7 +8598,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     <span className="resource-card-info">
                       <span>
                         {信息.label}
-                        {文件.type !== "folder" && ` · ${格式化大小(文件.size)}`}
+                        {文件.type === "folder" ? (缩略图.itemCount !== undefined ? ` · 含 ${缩略图.itemCount} 项目` : "") : ` · ${格式化大小(文件.size)}`}
                       </span>
                       {显示进度文本 && 进度显示状态.文本 && (
                         <span className={`resource-card-page${进度显示状态.显示胶囊 ? " is-pill" : ""}`}>
@@ -8647,19 +8687,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             )}
             {(当前视图 === "directory" || 正在显示虚拟文件夹) && (
               <div className="navigation-actions footer-navigation-actions" role="group" aria-label="目录导航">
-                <button
-                  type="button"
-                  className={正在读取 || 正在检查全局无效资源 ? "is-refreshing" : ""}
-                  disabled={正在读取 || 正在检查全局无效资源}
-                  onClick={() => void 处理刷新按钮()}
-                  title="刷新并检测失效资源"
-                  aria-label="刷新并检测失效资源"
-                  aria-busy={正在读取 || 正在检查全局无效资源}
-                >
-                  <svg className="navigation-refresh-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                    <path d="M15.6 7.5A6 6 0 1 0 16 11M15.6 3.8v3.9h-3.9" />
-                  </svg>
-                </button>
+
                 <button
                   type="button"
                   disabled={(!正在显示虚拟文件夹 && (!当前目录?.parentPath || 正在读取 || !当前根目录))}
@@ -9154,17 +9182,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   hidden={当前设置分类 !== "reader"}
                 >
                   <h3>阅读器设置</h3>
-                  <label className="settings-toggle">
-                    <input
-                      type="checkbox"
-                      checked={双页首页单独显示}
-                      onChange={(事件) => {
-                        设置双页首页单独显示(事件.target.checked);
-                        保存界面设置({ doublePageFirstSingle: 事件.target.checked });
-                      }}
-                    />
-                    <span>双页首页单独显示</span>
-                  </label>
+
                   <label className="settings-toggle">
                     <input
                       type="checkbox"

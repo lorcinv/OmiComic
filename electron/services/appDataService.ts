@@ -74,6 +74,7 @@ export interface AppSettings {
 }
 
 export interface ReaderViewState {
+  pairingAnchor?: number;
   fitMode: 阅读器缩放模式;
   pageMode: 阅读器页模式;
   pageDirection: 双页阅读方向;
@@ -261,7 +262,7 @@ const 默认设置: AppSettings = {
   readerDefaultFlow: "horizontal",
   readerDefaultPanorama: false,
   readerDefaultImmersive: false,
-  doublePageFirstSingle: true,
+  doublePageFirstSingle: false,
   doublePageDirection: "left-to-right",
   smartDetectSpreadPage: true,
   wheelPageTurn: true,
@@ -564,6 +565,8 @@ function 修正阅读视图状态(输入: unknown): ReaderViewState | undefined 
   }
 
   return {
+    ...(typeof 输入.pairingAnchor === "number" && Number.isFinite(输入.pairingAnchor)
+      ? { pairingAnchor: Math.max(0, Math.floor(输入.pairingAnchor)) } : {}),
     fitMode: 输入.fitMode as 阅读器缩放模式,
     pageMode: 输入.pageMode as 阅读器页模式,
     pageDirection: 输入.pageDirection as 双页阅读方向,

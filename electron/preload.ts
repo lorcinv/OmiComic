@@ -74,6 +74,7 @@ export interface AppSettings {
 }
 
 export interface ReaderViewState {
+  pairingAnchor?: number;
   fitMode: 阅读器缩放模式;
   pageMode: 阅读器页模式;
   pageDirection: 双页阅读方向;
@@ -295,6 +296,9 @@ export interface 缩略图输入 {
 }
 
 export interface 缩略图结果 {
+  itemCount?: number;
+  pdfPath?: string;
+  sourceVersion?: string;
   url: string | null;
 }
 
@@ -327,7 +331,7 @@ contextBridge.exposeInMainWorld("omicomic", {
   chooseExternalFiles: (): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:选择"),
   removeTemporaryOpened: (key: string): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:移除引用", key),
   promoteTemporaryOpened: (key: string): Promise<操作结果<OmiComicAppData>> => ipcRenderer.invoke("外部文件:加入资源库", key),
-  openDocument: (input: { path: string; type: "pdf" | "epub"; id: string }) => ipcRenderer.invoke("document:open", input),
+  openDocument: (input: { path: string; type: "pdf" | "epub"; id: string; purpose?: "reader" | "thumbnail" }) => ipcRenderer.invoke("document:open", input),
   readDocumentRange: (id: string, begin: number, end: number) => ipcRenderer.invoke("document:range", id, begin, end),
   readDocumentChapter: (id: string, index: number) => ipcRenderer.invoke("document:chapter", id, index),
   closeDocument: (id: string) => ipcRenderer.invoke("document:close", id),

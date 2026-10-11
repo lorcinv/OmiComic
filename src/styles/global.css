@@ -1140,7 +1140,7 @@ a,
   z-index: 30;
   display: grid;
   flex: 0 0 auto;
-  grid-template-columns: minmax(220px, 480px) max-content max-content max-content;
+  grid-template-columns: minmax(120px, 480px) max-content max-content max-content max-content;
   grid-template-rows: 34px;
   align-items: center;
   justify-content: start;
@@ -1357,6 +1357,8 @@ a,
   grid-column: 4;
   grid-row: 1;
 }
+
+.library-controls > .library-refresh-button { grid-column: 5; grid-row: 1; }
 
 .tag-filter-button.is-active {
   border-color: var(--强调色);
@@ -5547,61 +5549,37 @@ a,
   transform: translate(50%, -50%);
 }
 
+/* Revealed only after an attempted turn beyond the first/last page. */
 .reader-book-switch {
-  position: absolute;
-  z-index: 9;
-  top: 50%;
-  display: flex;
-  width: 36px;
-  height: 58px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid light-dark(rgba(145, 154, 166, 0.34), color-mix(in srgb, var(--控件边框) 34%, transparent));
-  border-radius: 10px;
-  background: rgba(255, 255, 255, var(--book-switch-opacity, 0.74));
-  box-shadow: 0 10px 24px rgba(58, 65, 75, 0.12);
-  color: light-dark(#596574, var(--次文字));
-  font-size: 34px;
-  line-height: 1;
-  padding: 0;
-  transform: translateY(-50%);
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  position: absolute; z-index: 9; top: 50%; display: grid; place-items: center;
+  width: 48px; height: 72px; padding: 8px; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; transform: translateY(-50%);
+  color: light-dark(#526b8c, #c8d6e7); opacity: max(.45, var(--book-switch-opacity, .7));
+  filter: drop-shadow(0 1px 3px #0008); transition: opacity 120ms ease;
 }
-
-.reader-book-switch svg {
-  display: block;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-  transform-origin: center;
+.reader-book-switch svg { width: 28px; height: 40px; fill: currentColor; stroke: none; }
+.reader-book-switch:hover, .reader-book-switch:focus-visible { opacity: 1; background: transparent; }
+.reader-book-switch-left { left: 8px; }
+.reader-book-switch-right { right: 8px; }
+.resource-placeholder-icon { display: block; width: 64px; height: 64px; opacity: .68; }
+.omi-home__cover-placeholder > .resource-placeholder-icon { width: 40%; height: auto; margin: auto; }
+.library-refresh-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border: 1px solid var(--控件边框);
+  border-radius: 9px;
+  background: var(--控件背景);
+  color: var(--主文字);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
-
-.reader-book-switch:hover {
-  border-color: light-dark(rgba(111, 122, 136, 0.48), color-mix(in srgb, var(--控件边框) 48%, transparent));
-  background: rgba(255, 255, 255, min(calc(var(--book-switch-opacity, 0.74) + 0.16), 0.98));
-  transform: translateY(-50%) scale(1.04);
-}
-
-.reader-book-switch-previous {
-  left: 18px;
-}
-
-.reader-book-switch-next {
-  right: 18px;
-}
-
-.reader-layout.is-immersive .reader-book-switch-previous {
-  left: 14px;
-}
-
-.reader-layout.is-immersive .reader-book-switch-next {
-  right: 14px;
-}
+.library-refresh-button:hover:not(:disabled) { border-color: var(--强调色); }
+.library-refresh-button:focus-visible { outline: 2px solid var(--强调色); outline-offset: 2px; }
+.library-refresh-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 
 .reader-image {
   display: block;

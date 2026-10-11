@@ -6,7 +6,7 @@
 
 Windows 与 Android 本地漫画、图片与电子书阅读器。
 
-![Version](https://img.shields.io/badge/version-1.0.1-708090)
+![Version](https://img.shields.io/badge/Windows-1.0.2-708090)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64_%7C_Android-5f7184)
 
 [使用方法](README_使用方法.md) · [Android 说明](docs/ANDROID.md) · [版本更新](CHANGELOG.md)
@@ -15,7 +15,7 @@ Windows 与 Android 本地漫画、图片与电子书阅读器。
 
 ## 安装
 
-从 [GitHub 1.0.1 下载页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1) 获取 Windows 安装包 **OmiComic-Setup-1.0.1-x64.exe** 或手机安装包 **OmiComic-1.0.1-android.apk**。本地构建输出在 `release/`。
+Windows 安装包：[OmiComic-Setup-1.0.2-x64.exe](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.2)。Android 安装包：[OmiComic-1.0.1-android.apk](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。本地构建输出在 `release/`。
 
 - 安装到当前用户，创建桌面和开始菜单快捷方式。
 - Windows“已安装的应用”可识别名称、版本、图标和卸载入口。
@@ -35,6 +35,8 @@ Windows 与 Android 本地漫画、图片与电子书阅读器。
 - **详情预览**：封面、续读、标签、简介和每组最多 48 页的按需缩略图；下滚先折叠详情，上滚到顶后略加滚动展开。
 - **统一阅读窗口**：图片、压缩包、PDF 和 EPUB 共用工具栏、阅读方向、全景滚动、适应尺寸、进度跳转及书签。
 - **阅读手感**：单页/双页、横向/纵向全景、加速拖动与惯性、跳转动画、沉浸全屏、预加载和缓存设置。
+- **双页配对**：从进入页开始配对；封面默认 1+2，从第 6 页切换为 6+7、8+9，横跨页独立显示。最后一组包含尾页即记为读完；越过首尾翻页后才显示切换相邻书籍的三角按钮。
+- **封面**：合集文件夹借用首个可读子资源封面并显示项目数；Windows PDF 使用第一页、EPUB 提取封面图；无封面时使用格式图标。
 - **主题**：经典雾灰、北境雾蓝、暖砂、暮夜灰；控件保持统一圆角与仿玻璃外观。
 
 ## 格式支持
@@ -47,7 +49,7 @@ Windows 与 Android 本地漫画、图片与电子书阅读器。
 | PDF | 本地 PDF.js worker、分段读取、按页渲染 |
 | EPUB | 后台按章解析，净化文本与位图后隔离显示 |
 
-PDF/EPUB 共用阅读窗口；EPUB 以完整章节为阅读单元，进度和书签按章节记录。文档封面及详情缩略图仍使用格式占位。EPUB 不保留出版方完整样式、SVG、远程或交互内容，不支持 DRM；密码保护及多卷归档不支持。
+PDF/EPUB 共用阅读窗口；EPUB 以完整章节为阅读单元，进度和书签按章节记录。Windows 支持 PDF/EPUB 封面，详情中的逐页预览仍使用格式图标。EPUB 不保留出版方完整样式、SVG、远程或交互内容，不支持 DRM；密码保护及多卷归档不支持。
 
 ## 数据
 

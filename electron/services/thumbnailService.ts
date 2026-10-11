@@ -3,6 +3,7 @@ import { safeRasterImage } from "./documentImageSafety";
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
+import { EPUBDocumentSource } from "./epubService";
 import {
   读取压缩包单张图片,
   读取压缩包图片列表,
@@ -29,6 +30,9 @@ export interface 缩略图输入 {
 
 export interface 缩略图结果 {
   url: string | null;
+  itemCount?: number;
+  pdfPath?: string;
+  sourceVersion?: string;
 }
 
 export type 缩略图错误代码 =
@@ -457,9 +461,11 @@ export async function 获取图片缩略图(图片路径: string): Promise<缩�
   }
 }
 
-export async function 获取文件夹封面缩略图(文件夹路径: string): Promise<缩略图结果> {
+export async function 获取文件夹封面缩略图(文件夹路径: string, budget = { remaining: 32, deadline: Date.now() + 5000 }, depth = 0): Promise<缩略图结果> {
   try {
+    if (depth > 6 || budget.remaining-- <= 0 || Date.now() > budget.deadline) return { url: null };
     const 目录项 = await 文件系统.readdir(文件夹路径, { withFileTypes: true });
+    const itemCount = 目录项.length;
     const 图片列表 = 目录项
       .filter((项目) => 项目.isFile() && 是支持的图片(项目.name))
       .map((项目) => ({ name: 项目.name, path: path.join(文件夹路径, 项目.name) }))
@@ -476,7 +482,7 @@ export async function 获取文件夹封面缩略图(文件夹路径: string): P
           continue;
         }
         const url = await 读取图片为DataUrl(封面.path, 封面.name);
-        if (url) return { url };
+        if (url) return { url, itemCount };
       } catch {
         continue;
       }
@@ -484,12 +490,24 @@ export async function 获取文件夹封面缩略图(文件夹路径: string): P
     for (const 封面 of 备用候选列表.slice(0, 缩略图候选最大数量)) {
       try {
         const url = await 读取图片为DataUrl(封面.path, 封面.name);
-        if (url) return { url };
+        if (url) return { url, itemCount };
       } catch {
         continue;
       }
     }
-    return { url: null };
+    // A collection directory borrows its first readable child's cover. Do not
+    // follow symlinks/junctions out of the selected directory or scan an entire tree.
+    const children = 目录项.filter(item => !item.isSymbolicLink() && (item.isDirectory() || 是支持的压缩包(item.name) || /\.(pdf|epub)$/i.test(item.name)))
+      .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || 自然排序器.compare(a.name, b.name));
+    for (const child of children) {
+      if (budget.remaining <= 0 || Date.now() > budget.deadline) break;
+      const filePath = path.join(文件夹路径, child.name);
+      const cover = child.isDirectory()
+        ? await 获取文件夹封面缩略图(filePath, budget, depth + 1)
+        : (budget.remaining--, await 获取缩略图({ path: filePath, type: path.extname(child.name).toLowerCase() === ".pdf" ? "pdf" : path.extname(child.name).toLowerCase() === ".epub" ? "epub" : "archive" }));
+      if (cover.url || cover.pdfPath) return { ...cover, itemCount };
+    }
+    return { url: null, itemCount };
   } catch {
     return { url: null };
   }
@@ -523,7 +541,27 @@ export async function 获取压缩包封面缩略图(压缩包路径: string): P
 
 export async function 获取缩略图(输入: 缩略图输入): Promise<缩略图结果> {
   if (输入.type === "image") return 使用缩略图缓存(`image:${输入.path}`, 输入.path, () => 获取图片缩略图(输入.path));
-  if (输入.type === "folder") return 使用缩略图缓存(`folder:${输入.path}`, 输入.path, () => 获取文件夹封面缩略图(输入.path));
+  if (输入.type === "folder") return 获取文件夹封面缩略图(输入.path);
   if (输入.type === "archive") return 使用缩略图缓存(`archive:${输入.path}`, 输入.path, () => 获取压缩包封面缩略图(输入.path));
+  if (输入.type === "pdf") return { url: null, pdfPath: 输入.path, sourceVersion: await 获取路径签名(输入.path) };
+  if (输入.type === "epub") return 使用缩略图缓存(`epub:${输入.path}`, 输入.path, () => 读取EPUB封面(输入.path));
   return { url: null };
+}
+
+let 活动封面任务 = 0;
+const 等待封面任务: Array<() => void> = [];
+async function 读取EPUB封面(filePath: string): Promise<缩略图结果> {
+  if (活动封面任务 >= 2) await new Promise<void>(resolve => 等待封面任务.push(resolve));
+  else 活动封面任务++;
+  let source: EPUBDocumentSource | undefined;
+  try {
+    source = new EPUBDocumentSource(filePath);
+    const result = await source.request<{ bytes: Uint8Array; name: string } | null>("cover");
+    return { url: result ? 图片数据转缩略图DataUrl(Buffer.from(result.bytes), result.name) : null };
+  } catch { return { url: null }; }
+  finally {
+    await source?.close();
+    const next = 等待封面任务.shift();
+    if (next) next(); else 活动封面任务--;
+  }
 }

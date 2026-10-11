@@ -5,7 +5,7 @@ import { PDFDocumentSource } from "./pdfService";
 import { EPUBDocumentSource, type EPUBChapter } from "./epubService";
 
 type Source = PDFDocumentSource | EPUBDocumentSource;
-interface Session { owner: number; closed: boolean; source?: Source; cleanup?: () => void }
+interface Session { owner: number; purpose: "reader" | "thumbnail"; closed: boolean; source?: Source; cleanup?: () => void }
 const sessions = new Map<string, Session>();
 const closedRequests = new Map<string, number>();
 function key(event: IpcMainInvokeEvent, id: unknown) {
@@ -26,8 +26,13 @@ export function registerDocumentIpc(findRoot: (filePath: string) => string | nul
     for (const [old, time] of closedRequests) if (time < Date.now() - 60000) closedRequests.delete(old);
     if (closedRequests.has(id)) throw new Error("文档会话已取消。");
     if (sessions.has(id)) throw new Error("文档会话已存在。");
-    for (const [oldId, session] of sessions) if (session.owner === event.sender.id) { sessions.delete(oldId); void close(session).catch(() => undefined); }
-    const session: Session = { owner: event.sender.id, closed: false };
+    const purpose = "purpose" in input && input.purpose === "thumbnail" ? "thumbnail" : "reader";
+    const owned = [...sessions.values()].filter(session => session.owner === event.sender.id && !session.closed);
+    if (purpose === "thumbnail" && (owned.some(session => session.purpose === "reader") || owned.length >= 2)) throw new Error("正在阅读，请稍后生成封面。");
+    // A cover must never close the active book. Opening a book cancels background
+    // cover sessions immediately, keeping foreground reads independent.
+    if (purpose === "reader") for (const [oldId, session] of sessions) if (session.owner === event.sender.id) { sessions.delete(oldId); void close(session).catch(() => undefined); }
+    const session: Session = { owner: event.sender.id, purpose, closed: false };
     sessions.set(id, session);
     const onDestroyed = () => { sessions.delete(id); void close(session); };
     event.sender.once("destroyed", onDestroyed);

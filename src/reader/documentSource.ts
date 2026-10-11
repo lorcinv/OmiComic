@@ -24,7 +24,7 @@ export class DocumentSource {
   private closed = false;
   private failure?: Error;
 
-  constructor(private readonly resource: 阅读资源结果) {}
+  constructor(private readonly resource: 阅读资源结果, private readonly purpose: "reader" | "thumbnail" = "reader") {}
 
   private assertOpen() {
     if (this.failure) throw this.failure;
@@ -34,7 +34,7 @@ export class DocumentSource {
   async open(): Promise<阅读资源结果> {
     const type = this.resource.sourceType;
     if (type !== "pdf" && type !== "epub") throw new Error("文档格式无效。");
-    const opened = await window.omicomic.openDocument({ path: this.resource.sourcePath, type, id: this.id });
+    const opened = await window.omicomic.openDocument({ path: this.resource.sourcePath, type, id: this.id, purpose: this.purpose });
     this.assertOpen();
     if (!opened.ok) throw new Error(opened.error.message);
     let chapters = opened.data.chapters;
@@ -105,7 +105,7 @@ export class DocumentSource {
       signal.throwIfAborted();
       this.assertOpen();
       const native = page.getViewport({ scale: 1 });
-      const scale = Math.min(
+      const scale = this.purpose === "thumbnail" ? Math.min(1, 360 / Math.max(native.width, native.height)) : Math.min(
         Math.max(1.5, Math.max(innerWidth, innerHeight) * Math.min(devicePixelRatio || 1, 2) / Math.max(native.width, native.height)),
         Math.sqrt(16_000_000 / (native.width * native.height)), 4096 / Math.max(native.width, native.height),
       );

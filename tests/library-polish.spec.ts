@@ -204,7 +204,7 @@ test('grouped directory navigation preserves history, parent navigation and refr
   await up.click();
   await expect(page.locator('.resource-card')).toHaveCount(10);
   await page.evaluate(() => { (window as any).__holdDirectory = true; });
-  const refresh = navigation.getByRole('button', { name: '刷新并检测失效资源' });
+  const refresh = page.locator('.library-controls').getByRole('button', { name: '刷新并检测失效资源' });
   await refresh.click();
   await expect(refresh).toBeDisabled();
   await expect(refresh).toHaveAttribute('aria-busy', 'true');

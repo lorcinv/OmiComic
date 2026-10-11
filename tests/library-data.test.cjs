@@ -254,6 +254,11 @@ test('progress preserves first-read and view state; recent removal persists unti
   assert.equal(data.recentOpened[0].currentPageIndex, 3);
   assert.deepEqual(data.removedRecentResourceKeys, []);
   assert.deepEqual(data.readingProgress[item.resourceKey].readerViewState, view);
+  const anchoredView = { ...view, pairingAnchor: 5 };
+  await reloaded.保存阅读进度({ ...progress(item, 9), readerViewState: anchoredView });
+  const restored = await f.load().获取阅读进度(item.resourceKey);
+  assert.equal(restored.currentPageIndex, 9);
+  assert.deepEqual(restored.readerViewState, anchoredView);
 });
 
 test('bookshelf, virtual folder and item ordering survives reload and scoped deletion', async t => {

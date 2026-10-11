@@ -1,3 +1,5 @@
+import { getResourceThumbnail } from "../reader/thumbnailClient";
+import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useRef, useState } from "react";
 import type { RecentOpenedItem, 阅读资源结果, 阅读打开上下文 } from "../types";
 import type { OmiBrandOriginGetter } from "../OmiBrandIcon";
@@ -53,7 +55,7 @@ export default function HomePage({ onBrowse, onOpenReader, refreshToken }: HomeP
         setLoading(false);
         await Promise.all(recent.map(async item => {
           try {
-            const thumbnail = await window.omicomic.getThumbnail({ path: item.sourcePath, type: item.sourceType });
+            const thumbnail = await getResourceThumbnail({ path: item.sourcePath, type: item.sourceType });
             if (generation.current !== current || !thumbnail.ok) return;
             setBooks(items => items.map(book => book.resourceKey === item.resourceKey ? { ...book, thumbnail: thumbnail.data.url } : book));
           } catch { /* A missing cover never prevents opening a book. */ }
@@ -125,7 +127,7 @@ export default function HomePage({ onBrowse, onOpenReader, refreshToken }: HomeP
                   const percent = progress > 0 && progress < 1 ? "<1" : Math.round(progress);
                   return <button type="button" key={book.resourceKey} className="omi-home__book" onClick={() => void resume(book)} disabled={opening !== null} aria-label={`继续阅读 ${book.title}${total ? `，第 ${page} ${unit}，共 ${total} ${unit}` : ""}`} aria-busy={opening === book.resourceKey}>
                     <div className={`omi-home__cover omi-home__cover--${index + 1}`}>
-                      {book.thumbnail ? <img src={book.thumbnail} alt="" onError={() => setBooks(items => items.map(item => item.resourceKey === book.resourceKey ? { ...item, thumbnail: null } : item))} /> : <div className="omi-home__cover-placeholder" aria-hidden="true"><span>OMI<br />COMIC</span><svg viewBox="0 0 80 80" fill="none"><path d="M15 18c11-3 18-1 25 5 7-6 14-8 25-5v43c-11-3-18-1-25 5-7-6-14-8-25-5V18Zm25 5v43" stroke="currentColor" strokeWidth="1.2" /></svg><small>YOUR NEXT CHAPTER</small></div>}
+                      {book.thumbnail ? <img src={book.thumbnail} alt="" onError={() => setBooks(items => items.map(item => item.resourceKey === book.resourceKey ? { ...item, thumbnail: null } : item))} /> : <div className="omi-home__cover-placeholder" aria-hidden="true"><ResourcePlaceholder type={book.sourceType} /></div>}
                       <span className="omi-home__cover-action">{opening === book.resourceKey ? "正在打开…" : "继续阅读"}<Arrow /></span>
                     </div>
                     <span className="omi-home__progress-track" aria-hidden="true"><span style={{ width: `${progress}%`, minWidth: progress > 0 ? 2 : 0 }} /></span>

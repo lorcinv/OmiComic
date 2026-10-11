@@ -25,12 +25,12 @@ export class EPUBDocumentSource {
     for (const task of this.pending.values()) { clearTimeout(task.timer); task.reject(error); }
     this.pending.clear();
   }
-  request<T>(method: "index" | "chapter", index?: number): Promise<T> {
+  request<T>(method: "index" | "chapter" | "cover", index?: number): Promise<T> {
     if (this.closed) return Promise.reject(new Error("EPUB 已关闭。"));
     if (this.pending.size >= 2) return Promise.reject(new Error("请等待当前章节加载完成。"));
     return new Promise<T>((resolve, reject) => {
       const id = ++this.counter;
-      const timer = setTimeout(() => { this.fail(new Error("EPUB 解析超时，文件可能已损坏。")); void this.worker.terminate(); }, 30000);
+      const timer = setTimeout(() => { this.fail(new Error("EPUB 解析超时，文件可能已损坏。")); void this.worker.terminate(); }, method === "cover" ? 5000 : 30000);
       this.pending.set(id, { resolve, reject, timer });
       this.worker.postMessage({ id, method, index });
     });

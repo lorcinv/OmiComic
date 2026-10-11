@@ -97,7 +97,27 @@ async function createBook(filePath: string) {
       if (Buffer.byteLength(content, "utf8") > MAX_SERIALIZED_CHAPTER - DOCUMENT_WRAPPER_RESERVE) throw new Error("EPUB 章节序列化内容超过安全上限。");
       return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>body{max-width:850px;margin:32px auto;padding:0 24px;background:#fff;color:#202124;line-height:1.8;font:18px/1.8 system-ui}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body>${content}</body></html>`;
     }
-    return { chapters: chapters.map(({ name, index }) => ({ name, index })), chapter };
+    async function cover(): Promise<{ bytes: Uint8Array; name: string } | null> {
+      const coverId = list<any>(opf?.metadata?.meta).find(item => item.name === "cover")?.content;
+      const images = [...manifest.values()].filter(item => /^image\/(jpeg|png|gif|webp)$/.test(item["media-type"]));
+      const candidates: string[] = [];
+      for (const item of images.filter(item => String(item.properties || "").split(/\s+/).includes("cover-image"))) candidates.push(resolveEpubPath(opfPath, item.href));
+      const legacy = manifest.get(String(coverId));
+      if (legacy && images.includes(legacy)) candidates.push(resolveEpubPath(opfPath, legacy.href));
+      for (const item of images.filter(item => /cover|front/i.test(String(item.id) + " " + item.href))) candidates.push(resolveEpubPath(opfPath, item.href));
+      if (!candidates.length && chapters[0]) {
+        const html = (await read(chapters[0].path, 4 * 1024 * 1024)).toString("utf8");
+        for (const match of html.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)) {
+          try { candidates.push(resolveEpubPath(chapters[0].path, match[1].replace(/&amp;/g, "&"))); } catch { /* Unsupported external image. */ }
+          if (candidates.length >= 8) break;
+        }
+      }
+      for (const name of [...new Set(candidates)].slice(0, 8)) {
+        try { const bytes = await read(name, 8 * 1024 * 1024); if (safeRasterImage(bytes)) return { bytes, name }; } catch { /* Try the next declared cover. */ }
+      }
+      return null;
+    }
+    return { chapters: chapters.map(({ name, index }) => ({ name, index })), chapter, cover };
   } catch (error) { zip.close(); throw error; }
 }
 if (parentPort) {
@@ -107,7 +127,7 @@ if (parentPort) {
   let queue = Promise.resolve();
   parentPort.on("message", ({ id, method, index }) => {
     queue = queue.then(async () => {
-      try { const source = await book; const data = method === "index" ? source.chapters : await source.chapter(index); parentPort!.postMessage({ id, data }); }
+      try { const source = await book; const data = method === "index" ? source.chapters : method === "cover" ? await source.cover() : await source.chapter(index); parentPort!.postMessage({ id, data }); }
       catch (error) { parentPort!.postMessage({ id, error: error instanceof Error ? error.message : "EPUB 读取失败。" }); }
     });
   });

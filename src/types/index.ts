@@ -70,6 +70,7 @@ export interface AppSettings {
 }
 
 export interface ReaderViewState {
+  pairingAnchor?: number;
   fitMode: 阅读器缩放模式;
   pageMode: 阅读器页模式;
   pageDirection: 双页阅读方向;
@@ -311,6 +312,9 @@ export interface 缩略图输入 {
 }
 
 export interface 缩略图结果 {
+  itemCount?: number;
+  pdfPath?: string;
+  sourceVersion?: string;
   url: string | null;
 }
 
@@ -344,7 +348,7 @@ export interface OmiComicApi {
   chooseExternalFiles(): Promise<操作结果<null>>;
   removeTemporaryOpened(resourceKey: string): Promise<操作结果<null>>;
   promoteTemporaryOpened(resourceKey: string): Promise<操作结果<OmiComicAppData>>;
-  openDocument(input: { path: string; type: "pdf" | "epub"; id: string }): Promise<操作结果<{ size: number; chapters: { name: string; index: number }[] }>>;
+  openDocument(input: { path: string; type: "pdf" | "epub"; id: string; purpose?: "reader" | "thumbnail" }): Promise<操作结果<{ size: number; chapters: { name: string; index: number }[] }>>;
   readDocumentRange(id: string, begin: number, end: number): Promise<操作结果<Uint8Array>>;
   readDocumentChapter(id: string, index: number): Promise<操作结果<string>>;
   closeDocument(id: string): Promise<操作结果<null>>;
