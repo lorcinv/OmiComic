@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => ({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
+    // SDKs, fixtures and packaging output must not trigger full-page reloads in a running app.
+    watch: { ignored: ["**/.cache/**", "**/.packaged-app/**", "**/android/build/**", "**/dist-android/**", "**/dist-electron/**", "**/release/**", "**/test-results/**"] },
   },
   build: {
     outDir: "dist",
