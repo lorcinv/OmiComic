@@ -21,7 +21,8 @@
     "build:icons": "node scripts/build-icons.cjs",
     "package:prepare": "npm run build:icons && npm run build && node scripts/prepare-package.cjs",
     "package:dir": "npm run package:prepare && electron-builder --dir --win --x64 --publish never",
-    "dist:win": "npm run package:prepare && electron-builder --win nsis --x64 --publish never"
+    "dist:win": "npm run package:prepare && electron-builder --win nsis --x64 --publish never",
+    "dist:portable": "npm run package:prepare && electron-builder --config electron-builder.portable.json --win zip --x64 --publish never"
   },
   "dependencies": {
     "7zip-bin-full": "26.4.1",

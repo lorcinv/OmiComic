@@ -12,6 +12,14 @@
 
 源码用户应先 `npm run build` 再 `npm start`；只更新源码不会改变已经生成的程序。安装版使用安装目录中的程序，开发用的 `OmiComic.cmd` 使用当前项目的构建文件。
 
+## Windows 免安装版
+
+下载 [OmiComic-Portable-1.0.2-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.0.2/OmiComic-Portable-1.0.2-x64.zip)，完整解压后双击 `OmiComic.exe`。不能在 ZIP 中直接运行，也不要单独移动 EXE；同目录的 DLL、`resources`、`locales` 都需要保留。
+
+免安装版无需 Node.js，不运行安装向导、不创建快捷方式、不注册文件关联。更新时关闭程序，将新版解压到新文件夹即可；移除时删除解压目录。
+
+阅读数据保存在本机 `%APPDATA%\OmiComic\omicomic-data.json`，与安装版、开发版共用，因此重新安装或换成免安装版后会继续显示旧记录。发行 ZIP 不含任何用户的漫画、收藏或阅读记录，应用不提供云同步；复制程序目录到别的电脑不会自动带走记录。删除程序目录不会删除漫画原文件或本地记录。
+
 ## 首页与资源库
 
 - 首页显示最近三本及页数/章节进度，点击卡片继续阅读。

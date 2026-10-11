@@ -39,3 +39,17 @@
 Windows 按用户既有选择保持未签名，安装包 Authenticode 状态已检查。对应 7-Zip 源码随发布附件提供。
 
 下载：[Windows 1.0.2](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.2)；[Android 1.0.1](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。源码线上完整回归见 GitHub 的 Verify reader and library 工作流。
+
+## 免安装 ZIP 补充验证
+
+2026-10-11 增加 Windows x64 ZIP，程序内容与已发布的 1.0.2 安装版一致。`npm run dist:portable` 显式选择 ZIP 目标，随包附上中文使用说明。原有安装器及 v1.0.2 标签保留。
+
+`node --test tests/portable.electron.cjs` 已通过：检查 ZIP 完整性及 37 个归档项，在含中文的临时目录实际解压，并运行该目录中的 EXE。PNG、CBZ、CB7、PDF、EPUB 打开、翻页、返回、进度持久化及既有文件管理回归均通过。测试确认实际运行路径来自本次解压目录，并使用独立临时数据，不接触用户的阅读记录。
+
+ZIP 与内层 ASAR 均未包含用户数据、测试数据目录或签名私钥；ZIP 没有卸载程序。阅读数据继续保存在本机 `%APPDATA%\OmiComic\omicomic-data.json`，不随程序压缩包分发。结果保存在本地 `test-results/portable-smoke.json`。
+
+| 文件 | 字节数 | SHA-256 |
+| --- | ---: | --- |
+| OmiComic-Portable-1.0.2-x64.zip | 140295591 | `5bc4522d5b2fc813cfc5290e5ebb4dbed037ad0e9e1cecb2f0d24760c844cc21` |
+
+免安装 ZIP 作为 v1.0.2 的新增附件提供，同名 `.zip.sha256` 文件用于独立校验。

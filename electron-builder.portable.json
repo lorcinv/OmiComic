@@ -1,0 +1,10 @@
+{
+  "extends": "./electron-builder.json",
+  "win": {
+    "target": [{ "target": "zip", "arch": ["x64"] }],
+    "artifactName": "OmiComic-Portable-${version}-${arch}.${ext}"
+  },
+  "extraFiles": [
+    { "from": "resources/portable-readme.txt", "to": "使用说明.txt" }
+  ]
+}

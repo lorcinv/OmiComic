@@ -17,6 +17,10 @@ Windows 与 Android 本地漫画、图片与电子书阅读器。
 
 Windows 安装包：[OmiComic-Setup-1.0.2-x64.exe](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.2)。Android 安装包：[OmiComic-1.0.1-android.apk](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。本地构建输出在 `release/`。
 
+Windows 免安装版：[OmiComic-Portable-1.0.2-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.0.2/OmiComic-Portable-1.0.2-x64.zip)。完整解压后双击 `OmiComic.exe`，保留同目录的 DLL、`resources` 和 `locales` 文件夹；无需 Node.js 或安装向导，不创建快捷方式或文件关联。
+
+免安装版和安装版均将记录保存在本机 `%APPDATA%\OmiComic\omicomic-data.json`，在同一台电脑上运行会沿用旧记录。发行包不包含用户漫画与阅读记录；复制程序文件夹不会自动迁移这些记录。免安装版仍未签名，首次运行也可能出现 Windows 安全提示。
+
 - 安装到当前用户，创建桌面和开始菜单快捷方式。
 - Windows“已安装的应用”可识别名称、版本、图标和卸载入口。
 - 在文件的“打开方式”中选择 OmiComic；安装不会更改已有默认程序。
@@ -75,12 +79,14 @@ Android 构建另需 JDK 17+、Android platform 35 和 build-tools 35.0.0，见 
 | `npm run build` | 类型检查、渲染进程和 Electron 构建 |
 | `npm start` | 启动已构建的应用；源码更新后应先重新构建 |
 | `npm run dist:win` | 生成图标、构建并输出 x64 EXE 安装包到 `release/` |
+| `npm run dist:portable` | 输出解压即用的 Windows x64 ZIP 免安装版 |
 | `npm run dist:android` | 构建手机界面、原生文件桥并签名输出 APK 到 `release/` |
 | `npm run package:dir` | 生成可直接运行的 `release/win-unpacked/OmiComic.exe` |
 | `npm test` | 文件服务、数据、归档、文档与阅读算法测试 |
 | `npm run test:dom` | React 状态与交互回归 |
 | `npm run test:ui` | 浏览器布局、阅读和交互回归 |
 | `node --test tests/packaged.electron.cjs` | 实际打包 EXE 的多格式阅读与持久化验证 |
+| `node --test tests/portable.electron.cjs` | 检查发行 ZIP、排除用户数据，并从实际解压目录运行多格式验证 |
 
 打包保留当前架构的 7-Zip、必要语言和依赖，将 EPUB worker 放到 ASAR 外；不会把源码、测试、开发工具或完整 `node_modules` 放进安装包。图标源文件为 [resources/icon.svg](resources/icon.svg)。
 
