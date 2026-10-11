@@ -25,7 +25,7 @@ test('real document panorama latency and scroll responsiveness', { timeout: 9000
   await input.fill('13'); await input.press('Enter');
   await expect(page.locator('[data-reader-page-index="12"]').locator('img, canvas, .reader-chapter')).toBeVisible();
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
-  await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);
+  await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
   await page.locator('.reader-stage').hover();
   await page.evaluate(() => {
     window.__perf = { gaps: [], encodedMs: 0, encodes: 0, running: true, mismatch: 0, samples: 0 };

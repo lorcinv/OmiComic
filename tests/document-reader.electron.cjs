@@ -150,7 +150,7 @@ test('PDF and EPUB share the real reader, persist modes/bookmarks and leave sour
   await epubCard.dblclick();
   await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('2');
   await expect(page.locator('.reader-toolbar')).toHaveCount(1);
-  await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);
+  await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
   await page.getByRole('button', { name: '返回', exact: true }).click();
   const epubRecord = Object.values(data.readingProgress).find(p => p.sourceType === 'epub');
   await page.evaluate(async record => { await window.omicomic.addFavorite(record); }, epubRecord);
@@ -167,7 +167,7 @@ test('PDF and EPUB share the real reader, persist modes/bookmarks and leave sour
   page = await launch(epubPath);
   await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('2');
   await expect(page.locator('.reader-layout')).toHaveClass(/is-flow-vertical/);
-  await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);
+  await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
   await expect(page.getByRole('button', { name: '取消当前章书签', exact: true })).toBeVisible();
   await expect(page.locator('[data-reader-page-index="1"] .reader-chapter')).toBeVisible();
   assert.deepEqual(await fs.readFile(pdfPath), pdfBytes);

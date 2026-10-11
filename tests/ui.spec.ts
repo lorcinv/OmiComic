@@ -72,7 +72,7 @@ test('real PDF worker renders, changes page and releases its session',async({pag
  await page.getByRole('button',{name:'适应宽度',exact:true}).click();
  await expect(page.locator('.reader-stage')).toHaveClass(/zoom-stage-fit-width/);
  await page.getByRole('button',{name:'开启全景连环画',exact:true}).click();
- await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);
+ await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
  const jump=page.getByRole('textbox',{name:'跳转到页码'});await jump.fill('3');await jump.press('Enter');
  await expect(page.locator('[data-reader-page-index="2"]')).toHaveClass(/is-current-page/);
  await expect.poll(()=>page.evaluate(()=>(window as any).__saved.some((p:any)=>p.sourceType==='pdf'&&p.readerViewState?.panorama&&p.readerViewState.fitMode==='fit-width'))).toBe(true);

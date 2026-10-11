@@ -72,7 +72,7 @@ test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view stat
   expect(await page.locator('.reader-chapter iframe').getAttribute('sandbox')).toBe('allow-same-origin');
   await page.getByRole('button', { name: '适应高度', exact: true }).click();
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
-  await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);
+  await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
   await jump.fill('20'); await jump.press('Enter');
   await expect(jump).toHaveValue('20');
   await expect(page.locator('[data-reader-page-index="19"]')).toHaveClass(/is-current-page/);
@@ -89,7 +89,7 @@ test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view stat
   await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).click();
   await expect(jump).toHaveValue('20');
   await expect(page.locator('.reader-layout')).toHaveClass(/is-flow-vertical/);
-  await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);
+  await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
   await expect(page.frameLocator('[data-reader-page-index="19"] iframe').getByRole('heading', { name: '章节 20', exact: true })).toBeVisible();
 });
 
