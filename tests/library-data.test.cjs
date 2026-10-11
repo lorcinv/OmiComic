@@ -41,6 +41,42 @@ function ordered(items, values, field = 'resourceKey') {
   assert.deepEqual(items.map(item => item.sortIndex), values.map((_, index) => index));
 }
 
+test('per-book sorting atomically remaps physical bookmarks, resume, pairing anchor and settings across reloads', async t => {
+  const { pageIdentity, sortReaderPages } = require('../dist-electron/shared/readerPreferences.js');
+  const f = await fixture(t), s = f.service;
+  const book = resource(f.dir, '漫画.cbz'), other = resource(f.dir, 'other.cbz');
+  const pages = [1,2,3,10].map((n,index)=>({index,name:`${n}.png`,archiveInnerPath:`pages/${n}.png`,type:'archive-image',sourcePath:book.sourcePath,modifiedAt:index%2?undefined:100}));
+  await s.保存阅读进度({...progress(book,1),totalPages:4,currentPageId:pageIdentity(pages[1]),readerViewState:{fitMode:'fit-window',pageMode:'double',pairingAnchor:1,pageDirection:'right-to-left',flow:'horizontal',panorama:false,immersive:false,adjustments:{enabled:true,gamma:1.3,sharpen:25},autoRead:{intervalSeconds:3,scrollPixelsPerSecond:100}}});
+  await s.保存阅读进度(progress(other,7));
+  await s.切换书签({...book,pageIndex:1,totalPages:4,pageName:'2.png',archiveInnerPath:'pages/2.png'});
+  for(const mode of ['name-desc','time-asc','time-desc','name-asc']) {
+    const saved = await s.切换阅读页面顺序({...book,pages,total:4},mode,pageIdentity(pages[1]));
+    const expected = sortReaderPages(pages,mode).findIndex(p=>p.name==='2.png');
+    const restored = await f.load().读取应用数据();
+    assert.equal(restored.readingProgress[book.resourceKey].currentPageIndex,expected);
+    assert.equal(restored.readingProgress[book.resourceKey].currentPageId,pageIdentity(pages[1]));
+    assert.equal(restored.readingProgress[book.resourceKey].readerViewState.pageSort,mode);
+    assert.equal(saved.readerViewState.pairingAnchor,expected);
+    assert.equal(saved.readerViewState.adjustments.gamma,1.3);
+    assert.equal(saved.readerViewState.autoRead.intervalSeconds,3);
+    assert.equal(restored.bookmarks[0].pageIndex,expected);
+    assert.equal(restored.bookmarks[0].pageId,pageIdentity(pages[1]));
+    assert.equal(await s.当前页已书签(book.resourceKey,expected,pageIdentity(pages[1])),true);
+    assert.equal(restored.readingProgress[other.resourceKey].currentPageIndex,7);
+  }
+  const before = await fs.readFile(f.dataPath,'utf8');
+  await assert.rejects(s.切换阅读页面顺序({...book,pages,total:4},'time-asc','missing-image'));
+  assert.equal(await fs.readFile(f.dataPath,'utf8'),before);
+});
+
+test('legacy document bookmarks with identical chapter titles retain distinct pages', async t => {
+  const book = resource('/legacy', 'chapters.epub', 'epub');
+  const f = await fixture(t, { bookmarks: [0,1].map(pageIndex => ({ ...book, id: `old-${pageIndex}`, pageIndex, totalPages: 2, pageName: 'Chapter' })) });
+  const data = await f.service.读取应用数据();
+  assert.deepEqual(data.bookmarks.map(b => b.pageIndex), [0,1]);
+  assert.equal(await f.service.当前页已书签(book.resourceKey, 1, 'epub-chapter:1'), true);
+});
+
 test('temporary files persist, deduplicate and retain progress when only their reference is deleted', async t => {
   const f = await fixture(t);
   const item = resource(f.dir, 'outside.cbz');
@@ -236,7 +272,7 @@ test('progress preserves first-read and view state; recent removal persists unti
   const f = await fixture(t);
   const s = f.service;
   const item = resource(f.dir, 'pages', 'folder');
-  const view = { fitMode: 'fit-width', pageMode: 'double', pageDirection: 'right-to-left', flow: 'vertical', panorama: true, immersive: true };
+  const view = { fitMode: 'fit-width', pageMode: 'double', pageDirection: 'right-to-left', flow: 'vertical', panorama: true, immersive: true, ...require('../dist-electron/shared/readerPreferences.js').normalizeReaderPreferences({}) };
   await s.保存阅读进度({ ...progress(item, 9), readerViewState: view });
   let saved = await s.保存阅读进度({ ...progress(item, 0), firstReadAt: 9999, hasStartedReading: false });
   assert.equal(saved.firstReadAt, 1000);

@@ -63,10 +63,20 @@ export async function listSevenZip(archivePath: string): Promise<ArchiveEntry[]>
       const bytes = unit === "m" ? value * 1024 * 1024 : unit === "k" ? value * 1024 : unit === "b" ? value : 2 ** value;
       if (bytes > 128 * 1024 * 1024) failLimit();
     }
+    for (const match of method.matchAll(/v\d+:m\d+:(\d+)([bkmg])?/gi)) {
+      const value = Number(match[1]);
+      const unit = match[2]?.toLowerCase();
+      const bytes = unit ? value * ({ b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3 }[unit] ?? 1) : 2 ** value;
+      if (bytes > 128 * 1024 * 1024) failLimit();
+    }
     if (fields.get("Split Before") === "+" || fields.get("Split After") === "+") throw new Error("Multipart archives are unsupported");
     if (fields.get("Encrypted") === "+") throw new 压缩包服务错误("ARCHIVE_ENCRYPTED", "暂不支持加密压缩包。");
-    if (fields.has("Symbolic Link") || fields.has("Hard Link")) throw new 压缩包服务错误("ARCHIVE_UNSAFE_ENTRY", "压缩包包含不支持的链接。");
-    if (fields.get("Folder") !== "+" && !fields.get("Attributes")?.startsWith("D") && isImage(name)) entries.push({ virtualPath: name, size });
+    // RAR5 listings include these keys with empty values for regular files.
+    if (["Symbolic Link", "Hard Link", "Copy Link"].some(key => Boolean(fields.get(key)?.trim()))) throw new 压缩包服务错误("ARCHIVE_UNSAFE_ENTRY", "压缩包包含不支持的链接。");
+    if (fields.get("Folder") !== "+" && !fields.get("Attributes")?.startsWith("D") && isImage(name)) {
+      const modifiedAt = Date.parse((fields.get("Modified") ?? "").replace(" ", "T"));
+      entries.push({ virtualPath: name, size, modifiedAt: Number.isFinite(modifiedAt) ? modifiedAt : undefined });
+    }
   }
   const stat = await fs.stat(archivePath);
   if (totalSize > 1024 * 1024 && totalSize > Math.max(stat.size, 1) * ARCHIVE_LIMITS.ratio) failLimit();
@@ -77,7 +87,9 @@ export async function readSevenZip(archivePath: string, entry: ArchiveEntry, max
   // -spd disables wildcard expansion, -- ends option parsing, absolute archive paths avoid @listfile syntax.
   // Names beginning @ cannot safely be passed as literal 7z selectors; fail closed instead.
   if (entry.virtualPath.startsWith("@")) failLimit();
-  const data = await run(["x", "-so", "-y", "-spd", "-mmt=1", "-mmemuse=256m", "-p", "--", path.resolve(archivePath), entry.virtualPath], maxBytes);
+  // RAR5 rejects 7z's MemUse decoder option. RAR dictionaries are bounded at indexing above.
+  const decoderOptions = /\.(rar|cbr)$/i.test(archivePath) ? [] : ["-mmemuse=256m"];
+  const data = await run(["x", "-so", "-y", "-spd", "-mmt=1", ...decoderOptions, "-p", "--", path.resolve(archivePath), entry.virtualPath], maxBytes);
   if (data.length !== entry.size) throw new Error("7z output size mismatch");
   return data;
 }

@@ -1,3 +1,4 @@
+import type { ReaderPreferences, PageSort } from "../../electron/shared/readerPreferences";
 export type 页面名称 = "首页" | "资源库" | "阅读器";
 
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
@@ -69,7 +70,7 @@ export interface AppSettings {
   confirmBeforeBatchDelete: 批量删除确认设置;
 }
 
-export interface ReaderViewState {
+export interface ReaderViewState extends ReaderPreferences {
   pairingAnchor?: number;
   fitMode: 阅读器缩放模式;
   pageMode: 阅读器页模式;
@@ -87,6 +88,7 @@ export interface ReadingProgress {
   currentPageIndex: number;
   totalPages: number;
   currentPageName?: string;
+  currentPageId?: string;
   percent: number;
   completed: boolean;
   hasStartedReading: boolean;
@@ -126,6 +128,7 @@ export interface BookmarkItem {
   pageIndex: number;
   totalPages: number;
   pageName?: string;
+  pageId?: string;
   archiveInnerPath?: string;
   thumbnailUrl?: string;
   note?: string;
@@ -248,6 +251,8 @@ export interface 打开资源输入 {
 }
 
 export interface 阅读页面项 {
+  pageId?: string;
+  modifiedAt?: number;
   index: number;
   name: string;
   sourcePath: string;
@@ -257,6 +262,7 @@ export interface 阅读页面项 {
 }
 
 export interface 阅读资源结果 {
+  requestedPageId?: string;
   key: string;
   resourceKey: string;
   title: string;
@@ -341,6 +347,7 @@ export type 操作结果<T> =
   | { ok: false; error: 操作错误 };
 
 export interface OmiComicApi {
+  setReaderPageSort(input: { path: string; type: 阅读资源类型; mode: PageSort; currentPageId: string }): Promise<操作结果<{ resource: 阅读资源结果; progress: ReadingProgress }>>;
   changeLocalResource(input: { path: string; action: "rename" | "trash" | "index"; name?: string }): Promise<操作结果<{ appData: OmiComicAppData; newPath: string | null }>>;
   restoreResourceIndex(): Promise<操作结果<OmiComicAppData>>;
   takeExternalOpen(): Promise<操作结果<{ resource: 阅读资源结果; initialPageIndex: number } | null>>;
@@ -408,7 +415,7 @@ export interface OmiComicApi {
   updateBookmarkMeta(id: string, input: 整理信息输入): Promise<操作结果<BookmarkItem>>;
   reorderBookmarks(orderedIds: string[]): Promise<操作结果<BookmarkItem[]>>;
   removeBookmark(id: string): Promise<操作结果<null>>;
-  isPageBookmarked(resourceKey: string, pageIndex: number): Promise<操作结果<boolean>>;
+  isPageBookmarked(resourceKey: string, pageIndex: number, pageId?: string): Promise<操作结果<boolean>>;
   selectFolder(): Promise<操作结果<string | null>>;
   listDirectory(path: string): Promise<操作结果<目录结果>>;
   getResourcePages(input: 打开资源输入): Promise<操作结果<阅读资源结果>>;

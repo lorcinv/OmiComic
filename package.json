@@ -1,6 +1,6 @@
 {
   "name": "omicomic",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "private": true,
   "description": "OmiComic Windows 与 Android 本地漫画阅读器",
   "main": "dist-electron/main.js",

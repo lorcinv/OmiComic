@@ -1,4 +1,6 @@
 import { scanDirectory, listDirectoryImages } from "./services/directoryService";
+import { normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages, type PageSort } from "./shared/readerPreferences";
+import { 切换阅读页面顺序 } from "./services/appDataService";
 import { registerDocumentIpc } from "./services/documentService";
 import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu } from "electron";
 import { promises as 文件系统 } from "node:fs";
@@ -400,7 +402,7 @@ async function 读取压缩包书签页预览(输入: 书签页预览输入, 来
   return 创建页面DataUrl(图片数据, 内部路径);
 }
 
-async function 读取阅读资源(输入: unknown): Promise<操作结果<阅读资源结果>> {
+async function 读取原始阅读资源(输入: unknown): Promise<操作结果<阅读资源结果>> {
     if (
       typeof 输入 !== "object"
       || 输入 === null
@@ -461,6 +463,7 @@ async function 读取阅读资源(输入: unknown): Promise<操作结果<阅读�
           sourcePath: 资源路径,
           virtualPath: 图片.virtualPath,
           archiveInnerPath: 图片.virtualPath,
+          modifiedAt: 图片.modifiedAt,
           type: "archive-image" as const,
         }));
 
@@ -565,7 +568,35 @@ async function 读取阅读资源(输入: unknown): Promise<操作结果<阅读�
     }
   }
 
+async function 读取阅读资源(输入: unknown, overrideSort?: PageSort): Promise<操作结果<阅读资源结果>> {
+  const result = await 读取原始阅读资源(输入);
+  if (!result.ok || result.data.sourceType === "pdf" || result.data.sourceType === "epub") return result;
+  const progress = await 获取阅读进度(result.data.resourceKey);
+  const mode = overrideSort ?? normalizePageSort(progress?.readerViewState?.pageSort);
+  if ((mode.startsWith("time") || progress?.readerViewState?.pageSort?.startsWith("time")) && result.data.sourceType !== "archive") {
+    let cursor = 0;
+    await Promise.all(Array.from({ length: Math.min(24, result.data.pages.length) }, async () => {
+      while (cursor < result.data.pages.length) {
+        const page = result.data.pages[cursor++];
+        try { page.modifiedAt = (await 文件系统.stat(page.sourcePath)).mtimeMs; } catch { /* Missing dates sort last, by stable name. */ }
+      }
+    }));
+  }
+  result.data.pages = sortReaderPages(result.data.pages, mode);
+  return result;
+}
+
 function 注册安全通道(): void {
+  ipcMain.handle("阅读:页面排序", async (_event, input: { path?: unknown; type?: unknown; mode?: unknown; currentPageId?: unknown }) => {
+    if (!input || typeof input.currentPageId !== "string" || normalizePageSort(input.mode) !== input.mode || !["folder", "image", "archive"].includes(String(input.type))) return { ok: false, error: { code: "INVALID_READER_SORT", message: "此资源不支持图片页面排序。" } };
+    try {
+      const result = await 读取阅读资源(input, input.mode as PageSort);
+      if (!result.ok) return result;
+      const progress = await 切换阅读页面顺序(result.data, input.mode as PageSort, input.currentPageId);
+      result.data.requestedPageId = progress.currentPageId;
+      return { ok: true, data: { resource: result.data, progress } };
+    } catch (error) { return { ok: false, error: { code: "READER_SORT_FAILED", message: error instanceof Error ? error.message : "页面排序未保存，请重试。" } }; }
+  });
   ipcMain.handle("资源:文件操作", async (event, input: unknown) => {
     if (event.senderFrame !== event.sender.mainFrame) return { ok: false, error: { code: "UNTRUSTED_FRAME", message: "不允许从文档内容操作文件。" } };
     try {
@@ -599,14 +630,16 @@ function 注册安全通道(): void {
       const 已有进度 = 数据.readingProgress[resource.resourceKey];
       const 起始页 = 输入.type === "image"
         ? Math.max(0, resource.pages.findIndex(页 => 页.sourcePath === 输入.path))
-        : 已有进度?.currentPageIndex ?? 0;
+        : resource.pages.length ? resolvePageIndex(resource.pages, 已有进度?.currentPageId, 已有进度?.currentPageName, 已有进度?.currentPageIndex ?? 0) : 已有进度?.currentPageIndex ?? 0;
       const initialPageIndex = Math.min(起始页, resource.total > 0 ? resource.total - 1 : Number.MAX_SAFE_INTEGER);
       await 记录临时打开({ resourceKey: resource.resourceKey, sourcePath: resource.sourcePath,
         sourceType: resource.sourceType, title: resource.title, currentPageIndex: initialPageIndex,
         totalPages: Math.max(1, resource.total), updatedAt: Date.now() });
       if (resource.total > 0) {
+        resource.requestedPageId = pageIdentity(resource.pages[initialPageIndex]);
         await 保存阅读进度({ resourceKey: resource.resourceKey, sourcePath: resource.sourcePath,
           sourceType: resource.sourceType, title: resource.title, currentPageIndex: initialPageIndex,
+          currentPageId: resource.requestedPageId,
           totalPages: resource.total, currentPageName: resource.pages[initialPageIndex]?.name,
           percent: Math.round((initialPageIndex + 1) / resource.total * 100),
           completed: initialPageIndex >= resource.total - 1, hasStartedReading: true,
@@ -1680,6 +1713,7 @@ function 注册安全通道(): void {
         pageName: "pageName" in 输入 && typeof 输入.pageName === "string"
           ? 输入.pageName
           : undefined,
+        pageId: "pageId" in 输入 && typeof 输入.pageId === "string" ? 输入.pageId : undefined,
         archiveInnerPath: "archiveInnerPath" in 输入 && typeof 输入.archiveInnerPath === "string"
           ? 输入.archiveInnerPath
           : undefined,
@@ -1752,7 +1786,7 @@ function 注册安全通道(): void {
     }
   });
 
-  ipcMain.handle("数据:当前页是否书签", async (_事件, resourceKey: unknown, pageIndex: unknown) => {
+  ipcMain.handle("数据:当前页是否书签", async (_事件, resourceKey: unknown, pageIndex: unknown, pageId: unknown) => {
     if (
       typeof resourceKey !== "string"
       || resourceKey.trim() === ""
@@ -1766,7 +1800,7 @@ function 注册安全通道(): void {
     }
 
     try {
-      return { ok: true, data: await 当前页已书签(resourceKey, pageIndex) };
+      return { ok: true, data: await 当前页已书签(resourceKey, pageIndex, typeof pageId === "string" ? pageId : undefined) };
     } catch {
       return {
         ok: false,

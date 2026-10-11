@@ -1,3 +1,5 @@
+import type { ReaderPreferences, PageSort } from "../shared/readerPreferences";
+import { normalizeReaderPreferences, normalizePageSort, sortReaderPages, pageIdentity, resolvePageIndex, bookmarkMatches, type IdentifiedPage } from "../shared/readerPreferences";
 import { app } from "electron";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { promises as 文件系统 } from "node:fs";
@@ -73,7 +75,7 @@ export interface AppSettings {
   confirmBeforeBatchDelete: 批量删除确认设置;
 }
 
-export interface ReaderViewState {
+export interface ReaderViewState extends ReaderPreferences {
   pairingAnchor?: number;
   fitMode: 阅读器缩放模式;
   pageMode: 阅读器页模式;
@@ -91,6 +93,7 @@ export interface ReadingProgress {
   currentPageIndex: number;
   totalPages: number;
   currentPageName?: string;
+  currentPageId?: string;
   percent: number;
   completed: boolean;
   hasStartedReading: boolean;
@@ -130,6 +133,7 @@ export interface BookmarkItem {
   pageIndex: number;
   totalPages: number;
   pageName?: string;
+  pageId?: string;
   archiveInnerPath?: string;
   thumbnailUrl?: string;
   note?: string;
@@ -573,6 +577,7 @@ function 修正阅读视图状态(输入: unknown): ReaderViewState | undefined 
     flow: 输入.flow as 阅读流向,
     panorama: 输入.panorama,
     immersive: 输入.immersive,
+    ...normalizeReaderPreferences(输入),
   };
 }
 
@@ -617,6 +622,7 @@ function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
       currentPageIndex,
       totalPages,
       currentPageName: 读取字符串(值.currentPageName),
+      currentPageId: 读取字符串(值.currentPageId),
       percent,
       completed,
       hasStartedReading,
@@ -769,12 +775,14 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
       Math.max(0, Math.floor(读取数字(项目.pageIndex) ?? 0)),
       Math.max(0, totalPages - 1),
     );
+    const legacyIdentity = sourceType === "pdf" || sourceType === "epub" ? pageIndex : 读取字符串(项目.archiveInnerPath) ?? 读取字符串(项目.pageName) ?? pageIndex;
+    const identityKey = `${resourceKey}:${读取字符串(项目.pageId) ?? legacyIdentity}`;
     if (
       !resourceKey
       || !sourcePath
       || !title
       || totalPages <= 0
-      || 已加入.has(`${resourceKey}:${pageIndex}`)
+      || 已加入.has(identityKey)
       || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
     ) {
       continue;
@@ -791,6 +799,7 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
       pageIndex,
       totalPages,
       pageName: 读取字符串(项目.pageName),
+      pageId: 读取字符串(项目.pageId),
       archiveInnerPath: 读取字符串(项目.archiveInnerPath),
       thumbnailUrl: 读取字符串(项目.thumbnailUrl),
       note: 读取可空文本(项目.note),
@@ -799,7 +808,7 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
       updatedAt: 读取数字(项目.updatedAt) ?? 当前时间,
       sortIndex: 读取数字(项目.sortIndex) ?? 书签列表.length,
     });
-    已加入.add(`${resourceKey}:${pageIndex}`);
+    已加入.add(identityKey);
   }
 
   return 书签列表
@@ -2070,7 +2079,7 @@ export async function 切换书签(
   const totalPages = Math.max(1, Math.floor(输入.totalPages));
   const pageIndex = Math.min(Math.max(0, Math.floor(输入.pageIndex)), totalPages - 1);
   const 已有书签 = 数据.bookmarks.find(
-    (项目) => 项目.resourceKey === 输入.resourceKey && 项目.pageIndex === pageIndex,
+    (项目) => 项目.resourceKey === 输入.resourceKey && bookmarkMatches(项目, pageIndex, 输入.pageId),
   );
 
   if (已有书签) {
@@ -2082,7 +2091,7 @@ export async function 切换书签(
   const 当前时间 = Date.now();
   const 书签: BookmarkItem = {
     ...输入,
-    id: 创建书签ID(输入.resourceKey, pageIndex),
+    id: 输入.pageId ? `${输入.resourceKey}#image:${encodeURIComponent(输入.pageId)}` : 创建书签ID(输入.resourceKey, pageIndex),
     pageIndex,
     totalPages,
     note: 输入.note ?? "",
@@ -2094,7 +2103,7 @@ export async function 切换书签(
   数据.bookmarks = [
     书签,
     ...数据.bookmarks.filter(
-      (项目) => !(项目.resourceKey === 书签.resourceKey && 项目.pageIndex === 书签.pageIndex),
+      (项目) => !(项目.resourceKey === 书签.resourceKey && bookmarkMatches(项目, pageIndex, 输入.pageId)),
     ),
   ].map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));
   await 保存应用数据(数据);
@@ -2155,8 +2164,30 @@ export async function 重排书签(orderedIds: string[]): Promise<BookmarkItem[]
   return 数据.bookmarks;
 }
 
-export async function 当前页已书签(resourceKey: string, pageIndex: number): Promise<boolean> {
+export async function 当前页已书签(resourceKey: string, pageIndex: number, pageId?: string): Promise<boolean> {
   const 数据 = await 读取应用数据();
   const 安全页码 = Math.max(0, Math.floor(pageIndex));
-  return 数据.bookmarks.some((项目) => 项目.resourceKey === resourceKey && 项目.pageIndex === 安全页码);
+  return 数据.bookmarks.some((项目) => 项目.resourceKey === resourceKey && bookmarkMatches(项目, 安全页码, pageId));
+}
+
+export async function 切换阅读页面顺序(resource: { resourceKey: string; sourcePath: string; sourceType: 阅读资源类型; title: string; pages: IdentifiedPage[]; total: number }, mode: PageSort, currentPageId: string): Promise<ReadingProgress> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 切换阅读页面顺序(resource, mode, currentPageId));
+  const data = await 读取应用数据();
+  const old = data.readingProgress[resource.resourceKey];
+  const previous = sortReaderPages(resource.pages, normalizePageSort(old?.readerViewState?.pageSort));
+  const pages = sortReaderPages(resource.pages, mode);
+  const index = pages.findIndex(page => pageIdentity(page) === currentPageId);
+  if (index < 0) throw new Error("当前图片已变化，请重新打开漫画。");
+  for (const bookmark of data.bookmarks) {
+    if (bookmark.resourceKey !== resource.resourceKey) continue;
+    const oldIndex = resolvePageIndex(previous, bookmark.pageId, bookmark.archiveInnerPath ?? bookmark.pageName, bookmark.pageIndex);
+    const identity = bookmark.pageId ?? pageIdentity(previous[oldIndex]);
+    const newIndex = pages.findIndex(page => pageIdentity(page) === identity);
+    if (newIndex >= 0) Object.assign(bookmark, { pageId: identity, pageIndex: newIndex, totalPages: pages.length, pageName: pages[newIndex].name });
+  }
+  const view = old?.readerViewState ?? { fitMode: data.settings.readerDefaultFitMode, pageMode: data.settings.readerPageMode, pageDirection: data.settings.doublePageDirection, flow: data.settings.readerDefaultFlow, panorama: false, immersive: false };
+  return 保存阅读进度({ ...old, resourceKey: resource.resourceKey, sourcePath: resource.sourcePath, sourceType: resource.sourceType, title: resource.title,
+    currentPageIndex: index, currentPageId, currentPageName: pages[index].name, totalPages: pages.length, percent: 0, completed: false, hasStartedReading: old?.hasStartedReading ?? false, firstReadAt: old?.firstReadAt ?? Date.now(), updatedAt: Date.now(),
+    readerViewState: { ...view, pageSort: mode, pairingAnchor: index, pairingAnchorId: currentPageId },
+  });
 }

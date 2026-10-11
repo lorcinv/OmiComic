@@ -50,7 +50,8 @@ async function listZip(file: string): Promise<ArchiveEntry[]> {
       if (Date.now() > deadline) failLimit();
       checkZip(entry, guard);
       if (!entry.fileName.endsWith("/") && isImage(entry.fileName)) {
-        result.push({ virtualPath: entry.fileName, size: entry.uncompressedSize });
+        const modifiedAt = entry.getLastModDate().getTime();
+        result.push({ virtualPath: entry.fileName, size: entry.uncompressedSize, modifiedAt: Number.isFinite(modifiedAt) ? modifiedAt : undefined });
         // ZIP64 offsets are already resolved; drop optional raw fields/comments so
         // malicious 64 KiB extra fields per entry cannot inflate the cache.
         entry.extraFields = [];

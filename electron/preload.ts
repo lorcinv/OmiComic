@@ -1,3 +1,4 @@
+import type { ReaderPreferences, PageSort } from "./shared/readerPreferences";
 import { contextBridge, ipcRenderer } from "electron";
 
 export interface 应用信息 {
@@ -73,7 +74,7 @@ export interface AppSettings {
   confirmBeforeBatchDelete: 批量删除确认设置;
 }
 
-export interface ReaderViewState {
+export interface ReaderViewState extends ReaderPreferences {
   pairingAnchor?: number;
   fitMode: 阅读器缩放模式;
   pageMode: 阅读器页模式;
@@ -91,6 +92,7 @@ export interface ReadingProgress {
   currentPageIndex: number;
   totalPages: number;
   currentPageName?: string;
+  currentPageId?: string;
   percent: number;
   completed: boolean;
   hasStartedReading: boolean;
@@ -130,6 +132,7 @@ export interface BookmarkItem {
   pageIndex: number;
   totalPages: number;
   pageName?: string;
+  pageId?: string;
   archiveInnerPath?: string;
   thumbnailUrl?: string;
   note?: string;
@@ -245,6 +248,8 @@ export interface 打开资源输入 {
 }
 
 export interface 阅读页面项 {
+  pageId?: string;
+  modifiedAt?: number;
   index: number;
   name: string;
   sourcePath: string;
@@ -254,6 +259,7 @@ export interface 阅读页面项 {
 }
 
 export interface 阅读资源结果 {
+  requestedPageId?: string;
   key: string;
   resourceKey: string;
   title: string;
@@ -335,6 +341,7 @@ contextBridge.exposeInMainWorld("omicomic", {
   readDocumentRange: (id: string, begin: number, end: number) => ipcRenderer.invoke("document:range", id, begin, end),
   readDocumentChapter: (id: string, index: number) => ipcRenderer.invoke("document:chapter", id, index),
   closeDocument: (id: string) => ipcRenderer.invoke("document:close", id),
+  setReaderPageSort: (input: { path: string; type: 阅读资源类型; mode: PageSort; currentPageId: string }) => ipcRenderer.invoke("阅读:页面排序", input),
   getAppInfo: (): Promise<应用信息> => ipcRenderer.invoke("应用:获取信息"),
   getAppData: (): Promise<操作结果<OmiComicAppData>> =>
     ipcRenderer.invoke("数据:获取应用数据"),
@@ -434,8 +441,8 @@ contextBridge.exposeInMainWorld("omicomic", {
     ipcRenderer.invoke("数据:重排书签", orderedIds),
   removeBookmark: (id: string): Promise<操作结果<null>> =>
     ipcRenderer.invoke("数据:移除书签", id),
-  isPageBookmarked: (resourceKey: string, pageIndex: number): Promise<操作结果<boolean>> =>
-    ipcRenderer.invoke("数据:当前页是否书签", resourceKey, pageIndex),
+  isPageBookmarked: (resourceKey: string, pageIndex: number, pageId?: string): Promise<操作结果<boolean>> =>
+    ipcRenderer.invoke("数据:当前页是否书签", resourceKey, pageIndex, pageId),
   selectFolder: (): Promise<操作结果<string | null>> =>
     ipcRenderer.invoke("目录:选择根目录"),
   listDirectory: (目标路径: string): Promise<操作结果<目录结果>> =>

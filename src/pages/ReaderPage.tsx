@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type {
   CSSProperties,
@@ -11,6 +11,10 @@ import { canPairPages, fitPage, fitSpread, fitPanorama, panoramaScrollBounds } f
 import { clampPage as 限制索引, normalizeGroup as 规范化页组主索引, groupIndices as 计算页组索引, nextGroup as 计算下一页组主索引, previousGroup as 计算上一页组主索引 } from "../reader/pageGroups";
 import ReaderChapter from "../components/ReaderChapter";
 import ReaderCanvas from "../components/ReaderCanvas";
+import ReaderTools from "../components/ReaderTools";
+import ReaderImageEffects, { GammaFilter } from "../components/ReaderImageEffects";
+import { useAutoRead } from "../reader/useAutoRead";
+import { DEFAULT_ADJUSTMENTS, DEFAULT_AUTO_READ, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
 import { useReaderDocument } from "../reader/useReaderDocument";
 import { advanceInertia, estimateReleaseVelocity, trimPrefetchBuffer, mouseDragGain, acceleratedMouseVelocity, MAX_MOTION_SPEED, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
 import type {
@@ -256,6 +260,14 @@ function ReaderPage({
   const [阅读流向, 设置阅读流向] = useState<阅读流向>("horizontal");
   const [全景模式, 设置全景模式] = useState(false);
   const [双页配对起点, 设置双页配对起点] = useState(initialPageIndex);
+  const [页面排序, 设置页面排序] = useState<PageSort>('name-asc');
+  const [画面调整, 设置画面调整] = useState({ ...DEFAULT_ADJUSTMENTS });
+  const [自动阅读设置, 设置自动阅读设置] = useState({ ...DEFAULT_AUTO_READ });
+  const [排序中, 设置排序中] = useState(false);
+  const [排序错误, 设置排序错误] = useState<string | null>(null);
+  const 阅读面板打开 = useRef(false);
+  const 排序正在提交 = useRef(false);
+  const 伽马滤镜Id = `reader-gamma-${useId().replace(/:/g, '')}`;
   const [跨本提示, 设置跨本提示] = useState<"previous" | "next" | null>(null);
   const [阅读视图已加载资源Key, 设置阅读视图已加载资源Key] = useState<string | null>(null);
   const [全景拖动中, 设置全景拖动中] = useState(false);
@@ -747,6 +759,7 @@ function ReaderPage({
       sourceType: resource.sourceType,
       title: resource.title,
       currentPageIndex: 显示进度索引,
+      currentPageId: pageIdentity(resource.pages[显示进度索引] ?? 显示阅读页面),
       totalPages: resource.total,
       currentPageName: resource.pages[显示进度索引]?.name ?? 显示阅读页面.name,
       percent,
@@ -758,6 +771,10 @@ function ReaderPage({
         fitMode: 缩放模式,
         pageMode: 阅读器设置.readerPageMode,
         pairingAnchor: 双页配对起点,
+        pairingAnchorId: resource.pages[双页配对起点] ? pageIdentity(resource.pages[双页配对起点]) : undefined,
+        pageSort: 页面排序,
+        adjustments: 画面调整,
+        autoRead: 自动阅读设置,
         pageDirection: 阅读器设置.doublePageDirection,
         flow: 阅读流向,
         panorama: 全景模式,
@@ -788,6 +805,7 @@ function ReaderPage({
       window.clearTimeout(保存进度定时器.current);
       保存进度定时器.current = null;
     }
+    if (排序正在提交.current) return;
     const 当前资源已初始化 = Boolean(
       resource
       && 阅读视图已加载资源Key引用.current === resource.resourceKey,
@@ -1139,7 +1157,7 @@ function ReaderPage({
 
   function 安排顶部栏隐藏(): void {
     清理顶部栏隐藏定时器();
-    if (!沉浸模式) return;
+    if (!沉浸模式 || 阅读面板打开.current) return;
     顶部栏隐藏定时器.current = window.setTimeout(() => {
       设置顶部栏可见(false);
       顶部栏隐藏定时器.current = null;
@@ -2634,12 +2652,15 @@ function ReaderPage({
           readerImageLoadConcurrency: 应用设置.readerImageLoadConcurrency,
           bookSwitchButtonOpacity: 应用设置.bookSwitchButtonOpacity,
         };
-        const 待恢复索引 = Math.min(
-          Math.max(initialPageIndex, 0),
-          Math.max(0, resource.total - 1),
-        );
+        const 恢复保存位置 = !resource.requestedPageId && 已保存进度?.currentPageIndex === initialPageIndex;
+        const 待恢复索引 = resolvePageIndex(resource.pages,
+          resource.requestedPageId ?? (恢复保存位置 ? 已保存进度?.currentPageId : undefined),
+          恢复保存位置 ? 已保存进度?.currentPageName : undefined, initialPageIndex);
         const 配对起点 = 已保存进度?.currentPageIndex === 待恢复索引
-          ? 限制索引(阅读视图.pairingAnchor ?? 待恢复索引, 总页数) : 待恢复索引;
+          ? resolvePageIndex(resource.pages, 阅读视图.pairingAnchorId, undefined, 阅读视图.pairingAnchor ?? 待恢复索引) : 待恢复索引;
+        设置页面排序(normalizePageSort(阅读视图.pageSort));
+        设置画面调整(normalizeAdjustments(阅读视图.adjustments));
+        设置自动阅读设置(normalizeAutoRead(阅读视图.autoRead));
         设置双页配对起点(配对起点);
         // Keep the saved page until dimensions decide whether it can pair.
         // Pre-normalizing here could discard the last page on a narrower window.
@@ -2677,6 +2698,7 @@ function ReaderPage({
   useEffect(() => {
     if (
       !resource
+      || 排序正在提交.current
       || 阅读视图已加载资源Key !== resource.resourceKey
       || 阅读视图已加载资源Key引用.current !== resource.resourceKey
     ) return;
@@ -2700,6 +2722,9 @@ function ReaderPage({
     显示阅读索引,
     显示进度索引,
     双页配对起点,
+    页面排序,
+    画面调整,
+    自动阅读设置,
     缩放模式,
     阅读器设置.readerPageMode,
     阅读器设置.doublePageDirection,
@@ -2796,7 +2821,7 @@ function ReaderPage({
     }
 
     let 已取消 = false;
-    void window.omicomic.isPageBookmarked(resource.resourceKey, 显示阅读索引)
+    void window.omicomic.isPageBookmarked(resource.resourceKey, 显示阅读索引, 显示阅读页面 ? pageIdentity(显示阅读页面) : undefined)
       .then((结果) => {
         if (已取消) return;
         if (结果.ok) {
@@ -3288,6 +3313,7 @@ function ReaderPage({
       sourceType: resource.sourceType,
       title: resource.title,
       pageIndex: 显示阅读索引,
+      pageId: pageIdentity(显示阅读页面),
       totalPages: resource.total,
       pageName: 显示阅读页面.name,
       archiveInnerPath: 显示阅读页面.archiveInnerPath,
@@ -3368,6 +3394,76 @@ function ReaderPage({
     });
   }
 
+  async function 切换页面排序(mode: PageSort): Promise<void> {
+    if (!resource || !显示阅读页面 || 排序正在提交.current || mode === 页面排序) return;
+    自动阅读.pause();
+    取消全景异步导航(true);
+    排序正在提交.current = true; 设置排序中(true); 设置排序错误(null);
+    if (保存进度定时器.current !== null) window.clearTimeout(保存进度定时器.current);
+    保存进度定时器.current = null;
+    const key = resource.resourceKey;
+    try {
+      const progress = 创建当前阅读进度();
+      if (progress) {
+        const saved = await window.omicomic.saveReadingProgress(progress);
+        if (!saved.ok) throw new Error(saved.error.message);
+      }
+      const result = await window.omicomic.setReaderPageSort({ path: resource.sourcePath, type: resource.sourceType, mode, currentPageId: pageIdentity(显示阅读页面) });
+      if (!result.ok) throw new Error(result.error.message);
+      if (资源Key引用.current !== key) return;
+      最新阅读进度快照.current = result.data.progress; 待保存进度.current = null;
+      onProgressSaved(result.data.progress); onBookmarksChanged();
+      onSwitchResource(result.data.resource, result.data.progress.currentPageIndex, openContext ?? { source: 'directory', currentKey: key, items: [] });
+    } catch (error) {
+      排序正在提交.current = false; 设置排序中(false);
+      设置排序错误(error instanceof Error ? error.message : '排序失败，请重试。');
+    }
+  }
+
+  const 自动阅读 = useAutoRead({
+    active: isActive && !阅读视图初始化中 && !排序中,
+    modeKey: `${resource?.resourceKey}:${阅读流向}:${全景模式}:${有效页模式}:${从右到左阅读}:${缩放模式}:${页面排序}`,
+    pageKey: 当前页组Key,
+    ready: 全景模式 ? Boolean(页面图片状态表[显示阅读索引]?.url && !页面图片状态表[显示阅读索引]?.loading) : 目标页组已准备,
+    failed: Boolean(文档错误 || 错误信息 || 当前页组索引.some(index => 页面图片状态表[index]?.error)),
+    continuous: 全景模式, atEnd: 当前页组包含尾页, settings: 自动阅读设置,
+    advance: 下一页,
+    displayReady: () => (全景模式 ? [显示阅读索引] : 当前页组索引).every(index => {
+      const frame = 阅读区域.current?.querySelector(`[data-reader-page-index="${index}"]`);
+      const image = frame?.querySelector<HTMLImageElement>('.reader-effects-original img');
+      return Boolean(frame && (!image || image.complete && image.naturalWidth > 0) && !frame.querySelector('[data-processing="pending"]'));
+    }),
+    scroll: pixels => {
+      if (!resource || !模式2) return 'end';
+      const next = 限制模式2偏移(全景偏移引用.current - pixels);
+      if (Math.abs(next - 全景偏移引用.current) < .01) return 'end';
+      const geometry = 模式2页面几何引用.current;
+      const center = (geometry.页面中心[安全索引引用.current] ?? 0) - next;
+      const half = (垂直阅读 ? 模式2可用高度 : 模式2可用宽度) / 2;
+      // Only enter a viewport whose intersecting pages are ready. Preloading
+      // still runs through the existing bounded reader queue and cache.
+      let ready = true;
+      for (let index = Math.max(0, 显示阅读索引 - 1); index < resource.total; index++) {
+        if (geometry.页面前缀长度[index] >= center + half) break;
+        if (geometry.页面前缀长度[index + 1] <= center - half) continue;
+        const state = 页面图片状态引用.current[index];
+        if (state?.error) return 'end';
+        const image = 阅读区域.current?.querySelector<HTMLImageElement>(`[data-reader-page-index="${index}"] .reader-effects-original img`);
+        if (!state?.url || state.loading || image && (!image.complete || !image.naturalWidth)) {
+          ready = false;
+          if (!state?.loading) void 确保页面图片就绪(index);
+        }
+      }
+      if (!ready) return 'loading';
+      暂停全景动画(); 设置全景偏移值(next); 尝试重心化模式2窗口();
+      安排模式2运动预热(-自动阅读设置.scrollPixelsPerSecond / 1000, 0, -pixels);
+      return 'moved';
+    },
+  });
+  useEffect(() => {
+    if (!自动阅读.running && 全景模式 && !阅读视图初始化中) 提交模式2自由位置();
+  }, [自动阅读.running]);
+
   function 渲染书签按钮(附加类名: string) {
     return (
       <div className={`reader-bookmark-slot ${附加类名}`}>
@@ -3399,6 +3495,7 @@ function ReaderPage({
       aria-labelledby="reader-title"
       aria-busy={!文档错误 && 阅读视图初始化中}
     >
+      <GammaFilter id={伽马滤镜Id} gamma={画面调整.gamma} />
       {进度保存错误 && <div className="document-save-error" role="alert">{进度保存错误}<button aria-label="关闭进度提示" onClick={() => 设置进度保存错误(null)}>×</button></div>}
       {沉浸模式 && (
         <>
@@ -3542,6 +3639,11 @@ function ReaderPage({
               沉浸
             </button>
           </div>
+          <ReaderTools disabled={阅读视图初始化中} document={resource?.sourceType === 'pdf' || resource?.sourceType === 'epub'} epub={resource?.sourceType === 'epub'} timeSortUnavailable={document.documentElement.dataset.platform === 'android' && !resource?.pages.some(page => page.modifiedAt)} sorting={排序中} error={排序错误}
+            sort={页面排序} onSort={mode => void 切换页面排序(mode)} adjustments={画面调整} onAdjustments={设置画面调整}
+            auto={自动阅读设置} onAuto={设置自动阅读设置} running={自动阅读.running}
+            onPlay={() => { 取消全景异步导航(true); 自动阅读.toggle(); }}
+            onPanel={open => { 阅读面板打开.current = open; if (open) { 自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
         </div>
       </header>
       <div
@@ -3670,6 +3772,7 @@ function ReaderPage({
                       key={页面.index}
                       style={计算模式2页面框架样式(页面.index)}
                     >
+                      <ReaderImageEffects settings={画面调整} gammaId={伽马滤镜Id} processable={页面.type !== 'epub-chapter' && Boolean(状态.url)} sourceKey={`${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
                       {状态.error ? (
                         <div className="reader-page-error" role="alert">
                           <span>第 {页面.index + 1} {阅读单位}加载失败</span>
@@ -3710,6 +3813,7 @@ function ReaderPage({
                           第 {页面.index + 1} {阅读单位}{状态.loading ? "加载中…" : "等待加载…"}
                         </div>
                       )}
+                      </ReaderImageEffects>
                     </figure>
                   );
                 })}

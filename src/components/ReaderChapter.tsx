@@ -15,9 +15,10 @@ function ReaderChapter({ html, title, width, height, style }: Props) {
   return <div className="reader-chapter" style={{ width: shownWidth, height: height * scale }}>
     <iframe title={title} srcDoc={html} sandbox="allow-same-origin" referrerPolicy="no-referrer" tabIndex={-1}
       onLoad={event => {
-        if (document.documentElement.dataset.colorTheme !== "night") return;
         const chapter = event.currentTarget.contentDocument;
         if (!chapter) return;
+        for (const name of ['pointerdown', 'wheel', 'keydown']) chapter.addEventListener(name, () => window.dispatchEvent(new Event('omi-pause')), { passive: true });
+        if (document.documentElement.dataset.colorTheme !== "night") return;
         const palette = getComputedStyle(document.documentElement);
         chapter.documentElement.style.colorScheme = "dark";
         chapter.body.style.backgroundColor = palette.getPropertyValue("--面板色");

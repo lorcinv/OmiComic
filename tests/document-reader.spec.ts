@@ -50,6 +50,26 @@ test('dark EPUB text follows the soft dark theme and retains shared reading cont
   await page.screenshot({ path: 'test-results/theme-night-epub.png' });
 });
 
+test('EPUB retains document order, supports display effects and explicitly disables raster processing', async ({ page }) => {
+  await seedDocument(page);
+  await expect(page.getByRole('textbox',{name:'跳转到章节'})).toBeEnabled();
+  await page.getByRole('button',{name:'阅读器设置',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'页面排序'})).toHaveCount(0);
+  await expect(page.getByText('PDF / EPUB 保持文档原有顺序。')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'画面调整',exact:true}).click();
+  await expect(page.getByRole('slider',{name:'锐化',exact:true})).toBeDisabled();
+  await expect(page.getByRole('slider',{name:'降噪',exact:true})).toBeDisabled();
+  await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.4');
+  await page.getByRole('checkbox',{name:'反色',exact:true}).check();
+  await expect(page.locator('.reader-effects').first()).toHaveCSS('filter', /invert\(1\)/);
+  await page.getByRole('button',{name:'关闭面板'}).click();
+  await page.getByRole('button',{name:'开始自动阅读',exact:true}).click();
+  await expect(page.getByRole('button',{name:'暂停自动阅读',exact:true})).toBeVisible();
+  await page.frameLocator('.reader-chapter iframe').locator('body').click();
+  await expect(page.getByRole('button',{name:'开始自动阅读',exact:true})).toBeVisible();
+});
+
 test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view state', async ({ page }) => {
   await seedDocument(page);
   const jump = page.getByRole('textbox', { name: '跳转到章节' });

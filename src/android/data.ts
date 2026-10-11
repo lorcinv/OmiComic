@@ -3,6 +3,7 @@ import { updateResourceRecords, withinPath } from "../../electron/services/resou
 import type { NativeCall } from "./bridge";
 import { sanitizeAndroidChapter } from "./epub";
 import { version as appVersion } from "../../package.json";
+import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
 
 const defaults: AppSettings = {
   colorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
@@ -125,14 +126,41 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     moveVirtualFolderItem: input=>write(d=>{if(input.fromFolderId===input.toFolderId)throw new Error("请选择其他书架。");const count=addItems(folder(d,input.toFolderId),[input.item]);removeItems(folder(d,input.fromFolderId),[input.item.resourceKey]);return {virtualFolders:d.virtualFolders,targetAlreadyHad:!count,addedToTarget:!!count};}),
     moveVirtualFolderItems: input=>write(d=>{if(input.fromFolderId===input.toFolderId)throw new Error("请选择其他书架。");const count=addItems(folder(d,input.toFolderId),input.items);removeItems(folder(d,input.fromFolderId),input.items.map(i=>i.resourceKey));return {virtualFolders:d.virtualFolders,targetAlreadyHadCount:input.items.length-count,addedCount:count,movedCount:input.items.length};}),
     getBookmarks: ()=>read(()=>data.bookmarks),
-    toggleBookmark: input=>write(d=>{const old=d.bookmarks.find(i=>i.resourceKey===input.resourceKey&&i.pageIndex===input.pageIndex);if(old){d.bookmarks=d.bookmarks.filter(i=>i!==old);return {bookmarked:false};}const item={...input,id:crypto.randomUUID(),createdAt:Date.now(),updatedAt:Date.now(),sortIndex:d.bookmarks.length};d.bookmarks.push(item);return {bookmarked:true,bookmark:item};}),
+    toggleBookmark: input=>write(d=>{const old=d.bookmarks.find(i=>i.resourceKey===input.resourceKey&&bookmarkMatches(i,input.pageIndex,input.pageId));if(old){d.bookmarks=d.bookmarks.filter(i=>i!==old);return {bookmarked:false};}const item={...input,id:crypto.randomUUID(),createdAt:Date.now(),updatedAt:Date.now(),sortIndex:d.bookmarks.length};d.bookmarks.push(item);return {bookmarked:true,bookmark:item};}),
     updateBookmarkMeta: (id,input)=>write(d=>{const i=d.bookmarks.find(i=>i.id===id);if(!i)throw new Error("书签已不存在。");Object.assign(i,input,{tags:tags(input.tags),updatedAt:Date.now()});return i;}),
     reorderBookmarks: keys=>write(d=>(d.bookmarks=reorder(d.bookmarks,keys,i=>i.id))),
     removeBookmark: id=>write(d=>{d.bookmarks=d.bookmarks.filter(i=>i.id!==id);return null;}),
-    isPageBookmarked: (key,page)=>read(()=>data.bookmarks.some(i=>i.resourceKey===key&&i.pageIndex===page)),
+    isPageBookmarked: (key,page,id)=>read(()=>data.bookmarks.some(i=>i.resourceKey===key&&bookmarkMatches(i,page,id))),
     selectFolder: ()=>call("chooseFolder"),
     listDirectory: async path=>{const result=await call<import("../types").目录结果>("listDirectory",{path});if(result.ok){const hidden=data.excludedResourcePaths??[];result.data.items=result.data.items.filter(i=>!hidden.some(p=>withinPath(i.path,p)));result.data.total=result.data.items.length;}return result;},
-    getResourcePages: input=>call("getResourcePages",input),
+    getResourcePages: async input=>{
+      await queue;
+      const result = await call<阅读资源结果>('getResourcePages', input);
+      if (result.ok && result.data.sourceType !== 'pdf' && result.data.sourceType !== 'epub') result.data.pages = sortReaderPages(result.data.pages, normalizePageSort(data.readingProgress[result.data.resourceKey]?.readerViewState?.pageSort));
+      return result;
+    },
+    setReaderPageSort: input=>write(async d=>{
+      if (!['folder', 'image', 'archive'].includes(input.type)) throw new Error('此资源不支持图片页面排序。');
+      const resource = await native<阅读资源结果>('getResourcePages', input);
+      const old = d.readingProgress[resource.resourceKey];
+      const previous = sortReaderPages(resource.pages, normalizePageSort(old?.readerViewState?.pageSort));
+      resource.pages = sortReaderPages(resource.pages, input.mode);
+      const index = resource.pages.findIndex(p=>pageIdentity(p)===input.currentPageId);
+      if (index < 0) throw new Error('当前图片已变化，请重新打开漫画。');
+      for (const bookmark of d.bookmarks.filter(b=>b.resourceKey===resource.resourceKey)) {
+        const oldIndex = resolvePageIndex(previous, bookmark.pageId, bookmark.archiveInnerPath??bookmark.pageName, bookmark.pageIndex);
+        const id = bookmark.pageId??pageIdentity(previous[oldIndex]);
+        const newIndex = resource.pages.findIndex(p=>pageIdentity(p)===id);
+        if(newIndex>=0) Object.assign(bookmark,{pageId:id,pageIndex:newIndex,totalPages:resource.total,pageName:resource.pages[newIndex].name});
+      }
+      const view = old?.readerViewState??{fitMode:d.settings.readerDefaultFitMode,pageMode:d.settings.readerPageMode,pageDirection:d.settings.doublePageDirection,flow:d.settings.readerDefaultFlow,panorama:false,immersive:false};
+      const progress = {...old,resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:index,currentPageId:input.currentPageId,currentPageName:resource.pages[index].name,totalPages:resource.total,percent:Math.round((index+1)/resource.total*100),completed:index===resource.total-1,updatedAt:Date.now(),readerViewState:{...view,pageSort:input.mode,pairingAnchor:index,pairingAnchorId:input.currentPageId}};
+      d.readingProgress[resource.resourceKey]=progress;
+      d.recentOpened=d.recentOpened.map(p=>p.resourceKey===resource.resourceKey?progress:p);
+      d.temporaryOpened=d.temporaryOpened.map(p=>p.resourceKey===resource.resourceKey?progress:p);
+      resource.requestedPageId=input.currentPageId;
+      return {resource,progress};
+    }),
     getPageImage: input=>call("getPageImage",input),
     getThumbnail: input=>call("getThumbnail",input),
     getReadablePageCount: input=>call("getReadablePageCount",input),
@@ -148,7 +176,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     onExternalOpen: callback=>{listeners.add(callback);return()=>{listeners.delete(callback);};},
     chooseExternalFiles: async()=>{
       const result=await call<string|null>("chooseFile");if(!result.ok)return result;if(!result.data)return ok(null);
-      const opened=await call<阅读资源结果>("getResourcePages",{path:result.data});if(!opened.ok)return opened;
+      const opened=await api.getResourcePages({path:result.data,type:/\.(zip|cbz|rar|cbr|7z|cb7)$/i.test(result.data)?'archive':/\.pdf$/i.test(result.data)?'pdf':/\.epub$/i.test(result.data)?'epub':'image'});if(!opened.ok)return opened;
       const resource=opened.data, initialPageIndex=data.readingProgress[resource.resourceKey]?.currentPageIndex??0;
       const saved=await write(d=>{const item={resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:initialPageIndex,totalPages:resource.total,updatedAt:Date.now()};d.temporaryOpened=[item,...d.temporaryOpened.filter(i=>i.resourceKey!==item.resourceKey)];return null;});
       if(!saved.ok)return saved;external.push({resource,initialPageIndex});listeners.forEach(fn=>fn());return ok(null);

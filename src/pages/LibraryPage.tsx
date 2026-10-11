@@ -1,3 +1,4 @@
+import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail } from "../reader/thumbnailClient";
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -1409,6 +1410,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       设置虚拟文件夹列表(结果.data.virtualFolders);
       设置资源元数据表(结果.data.resourceMeta);
       设置标签顺序(结果.data.tagOrder);
+
       过滤已删除标签(删除标签);
       设置标签菜单(null);
       设置待删除标签列表(null);
@@ -2780,6 +2782,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       设置虚拟文件夹列表(结果.data.virtualFolders);
       设置资源元数据表(结果.data.resourceMeta);
       设置标签顺序(结果.data.tagOrder);
+      // A details panel can stay mounted behind the reader. Refresh only its
+      // page manifest on return, preserving the selected physical thumbnail.
+      const preview = 资源详情阅读资源, sequence = 资源详情加载序号.current;
+      if (preview && 资源信息目标 && preview.sourceType !== 'pdf' && preview.sourceType !== 'epub') {
+        const selected = preview.pages[资源详情所选页];
+        const refreshed = await window.omicomic.getResourcePages({ path: preview.sourcePath, type: preview.sourceType });
+        if (!已取消 && sequence === 资源详情加载序号.current && refreshed.ok) {
+          设置资源详情阅读资源(refreshed.data);
+          const index = resolvePageIndex(refreshed.data.pages, selected ? pageIdentity(selected) : undefined, undefined, 资源详情所选页);
+          设置资源详情所选页(index); 设置资源详情预览页(Math.floor(index / 48));
+        }
+      }
     }
 
     void 刷新阅读数据();
@@ -4071,7 +4085,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 已保存进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = 已保存进度
-        ? Math.min(Math.max(已保存进度.currentPageIndex, 0), (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)))
+        ? 定位续读页面(结果.data, 已保存进度, 已保存进度.currentPageIndex)
         : 默认起始页;
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
@@ -4106,10 +4120,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 进度 = 进度结果.ok ? 进度结果.data : null;
-      const 起始页 = Math.min(
-        Math.max(进度?.currentPageIndex ?? 项目.currentPageIndex ?? 0, 0),
-        (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)),
-      );
+      const 起始页 = 定位续读页面(结果.data, 进度, 进度?.currentPageIndex ?? 项目.currentPageIndex ?? 0);
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
         结果.data,
@@ -4144,10 +4155,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 进度 = 进度结果.ok ? 进度结果.data : null;
-      const 起始页 = Math.min(
-        Math.max(进度?.currentPageIndex ?? 0, 0),
-        (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)),
-      );
+      const 起始页 = 定位续读页面(结果.data, 进度, 进度?.currentPageIndex ?? 0);
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
         结果.data,
@@ -4183,10 +4191,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 进度 = 进度结果.ok ? 进度结果.data : null;
-      const 起始页 = Math.min(
-        Math.max(进度?.currentPageIndex ?? 0, 0),
-        (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)),
-      );
+      const 起始页 = 定位续读页面(结果.data, 进度, 进度?.currentPageIndex ?? 0);
       void 保存资源当前进度(结果.data, 起始页);
       打开阅读器(
         结果.data,
@@ -4217,8 +4222,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         return;
       }
 
-      const 起始页 = Math.min(Math.max(项目.pageIndex, 0), (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1)));
-      if (项目.pageIndex !== 起始页) {
+      const 起始页 = 结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Math.max(0, 项目.pageIndex) : resolvePageIndex(结果.data.pages, 项目.pageId, 项目.archiveInnerPath ?? 项目.pageName, 项目.pageIndex);
+      if (项目.pageIndex >= 结果.data.total && !项目.pageId && !项目.pageName) {
         设置错误信息("书签页码已超出当前资源页数，已跳转到最后一页。");
       }
       void 保存资源当前进度(结果.data, 起始页);
@@ -6810,10 +6815,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     };
   }
 
+  function 定位续读页面(资源: 阅读资源结果, 进度: ReadingProgress | null, fallback: number): number {
+    if (资源.sourceType === 'pdf' || 资源.sourceType === 'epub') return Math.max(0, fallback);
+    return resolvePageIndex(资源.pages, 进度?.currentPageId, 进度?.currentPageName, fallback);
+  }
+
   async function 保存资源当前进度(资源: 阅读资源结果, 当前页索引: number): Promise<void> {
     const 当前页面 = 资源.pages[当前页索引];
     if (!当前页面) return;
 
+    资源.requestedPageId = pageIdentity(当前页面);
     const completed = 当前页索引 >= 资源.total - 1;
     const 结果 = await window.omicomic.saveReadingProgress({
       resourceKey: 资源.resourceKey,
@@ -6821,6 +6832,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       sourceType: 资源.sourceType,
       title: 资源.title,
       currentPageIndex: 当前页索引,
+      currentPageId: pageIdentity(当前页面),
       totalPages: 资源.total,
       currentPageName: 当前页面.name,
       percent: Math.round(((当前页索引 + 1) / Math.max(1, 资源.total)) * 100),

@@ -30,6 +30,17 @@ test('ZIP/CBZ naturally sorted, nested Unicode, exact bytes', async t => {
  assert.deepEqual((await archive.读取压缩包图片列表(p)).map(e=>e.virtualPath),['章/2.jpg','章/10.jpg']);
  assert.equal((await archive.读取压缩包单张图片(p,'章/2.jpg')).toString(),'image fixture');
 });
+
+test('real RAR4/RAR5 compressed artwork retains entry times and empty RAR5 link fields are regular files', async () => {
+  for (const name of ['RAR4.rar','RAR5.cbr']) {
+    const file=path.resolve('tests/fixtures/android-archives',name);
+    const entries=await archive.读取压缩包图片列表(file);
+    assert.equal(entries.length,3);
+    assert.deepEqual(entries.map(e=>e.virtualPath.replace(/\\/g,'/')),['漫画/页1.png','漫画/页2.png','漫画/页10.png']);
+    assert.ok(entries.every(entry=>Number.isFinite(entry.modifiedAt)&&entry.modifiedAt>0));
+    for(const entry of entries){const data=await archive.读取压缩包单张图片(file,entry.virtualPath);assert.equal(data.length,entry.size);assert.equal(data.subarray(1,4).toString(),'PNG');}
+  }
+});
 test('10,000 pages index and last page read; bounded metadata', async t => {
  const start=performance.now();const p=await fixture(t,'many.zip',Array.from({length:10000},(_,i)=>({name:`page-${i}.jpg`})));
  assert.equal((await archive.读取压缩包图片列表(p)).length,10000);

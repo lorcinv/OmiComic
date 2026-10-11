@@ -1,3 +1,4 @@
+import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail } from "../reader/thumbnailClient";
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useRef, useState } from "react";
@@ -96,7 +97,8 @@ export default function HomePage({ onBrowse, onOpenReader, refreshToken }: HomeP
       if (!progress.ok) throw new Error(progress.error.message);
       const saved = progress.data?.currentPageIndex ?? book.currentPageIndex;
       const safeSaved = Math.max(0, Number.isFinite(saved) ? Math.floor(saved) : 0);
-      const page = isDocument ? safeSaved : Math.min(safeSaved, resource.data.pages.length - 1);
+      const page = isDocument ? safeSaved : resolvePageIndex(resource.data.pages, progress.data?.currentPageId, progress.data?.currentPageName, safeSaved);
+      if (!isDocument) resource.data.requestedPageId = pageIdentity(resource.data.pages[page]);
       if (origin) onOpenReader(resource.data, page, undefined, origin);
       else onOpenReader(resource.data, page);
     } catch (cause) {

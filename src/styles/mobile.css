@@ -102,10 +102,10 @@ html[data-platform="android"] .reader-stage.is-panorama { touch-action:none; }
   .organize-drawer { width:min(100vw,420px); max-width:100vw; }
   .root-delete-overlay { padding:16px; }
   .root-delete-dialog { max-width:100%; }
-  .reader-toolbar { min-height:54px; flex-basis:54px; padding:6px 10px; gap:8px; overflow-x:auto; }
+  .reader-toolbar { min-height:54px; flex-basis:auto; height:auto; flex-wrap:wrap; padding:6px 10px; gap:8px; overflow:visible; }
   .reader-toolbar button { min-height:40px; min-width:40px; }
   .reader-back span { display:none; }
-  .reader-actions { flex:0 0 auto; gap:8px; }
+  .reader-toolbar .reader-actions { flex:1 1 340px; flex-wrap:wrap; gap:8px; }
   .reader-actions > div { flex-shrink:0; }
   .reader-filename-strip { padding:0 12px; }
   .reader-footer { padding:10px 8px; gap:6px; min-height:66px; flex-wrap:wrap; }

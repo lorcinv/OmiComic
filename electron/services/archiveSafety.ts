@@ -15,7 +15,7 @@ export class 压缩包服务错误 extends Error {
     this.name = "压缩包服务错误";
   }
 }
-export interface ArchiveEntry { virtualPath: string; size: number }
+export interface ArchiveEntry { virtualPath: string; size: number; modifiedAt?: number }
 export function failLimit(): never {
   throw new 压缩包服务错误("ARCHIVE_LIMIT_EXCEEDED", "压缩包超过安全读取限制，请拆分后再打开。");
 }
