@@ -145,7 +145,7 @@ export default function GlassSelect<T extends GlassSelectValue>({
     if (!选项 || 选项.disabled) return;
     if (!值相同(选项.value, value)) onChange(选项.value);
     关闭下拉();
-    window.requestAnimationFrame(() => 触发按钮.current?.focus());
+    触发按钮.current?.focus({ preventScroll: true });
   }
 
   function 处理按键(事件: ReactKeyboardEvent<HTMLButtonElement>): void {
