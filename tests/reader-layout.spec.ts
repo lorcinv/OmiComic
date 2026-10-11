@@ -61,8 +61,27 @@ test('ordinary reader contains extreme images and centers short fit-width pages'
   await expect(page.getByRole('combobox', { name: '缩放方式' })).toContainText('适应窗口');
   for (const index of [5, 6]) {
     await jump(page, index); await contained(page);
-    await fit(page, '适应高度'); await contained(page);
-    await fit(page, '适应窗口（默认）');
+    if (index === 5) {
+      await expect(page.locator('.reader-stage')).toHaveCSS('padding-left', '0px');
+      const stage = (await page.locator('.reader-stage').boundingBox())!;
+      const image = (await page.locator('[data-reader-page-index="4"] img').boundingBox())!;
+      expect(Math.abs(image.x - stage.x)).toBeLessThan(1);
+      expect(Math.abs(image.width - stage.width)).toBeLessThan(1);
+    }
+    await fit(page, '适应高度');
+    await expect.poll(() => page.locator('.reader-stage').evaluate(stage => {
+      const css = getComputedStyle(stage), image = stage.querySelector('img')!.getBoundingClientRect();
+      return Math.abs(image.height - stage.clientHeight + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom));
+    })).toBeLessThan(1);
+    if (index === 5) {
+      await expect.poll(() => page.locator('.reader-stage').evaluate(stage => stage.scrollWidth - stage.clientWidth)).toBeGreaterThan(1000);
+      await page.locator('.reader-stage').evaluate(stage => { stage.scrollLeft = stage.scrollWidth; });
+      await expect.poll(() => page.locator('.reader-stage').evaluate(stage => {
+        const image = stage.querySelector('img')!.getBoundingClientRect();
+        return Math.abs(image.right - stage.getBoundingClientRect().right + parseFloat(getComputedStyle(stage).paddingRight));
+      })).toBeLessThan(2);
+    } else await contained(page);
+    await fit(page, '适应窗口');
   }
   await jump(page, 7); await fit(page, '适应宽度'); await contained(page);
   await page.screenshot({ path: 'test-results/reader-centered-fit-width.png' });

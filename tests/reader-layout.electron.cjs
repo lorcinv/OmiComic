@@ -53,7 +53,15 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   await expect(page.locator('[data-reader-page-index="2"] img')).toBeVisible();
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1); await contained();
   await page.getByRole('button', { name: '当前双页，点击切换单页', exact: true }).click();
-  for (const number of [5, 6]) { await jump(number); await fit('适应高度'); await contained(); }
+  for (const number of [5, 6]) { await jump(number); await fit('适应窗口'); await contained(); }
+  await jump(5);
+  await expect.poll(() => page.locator('.reader-stage').evaluate(stage => Math.abs(stage.querySelector('img').getBoundingClientRect().width - stage.clientWidth))).toBeLessThan(1);
+  await fit('适应高度');
+  await expect.poll(() => page.locator('.reader-stage').evaluate(stage => {
+    const css = getComputedStyle(stage);
+    return Math.abs(stage.querySelector('img').getBoundingClientRect().height - stage.clientHeight + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom));
+  })).toBeLessThan(1);
+  await expect.poll(() => page.locator('.reader-stage').evaluate(stage => stage.scrollWidth - stage.clientWidth)).toBeGreaterThan(1000);
   await jump(7); await fit('适应宽度'); await contained();
   await app.evaluate(async ({ BrowserWindow }) => { await BrowserWindow.getAllWindows()[0].capturePage(undefined, { stayHidden: true, stayAwake: true }); });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -74,7 +82,7 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   })).toBeLessThan(1);
   await page.getByRole('button', { name: '关闭全景连环画', exact: true }).click();
   await expect(zoom).toContainText('适应宽度'); await expect(zoom).toBeEnabled();
-  await fit('适应窗口（默认）'); await contained();
+  await fit('适应窗口'); await contained();
   const immersive = page.getByRole('button', { name: '沉浸', exact: true });
   await immersive.click(); await expect(page.locator('.reader-layout')).toHaveClass(/is-immersive/);
   await page.keyboard.press('Escape'); await expect(page.locator('.reader-layout')).not.toHaveClass(/is-immersive/);

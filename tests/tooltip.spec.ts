@@ -19,6 +19,28 @@ async function openLibrary(page: Page) {
   await expect(page.locator('.resource-card')).toHaveCount(10);
 }
 
+test('window and toolbar explanations share glass styling below the button row', async ({ page }) => {
+  await openLibrary(page);
+  const tooltip = page.getByRole('tooltip');
+  const row = (await page.locator('.window-controls').boundingBox())!;
+  for (const label of ['最小化窗口', '最大化窗口', '关闭窗口']) {
+    await page.getByRole('button', { name: label, exact: true }).hover();
+    await expect(tooltip).toBeVisible();
+    await expect.poll(async () => (await tooltip.boundingBox())!.y).toBeGreaterThanOrEqual(row.y + row.height + 11);
+    await expect(tooltip).toHaveCSS('z-index', '1100');
+    await expect(tooltip).not.toHaveCSS('backdrop-filter', 'none');
+  }
+  const windowBackground = await tooltip.evaluate(el => getComputedStyle(el).backgroundColor);
+  await page.getByRole('button', { name: '刷新并检测失效资源' }).hover();
+  await expect(tooltip).toBeVisible();
+  const controls = (await page.locator('.library-controls').boundingBox())!;
+  await expect.poll(async () => (await tooltip.boundingBox())!.y).toBeGreaterThanOrEqual(controls.y + controls.height + 11);
+  expect(await tooltip.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(windowBackground);
+  await page.getByRole('button', { name: '最小化窗口', exact: true }).hover();
+  await expect(tooltip).toHaveText('最小化');
+  await page.screenshot({ path: 'test-results/window-tooltip-below-controls.png' });
+});
+
 test('nested cover actions own one rounded tooltip within their exact hit area', async ({ page }) => {
   await openLibrary(page);
   const book = page.locator('.resource-card').filter({ has: page.locator('.resource-details strong', { hasText: /^Book$/ }) });

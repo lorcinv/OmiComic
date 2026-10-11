@@ -15,22 +15,34 @@ test('broad pairs fall back to single pages and narrow windows unpair portraits'
   assert.equal(canPairPages(broad, portrait, viewport, 'fit-height'), false);
   assert.equal(canPairPages(portrait, portrait, { width: 750, height: 800 }, 'fit-window'), false);
   assert.equal(canPairPages(portrait, portrait, viewport, 'original'), false);
-  const pair = fitSpread([portrait, portrait], viewport, 'fit-width');
+  const pair = fitSpread([portrait, portrait], viewport, 'fit-window');
   assert.ok(pair[0].width + pair[1].width <= viewport.width);
   assert.ok(pair.every(size => size.height <= viewport.height));
 });
 
-test('ordinary fit-window and fit-height contain extreme images without distortion', () => {
+test('only fit-window contains both axes; width and height modes respect their chosen axis', () => {
   for (const size of [{ width: 18000, height: 400 }, { width: 400, height: 18000 }]) {
-    for (const mode of ['fit-window', 'fit-height']) {
+    for (const mode of ['fit-window', 'fit-height', 'fit-width']) {
       const fitted = fitPage(size, viewport, mode);
-      assert.ok(fitted.width <= viewport.width + .01 && fitted.height <= viewport.height + .01);
+      if (mode === 'fit-window') assert.ok(fitted.width <= viewport.width + .01 && fitted.height <= viewport.height + .01);
+      else if (mode === 'fit-height') assert.equal(fitted.height, viewport.height);
+      else assert.equal(fitted.width, viewport.width);
       assert.ok(Math.abs(fitted.width / fitted.height - size.width / size.height) < .0001);
     }
     assert.equal(fitPage(size, viewport, 'original'), size);
     const vertical = fitPanorama(size, viewport, true), horizontal = fitPanorama(size, viewport, false);
     assert.equal(vertical.width, viewport.width);
     assert.equal(horizontal.height, viewport.height);
+  }
+});
+
+test('pair eligibility follows the selected scale without overriding width or height', () => {
+  assert.equal(canPairPages(portrait, portrait, viewport, 'fit-width'), false);
+  assert.equal(canPairPages(broad, broad, viewport, 'fit-width'), true);
+  for (const mode of ['fit-width', 'fit-height']) {
+    const pair = fitSpread([broad, broad], viewport, mode);
+    if (mode === 'fit-width') assert.equal(pair[0].width + pair[1].width, viewport.width);
+    else assert.equal(pair[0].height, viewport.height);
   }
 });
 

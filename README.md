@@ -6,7 +6,7 @@
 
 Windows 与 Android 本地漫画、图片与电子书阅读器。
 
-![Version](https://img.shields.io/badge/Windows-1.0.3-708090)
+![Version](https://img.shields.io/badge/Windows-1.0.4-708090)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64_%7C_Android-5f7184)
 
 [使用方法](README_使用方法.md) · [Android 说明](docs/ANDROID.md) · [版本更新](CHANGELOG.md)
@@ -17,7 +17,7 @@ Windows 与 Android 本地漫画、图片与电子书阅读器。
 
 旧版 Windows 安装包（1.0.2）：[OmiComic-Setup-1.0.2-x64.exe](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.2)。Android 安装包：[OmiComic-1.0.1-android.apk](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。本地构建输出在 `release/`。
 
-Windows 免安装版：[OmiComic-Portable-1.0.3-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.0.3/OmiComic-Portable-1.0.3-x64.zip)。完整解压后双击 `OmiComic.exe`，保留同目录的 DLL、`resources` 和 `locales` 文件夹；无需 Node.js 或安装向导，不创建快捷方式或文件关联。
+Windows 免安装版：[OmiComic-Portable-1.0.4-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.0.4/OmiComic-Portable-1.0.4-x64.zip)。完整解压后双击 `OmiComic.exe`，保留同目录的 DLL、`resources` 和 `locales` 文件夹；无需 Node.js 或安装向导，不创建快捷方式或文件关联。
 
 免安装版和安装版均将记录保存在本机 `%APPDATA%\OmiComic\omicomic-data.json`，在同一台电脑上运行会沿用旧记录。发行包不包含用户漫画与阅读记录；复制程序文件夹不会自动迁移这些记录。免安装版仍未签名，首次运行也可能出现 Windows 安全提示。
 
@@ -37,10 +37,10 @@ Windows 免安装版：[OmiComic-Portable-1.0.3-x64.zip](https://github.com/lorc
 - **临时存放**：直接从系统打开、尚未加入资源库的文件保存在这里；右键可删除临时引用，或将所在目录加入资源库。
 - **自适应卡片**：七档拖动滑条，默认每行四张；Ctrl＋滚轮上滚放大、下滚缩小，每档铺满当前内容宽度。资源库与详情分别保存档位。
 - **详情预览**：封面、续读、标签、简介和每组最多 48 页的按需缩略图；下滚先折叠详情，上滚到顶后略加滚动展开。
-- **阅读缩放**：普通模式用下拉菜单选择适应窗口（默认）、宽度、高度或原始尺寸；全景自动按方向适配，双页仅在窗口可完整容纳时合并。
+- **阅读缩放**：普通模式用下拉菜单选择适应窗口、宽度、高度或原始尺寸；全景自动按方向适配，双页仅在窗口可完整容纳时合并。
 - **统一阅读窗口**：图片、压缩包、PDF 和 EPUB 共用工具栏、阅读方向、全景滚动、适应尺寸、进度跳转及书签。
 - **阅读手感**：单页/双页、横向/纵向全景、加速拖动与惯性、跳转动画、沉浸全屏、预加载和缓存设置。
-- **双页配对**：从进入页开始配对；封面默认 1+2，从第 6 页切换为 6+7、8+9，横跨页独立显示。最后一组包含尾页即记为读完；越过首尾翻页后才显示切换相邻书籍的三角按钮。
+- **双页配对**：从进入页开始配对；封面默认 1+2，从第 6 页切换为 6+7、8+9，横跨页独立显示。最后一组包含尾页即记为读完；越过首尾翻页后才显示圆角磨砂切书按钮，也可按 ↑ 上一本、↓ 下一本。
 - **封面**：合集文件夹借用首个可读子资源封面并显示项目数；Windows PDF 使用第一页、EPUB 提取封面图；无封面时使用格式图标。
 - **主题**：经典雾灰、北境雾蓝、暖砂、暮夜灰；控件保持统一圆角与仿玻璃外观。
 

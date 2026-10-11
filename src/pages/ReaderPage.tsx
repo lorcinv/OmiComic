@@ -268,6 +268,7 @@ function ReaderPage({
   const 阅读视图已加载资源Key引用 = useRef<string | null>(null);
   const 沉浸全屏同步序号 = useRef(0);
   const 上次滚轮时间 = useRef(0);
+  const 相邻资源切换中 = useRef(false);
   const 阅读区域 = useRef<HTMLDivElement>(null);
   const 全景页面流 = useRef<HTMLDivElement>(null);
   const 保存进度定时器 = useRef<number | null>(null);
@@ -3117,7 +3118,7 @@ function ReaderPage({
       if (事件.defaultPrevented || (事件.key !== "Escape" && 目标元素?.closest('[role="combobox"], [role="listbox"]'))) return;
       if (
         目标元素
-        && (目标元素.tagName === "INPUT" || 目标元素.tagName === "TEXTAREA")
+        && 目标元素.closest('input, textarea, select, [contenteditable="true"], [role="slider"], [role="spinbutton"]')
         && 事件.key !== "Escape"
       ) {
         return;
@@ -3137,12 +3138,12 @@ function ReaderPage({
       if (事件.key.toLocaleLowerCase() === "f") {
         事件.preventDefault();
         设置沉浸全屏(!沉浸模式);
-      } else if (垂直阅读 && 事件.key === "ArrowUp") {
+      } else if (!事件.altKey && !事件.ctrlKey && !事件.metaKey && 事件.key === "ArrowUp") {
         事件.preventDefault();
-        上一页();
-      } else if (垂直阅读 && 事件.key === "ArrowDown") {
+        if (!事件.repeat) void 切换相邻资源("previous");
+      } else if (!事件.altKey && !事件.ctrlKey && !事件.metaKey && 事件.key === "ArrowDown") {
         事件.preventDefault();
-        下一页();
+        if (!事件.repeat) void 切换相邻资源("next");
       } else if (事件.key === "ArrowLeft") {
         事件.preventDefault();
         if (从右到左阅读) 下一页();
@@ -3171,6 +3172,8 @@ function ReaderPage({
   }, [
     isActive,
     onBack,
+    openContext,
+    onSwitchResource,
     resource,
     安全索引,
     当前页面,
@@ -3217,31 +3220,36 @@ function ReaderPage({
 
   async function 切换相邻资源(方向: "previous" | "next"): Promise<void> {
     const 目标资源 = directionToTarget(方向);
-    if (!目标资源 || !openContext) return;
+    if (!目标资源 || !openContext || 相邻资源切换中.current) return;
 
-    立即保存待保存进度();
-    设置错误信息(null);
-    const 结果 = await window.omicomic.getResourcePages({
-      path: 目标资源.path,
-      type: 目标资源.type,
-    });
-    if (!结果.ok) {
-      设置错误信息(结果.error.message);
-      return;
+    相邻资源切换中.current = true;
+    try {
+      立即保存待保存进度();
+      设置错误信息(null);
+      const 结果 = await window.omicomic.getResourcePages({
+        path: 目标资源.path,
+        type: 目标资源.type,
+      });
+      if (!结果.ok) {
+        设置错误信息(结果.error.message);
+        return;
+      }
+
+      const 新上下文: 阅读打开上下文 = {
+        ...openContext,
+        currentKey: 结果.data.resourceKey,
+      };
+      const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
+      const 进度 = 进度结果.ok ? 进度结果.data : null;
+      const 起始页 = Math.min(
+        Math.max(进度?.currentPageIndex ?? 0, 0),
+        结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub"
+          ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1),
+      );
+      onSwitchResource(结果.data, 起始页, 新上下文);
+    } finally {
+      相邻资源切换中.current = false;
     }
-
-    const 新上下文: 阅读打开上下文 = {
-      ...openContext,
-      currentKey: 结果.data.resourceKey,
-    };
-    const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
-    const 进度 = 进度结果.ok ? 进度结果.data : null;
-    const 起始页 = Math.min(
-      Math.max(进度?.currentPageIndex ?? 0, 0),
-      结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub"
-        ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1),
-    );
-    onSwitchResource(结果.data, 起始页, 新上下文);
   }
 
   function directionToTarget(方向: "previous" | "next") {
@@ -3513,7 +3521,7 @@ function ReaderPage({
               className="reader-fit-select"
               value={全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式}
               options={[
-                { value: "fit-window", label: "适应窗口（默认）" },
+                { value: "fit-window", label: "适应窗口" },
                 { value: "fit-width", label: "适应宽度" },
                 { value: "fit-height", label: "适应高度" },
                 { value: "original", label: "原始尺寸" },
@@ -3592,11 +3600,11 @@ function ReaderPage({
             type="button"
             className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "right" : "left"}`}
             style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
-            title={`上一本：${上一本资源.title}`}
+            title={`上一本：${上一本资源.title}（↑）`}
             aria-label={`上一本：${上一本资源.title}`}
             onClick={() => void 切换相邻资源("previous")}
           >
-            <svg viewBox="0 0 24 32" aria-hidden="true"><path d={从右到左阅读 ? "M4 3L22 16L4 29Z" : "M20 3L2 16L20 29Z"} /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={从右到左阅读 ? "M8 5L18 12L8 19Z" : "M16 5L6 12L16 19Z"} /></svg>
           </button>
         )}
         {resource && 跨本提示 === "next" && 当前页组包含尾页 && 下一本资源 && (
@@ -3604,11 +3612,11 @@ function ReaderPage({
             type="button"
             className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "left" : "right"}`}
             style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
-            title={`下一本：${下一本资源.title}`}
+            title={`下一本：${下一本资源.title}（↓）`}
             aria-label={`下一本：${下一本资源.title}`}
             onClick={() => void 切换相邻资源("next")}
           >
-            <svg viewBox="0 0 24 32" aria-hidden="true"><path d={从右到左阅读 ? "M20 3L2 16L20 29Z" : "M4 3L22 16L4 29Z"} /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={从右到左阅读 ? "M16 5L6 12L16 19Z" : "M8 5L18 12L8 19Z"} /></svg>
           </button>
         )}
         {文档错误 ? (

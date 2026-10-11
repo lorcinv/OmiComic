@@ -22,14 +22,16 @@ function GlobalTooltip() {
     const anchor = tooltip.element.getBoundingClientRect();
     const padding = 12;
     const compact = anchor.width < 180 && anchor.height < 80;
+    const toolbar = tooltip.element.closest('.window-controls, .reader-toolbar, .library-toolbar, .library-controls, .resource-detail-toolbar, [role="toolbar"]');
     const x = tooltip.pointer?.x ?? anchor.left + anchor.width / 2;
-    const below = tooltip.pointer && !compact ? tooltip.pointer.y + 18 : anchor.bottom + 8;
+    const below = toolbar ? Math.max(anchor.bottom, toolbar.getBoundingClientRect().bottom) + 12
+      : tooltip.pointer && !compact ? tooltip.pointer.y + 18 : anchor.bottom + 12;
     const above = tooltip.pointer && !compact ? tooltip.pointer.y - 12 : anchor.top - 8;
     let left = tooltip.pointer ? x + 14 : x - box.width / 2;
     if (left + box.width > innerWidth - padding) left = x - box.width - 14;
     let top = below + box.height <= innerHeight - padding ? below : above - box.height;
     // 小按钮优先向侧面让开，三个点的提示不会压在下方收藏按钮上。
-    if (compact && (anchor.right + box.width + 8 <= innerWidth - padding || anchor.left - box.width - 8 >= padding)) {
+    if (compact && !toolbar && (anchor.right + box.width + 8 <= innerWidth - padding || anchor.left - box.width - 8 >= padding)) {
       left = anchor.right + box.width + 8 <= innerWidth - padding ? anchor.right + 8 : anchor.left - box.width - 8;
       top = anchor.top + (anchor.height - box.height) / 2;
     }

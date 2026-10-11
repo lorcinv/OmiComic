@@ -5552,13 +5552,17 @@ a,
 /* Revealed only after an attempted turn beyond the first/last page. */
 .reader-book-switch {
   position: absolute; z-index: 9; top: 50%; display: grid; place-items: center;
-  width: 48px; height: 72px; padding: 8px; border: 0; border-radius: 0;
-  background: transparent; box-shadow: none; transform: translateY(-50%);
-  color: light-dark(#526b8c, #c8d6e7); opacity: max(.45, var(--book-switch-opacity, .7));
-  filter: drop-shadow(0 1px 3px #0008); transition: opacity 120ms ease;
+  width: 36px; height: 52px; padding: 0;
+  border: 1px solid color-mix(in srgb, var(--控件边框) 78%, transparent); border-radius: 8px;
+  background: color-mix(in srgb, var(--玻璃基色) 76%, transparent);
+  box-shadow: none; transform: translateY(-50%);
+  color: var(--控件文字); opacity: max(.45, var(--book-switch-opacity, .7));
+  backdrop-filter: blur(18px) saturate(1.16);
+  -webkit-backdrop-filter: blur(18px) saturate(1.16);
+  transition: opacity 120ms ease, background-color 120ms ease;
 }
-.reader-book-switch svg { width: 28px; height: 40px; fill: currentColor; stroke: none; }
-.reader-book-switch:hover, .reader-book-switch:focus-visible { opacity: 1; background: transparent; }
+.reader-book-switch svg { display: block; width: 16px; height: 16px; fill: currentColor; stroke: none; }
+.reader-book-switch:hover, .reader-book-switch:focus-visible { opacity: 1; background: color-mix(in srgb, var(--玻璃基色) 90%, transparent); }
 .reader-book-switch-left { left: 8px; }
 .reader-book-switch-right { right: 8px; }
 .resource-placeholder-icon { display: block; width: 64px; height: 64px; opacity: .68; }
@@ -5733,6 +5737,10 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
   align-items: flex-start;
   justify-content: flex-start;
   overflow: auto;
+}
+
+.reader-stage.zoom-stage-fit-window:not(.is-panorama) {
+  padding-inline: 0;
 }
 
 .reader-stage:not(.is-panorama) .reader-page-spread {
@@ -6204,7 +6212,7 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
 
 .global-glass-tooltip {
   position: fixed;
-  z-index: 200;
+  z-index: 1100;
   max-width: min(480px, calc(100vw - 32px));
   max-height: calc(100vh - 24px);
   overflow: hidden;
