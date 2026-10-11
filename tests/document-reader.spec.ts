@@ -53,10 +53,7 @@ test('dark EPUB text follows the soft dark theme and retains shared reading cont
 test('EPUB retains document order, supports display effects and explicitly disables raster processing', async ({ page }) => {
   await seedDocument(page);
   await expect(page.getByRole('textbox',{name:'跳转到章节'})).toBeEnabled();
-  await page.getByRole('button',{name:'阅读器设置',exact:true}).click();
-  await expect(page.getByRole('combobox',{name:'页面排序'})).toHaveCount(0);
-  await expect(page.getByText('PDF / EPUB 保持文档原有顺序。')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'画面调整',exact:true}).click();
   await expect(page.getByRole('slider',{name:'锐化',exact:true})).toBeDisabled();
   await expect(page.getByRole('slider',{name:'降噪',exact:true})).toBeDisabled();

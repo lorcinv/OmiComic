@@ -42,6 +42,26 @@ async function openLibrary(page: Page) {
   await expect.poll(() => page.locator('.resource-preview img').evaluateAll(images => images.length >= 2 && images.slice(0, 2).every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
 }
 
+test('detail footer actions align with back and the inline tag button remains usable when wrapped', async ({ page }) => {
+  await openLibrary(page);
+  await page.locator('.resource-card').filter({has:page.locator('.resource-details strong',{hasText:/^Book$/})}).getByRole('button',{name:'打开资源信息'}).click();
+  for(const width of [1440,960]) {
+    await page.setViewportSize({width,height:900});
+    const back=await page.getByRole('button',{name:'返回资源列表'}).boundingBox();
+    const rename=await page.getByRole('button',{name:'重命名本地文件',exact:true}).boundingBox();
+    const remove=await page.getByRole('button',{name:'删除…',exact:true}).boundingBox();
+    expect(rename!.y).toBe(back!.y);expect(remove!.y).toBe(back!.y);expect(rename!.x+rename!.width).toBeLessThan(remove!.x);expect(remove!.x+remove!.width).toBeLessThan(back!.x);
+    const styles=await page.locator('.resource-detail-action').evaluateAll(buttons=>buttons.map(button=>{const css=getComputedStyle(button);return [css.backgroundColor,css.borderRadius,css.height,css.backdropFilter];}));expect(styles[0]).toEqual(styles[2]);expect(styles[1]).toEqual(styles[2]);
+    await expect(page.locator('.resource-detail-tag-editor > :last-child').getByRole('button',{name:'添加标签'})).toBeVisible();
+    await page.getByRole('button',{name:'添加标签',exact:true}).click();await page.getByPlaceholder('输入标签，逗号分隔').fill('新增标签');await page.getByPlaceholder('输入标签，逗号分隔').press('Enter');
+    await expect(page.getByRole('button',{name:'移除标签：新增标签',exact:true})).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:'重命名本地文件',exact:true}).click();await expect(page.getByRole('dialog',{name:'重命名本地文件'})).toBeVisible();await page.getByRole('button',{name:'取消',exact:true}).click();
+    await page.getByRole('button',{name:'删除…',exact:true}).click();await expect(page.getByRole('radio',{name:/仅移除索引/})).toBeChecked();await page.getByRole('button',{name:'取消',exact:true}).click();
+    await page.mouse.move(250,35);await page.screenshot({path:`test-results/detail-actions-${width}.png`});
+  }
+});
+
 test('cover tags fit all card sizes and retain hidden tags and independent actions', async ({ page }) => {
   await openLibrary(page);
   const book = page.locator('.resource-card').filter({ has: page.locator('.resource-details strong', { hasText: /^Book$/ }) });

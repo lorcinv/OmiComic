@@ -1,3 +1,4 @@
+import BookReaderSettings from '../components/BookReaderSettings';
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail } from "../reader/thumbnailClient";
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
@@ -96,7 +97,7 @@ const 设置分类选项: Array<{ id: 设置分类; label: string; description: 
   { id: "library", label: "资源库", description: "卡片、排序、记录与标签检索" },
   { id: "progress", label: "进度显示", description: "卡片进度条与页数信息" },
   { id: "reader-default", label: "默认阅读", description: "新书首次打开时的阅读方式" },
-  { id: "reader", label: "阅读器", description: "翻页、沉浸、缓存与预加载" },
+  { id: "reader", label: "阅读器", description: "页面排序、自动阅读、沉浸与缓存" },
   { id: "safety", label: "安全与确认", description: "删除软件记录前的确认选项" },
 ];
 
@@ -3192,7 +3193,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         (目标 instanceof Element && !!目标.closest(".resource-detail-direct-summary textarea, .resource-detail-direct-tags button"))
         || 标签添加浮层.current?.contains(目标)
         || 标签添加触发区.current?.contains(目标)
-        || (目标 instanceof Element && 目标.closest(".resource-detail-back"))
+        || (目标 instanceof Element && 目标.closest(".resource-detail-action"))
       ) return;
       void 完成资源详情信息编辑();
     }
@@ -5652,6 +5653,25 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     打开阅读器(资源详情阅读资源, 起始页);
   }
 
+  async function 打开详情文件操作(mode: "rename" | "delete"): Promise<void> {
+    if (!资源信息目标 || 整理保存中) return;
+    if (资源详情编辑模式 && !(await 完成资源详情信息编辑())) return;
+    const item = 资源信息目标.kind === "bookmark" ? 资源信息目标.item : 资源信息目标.input;
+    const path = 资源信息目标.kind === "resource" ? 资源信息目标.localPath ?? item.sourcePath : item.sourcePath;
+    设置本地文件目标({ path, title: item.title, mode });
+  }
+
+  function 更新书籍阅读设置(progress: ReadingProgress, resource?: 阅读资源结果): void {
+    设置阅读进度表(previous => ({ ...previous, [progress.resourceKey]: progress }));
+    void 刷新最近打开();
+    void window.omicomic.getBookmarks().then(result => { if (result.ok) 设置书签列表(result.data); });
+    if (resource && 资源详情阅读资源?.resourceKey === resource.resourceKey) {
+      const selected = 资源详情阅读资源.pages[资源详情所选页];
+      const index = resolvePageIndex(resource.pages, selected ? pageIdentity(selected) : undefined, undefined, 资源详情所选页);
+      设置资源详情阅读资源(resource); 设置资源详情所选页(index); 设置资源详情预览页(Math.floor(index / 48));
+    }
+  }
+
   function 打开设置窗口(): void {
     设置当前设置分类("library");
     设置设置窗口偏移({ x: 0, y: 0 });
@@ -6991,7 +7011,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 是书签 = 资源信息目标.kind === "bookmark";
     const 标题 = 是书签 ? 资源信息目标.item.title : 资源信息目标.input.title;
     const 路径 = 是书签 ? 资源信息目标.item.sourcePath : 资源信息目标.input.sourcePath;
-    const 操作路径 = 资源信息目标.kind === "resource" ? 资源信息目标.localPath ?? 路径 : 路径;
     const 类型 = 资源信息目标.fileType;
     const 阅读单位 = 类型 === "epub" ? "章" : "页";
     const 信息 = 类型信息[类型];
@@ -7070,8 +7089,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 </span>
               </div>
               <div className="resource-detail-primary-actions">
-                <button type="button" className="resource-detail-file-action" aria-label="重命名本地文件" onClick={() => 设置本地文件目标({ path: 操作路径, title: 标题, mode: "rename" })}>重命名</button>
-                <button type="button" className="resource-detail-file-action" onClick={() => 设置本地文件目标({ path: 操作路径, title: 标题, mode: "delete" })}>删除…</button>
                 <button
                   type="button"
                   className="primary-action resource-detail-read-button"
@@ -7114,10 +7131,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         <span className="tag-chip resource-detail-tag-chip-readonly" key={标签}>{标签}</span>
                       )
                     )) : <span className="drawer-muted">未设置标签</span>}
-                  </div>
-                </div>
-                {(
-                  <div className="resource-detail-field-actions">
+
                     <span className={`tag-add-wrap ${标签添加弹窗打开 ? "is-open" : ""}`} ref={标签添加触发区}>
                       <button
                         type="button"
@@ -7140,7 +7154,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       ><span className="tag-add-symbol" aria-hidden="true">+</span><span>添加标签</span></button>
                     </span>
                   </div>
-                )}
+                </div>
                 {资源详情编辑模式 && 标签添加弹窗打开 && createPortal(
                   <span
                     ref={标签添加浮层}
@@ -7564,20 +7578,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
         </div>}
 
-        {资源信息目标 && (
-          <button
-            type="button"
-            className="resource-detail-back"
-            onClick={async () => {
-              if (资源详情编辑模式 && !(await 完成资源详情信息编辑())) return;
-              关闭资源详情页面();
-            }}
-            aria-label="返回资源列表"
-          >
-            <ArrowIcon direction="left" />
-            <span>返回</span>
-          </button>
-        )}
+        {资源信息目标 && <div className="resource-detail-footer">
+          <div className="resource-detail-file-actions">
+            <button type="button" className="resource-detail-action" aria-label="重命名本地文件" onClick={() => 打开详情文件操作("rename")}><span>重命名</span></button>
+            <button type="button" className="resource-detail-action" onClick={() => 打开详情文件操作("delete")}><span>删除…</span></button>
+          </div>
+          <button type="button" className="resource-detail-action resource-detail-back" aria-label="返回资源列表" onClick={async () => {
+            if (资源详情编辑模式 && !(await 完成资源详情信息编辑())) return;
+            关闭资源详情页面();
+          }}><ArrowIcon direction="left" /><span>返回</span></button>
+        </div>}
         {资源信息目标 ? 渲染资源详情工作区() : <>
         <div className="library-body">
           {正在打开资源路径 && <div className="library-opening-status" role="status" aria-live="polite" aria-busy="true">正在打开 {正在打开资源路径.split(/[\\/]/).pop()}…</div>}
@@ -9195,6 +9205,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   hidden={当前设置分类 !== "reader"}
                 >
                   <h3>阅读器设置</h3>
+                  {当前设置分类 === "reader" && <BookReaderSettings preferred={资源详情阅读资源} onSaved={更新书籍阅读设置} />}
 
                   <label className="settings-toggle">
                     <input

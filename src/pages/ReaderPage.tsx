@@ -263,10 +263,7 @@ function ReaderPage({
   const [页面排序, 设置页面排序] = useState<PageSort>('name-asc');
   const [画面调整, 设置画面调整] = useState({ ...DEFAULT_ADJUSTMENTS });
   const [自动阅读设置, 设置自动阅读设置] = useState({ ...DEFAULT_AUTO_READ });
-  const [排序中, 设置排序中] = useState(false);
-  const [排序错误, 设置排序错误] = useState<string | null>(null);
   const 阅读面板打开 = useRef(false);
-  const 排序正在提交 = useRef(false);
   const 伽马滤镜Id = `reader-gamma-${useId().replace(/:/g, '')}`;
   const [跨本提示, 设置跨本提示] = useState<"previous" | "next" | null>(null);
   const [阅读视图已加载资源Key, 设置阅读视图已加载资源Key] = useState<string | null>(null);
@@ -805,7 +802,6 @@ function ReaderPage({
       window.clearTimeout(保存进度定时器.current);
       保存进度定时器.current = null;
     }
-    if (排序正在提交.current) return;
     const 当前资源已初始化 = Boolean(
       resource
       && 阅读视图已加载资源Key引用.current === resource.resourceKey,
@@ -2698,7 +2694,6 @@ function ReaderPage({
   useEffect(() => {
     if (
       !resource
-      || 排序正在提交.current
       || 阅读视图已加载资源Key !== resource.resourceKey
       || 阅读视图已加载资源Key引用.current !== resource.resourceKey
     ) return;
@@ -3394,34 +3389,8 @@ function ReaderPage({
     });
   }
 
-  async function 切换页面排序(mode: PageSort): Promise<void> {
-    if (!resource || !显示阅读页面 || 排序正在提交.current || mode === 页面排序) return;
-    自动阅读.pause();
-    取消全景异步导航(true);
-    排序正在提交.current = true; 设置排序中(true); 设置排序错误(null);
-    if (保存进度定时器.current !== null) window.clearTimeout(保存进度定时器.current);
-    保存进度定时器.current = null;
-    const key = resource.resourceKey;
-    try {
-      const progress = 创建当前阅读进度();
-      if (progress) {
-        const saved = await window.omicomic.saveReadingProgress(progress);
-        if (!saved.ok) throw new Error(saved.error.message);
-      }
-      const result = await window.omicomic.setReaderPageSort({ path: resource.sourcePath, type: resource.sourceType, mode, currentPageId: pageIdentity(显示阅读页面) });
-      if (!result.ok) throw new Error(result.error.message);
-      if (资源Key引用.current !== key) return;
-      最新阅读进度快照.current = result.data.progress; 待保存进度.current = null;
-      onProgressSaved(result.data.progress); onBookmarksChanged();
-      onSwitchResource(result.data.resource, result.data.progress.currentPageIndex, openContext ?? { source: 'directory', currentKey: key, items: [] });
-    } catch (error) {
-      排序正在提交.current = false; 设置排序中(false);
-      设置排序错误(error instanceof Error ? error.message : '排序失败，请重试。');
-    }
-  }
-
   const 自动阅读 = useAutoRead({
-    active: isActive && !阅读视图初始化中 && !排序中,
+    active: isActive && !阅读视图初始化中,
     modeKey: `${resource?.resourceKey}:${阅读流向}:${全景模式}:${有效页模式}:${从右到左阅读}:${缩放模式}:${页面排序}`,
     pageKey: 当前页组Key,
     ready: 全景模式 ? Boolean(页面图片状态表[显示阅读索引]?.url && !页面图片状态表[显示阅读索引]?.loading) : 目标页组已准备,
@@ -3639,9 +3608,7 @@ function ReaderPage({
               沉浸
             </button>
           </div>
-          <ReaderTools disabled={阅读视图初始化中} document={resource?.sourceType === 'pdf' || resource?.sourceType === 'epub'} epub={resource?.sourceType === 'epub'} timeSortUnavailable={document.documentElement.dataset.platform === 'android' && !resource?.pages.some(page => page.modifiedAt)} sorting={排序中} error={排序错误}
-            sort={页面排序} onSort={mode => void 切换页面排序(mode)} adjustments={画面调整} onAdjustments={设置画面调整}
-            auto={自动阅读设置} onAuto={设置自动阅读设置} running={自动阅读.running}
+          <ReaderTools disabled={阅读视图初始化中} epub={resource?.sourceType === 'epub'} adjustments={画面调整} onAdjustments={设置画面调整} running={自动阅读.running}
             onPlay={() => { 取消全景异步导航(true); 自动阅读.toggle(); }}
             onPanel={open => { 阅读面板打开.current = open; if (open) { 自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
         </div>

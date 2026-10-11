@@ -20,8 +20,9 @@ async function open(page: Page, options: { count?: number; delay?: number; tall?
     const picture = {url:canvas.toDataURL(),width:canvas.width,height:canvas.height};
     (window as any).__requests=[];
     api.getAppData = async()=>{const result=await baseData();result.data.readingProgress=state.progress;result.data.bookmarks=state.marks;result.data.settings.readerDefaultFitMode='fit-window';result.data.settings.readerPreloadPages=0;return result;};
+    api.getRecentOpened = async()=>({ok:true,data:Object.values(state.progress).sort((a:any,b:any)=>b.updatedAt-a.updatedAt)});
     api.getReadingProgress = async(key:string)=>({ok:true,data:state.progress[key]??null});
-    api.saveReadingProgress = async(input:any)=>{const saved={...input,readerViewState:input.readerViewState??state.progress[input.resourceKey]?.readerViewState};state.progress[input.resourceKey]=saved;persist();(window as any).__saved.push(saved);return {ok:true,data:saved};};
+    api.saveReadingProgress = async(input:any)=>{const saved={...input,updatedAt:Date.now(),readerViewState:input.readerViewState??state.progress[input.resourceKey]?.readerViewState};state.progress[input.resourceKey]=saved;persist();(window as any).__saved.push(saved);return {ok:true,data:saved};};
     api.getResourcePages = async({path}:any)=>{const p=await prefs();const key=`folder:${path}`;return {ok:true,data:{key,resourceKey:key,sourcePath:path,sourceType:'folder',title:'Book',pages:p.sortReaderPages(basePages,p.normalizePageSort(state.progress[key]?.readerViewState?.pageSort)),total:count}};};
     api.getPageImage = async(input:any)=>{(window as any).__requests.push(input.sourcePath);if(delay&&/page1\./.test(input.sourcePath))await new Promise(r=>setTimeout(r,delay));return {ok:true,data:picture};};
     api.getBookmarks=async()=>({ok:true,data:state.marks});
@@ -33,12 +34,28 @@ async function open(page: Page, options: { count?: number; delay?: number; tall?
   await expect(page.getByRole('textbox',{name:'跳转到页码'})).toBeEnabled();
   await expect(page.locator('.reader-image').first()).toBeVisible();
 }
-async function settings(page: Page) { await page.getByRole('button',{name:'阅读器设置',exact:true}).click(); }
+const selectedBooks=new WeakMap<Page,string>();
+async function settings(page: Page) {
+  await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'返回',exact:true}).click();
+  selectedBooks.set(page,await page.evaluate(()=>(window as any).__saved.at(-1).resourceKey));
+  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^阅读器 /}).click();
+  await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toBeVisible();
+}
+async function resume(page: Page) {
+  if(await page.getByRole('button',{name:'关闭设置',exact:true}).count()) {
+    await expect(page.locator('.book-reader-settings')).toHaveAttribute('aria-busy','false');
+    await page.getByRole('button',{name:'关闭设置',exact:true}).click();
+  }
+  if(await page.locator('.resource-detail-read-button').count()) await page.locator('.resource-detail-read-button').click();
+  else {await page.getByRole('button',{name:/^最近阅读/}).click();await page.locator('.resource-card[data-selection-key="'+selectedBooks.get(page)+'"]').dblclick();}
+  await expect(page.locator('.reader-image').first()).toBeVisible();
+}
 async function adjust(page: Page) { await page.getByRole('button',{name:'画面调整',exact:true}).click(); }
 async function slider(page: Page, label: string, value: number) {
   await page.getByRole('slider',{name:label,exact:true}).fill(String(value));
 }
-async function interval(page: Page) { await settings(page);await slider(page,'翻页间隔',1);await page.getByRole('button',{name:'关闭面板'}).click(); }
+async function interval(page: Page) { await settings(page);await slider(page,'翻页间隔',1);await resume(page); }
 async function jump(page: Page, index: number) { const input=page.getByRole('textbox',{name:'跳转到页码'}); await input.fill(String(index));await input.press('Enter'); }
 const play=(page:Page)=>page.getByRole('button',{name:'开始自动阅读',exact:true});
 const pause=(page:Page)=>page.getByRole('button',{name:'暂停自动阅读',exact:true});
@@ -46,18 +63,30 @@ const pause=(page:Page)=>page.getByRole('button',{name:'暂停自动阅读',exac
 test('page sorting preserves the image, bookmark, per-book preferences and fresh reload', async({page})=>{
   await open(page); await jump(page,2);await page.getByRole('button',{name:'添加当前页书签'}).click();
   const expected=[['文件名自然降序',5],['修改时间升序',2],['修改时间降序',2],['文件名自然升序',2]] as const;
-  for(const [label,index] of expected){await settings(page);await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:label,exact:true}).click();await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue(String(index));await expect(page.locator('#reader-title')).toContainText('/ 2.png');await expect(page.getByRole('button',{name:'取消当前页书签'})).toBeVisible();}
-  await settings(page);await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:'文件名自然降序',exact:true}).click();
+  for(const [label,index] of expected){await settings(page);await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:label,exact:true}).click();await resume(page);await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue(String(index));await expect(page.locator('#reader-title')).toContainText('/ 2.png');await expect(page.getByRole('button',{name:'取消当前页书签'})).toBeVisible();}
+  await settings(page);await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:'文件名自然降序',exact:true}).click();await resume(page);
   await page.getByRole('button',{name:'返回',exact:true}).click();await page.reload();await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
   await expect(page.locator('#reader-title')).toContainText('/ 2.png');await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('5');await expect(play(page)).toBeVisible();
-  await settings(page);await expect(page.getByRole('combobox',{name:'页面排序'})).toContainText('文件名自然降序');await page.keyboard.press('Escape');await expect(page.locator('.reader-tool-panel')).toHaveCount(0);await expect(page.locator('.reader-layout')).toBeVisible();
+  await settings(page);await expect(page.getByRole('combobox',{name:'页面排序'})).toContainText('文件名自然降序');await page.keyboard.press('Escape');await expect(page.locator('.settings-window')).toHaveCount(0);await resume(page);await expect(page.locator('.reader-layout')).toBeVisible();
+});
+
+test('general settings select books independently and persist auto read without starting it',async({page})=>{
+  await open(page);await settings(page);
+  await slider(page,'翻页间隔',7);await slider(page,'滚动速度',150);await expect(page.locator('.book-reader-settings')).toHaveAttribute('aria-busy','false');
+  await page.screenshot({path:'test-results/general-reader-settings.png'});
+  await resume(page);await expect(play(page)).toBeVisible();await page.getByRole('button',{name:'返回',exact:true}).click();
+  await page.getByRole('button',{name:/^资源库/}).click();await page.locator('.resource-card').filter({hasText:'Book'}).getByRole('button',{name:'打开资源信息'}).click();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^阅读器 /}).click();
+  await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toHaveValue('5');
+  await page.getByRole('combobox',{name:'当前漫画'}).click();await page.getByRole('option',{name:'Book',exact:true}).last().click();
+  await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toHaveValue('7');await expect(page.getByRole('slider',{name:'滚动速度',exact:true})).toHaveValue('150');
 });
 
 test('returning from sorted reading updates the existing thumbnail panel and retains its selected image',async({page})=>{
   await open(page);await page.getByRole('button',{name:'返回',exact:true}).click();
   await page.locator('.resource-card').filter({hasText:'Book'}).getByRole('button',{name:'打开资源信息'}).click();
   await page.getByRole('button',{name:'第 2 页：2.png',exact:true}).dblclick();
-  await expect(page.locator('#reader-title')).toContainText('/ 2.png');await settings(page);await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:'文件名自然降序',exact:true}).click();
+  await expect(page.locator('#reader-title')).toContainText('/ 2.png');await settings(page);await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:'文件名自然降序',exact:true}).click();await resume(page);
   await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('5');await page.getByRole('button',{name:'返回',exact:true}).click();
   await expect(page.locator('.resource-detail-thumbnail').first()).toHaveAttribute('aria-label','第 1 页：20.png');
   await expect(page.getByRole('button',{name:'第 5 页：2.png',exact:true})).toHaveAttribute('aria-pressed','true');
@@ -77,14 +106,14 @@ test('auto paging advances groups, waits for loads, stops at the end and never r
 
 test('manual actions, panels, blur and background pause without automatic resume',async({page})=>{
   await open(page,{count:20});await interval(page);
-  const actions=[async()=>page.getByRole('button',{name:'下一页',exact:true}).click(),async()=>jump(page,4),async()=>page.locator('.reader-stage').click({position:{x:5,y:5}}),async()=>page.getByRole('slider',{name:'阅读进度',exact:true}).click({position:{x:50,y:4}}),async()=>settings(page),async()=>adjust(page),async()=>page.evaluate(()=>window.dispatchEvent(new Event('blur'))),async()=>page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));})];
-  for(const action of actions){if(await page.locator('.reader-tool-panel').count())await page.getByRole('button',{name:'关闭面板'}).click();await play(page).click();await expect(pause(page)).toBeVisible();await action();await expect(play(page)).toBeVisible();}
+  const actions=[async()=>page.getByRole('button',{name:'下一页',exact:true}).click(),async()=>jump(page,4),async()=>page.locator('.reader-stage').click({position:{x:5,y:5}}),async()=>page.getByRole('slider',{name:'阅读进度',exact:true}).click({position:{x:50,y:4}}),async()=>page.getByRole('combobox',{name:'缩放方式'}).click(),async()=>adjust(page),async()=>page.evaluate(()=>window.dispatchEvent(new Event('blur'))),async()=>page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));})];
+  for(const action of actions){if(await page.locator('.reader-tool-panel').count())await page.getByRole('button',{name:'关闭面板'}).click();await play(page).click();await expect(pause(page)).toBeVisible();await action();await expect(play(page)).toBeVisible();if(await page.getByRole('listbox').count())await page.keyboard.press('Escape');}
   const before=await page.getByRole('textbox',{name:'跳转到页码'}).inputValue();await page.waitForTimeout(1200);await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue(before);
 });
 
 test('continuous auto scroll waits for pages and reaches the actual last edge of a long strip',async({page})=>{
   test.setTimeout(45000);await open(page,{count:1,tall:true});await page.getByRole('button',{name:'开启全景连环画',exact:true}).click();await page.getByRole('button',{name:'当前横向阅读，点击切换纵向阅读',exact:true}).click();
-  await settings(page);await slider(page,'滚动速度',400);await page.getByRole('button',{name:'关闭面板'}).click();
+  await settings(page);await slider(page,'滚动速度',400);await resume(page);
   const image=page.locator('.reader-image').first(),before=(await image.boundingBox())!.y;
   await play(page).click();await page.waitForTimeout(800);await expect(pause(page)).toBeVisible();expect((await image.boundingBox())!.y).toBeLessThan(before-200);
   // Move close to the true long-page edge, then let automatic scroll finish.
@@ -96,7 +125,7 @@ test('continuous auto scroll waits for pages and reaches the actual last edge of
 
 test('continuous reading waits at a slow next page instead of scrolling through it',async({page})=>{
   await open(page,{count:3,delay:3500});await page.getByRole('button',{name:'开启全景连环画',exact:true}).click();
-  await settings(page);await slider(page,'滚动速度',400);await page.getByRole('button',{name:'关闭面板'}).click();
+  await settings(page);await slider(page,'滚动速度',400);await resume(page);
   const before=await page.locator('.reader-page-spread').evaluate(el=>(el as HTMLElement).style.getPropertyValue('--reader-panorama-translate'));
   await play(page).click();await page.waitForTimeout(1100);await expect(pause(page)).toBeVisible();
   expect(Math.abs(parseFloat(await page.locator('.reader-page-spread').evaluate(el=>(el as HTMLElement).style.getPropertyValue('--reader-panorama-translate')))-parseFloat(before))).toBeLessThan(1);
@@ -142,5 +171,5 @@ test('worker processing is real, bounded for large pages, consistent in pairs an
   await page.setViewportSize({width:600,height:620});await expect(page.getByRole('button',{name:'恢复默认'})).toBeEnabled();
   const panel=await page.locator('.reader-tool-panel').boundingBox();expect(panel!.x).toBeGreaterThanOrEqual(0);expect(panel!.x+panel!.width).toBeLessThanOrEqual(600);expect(panel!.y+panel!.height).toBeLessThanOrEqual(620);
   await page.screenshot({path:'test-results/reader-tools-small.png'});
-  await page.getByRole('button',{name:'关闭面板'}).click();await expect(play(page)).toBeInViewport();await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toBeInViewport();
+  await page.getByRole('button',{name:'关闭面板'}).click();await expect(play(page)).toBeInViewport();await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);
 });

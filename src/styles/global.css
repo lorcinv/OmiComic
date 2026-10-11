@@ -6485,11 +6485,22 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
   background: light-dark(#566271, var(--强调色));
 }
 
-.resource-detail-back {
+.resource-detail-footer {
   position: absolute;
   z-index: 110;
+  left: 24px;
   right: 24px;
   bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.resource-detail-file-actions { display: flex; gap: 8px; }
+.resource-detail-action {
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6507,13 +6518,13 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
   backdrop-filter: blur(18px) saturate(1.15);
 }
 
-.resource-detail-back span:last-child {
+.resource-detail-action span:last-child {
   color: inherit;
   font-size: 12px;
   font-weight: 650;
 }
 
-.resource-detail-back:hover {
+.resource-detail-action:hover {
   background: light-dark(rgba(255, 255, 255, 0.82), color-mix(in srgb, var(--面板色) 82%, transparent));
   color: light-dark(#303a45, var(--主文字));
 }
@@ -6805,7 +6816,7 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
 .resource-detail-direct-tags,
 .resource-detail-direct-summary {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   min-width: 0;
@@ -6819,40 +6830,6 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
   min-width: 0;
   max-height: none;
   overflow: visible;
-}
-
-.resource-detail-field-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.resource-detail-field-actions .tag-add-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 34px;
-  min-height: 34px;
-  border: 1px solid light-dark(rgba(126, 138, 151, 0.2), color-mix(in srgb, var(--控件边框) 20%, transparent));
-  border-radius: 9px;
-  background: light-dark(rgba(255, 255, 255, 0.58), color-mix(in srgb, var(--面板色) 58%, transparent));
-  color: light-dark(#5d6875, var(--次文字));
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.resource-detail-field-actions .tag-add-button {
-  width: 34px;
-  min-width: 34px;
-  padding: 0;
-  font-size: 16px;
-}
-
-.resource-detail-field-actions .tag-add-button:hover,
-.resource-detail-direct-tags .tag-add-wrap.is-open .tag-add-button {
-  border-color: light-dark(rgba(78, 89, 104, 0.3), color-mix(in srgb, var(--控件边框) 30%, transparent));
-  background: light-dark(rgba(255, 255, 255, 0.88), color-mix(in srgb, var(--面板色) 88%, transparent));
-  color: light-dark(#3f4b57, var(--主文字));
 }
 
 .resource-detail-direct-summary textarea {
@@ -7384,10 +7361,9 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
 }
 
 .resource-detail-tag-editor .tag-add-button {
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
-  font-size: 15px;
+  width: auto; min-width: 0; height: 28px; min-height: 28px; gap: 5px; padding: 0 9px; font-size: 11px; white-space: nowrap;
+  background: light-dark(rgba(78, 89, 104, 0.08), color-mix(in srgb, var(--控件悬停) 8%, transparent));
+  color: light-dark(#566271, var(--次文字));
 }
 
 .resource-detail-tag-editor .tag-add-wrap.is-open .tag-add-button {
@@ -7501,9 +7477,9 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
     padding-left: 10px;
   }
 
-  .resource-detail-back {
+  .resource-detail-footer {
     right: 18px;
-    left: auto;
+    left: 18px;
   }
 
   .resource-detail-lower {
@@ -7526,10 +7502,10 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
     padding-left: 14px;
   }
 
-  .resource-detail-back {
+  .resource-detail-footer {
     right: 16px;
     bottom: 16px;
-    left: auto;
+    left: 16px;
   }
 
   .resource-detail-hero {
@@ -7590,7 +7566,7 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
 
   .resource-detail-direct-tags,
   .resource-detail-direct-summary {
-    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-columns: 42px minmax(0, 1fr);
     gap: 7px;
   }
 
@@ -7685,7 +7661,6 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
 .resource-detail-direct-summary textarea { box-sizing: border-box; display: block; width: 100%; height: 108px; min-height: 108px; max-height: 108px; margin: 0; padding: 9px 10px; border: 1px solid transparent; border-radius: 10px; font-family: inherit; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow: auto; resize: none; -webkit-line-clamp: unset; }
 .resource-detail-direct-summary textarea { border-color: light-dark(rgba(126,138,151,.25), color-mix(in srgb, var(--控件边框) 25%, transparent)); field-sizing: fixed; }
 .resource-detail-direct-tags { min-height: 34px; align-items: center; }
-.resource-detail-field-actions .tag-add-button { width: auto; min-width: 88px; gap: 5px; padding: 0 9px; font-size: 12px; }
 .resource-detail-direct-editor.is-readonly { cursor: default; }
 .resource-detail-direct-summary > p { cursor: text; }
 .detail-pagination { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
@@ -7718,6 +7693,14 @@ button:focus-visible { outline: 2px solid light-dark(#8c95a1, var(--控件边框
 .local-file-error { color: #ae3a3a; }
 .resource-detail-primary-actions { gap: 8px; }
 .resource-detail-primary-actions .resource-detail-read-button { order:-1; flex:1; min-width:100px; width:auto; }
-.resource-detail-file-action { flex:0 0 auto; padding:8px 10px; border:1px solid var(--控件边框); border-radius:10px; background:var(--控件背景); font-size:12px; white-space:nowrap; }
 .resource-detail-primary-actions > button { min-height: 40px; }
 .restore-index-button { flex-shrink: 0; }
+
+.book-reader-settings { padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--控件边框); }
+.book-reader-settings h4 { margin: 0 0 14px; font-size: 13px; }
+.book-reader-settings .settings-help { margin: 6px 0 14px; color: var(--次文字); font-size: 11px; line-height: 1.7; }
+.book-reader-settings .settings-glass-select { max-width: min(310px, 65%); }
+.book-reader-slider > span:last-child { display: flex; align-items: center; gap: 10px; width: min(310px, 65%); }
+.book-reader-slider input { width: 100%; min-width: 0; accent-color: var(--强调色); }
+.book-reader-slider output { min-width: 76px; text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; }
+@media (max-width: 600px) { .resource-detail-action { min-width: 74px; padding: 0 10px; } }

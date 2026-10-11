@@ -33,6 +33,9 @@ test('packaged reader sorts real folders/archives, restores identities and runs 
   const env={...process.env,OMICOMIC_TEST_HEADLESS:'1',OMICOMIC_TEST_PROFILE:profile};delete env.ELECTRON_RUN_AS_NODE;delete env.VITE_DEV_SERVER_URL;
   const launch=async file=>{app=await _electron.launch({executablePath:executable,args:file?[file]:[],env});const page=await app.firstWindow();await page.emulateMedia({reducedMotion:'reduce'});return page;};
   let page=await launch(path.join(books,'漫画.cbz'));
+  const openSettings=async()=>{await page.getByRole('button',{name:'返回',exact:true}).click();await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^阅读器 /}).click();await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toBeVisible();};
+  const resumeBook=async(file,type)=>{await expect(page.locator('.book-reader-settings')).toHaveAttribute('aria-busy','false');await page.getByRole('button',{name:'关闭设置',exact:true}).click();const key=await page.evaluate(async input=>(await window.omicomic.getResourcePages(input)).data.resourceKey,{path:file,type});await page.getByRole('button',{name:/^最近阅读/}).click();await page.locator('.resource-card[data-selection-key='+JSON.stringify(key)+']').dblclick();};
+
   await expect(page.locator('.reader-image').first()).toBeVisible();
   assert.equal((await page.evaluate(root=>window.omicomic.addLibraryRoot({path:root,name:'一次性测试样本'}),books)).ok,true);
   const info=await app.evaluate(({app})=>({version:app.getVersion(),packaged:app.isPackaged,profile:app.getPath('userData')}));assert.equal(info.packaged,true);assert.equal(info.version,require('../package.json').version);assert.equal(info.profile,profile);
@@ -62,7 +65,7 @@ test('packaged reader sorts real folders/archives, restores identities and runs 
   }
   // UI sort commits the current view first and cancels stale unmount saves.
   await page.getByRole('button',{name:'下一页',exact:true}).click();
-  await page.getByRole('button',{name:'阅读器设置',exact:true}).click();await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:'文件名自然降序',exact:true}).click();
+  await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);await openSettings();await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:'文件名自然降序',exact:true}).click();await resumeBook(path.join(books,'漫画.cbz'),'archive');
   await expect(page.locator('#reader-title')).toContainText('/ 2.png');await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('3');
   await page.getByRole('button',{name:'画面调整',exact:true}).click();await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.4');await page.getByRole('slider',{name:'锐化',exact:true}).fill('80');await page.getByRole('slider',{name:'降噪',exact:true}).fill('60');await page.getByRole('button',{name:'关闭面板'}).click();
   const start=performance.now();await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready',{timeout:15000});const processingMs=Math.round(performance.now()-start);
@@ -73,7 +76,7 @@ test('packaged reader sorts real folders/archives, restores identities and runs 
   const docs=[];
   for(const name of ['文档.pdf','章节.epub']) {
     page=await launch(path.join(books,name));await expect(page.locator(name.endsWith('.pdf')?'.reader-canvas':'.reader-chapter').first()).toBeVisible();
-    await page.getByRole('button',{name:'阅读器设置',exact:true}).click();await expect(page.getByRole('combobox',{name:'页面排序'})).toHaveCount(0);await page.getByRole('button',{name:'关闭面板'}).click();
+    await openSettings();await expect(page.getByRole('combobox',{name:'页面排序'})).toHaveCount(0);await expect(page.getByText('PDF / EPUB 保持文档原有顺序。')).toBeVisible();await resumeBook(path.join(books,name),name.endsWith('.pdf')?'pdf':'epub');
     await page.getByRole('button',{name:'画面调整',exact:true}).click();await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.3');
     if(name.endsWith('.pdf')) {await page.getByRole('slider',{name:'锐化',exact:true}).fill('50');await page.getByRole('slider',{name:'降噪',exact:true}).fill('50');await page.getByRole('button',{name:'关闭面板'}).click();await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready',{timeout:15000});}
     else {await expect(page.getByRole('slider',{name:'锐化',exact:true})).toBeDisabled();await page.getByRole('button',{name:'关闭面板'}).click();}
