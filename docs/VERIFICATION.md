@@ -1,55 +1,57 @@
-# 1.0.0 验证记录
+# 1.0.1 验证记录
 
-验证日期：2026-10-11。Windows 11 x64、Node.js 24、Electron 43.7.9；Android 15 / API 35 x86_64 模拟器、WebView 124.0.6367.219。未连接实体手机。
+日期：2026-10-11。Windows 与 Android 版本均为 1.0.1，Android versionCode 10001。
 
-Windows 和 Android 的源码版本、应用信息、安装包、当前文档统一为 **1.0.0**。Android versionCode 为 **10000**，发布密钥与此前版本一致。Android 应用信息直接引用项目版本，避免两端版本遗漏同步。
+## 本次修复
 
-## 本轮验证
+- 移除启动图标右侧两条装饰线，重新生成 Windows PNG/ICO、Android 自适应与单色图标，并检查 APK 中实际绘制出的图标。
+- 手机所有资源卡片、书架与页面预览直接单击进入，独立保留多选、信息与收藏按钮。删除模拟双击事件的兼容层，Android 平台判断不再依赖粗指针媒体查询。手机页面切换不使用桌面整屏截图转场。
+- SAF 可定位文件通过文件描述符直接读取，避免原来整本复制后才能获取封面/页数的行为。ZIP/RAR/7z 使用 libarchive，PDF 按字节范围读取，EPUB 按条目读取。
+- 封面惰性加载，不为后台页数统计扫描压缩包；阅读请求优先。目录元数据、封面与索引有上限缓存，文件元数据变化与重命名/删除会使缓存失效。保留不可定位文件提供程序的有上限缓存回退。
 
-| 检查 | 结果 |
+## 验证结果
+
+| 项目 | 结果 |
 | --- | --- |
-| Windows 与 Android 完整构建、类型检查 | 通过 |
-| React DOM | 16 项通过，含 Android 数据保存及 EPUB 净化 |
-| Windows 实际打包 EXE | 应用版本 1.0.0；图片、CBZ、CB7、PDF、EPUB 读取、翻页和续读通过 |
-| Windows 安装后的 EXE | 再次通过上述真实文件读取测试 |
-| Windows 本地文件操作 | 重命名、进度迁移、索引隐藏/恢复、回收站删除及根目录保护通过 |
-| Windows 安装与卸载 | 系统应用信息为 1.0.0；两处快捷方式、14 种打开方式、默认关联保留及卸载清理通过 |
-| Android 升级与版本 | 从 0.3.1 覆盖安装成功，应用元数据与界面 API 均为 1.0.0，保留系统目录授权及原有进度 |
-| Android 压缩包 | RAR4/RAR5/7z/CB7 实际解码通过，覆盖固实 RAR5、固实 7z、中文路径和自然排序 |
-| Android 跳页及封面 | 逐个归档按 3→1→2 页读取，校验 PNG 尺寸与像素；封面解码通过 |
-| Android 实际阅读器 | 四种归档从封面进入阅读、翻至第 2 页并保存；CB7 重命名后继续读取 |
-| Android 重启续读 | 四种归档进度保留，重新启动后继续 RAR5 第 2 页 |
-| Android 异常文件 | 加密、损坏及空归档返回错误 |
-| Android 图标与包内容 | 自适应和单色图标存在，四种 ABI 齐全，原生库与锁定 AAR 一致、16 KB 对齐，第三方许可齐全，无签名私钥和测试脚本 |
-| Android 签名 | APK v2 / v3 验证通过；证书沿用此前版本 |
+| 类型检查与双端生产构建 | 通过 |
+| 核心测试 | 63 项：62 通过，1 项既有 7z 通配符用例跳过 |
+| DOM 数据与交互 | 16 项通过 |
+| 浏览器回归 | 49 项通过；最后手机转场调整后，相关 8 项再次通过 |
+| Windows 实际打包程序 | 图片、CBZ、CB7、PDF、EPUB 读取、翻页与进度保存通过；版本为 1.0.1 |
+| Windows 安装器 | 已生成 EXE；本机检测到既有安装/快捷方式，隔离安装与卸载测试在改动系统前停止，没有覆盖既有安装 |
+| Android 升级 | 沿用原发布证书，从 1.0.0 覆盖升级至 1.0.1，授权及原有记录保留 |
+| Android 真实触摸 | 生产 APK 内注入系统触摸事件，图片目录、CBZ、RAR5、固实 7z、PDF、EPUB 均单击进入并翻到第二页；强制精细指针仍生效；无模拟双击事件 |
+| Android 卡片内部操作 | 信息按钮打开详情；页面预览单击直接阅读；实际重命名、Android 删除确认文案、设置布局通过 |
+| RAR/7z | RAR4、RAR5、7z、固实 CB7 自然排序、中文路径、跳页 3→1→2、封面、续读及重命名通过；加密、损坏和空归档被拒绝 |
+| 流式 SAF 回退 | 测试管道提供程序：后台封面不复制，用户打开时复制一次 48,595 字节，释放后重开及页面解码通过 |
+| EPUB 隔离 | DTD 拒绝、脚本不执行，章节正常显示 |
+| APK 发布检查 | v2/v3 签名通过；4 ABI；64 位原生 ELF 与未压缩 ZIP 条目均 16 KB 对齐；无签名密钥及测试资源 |
 
-安装测试使用独立目录及生成的文件，不改动用户漫画或已有安装。Windows 安装回归入口同时修复了 Windows PowerShell 5.1 传递内嵌 JavaScript 引号的问题，已在该版本 PowerShell 实际运行通过。
+Android 运行环境为 API 35 x86_64 专用模拟器、2 CPU/2 GB RAM，系统 WebView 124；本次没有连接实体手机。Windows 浏览器开发测试的首次冷编译曾超过 30 秒，保留已启动的开发服务后相关 8 项在 8.1 秒内通过；生产安装包另行测试。
 
-## 交付文件
+## 加载压力对比
+
+使用同一测试库：12 个 CBZ、1 个固实 RAR5、1 个固实 CB7，每本 64 张 512×768 PNG，总计 1,058,228,907 字节。应用启动后等待 2 秒；发起 14 个封面和 14 个页数请求后立即打开 Book12.cbz，并等待第一张图片实际解码。冷缓存先清理测试应用的派生缓存；热缓存启动新进程。这里测量的是读取压力场景，不是整机冷启动时长，也不代表每台实体手机的速度。
+
+| 指标（毫秒） | 1.0.0 冷缓存 | 1.0.1 冷缓存 | 1.0.1 新进程复用缓存 |
+| --- | ---: | ---: | ---: |
+| 列出书库 | 207 | 175 | 110 |
+| 并发封面下获取页清单 | 5206 | 75 | 89 |
+| 并发封面下首图解码 | 5298 | 333 | 202 |
+| 全部封面完成 | 5298 | 399 | 202 |
+
+1.0.1 冷缓存下整本复制字节数为 **0**，14 本封面没有创建任何完整索引；只有实际打开的 3 本漫画创建了索引。新进程再次测试时索引重建次数为 **0**。固实 RAR5 首次索引耗时 564 ms，同进程释放后重开 8 ms；固实包跳页仍可能顺序解码前面的条目。
+
+原始结果保存在本地 `test-results/android-performance-1.0.0.json`、`android-performance-1.0.1-cold.json`、`android-performance-1.0.1-warm.json`。可使用 `tests/android/performance-fixtures.cjs` 及 `scripts/test-android.ps1 -Mode performance` 重现。
+
+## 发布文件
 
 | 文件 | 字节数 | SHA-256 |
 | --- | ---: | --- |
-| OmiComic-Setup-1.0.0-x64.exe | 100385195 | `586488b985d997fe72be2ba572bf8b04936d0da038b87ae422ce2ed8653fc4a8` |
-| OmiComic-1.0.0-android.apk | 14266725 | `0acfb7e83bb0566cb1f0cc5925d1e27e1c1d13c8b76c22be647190f10c2a6686` |
+| OmiComic-Setup-1.0.1-x64.exe | 100382643 | `011dd9cfeb028f023af4f62d1ee59e277c991ee0284e2b1f3fc4271aa7db1134` |
+| OmiComic-1.0.1-android.apk | 14283109 | `fa06e609ade4c8450aad032b3a5d1c641e3cc9a6e1f4310d6f3eec468ef4609a` |
 | 7z2604-src.tar.xz | 1560440 | `9691944c0fe0d01bb49373a704fb983fd33bc98b1738695179dfbf99ac1734f6` |
 
-下载入口：[GitHub v1.0.0](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.0)。Windows EXE 按用户要求保持未签名。Android 证书 SHA-256：`31d30425848de4b32a69e27873756562f400996ef647cba83443b6b20ad9db43`。密钥仅保存在被忽略的本地 `.android-signing` 目录，不提交 GitHub。
+Android 发布证书 SHA-256：`31d30425848de4b32a69e27873756562f400996ef647cba83443b6b20ad9db43`。密钥仅在被忽略的本地 `.android-signing` 目录。Windows 按用户此前选择保持未签名。
 
-## 复现与范围
-
-```powershell
-npm run dist:win
-node --test tests/packaged.electron.cjs
-./scripts/test-installer.ps1
-npm run dist:android
-node scripts/verify-android.cjs
-./scripts/test-android.ps1 -Mode archives
-./scripts/test-android.ps1 -Mode archive-restore
-npm run test:dom
-```
-
-GitHub 主分支的工作流另行执行干净 `npm ci`、构建、服务/算法及 DOM 测试和完整浏览器 UI 回归。Android 模拟器及示例准备见 [Android 说明](ANDROID.md)。
-
-本轮没有实体手机、其他 Android 版本、16 KB 页大小系统或私人大型漫画库的运行结果；16 KB 仅验证 ELF 和 APK 对齐。不支持密码或分卷归档。手机单个归档/文档上限 1 GB，单页图片数据上限 64 MB，原生归档展开总量上限 8 GB。
-
-此前完整功能回归及历史交付哈希分别保留在 [0.3.1](verification-0.3.1.md)、[0.3.0](verification-0.3.0.md)、[0.2.0](verification-0.2.0.md)。历史记录保留原版本号，用于追溯。
+下载入口：[GitHub v1.0.1](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1)。本次源码提交的线上验证状态见仓库 Verify reader and library 工作流。

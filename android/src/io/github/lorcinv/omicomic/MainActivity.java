@@ -21,7 +21,7 @@ public final class MainActivity extends Activity {
   private WebView web;
   private WebMessagePort channel;
   private LocalLibrary library;
-  private final ExecutorService work = Executors.newSingleThreadExecutor();
+  private final ReaderWorkQueue work = new ReaderWorkQueue();
   private int pickerId = -1;
   private boolean fullscreen;
 
@@ -62,7 +62,7 @@ public final class MainActivity extends Activity {
           if(file.contains("..")||file.contains("\\")) throw new IOException("Invalid asset");
           String mime=file.endsWith(".mjs")||file.endsWith(".js")?"text/javascript":file.endsWith(".css")?"text/css":file.endsWith(".html")?"text/html":file.endsWith(".json")?"application/json":file.endsWith(".wasm")?"application/wasm":file.endsWith(".svg")?"image/svg+xml":file.endsWith(".webp")?"image/webp":"application/octet-stream";
           return response(mime,getAssets().open("web/"+file),200,"OK");
-        } catch(Exception e) { return response("text/plain",new ByteArrayInputStream(new byte[0]),404,"Not found"); }
+        } catch(Exception e) { android.util.Log.w("OmiComic","Local media could not be read",e);return response("text/plain",new ByteArrayInputStream(new byte[0]),404,"Not found"); }
       }
       @Override public void onPageFinished(WebView v,String url) {
         if(!url.equals("https://omi.local/index.html"))return;
@@ -85,7 +85,8 @@ public final class MainActivity extends Activity {
               }
               if(method.equals("isFullscreen")){reply(id,fullscreen,null);return;}
               final JSONObject params=args;
-              work.execute(()->{try{reply(id,library.call(method,params),null);}catch(Exception e){reply(id,null,explain(e));}});
+              int priority=method.equals("getThumbnail")||method.equals("getReadablePageCount")||method.equals("checkResourcePath")||method.equals("getBookmarkPagePreview")?2:0;
+              work.execute(priority,()->{try{reply(id,library.call(method,params),null);}catch(Exception e){reply(id,null,explain(e));}});
             }catch(Exception e){android.util.Log.e("OmiComic","Invalid request",e);}
           }
         });
@@ -127,5 +128,5 @@ public final class MainActivity extends Activity {
   private void event(String event){try{if(channel!=null)channel.postMessage(new WebMessage(new JSONObject().put("event",event).toString()));}catch(Exception ignored){}}
   @Override public void onBackPressed(){event("back");}
   @Override protected void onPause(){event("pause");super.onPause();}
-  @Override protected void onDestroy(){if(channel!=null)channel.close();work.execute(library::close);work.shutdown();web.destroy();super.onDestroy();}
+  @Override protected void onDestroy(){if(channel!=null){channel.close();channel=null;}work.getQueue().clear();work.execute(library::close);work.shutdown();web.destroy();super.onDestroy();}
 }

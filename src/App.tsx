@@ -4,6 +4,7 @@ import GlobalTooltip from "./GlobalTooltip";
 import type { OmiBrandOriginGetter } from "./OmiBrandIcon";
 import HomePage from "./pages/HomePage";
 import WindowControls from "./WindowControls";
+import { isAndroid } from "./platform";
 import type { ReadingProgress, 阅读打开上下文, 阅读资源结果, 页面名称 } from "./types";
 import "./styles/pageTransitions.css";
 
@@ -78,7 +79,7 @@ function App() {
         return;
       } finally { 主界面转场中.current = false; }
     }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || typeof document.startViewTransition !== "function") {
+    if (isAndroid() || window.matchMedia("(prefers-reduced-motion: reduce)").matches || typeof document.startViewTransition !== "function") {
       设置当前页面(目标页面);
       return;
     }
@@ -137,7 +138,7 @@ function App() {
   ): Promise<void> {
     await 加载阅读器();
     if (!应用已挂载.current) return;
-    const 减少动画 = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const 减少动画 = isAndroid() || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const 转场原点 = 获取转场原点?.();
     if (!转场原点 || 减少动画 || typeof document.startViewTransition !== "function") {
       提交阅读器页面(资源, 起始页, 上下文);

@@ -6,7 +6,7 @@
 
 Windows 与 Android 本地漫画、图片与电子书阅读器。
 
-![Version](https://img.shields.io/badge/version-1.0.0-708090)
+![Version](https://img.shields.io/badge/version-1.0.1-708090)
 ![Platform](https://img.shields.io/badge/platform-Windows_x64_%7C_Android-5f7184)
 
 [使用方法](README_使用方法.md) · [Android 说明](docs/ANDROID.md) · [版本更新](CHANGELOG.md)
@@ -15,7 +15,7 @@ Windows 与 Android 本地漫画、图片与电子书阅读器。
 
 ## 安装
 
-从 [GitHub 1.0.0 下载页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.0) 获取 Windows 安装包 **OmiComic-Setup-1.0.0-x64.exe** 或手机安装包 **OmiComic-1.0.0-android.apk**。本地构建输出在 `release/`。
+从 [GitHub 1.0.1 下载页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1) 获取 Windows 安装包 **OmiComic-Setup-1.0.1-x64.exe** 或手机安装包 **OmiComic-1.0.1-android.apk**。本地构建输出在 `release/`。
 
 - 安装到当前用户，创建桌面和开始菜单快捷方式。
 - Windows“已安装的应用”可识别名称、版本、图标和卸载入口。

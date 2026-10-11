@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import ArrowIcon from "../ArrowIcon";
+import { isAndroid, singleTapNavigation } from "../platform";
 import LocalFileDialog, { type LocalFileTarget } from "../components/LocalFileDialog";
 import 资源详情缩略图 from "../components/DetailPagePreview";
 import { useBoundedRecord } from "../hooks/useBoundedRecord";
@@ -101,6 +102,7 @@ type 资源信息目标 =
   | { kind: "bookmark"; item: BookmarkItem; fileType: 资源类型; thumbnailUrl?: string | null };
 
 interface 缩略图状态 {
+  sourceVersion?: string;
   status: 缩略图加载状态;
   url: string | null;
 }
@@ -937,6 +939,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const [当前目录, 设置当前目录] = useState<目录结果 | null>(null);
   const [历史记录, 设置历史记录] = useState<历史状态>({ entries: [], index: -1 });
   const [正在读取, 设置正在读取] = useState(false);
+  const [正在打开资源路径, 设置正在打开资源路径] = useState<string | null>(null);
+  const 打开清单任务 = useRef<{ path: string; promise: ReturnType<typeof window.omicomic.getResourcePages> } | null>(null);
   const [错误信息, 设置错误信息] = useState<string | null>(null);
   const [成功提示, 设置成功提示] = useState<string | null>(null);
   const [搜索内容, 设置搜索内容] = useState("");
@@ -3466,14 +3470,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
   useEffect(() => {
     const 本次序号 = ++缩略图请求序号.current;
-    if (!isActive) return;
+    if (!isActive || 正在打开资源路径) return;
+    const 版本 = (文件: 文件条目) => `${文件.size ?? ""}:${文件.modifiedAt ?? ""}`;
     const 可加载项目 = 缩略图目标项目.filter((文件) => 支持真实缩略图(文件.type));
 
     设置缩略图表((原表) => {
       const 新表: Record<string, 缩略图状态> = {};
       for (const 文件 of 缩略图目标项目) {
         const 原状态 = 原表[文件.path];
-        if (原状态?.status === "loaded" || 原状态?.status === "error") {
+        if (原状态?.sourceVersion === 版本(文件) && (原状态.status === "loaded" || 原状态.status === "error")) {
           新表[文件.path] = 原状态;
         } else {
           新表[文件.path] = { status: 支持真实缩略图(文件.type) ? "idle" : "error", url: null };
@@ -3485,10 +3490,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     async function 加载缩略图批次(): Promise<void> {
       const 加载队列 = 可加载项目.filter((文件) => {
         const 状态 = 缩略图表[文件.path];
-        return 状态?.status !== "loaded" && 状态?.status !== "error";
+        return 状态?.sourceVersion !== 版本(文件) || (状态?.status !== "loaded" && 状态?.status !== "error");
       });
       if (加载队列.length === 0) return;
-      const 并发数 = 6;
+      const 并发数 = isAndroid() ? 2 : 6;
       let 游标 = 0;
 
       async function 工作线程(): Promise<void> {
@@ -3514,8 +3519,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               return {
                 ...原表,
                 [文件.path]: 结果.ok && 结果.data.url
-                  ? { status: "loaded", url: 结果.data.url }
-                  : { status: "error", url: null },
+                  ? { status: "loaded", url: 结果.data.url, sourceVersion: 版本(文件) }
+                  : { status: "error", url: null, sourceVersion: 版本(文件) },
               };
             });
           } catch {
@@ -3524,7 +3529,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               if (!(文件.path in 原表)) return 原表;
               return {
                 ...原表,
-                [文件.path]: { status: "error", url: null },
+                [文件.path]: { status: "error", url: null, sourceVersion: 版本(文件) },
               };
             });
           }
@@ -3538,10 +3543,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     void 加载缩略图批次();
     return () => { if (缩略图请求序号.current === 本次序号) 缩略图请求序号.current += 1; };
-  }, [缩略图目标项目, isActive]);
+  }, [缩略图目标项目, isActive, 正在打开资源路径]);
 
   useEffect(() => {
     const 本次序号 = ++路径状态请求序号.current;
+    if (!isActive) return;
     const 路径项目Map = new Map<string, 文件条目>();
     for (const 文件 of 缩略图目标项目) {
       if (!文件.path || 路径项目Map.has(文件.path)) continue;
@@ -3559,7 +3565,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     });
 
     async function 检查路径批次(): Promise<void> {
-      const 并发数 = 6;
+      const 并发数 = isAndroid() ? 2 : 6;
       let 游标 = 0;
 
       async function 工作线程(): Promise<void> {
@@ -3599,7 +3605,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
 
     void 检查路径批次();
-  }, [缩略图目标项目]);
+    return () => { if (路径状态请求序号.current === 本次序号) 路径状态请求序号.current += 1; };
+  }, [缩略图目标项目, isActive]);
 
   useEffect(() => {
     if (当前视图 !== "virtual-folder" || !当前虚拟文件夹 || 当前虚拟文件夹无效资源项目.length === 0) return;
@@ -3758,6 +3765,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
   useEffect(() => {
     const 本次序号 = ++可阅读页数请求序号.current;
+    if (!isActive) return;
     const 可统计项目Map = new Map<string, 文件条目>();
     for (const 文件 of 缩略图目标项目) {
       const key = 获取可阅读页数Key(文件);
@@ -3834,7 +3842,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
 
     void 加载可阅读页数批次();
-  }, [缩略图目标项目]);
+    return () => { if (可阅读页数请求序号.current === 本次序号) 可阅读页数请求序号.current += 1; };
+  }, [缩略图目标项目, isActive]);
 
   useEffect(() => {
     function 处理分页快捷键(事件: KeyboardEvent): void {
@@ -3987,6 +3996,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     onOpenReader(资源, 起始页, 上下文, 转场原点);
   }
 
+  function 读取漫画清单(input: Parameters<typeof window.omicomic.getResourcePages>[0]) {
+    if (打开清单任务.current?.path === input.path) return 打开清单任务.current.promise;
+    设置正在打开资源路径(input.path);
+    const promise = window.omicomic.getResourcePages(input).finally(() => {
+      if (打开清单任务.current?.promise === promise) {
+        打开清单任务.current = null;
+        设置正在打开资源路径(null);
+      }
+    });
+    打开清单任务.current = { path: input.path, promise };
+    return promise;
+  }
+
   async function 打开资源(文件: 文件条目): Promise<void> {
     if (!当前根目录) return;
     const 本次打开序号 = ++打开阅读请求序号.current;
@@ -4000,7 +4022,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     设置错误信息(null);
     try {
-      const 结果 = await window.omicomic.getResourcePages({ path: 文件.path, type: 文件.type });
+      const 结果 = await 读取漫画清单({ path: 文件.path, type: 文件.type });
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       if (!结果.ok) {
         if (文件.type === "folder" && 结果.error.code === "NO_IMAGES") {
@@ -4044,7 +4066,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
     设置错误信息(null);
     try {
-      const 结果 = await window.omicomic.getResourcePages({
+      const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
       });
@@ -4082,7 +4104,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
     设置错误信息(null);
     try {
-      const 结果 = await window.omicomic.getResourcePages({
+      const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
       });
@@ -4121,7 +4143,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     设置错误信息(null);
     try {
-      const 结果 = await window.omicomic.getResourcePages({
+      const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
       });
@@ -4158,7 +4180,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
     设置错误信息(null);
     try {
-      const 结果 = await window.omicomic.getResourcePages({
+      const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
       });
@@ -6890,7 +6912,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           是面板拖拽落点 ? `is-panel-sort-drop-${书架分类面板拖拽落点?.position}` : "",
         ].filter(Boolean).join(" ")}
         onClick={(事件) => {
-          if (表面 === "panel") 切换书架分类(书架.id);
+          if (表面 === "panel" || singleTapNavigation()) 切换书架分类(书架.id);
           else 安排点击切换书架分类(书架, 事件);
         }}
         onKeyDown={(事件) => 处理书架分类按键(事件, 书架.id)}
@@ -7147,7 +7169,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 <h3 id="resource-preview-heading">缩略预览</h3>
                 <p>{类型 === "pdf" || 类型 === "epub"
                   ? (总页数 > 0 ? `共 ${总页数} ${阅读单位} · 使用上方按钮继续阅读` : "使用上方按钮开始阅读")
-                  : 总页数 > 0 ? `共 ${总页数} 页 · 单击选择，双击从该页阅读` : "正在读取页面清单"}</p>
+                  : 总页数 > 0 ? `共 ${总页数} 页 · ${singleTapNavigation() ? "点击从该页阅读" : "单击选择，双击从该页阅读"}` : "正在读取页面清单"}</p>
               </div>
               <div className="resource-detail-preview-controls">
                 {资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && (
@@ -7234,13 +7256,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     );
   }
   return (
-    <section className="library-layout" aria-labelledby="library-title" onClickCapture={event => {
-      if (!window.matchMedia("(pointer: coarse)").matches || 选择模式) return;
-      const target=event.target as HTMLElement;
-      if(target.closest(".resource-info-button,.favorite-button,.selection-check,.preview-tag-more")) return;
-      const card=target.closest<HTMLElement>(".resource-card");
-      if(card) card.dispatchEvent(new MouseEvent("dblclick",{bubbles:true,cancelable:true}));
-    }}>
+    <section className="library-layout" aria-labelledby="library-title">
       <aside className="library-sidebar">
         <OmiPageBrand onActivate={onHome} onRead={origin => {
           const 最近项目 = [...最近打开列表].sort((a, b) => b.updatedAt - a.updatedAt)[0];
@@ -7511,6 +7527,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         )}
         {资源信息目标 ? 渲染资源详情工作区() : <>
         <div className="library-body">
+          {正在打开资源路径 && <div className="library-opening-status" role="status" aria-live="polite" aria-busy="true">正在打开 {正在打开资源路径.split(/[\\/]/).pop()}…</div>}
           {错误信息 && (
             <div className="error-banner" role="alert">
               <span>{错误信息}</span>
@@ -7605,17 +7622,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       } progress-thickness-${进度条粗细} ${已选项目Key集合.has(项目.resourceKey) ? "is-selected" : ""} ${路径失效 ? "is-path-invalid" : ""}`}
                       onClick={(事件) => {
                         if (框选后忽略点击(事件)) return;
-                        if (选择模式 === "recent" && 事件.detail === 1) 切换选择项目(项目.resourceKey);
+                        if (选择模式 === "recent") { if (事件.detail <= 1) 切换选择项目(项目.resourceKey); }
+                        else if ((singleTapNavigation() && 事件.detail <= 1) || 事件.detail === 0) void 打开最近项目(项目);
                       }}
                       onDoubleClick={() => {
-                        if (选择模式 !== "recent") void 打开最近项目(项目);
+                        if (!singleTapNavigation() && 选择模式 !== "recent") void 打开最近项目(项目);
                       }}
                       onContextMenu={(事件) => {
                         事件.preventDefault();
                         设置整理空白菜单(null);
                         设置最近菜单({ x: 事件.clientX, y: 事件.clientY, 项目 });
                       }}
-                      title={`双击继续阅读：${项目.title}`}
+                      title={`${singleTapNavigation() ? "点击" : "双击"}继续阅读：${项目.title}`}
                     >
                       {选择模式 === "recent" && (
                         <span className="selection-check" onClick={(事件) => 事件.stopPropagation()}>
@@ -7820,7 +7838,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         key={文件夹.id}
                         className={`bookshelf-folder-card ${书架文件夹拖拽Key === 文件夹.id ? "is-card-middle-drag-source" : ""} ${书架文件夹拖拽落点?.key === 文件夹.id ? `is-card-middle-drop-${书架文件夹拖拽落点.position}` : ""}`}
                         tabIndex={0}
-                        onDoubleClick={() => 进入书架文件夹(文件夹)}
+                        onClick={() => { if (singleTapNavigation()) 进入书架文件夹(文件夹); }}
+                        onDoubleClick={() => { if (!singleTapNavigation()) 进入书架文件夹(文件夹); }}
                         onMouseDown={(事件) => 开始书架文件夹中键拖拽(事件, 文件夹)}
                         onMouseEnter={(事件) => 开始资源备注悬停(`bookshelf-folder:${文件夹.id}`, 文件夹.note, 事件)}
                         onMouseMove={(事件) => {
@@ -7955,10 +7974,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       }}
                       onClick={(事件) => {
                         if (框选后忽略点击(事件)) return;
-                        if (选择模式 === "favorites" && 事件.detail === 1) 切换选择项目(项目.resourceKey);
+                        if (选择模式 === "favorites") { if (事件.detail <= 1) 切换选择项目(项目.resourceKey); }
+                        else if ((singleTapNavigation() && 事件.detail <= 1) || 事件.detail === 0) void 打开收藏项目(项目);
                       }}
                       onDoubleClick={() => {
-                        if (选择模式 !== "favorites") void 打开收藏项目(项目);
+                        if (!singleTapNavigation() && 选择模式 !== "favorites") void 打开收藏项目(项目);
                       }}
                       onContextMenu={(事件) => {
                         事件.preventDefault();
@@ -8106,10 +8126,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       }}
                       onClick={(事件) => {
                         if (框选后忽略点击(事件)) return;
-                        if (选择模式 === "bookmarks" && 事件.detail === 1) 切换选择项目(项目.id);
+                        if (选择模式 === "bookmarks") { if (事件.detail <= 1) 切换选择项目(项目.id); }
+                        else if ((singleTapNavigation() && 事件.detail <= 1) || 事件.detail === 0) void 打开书签项目(项目);
                       }}
                       onDoubleClick={() => {
-                        if (选择模式 !== "bookmarks") void 打开书签项目(项目);
+                        if (!singleTapNavigation() && 选择模式 !== "bookmarks") void 打开书签项目(项目);
                       }}
                       onContextMenu={(事件) => {
                         事件.preventDefault();
@@ -8188,7 +8209,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               <div className="empty-library compact-empty">
                 <div className="empty-illustration" aria-hidden="true">▤</div>
                 <h2>请选择书架</h2>
-                <p>返回书架栏后，双击书架卡片进入内部资源视图。</p>
+                <p>返回书架栏后，{singleTapNavigation() ? "点击" : "双击"}书架卡片进入内部资源视图。</p>
                 <button className="secondary-action empty-primary" type="button" onClick={返回书架根层}>
                   返回书架
                 </button>
@@ -8286,10 +8307,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         }}
                         onClick={(事件) => {
                           if (框选后忽略点击(事件)) return;
-                          if (选择模式 === "virtual-folder" && 事件.detail === 1) 切换选择项目(项目.resourceKey);
+                          if (选择模式 === "virtual-folder") { if (事件.detail <= 1) 切换选择项目(项目.resourceKey); }
+                          else if ((singleTapNavigation() && 事件.detail <= 1) || 事件.detail === 0) void 打开虚拟文件夹项目(项目);
                         }}
                         onDoubleClick={() => {
-                          if (选择模式 !== "virtual-folder") void 打开虚拟文件夹项目(项目);
+                          if (!singleTapNavigation() && 选择模式 !== "virtual-folder") void 打开虚拟文件夹项目(项目);
                         }}
                         onContextMenu={(事件) => {
                           事件.preventDefault();
@@ -8455,10 +8477,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     } progress-thickness-${进度条粗细} ${已选项目Key集合.has(文件.id) ? "is-selected" : ""}`}
                     onClick={(事件) => {
                       if (框选后忽略点击(事件)) return;
-                      if (选择模式 === "directory" && 事件.detail === 1) 切换选择项目(文件.id);
+                      if (选择模式 === "directory") { if (事件.detail <= 1) 切换选择项目(文件.id); }
+                      else if ((singleTapNavigation() && 事件.detail <= 1) || 事件.detail === 0) void 打开资源(文件);
                     }}
                     onDoubleClick={() => {
-                      if (选择模式 !== "directory") void 打开资源(文件);
+                      if (!singleTapNavigation() && 选择模式 !== "directory") void 打开资源(文件);
                     }}
                     onContextMenu={(事件) => {
                       if (!资源整理输入) return;
@@ -8476,15 +8499,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     }}
                     title={
                       文件.type === "folder"
-                        ? `双击打开文件夹：${文件.name}`
+                        ? `${singleTapNavigation() ? "点击" : "双击"}打开文件夹：${文件.name}`
                         : 文件.type === "image"
-                          ? `双击阅读：${文件.name}`
+                          ? `${singleTapNavigation() ? "点击" : "双击"}阅读：${文件.name}`
                           : 文件.type === "archive"
-                            ? `双击阅读压缩包：${文件.name}`
+                            ? `${singleTapNavigation() ? "点击" : "双击"}阅读压缩包：${文件.name}`
                             : 文件.type === "pdf"
-                              ? `双击阅读 PDF：${文件.name}`
+                              ? `${singleTapNavigation() ? "点击" : "双击"}阅读 PDF：${文件.name}`
                               : 文件.type === "epub"
-                                ? `双击阅读 EPUB：${文件.name}`
+                                ? `${singleTapNavigation() ? "点击" : "双击"}阅读 EPUB：${文件.name}`
                           : 文件.name
                     }
                   >

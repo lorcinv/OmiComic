@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { singleTapNavigation } from "../platform";
 import type { 阅读页面项 } from "../types";
 type 缩略图状态 = { status: "idle" | "loading" | "loaded" | "error"; url: string | null };
 
@@ -107,14 +108,14 @@ export default function 资源详情缩略图({ page, selected, onSelect, onOpen
       className={`resource-detail-thumbnail ${selected ? "is-selected" : ""}`}
       aria-pressed={selected}
       aria-label={`第 ${page.index + 1} 页：${page.name}`}
-      onClick={onSelect}
-      onDoubleClick={onOpen}
+      onClick={() => { onSelect(); if (singleTapNavigation()) onOpen(); }}
+      onDoubleClick={() => { if (!singleTapNavigation()) onOpen(); }}
     >
       <span className={`resource-detail-thumbnail-image thumbnail-${状态.status}`}>
         {状态.status === "loaded" && 状态.url ? (
           <img src={状态.url} alt="" draggable={false} decoding="async" />
         ) : 状态.status === "error" ? (
-          <span title="预览不可用，双击仍可尝试阅读" aria-hidden="true">!</span>
+          <span title={`预览不可用，${singleTapNavigation() ? "点击" : "双击"}仍可尝试阅读`} aria-hidden="true">!</span>
         ) : (
           <span className="resource-detail-thumbnail-skeleton" aria-hidden="true" />
         )}

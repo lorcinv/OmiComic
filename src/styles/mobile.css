@@ -3,6 +3,7 @@ html[data-platform="android"] .window-controls { display:none; }
 html[data-platform="android"] .reader-toolbar { padding-right:16px; }
 html[data-platform="android"] .reader-stage:not(.is-panorama) { touch-action:pan-y pinch-zoom; }
 html[data-platform="android"] .reader-stage.is-panorama { touch-action:none; }
+.library-opening-status { position:absolute; z-index:90; top:12px; left:50%; transform:translateX(-50%); max-width:calc(100% - 24px); padding:10px 16px; border:1px solid var(--边框色); border-radius:14px; background:var(--面板色); color:var(--主文字); font-size:13px; overflow-wrap:anywhere; pointer-events:none; }
 @media (pointer:coarse) {
   button,input,select,textarea { touch-action:manipulation; }
   button { -webkit-tap-highlight-color:transparent; }

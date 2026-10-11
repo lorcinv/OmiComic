@@ -1,4 +1,4 @@
-param([string]$Serial = 'emulator-5580', [ValidateSet('smoke','restore','ui','archives','archive-restore')][string]$Mode = 'smoke', [string]$JavaHome = $env:JAVA_HOME)
+param([string]$Serial = 'emulator-5580', [ValidateSet('smoke','restore','ui','archives','archive-restore','performance','interactions','storage')][string]$Mode = 'smoke', [string]$JavaHome = $env:JAVA_HOME, [string]$ExpectedVersion, [switch]$ColdCache)
 $ErrorActionPreference = 'Stop'
 if (!$Serial.StartsWith('emulator-')) { throw 'This test only runs on a dedicated emulator containing disposable fixtures.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -10,10 +10,11 @@ $adb = Join-Path $sdk 'platform-tools\adb.exe'
 $build = Join-Path $projectRoot '.cache\android-test'
 New-Item -ItemType Directory -Force -Path $build,(Join-Path $build 'classes'),(Join-Path $build 'dex'),(Join-Path $build 'assets') | Out-Null
 Copy-Item -Path 'tests\android\*.js' -Destination (Join-Path $build 'assets')
-$manifest = '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.lorcinv.omicomic.test"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/><application android:label="OmiComic test" android:testOnly="true"/><instrumentation android:name="io.github.lorcinv.omicomic.test.SmokeTest" android:targetPackage="io.github.lorcinv.omicomic"/></manifest>'
+Copy-Item -LiteralPath 'tests/fixtures/android-archives/RAR5.cbr' -Destination (Join-Path $build 'assets/stream.cbr')
+$manifest = '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.lorcinv.omicomic.test"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/><application android:label="OmiComic test" android:testOnly="true"><provider android:name="io.github.lorcinv.omicomic.test.PipeProvider" android:authorities="io.github.lorcinv.omicomic.test.pipe" android:exported="true"/></application><instrumentation android:name="io.github.lorcinv.omicomic.test.SmokeTest" android:targetPackage="io.github.lorcinv.omicomic"/></manifest>'
 [IO.File]::WriteAllText((Join-Path $build 'AndroidManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
 function Run([string]$Tool, [string[]]$Arguments) { & $Tool @Arguments; if ($LASTEXITCODE -ne 0) { throw "Test tool failed: $Tool" } }
-Run (Join-Path $JavaHome 'bin\javac.exe') @('--release','8','-encoding','UTF-8','-cp',$platform,'-d',(Join-Path $build 'classes'),'tests/android/SmokeTest.java')
+Run (Join-Path $JavaHome 'bin\javac.exe') @('--release','8','-encoding','UTF-8','-cp',$platform,'-d',(Join-Path $build 'classes'),'tests/android/SmokeTest.java','tests/android/PipeProvider.java')
 Run (Join-Path $JavaHome 'bin\jar.exe') @('cf',(Join-Path $build 'classes.jar'),'-C',(Join-Path $build 'classes'),'.')
 $env:JAVA_HOME=$JavaHome
 Run (Join-Path $tools 'd8.bat') @('--min-api','26','--lib',$platform,'--output',(Join-Path $build 'dex'),(Join-Path $build 'classes.jar'))
@@ -25,8 +26,9 @@ $env:OMI_TEST_SIGNING_PASSWORD=[IO.File]::ReadAllText((Join-Path $projectRoot '.
 try { Run (Join-Path $tools 'apksigner.bat') @('sign','--ks',(Join-Path $projectRoot '.android-signing\omicomic-release.jks'),'--ks-key-alias','omicomic','--ks-pass','env:OMI_TEST_SIGNING_PASSWORD','--key-pass','env:OMI_TEST_SIGNING_PASSWORD',$apk) }
 finally { Remove-Item Env:OMI_TEST_SIGNING_PASSWORD -ErrorAction SilentlyContinue }
 Run $adb @('-s',$Serial,'install','-r','-t',$apk)
-$expectedVersion = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version
-$result = & $adb -s $Serial shell am instrument -w -e mode $Mode -e expectedVersion $expectedVersion io.github.lorcinv.omicomic.test/.SmokeTest
+if (!$ExpectedVersion) { $ExpectedVersion = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version }
+$cacheMode = if ($ColdCache) { 'cold' } else { 'keep' }
+$result = & $adb -s $Serial shell am instrument -w -e mode $Mode -e cache $cacheMode -e expectedVersion $expectedVersion io.github.lorcinv.omicomic.test/.SmokeTest
 $result | Write-Output
 $jsonLine = $result | Where-Object { $_.StartsWith('INSTRUMENTATION_RESULT: result=') } | Select-Object -Last 1
 if (!$jsonLine) { throw 'Instrumentation did not return a result.' }

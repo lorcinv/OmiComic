@@ -15,7 +15,7 @@ yauzl.open(apk, {lazyEntries:true}, (error, zip) => {
   if(error)throw error;
   zip.on('error', error => {throw error;});
   zip.on('entry', entry => {
-    assert(!/\.(jks|keystore)$|password\.txt|^assets\/.*(?:archives|smoke|restore)\.js$/.test(entry.fileName), 'Private/test file in release APK');
+    assert(!/\.(jks|keystore)$|password\.txt|^assets\/.*(?:archives|smoke|restore|performance|interactions)\.js$/.test(entry.fileName), 'Private/test file in release APK');
     expected.delete(entry.fileName);
     if(entry.fileName.startsWith('lib/')) {
       assert.equal(entry.compressionMethod,0,'Native libraries must be stored for extractNativeLibs=false');
