@@ -1,101 +1,140 @@
-<div align="center">
+**简体中文** · [English](README.en.md) · [日本語](README.ja.md)
 
-<img src="resources/icon.png" width="96" alt="OmiComic">
+<div align="center"><img src="resources/icon.png" width="88" alt="OmiComic"></div>
 
 # OmiComic
 
-本地漫画阅读器 · Local comic reader · ローカル漫画リーダー
+**整理你的漫画，接着上次阅读。**
 
-**Windows x64 · Android 8.0+ · 1.1.36**
+OmiComic 是一款 Windows 和 Android 本地漫画阅读器。打开文件夹、压缩包或电子书，用书架和标签整理收藏，再从上次的位置接着读。
 
-[下载 / Download / ダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.36) · [简体中文](#简体中文) · [English](#english) · [日本語](#日本語)
+## 下载
 
-</div>
-
-![OmiComic on Windows and Android](docs/images/v1.1.36/overview.png)
-
-| 平台 / Platform / 対応環境 | 下载 / Download / ダウンロード |
+| 平台 | 安装包 |
 | --- | --- |
-| Windows x64 | [OmiComic-Portable-1.1.36-x64.zip](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/OmiComic-Portable-1.1.36-x64.zip) |
-| Android 8.0+ | [OmiComic-1.1.36-android.apk](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/OmiComic-1.1.36-android.apk) |
-| SHA-256 | [SHA256SUMS-1.1.36.txt](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/SHA256SUMS-1.1.36.txt) |
+| PC · Windows x64 | [OmiComic 1.1.36 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/OmiComic-Portable-1.1.36-x64.zip) |
+| Android 8.0+ | [OmiComic 1.1.36 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/OmiComic-1.1.36-android.apk) |
 
-## 简体中文
+Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-OmiComic（Omi）是一款面向 Windows 和 Android 的本地漫画阅读器。打开自己的收藏，用书架、收藏和标签整理资源，再从上次的位置接着读。
+## 功能
 
-- 支持图片文件夹、单张图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF 和 EPUB。
-- 提供单页、双页、全景、沉浸与自动阅读，保留阅读进度和书签。
-- 支持多目录、搜索、标签、简介、收藏和书架；Android 使用系统目录授权读取文件。
-- 可切换雾灰、北境、暖沙和夜色主题，界面支持简体中文、English、日本語。
-- Windows 提供首页图案裁剪预览、全局字号、按电脑配置分配的图片缓存和预读；Android 提供触摸、双指缩放和音量键翻页。
+- 直接阅读图片文件夹、单张图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF 和 EPUB。
+- 用书架、分类、标签、收藏和搜索整理漫画，用书签标记喜欢的页面。
+- 单页、双页、全景、沉浸和自动阅读，按内容与习惯选择阅读方式。
+- 自动保存阅读进度，首页快速继续阅读。
+- 雾灰、北境、暖沙、夜色四种主题，支持简体中文、English、日本語。
 
-**1.1.36 更新：** PC 设置新增“关于 OmiComic”。手机和 PC 共用 Omi 介绍、版本和 GitHub 项目链接。Windows 包含此前的主题统一、详情简介双击编辑并自动保存、缩略图双击阅读和大图加载优化；Android 保留目录授权、原生图片显示、独立栏目布局及后台恢复修复。
+## Windows 版
 
-Windows：完整解压 ZIP 后运行 `OmiComic.exe`，保留同目录的运行文件。Android：安装 APK；沿用原签名，可覆盖升级保留设置、目录授权和记录。升级前可自行备份重要数据，卸载 Android 应用会清除应用记录。
+用完整的资源库管理收藏，按鼠标和键盘的习惯浏览、整理、阅读。
 
-漫画在本机读取。删除软件内引用和删除原文件是两种操作；重命名或明确选择删除原文件会修改本地文件。EPUB 不支持 DRM、远程或交互内容；密码保护和多卷压缩包不支持。
+<table>
+<tr>
+<td width="50%" valign="top">
+<h3>首页</h3>
+<p>最近阅读集中展示封面、页码和进度。双击封面，或点击悬停时出现的“继续阅读”，回到上次读到的位置。</p>
+<a href="docs/images/v1.1.36/windows-home.png"><img src="docs/images/v1.1.36/windows-home.png" width="100%" alt="首页"></a>
+</td>
+<td width="50%" valign="top">
+<h3>资源库</h3>
+<p>添加多个漫画目录，以封面网格或列表浏览；通过名称、标签和简介查找资源。</p>
+<a href="docs/images/v1.1.36/windows-library.png"><img src="docs/images/v1.1.36/windows-library.png" width="100%" alt="资源库"></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>书架</h3>
+<p>按系列、作者或阅读计划建立书架，用分类整理不同收藏。中键拖动卡片即可调整顺序。</p>
+<a href="docs/images/v1.1.36/windows-shelves.png"><img src="docs/images/v1.1.36/windows-shelves.png" width="100%" alt="书架"></a>
+</td>
+<td width="50%" valign="top">
+<h3>标签筛选</h3>
+<p>按模糊或精准匹配筛选标签，在同一面板中管理和清理标签。</p>
+<a href="docs/images/v1.1.36/windows-tags.png"><img src="docs/images/v1.1.36/windows-tags.png" width="100%" alt="标签筛选"></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>详情与页面预览</h3>
+<p>查看封面、进度、标签和简介，通过缩略图浏览整本漫画。双击简介编辑，双击缩略图从对应页开始阅读。</p>
+<a href="docs/images/v1.1.36/windows-detail.png"><img src="docs/images/v1.1.36/windows-detail.png" width="100%" alt="详情与页面预览"></a>
+</td>
+<td width="50%" valign="top">
+<h3>阅读器</h3>
+<p>支持双页、适应窗口、全景和沉浸阅读。通过底部进度条跳页，实时调整亮度、对比度和图像效果。</p>
+<a href="docs/images/v1.1.36/windows-reader.png"><img src="docs/images/v1.1.36/windows-reader.png" width="100%" alt="阅读器"></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>设置</h3>
+<p>调整主题、字号和首页图案，也可设置阅读方式、图片缓存与预加载。首页图案支持裁剪和效果预览。</p>
+<a href="docs/images/v1.1.36/windows-settings.png"><img src="docs/images/v1.1.36/windows-settings.png" width="100%" alt="设置"></a>
+</td>
+<td width="50%" valign="top">
+<h3>关于 OmiComic</h3>
+<p>查看应用介绍与当前版本，打开 GitHub 项目主页。</p>
+<a href="docs/images/v1.1.36/windows-about.png"><img src="docs/images/v1.1.36/windows-about.png" width="100%" alt="关于 OmiComic"></a>
+</td>
+</tr>
+</table>
 
-[使用方法](README_使用方法.md) · [Android 说明](docs/ANDROID.md) · [版本更新](CHANGELOG.md) · [1.1.36 验证记录](docs/verification-1.1.36.md)
+## Android 版
 
-## English
+以触摸操作为中心，从目录浏览到全屏阅读，一只手也能轻松切换。
 
-OmiComic (Omi) is a local comic reader for Windows and Android. Open your collection, organize it with bookshelves, favorites and tags, and continue from where you left off.
+<table>
+<tr>
+<td width="50%" valign="top">
+<h3>首页</h3>
+<p>最近阅读显示封面与进度，轻点即可续读；底部可直接进入资源库和设置。</p>
+<a href="docs/images/v1.1.36/android-home.png"><img src="docs/images/v1.1.36/android-home.png" height="440" alt="首页"></a>
+</td>
+<td width="50%" valign="top">
+<h3>资源库</h3>
+<p>底栏切换资源库、书架、收藏、书签和最近阅读。网格或列表布局可按栏目分别设置。</p>
+<a href="docs/images/v1.1.36/android-library.png"><img src="docs/images/v1.1.36/android-library.png" height="440" alt="资源库"></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>目录浏览</h3>
+<p>从侧边目录树进入漫画所在的文件夹，也可添加目录或打开单个文件。</p>
+<a href="docs/images/v1.1.36/android-folders.png"><img src="docs/images/v1.1.36/android-folders.png" height="440" alt="目录浏览"></a>
+</td>
+<td width="50%" valign="top">
+<h3>书架</h3>
+<p>按阅读计划把漫画放进不同书架。长按选择、调整顺序，分类管理不同收藏。</p>
+<a href="docs/images/v1.1.36/android-shelves.png"><img src="docs/images/v1.1.36/android-shelves.png" height="440" alt="书架"></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>漫画详情</h3>
+<p>查看封面、标签、简介和页面预览，从需要的页面开始阅读。</p>
+<a href="docs/images/v1.1.36/android-detail.png"><img src="docs/images/v1.1.36/android-detail.png" height="440" alt="漫画详情"></a>
+</td>
+<td width="50%" valign="top">
+<h3>阅读器</h3>
+<p>点击画面中央唤出工具，支持滑动翻页、双指缩放、音量键翻页和自动阅读。</p>
+<a href="docs/images/v1.1.36/android-reader.png"><img src="docs/images/v1.1.36/android-reader.png" height="440" alt="阅读器"></a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>设置</h3>
+<p>各栏目分别保存显示布局，还可调整语言、主题、阅读方式和缓存容量。</p>
+<a href="docs/images/v1.1.36/android-settings.png"><img src="docs/images/v1.1.36/android-settings.png" height="440" alt="设置"></a>
+</td>
+<td width="50%" valign="top">
+<h3>关于 OmiComic</h3>
+<p>查看应用介绍、版本与 GitHub 项目主页。</p>
+<a href="docs/images/v1.1.36/android-about.png"><img src="docs/images/v1.1.36/android-about.png" height="440" alt="关于 OmiComic"></a>
+</td>
+</tr>
+</table>
 
-- Read image folders, individual images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB.
-- Choose single-page, double-page, panorama, immersive or automatic reading, with saved progress and bookmarks.
-- Manage multiple folders, search, tags, descriptions, favorites and bookshelves. Android uses system folder permissions.
-- Choose Mist, Nord, Sand or Night, with Simplified Chinese, English and Japanese interfaces.
-- Windows offers cropped home artwork, global text sizing and hardware-aware image caching and preloading. Android supports touch gestures, pinch zoom and volume-key navigation.
+## 更多
 
-**New in 1.1.36:** About OmiComic is now available in PC settings. Both platforms share the introduction, version and GitHub project link. Windows also includes the recent theme refinements, double-click description editing with automatic saving, double-click thumbnail reading and large-image loading improvements. Android retains folder permissions, native image rendering, independent view layouts and background-resume fixes.
-
-Windows: extract the entire ZIP and run `OmiComic.exe`, keeping its companion files. Android: install the APK. It uses the existing signing certificate, so an in-place upgrade retains settings, folder permissions and reading records. Uninstalling the Android app clears its app data.
-
-Books are read locally. Removing an app reference is separate from deleting the original file; renaming or explicitly deleting an original changes the local file. EPUB does not support DRM, remote or interactive content. Password-protected and multi-volume archives are unsupported.
-
-[Release notes](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.36) · [Verification](docs/verification-1.1.36.md) · [Build instructions](docs/ANDROID.md)
-
-## 日本語
-
-OmiComic（Omi）は Windows と Android 向けのローカル漫画リーダーです。自分のコレクションを開き、本棚・お気に入り・タグで整理して、前回の続きから読めます。
-
-- 画像フォルダー、単一画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB に対応。
-- 単ページ、見開き、パノラマ、没入、自動読書を選択でき、読書進捗としおりを保存します。
-- 複数フォルダー、検索、タグ、紹介文、お気に入り、本棚で整理。Android はシステムのフォルダーアクセス権を使用します。
-- 霧グレー・北欧・暖砂・夜色のテーマを用意。UI は簡体字中国語、English、日本語に対応しています。
-- Windows ではホーム画像のトリミング、全体の文字サイズ、PC の性能に応じた画像キャッシュと先読みを設定できます。Android はタッチ操作、ピンチズーム、音量キーでのページ送りに対応します。
-
-**1.1.36 の更新：** PC の設定に「OmiComic について」を追加しました。両プラットフォームで紹介文、バージョン、GitHub リンクを統一しています。Windows にはテーマの調整、紹介文のダブルクリック編集と自動保存、サムネイルのダブルクリック読書、大画像の読み込み改善も含まれます。Android はフォルダー権限、ネイティブ画像表示、画面ごとのレイアウト、バックグラウンド復帰の修正を引き継いでいます。
-
-Windows は ZIP をすべて展開し、同じフォルダーのファイルを残したまま `OmiComic.exe` を起動してください。Android は APK をインストールします。従来と同じ署名で、設定・フォルダー権限・読書記録を保った上書き更新が可能です。Android アプリをアンインストールするとアプリ内の記録は削除されます。
-
-作品は端末内で読み込みます。アプリ内の参照の削除と元ファイルの削除は別の操作です。元ファイルの名前変更や明示的な削除は端末内のファイルを変更します。EPUB の DRM・リモート・対話型コンテンツ、暗号化された書庫、分割書庫には対応していません。
-
-[リリースノート](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.36) · [検証記録](docs/verification-1.1.36.md) · [ビルド手順](docs/ANDROID.md)
-
-## Screenshots / 界面 / 画面
-
-All covers, pages and home artwork shown here use synthetic Omi symbol placeholders. 配图中的封面、页面和首页图案全部使用 Omi 占位符号。画像内の表紙・ページ・ホーム画像はすべて Omi のプレースホルダーです。
-
-![Windows library](docs/images/v1.1.36/windows-library.png)
-
-![Windows reader](docs/images/v1.1.36/windows-reader.png)
-
-<img src="docs/images/v1.1.36/android-library.png" width="32%" alt="Android library with Omi placeholders"> <img src="docs/images/v1.1.36/android-reader.png" width="32%" alt="Android reader with Omi placeholder"> <img src="docs/images/v1.1.36/android-about.png" width="32%" alt="About OmiComic on Android">
-
-## Build / 构建 / ビルド
-
-Node.js 24 + npm. Windows packaging requires Windows x64. Android requires JDK 17+, Android platform 35 and build-tools 35.0.0.
-
-```sh
-npm ci
-npm run dev
-npm run verify
-npm run dist:portable
-npm run dist:android
-```
-
-Third-party notices are included in the distributions. [7-Zip source](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/7z2604-src.tar.xz) · [Archive limits](tests/ARCHIVE_STRESS.md)
-
-本项目暂未提供开源许可证。No open-source license has been granted for this project. 本プロジェクトにはオープンソースライセンスが付与されていません。
+[使用方法](README_使用方法.md) · [版本更新](CHANGELOG.md) · [反馈问题](https://github.com/lorcinv/OmiComic/issues) · [历史版本](docs/releases/README.md)

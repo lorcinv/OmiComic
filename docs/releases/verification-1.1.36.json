@@ -11,16 +11,6 @@
       "name": "OmiComic-1.1.36-android.apk",
       "bytes": 14479986,
       "sha256": "75fd92a27e8cb8ea44d9c89411ed72ec2e056367596d0f5969729737e239b88a"
-    },
-    {
-      "name": "7z2604-src.tar.xz",
-      "bytes": 1560440,
-      "sha256": "9691944c0fe0d01bb49373a704fb983fd33bc98b1738695179dfbf99ac1734f6"
-    },
-    {
-      "name": "OmiComic-1.1.36-preview.png",
-      "bytes": 227163,
-      "sha256": "6fe079cca3b7c52503e9392cd35f0c92f446ccdc9bfc025039c477eef2334620"
     }
   ],
   "checks": {
