@@ -1,7 +1,8 @@
+import { t } from '../i18n';
 /** 静态的首页签名，沿用品牌的开口圆环与双眼，不参与按钮动画。 */
 export default function OmiSignature() {
   return (
-    <div className="omi-home__signature" aria-label="OmiComic 品牌签名">
+    <div className="omi-home__signature" aria-label={t("OmiComic 品牌签名")}>
       <svg viewBox="0 0 100 100" aria-hidden="true" className="omi-home__signature-mark">
         <circle cx="50" cy="50" r="37" fill="none" stroke="currentColor" strokeWidth=".6" opacity=".3" />
         <path d="M73.3 26.7a33 33 0 1 0 0 46.6" fill="none" stroke="currentColor" strokeWidth="11" />

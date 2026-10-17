@@ -37,6 +37,12 @@ export interface LibraryRoot {
 }
 
 export interface AppSettings {
+  language?: 'zh-CN' | 'en' | 'ja';
+  desktopInfoFontSize?: number;
+  desktopGlobalFontSize?: number;
+  desktopReaderAutoHide?: boolean;
+  desktopPerformanceProfile?: 'auto' | 'balanced' | 'high' | 'custom';
+
   cardSize: 卡片尺寸;
   cardScale: number;
   detailThumbnailScale: number;
@@ -124,6 +130,7 @@ export interface FavoriteItem {
 }
 
 export interface BookmarkItem {
+  bookmarkTitle?: string;
   id: string;
   resourceKey: string;
   sourcePath: string;
@@ -143,6 +150,7 @@ export interface BookmarkItem {
 }
 
 export interface 整理信息输入 {
+  bookmarkTitle?: string;
   note?: string;
   tags?: string[];
 }
@@ -270,6 +278,7 @@ export interface 阅读资源结果 {
 }
 
 export interface 获取页面图片输入 {
+  prefetch?: boolean;
   preview?: boolean;
   sourcePath: string;
   virtualPath?: string;
@@ -303,6 +312,8 @@ export interface 缩略图输入 {
 
 export interface 缩略图结果 {
   itemCount?: number;
+  childFolderCount?: number;
+  folderSummary?: { folders: number; books: number; images: number; unsupported: number };
   pdfPath?: string;
   sourceVersion?: string;
   url: string | null;
@@ -345,6 +356,10 @@ contextBridge.exposeInMainWorld("omicomic", {
   getAppInfo: (): Promise<应用信息> => ipcRenderer.invoke("应用:获取信息"),
   getAppData: (): Promise<操作结果<OmiComicAppData>> =>
     ipcRenderer.invoke("数据:获取应用数据"),
+  getHomeArtwork: () => ipcRenderer.invoke('主界面:获取图案'),
+  selectHomeArtwork: () => ipcRenderer.invoke('主界面:选择图案'),
+  saveHomeArtwork: (input: import('./shared/homeArtwork').SaveHomeArtwork) => ipcRenderer.invoke('主界面:保存图案', input),
+  resetHomeArtwork: () => ipcRenderer.invoke('主界面:恢复图案'),
   updateSettings: (输入: Partial<AppSettings>): Promise<操作结果<AppSettings>> =>
     ipcRenderer.invoke("数据:更新设置", 输入),
   addLibraryRoot: (输入: { path: string; name: string }): Promise<操作结果<LibraryRoot>> =>

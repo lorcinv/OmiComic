@@ -6,6 +6,9 @@ import { version as appVersion } from "../../package.json";
 import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
 
 const defaults: AppSettings = {
+  language: 'zh-CN',
+  mobileReaderAutoHide: true,
+  mobileLibraryLayout: "grid", mobileGridColumns: 2, mobileListCoverSize: 82, readerVolumeKeys: false, readerVolumeKeysReversed: false,
   colorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
   pageSize: 60, sortMode: "name-asc", sortDirection: "asc", folderFirst: true,
   hideBookshelfItemsInLibrary: true, showProgressBar: true, showProgressText: true,
@@ -15,6 +18,7 @@ const defaults: AppSettings = {
   smartDetectSpreadPage: true, wheelPageTurn: false, immersiveAutoHide: false, immersiveAutoHideDelay: 3000,
   readerHideFooterControls: false, readerHideImmersiveProgress: false, readerMemoryCacheSizeMb: 100,
   readerPreloadPages: 2, readerImageLoadConcurrency: 2, bookSwitchButtonOpacity: 40,
+  androidReaderDiskCacheSizeMb: 512, androidThumbnailCacheSizeMb: 128,
   organizeDrawerOpacity: 90, bookshelfNoteHoverDelayMs: 1000, recentOpenedLimit: 50,
   tagSearchMode: "fuzzy", confirmBeforeDeleteTags: true,
   confirmBeforeBatchDelete: { favorites: true, bookmarks: true, recent: true },
@@ -41,8 +45,18 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     ...stored,
   };
   data.settings = { ...defaults, ...stored?.settings };
+  // Preserve existing direct-file references when upgrading to history-only storage.
+  for (const item of data.temporaryOpened) {
+    if (!data.recentOpened.some(recent => recent.resourceKey === item.resourceKey)
+      && !data.removedRecentResourceKeys.includes(item.resourceKey)) data.recentOpened.push(item);
+  }
+  data.recentOpened.sort((a, b) => b.updatedAt - a.updatedAt);
+  data.recentOpened = data.recentOpened.slice(0, data.settings.recentOpenedLimit);
+  data.temporaryOpened = [];
   let queue: Promise<unknown> = Promise.resolve();
-  const read = async <T>(fn: () => T): Promise<操作结果<T>> => { await queue; return ok(structuredClone(fn())); };
+  // Reads use the last atomically committed snapshot. A slow disk save must not
+  // stall opening a comic; writes still serialize and report persistence failures.
+  const read = async <T>(fn: () => T): Promise<操作结果<T>> => ok(structuredClone(fn()));
   const write = <T>(fn: (draft: OmiComicAppData) => T | Promise<T>, persist = true): Promise<操作结果<T>> => {
     const work = queue.then(async () => {
       const draft = structuredClone(data);
@@ -76,6 +90,8 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
   const listeners = new Set<() => void>();
   const api: OmiComicApi = {
     getAppInfo: async () => ({name:"OmiComic", version:appVersion, platform:"android"}),
+    getAndroidCacheInfo: () => call("getAndroidCacheInfo"),
+    clearAndroidReadCache: () => call("clearAndroidReadCache"),
     getAppData: () => read(() => data),
     updateSettings: input => write(d => (d.settings = {...d.settings,...input})),
     addLibraryRoot: input => write(d => {
@@ -106,7 +122,13 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     updateFavoriteMeta: (key,input) => write(d=>{const item=d.favorites.find(i=>i.resourceKey===key);if(!item)throw new Error("收藏已不存在。");Object.assign(item,input,{tags:tags(input.tags),updatedAt:Date.now()});return item;}),
     reorderFavorites: keys => write(d=>(d.favorites=reorder(d.favorites,keys,i=>i.resourceKey))),
     removeFavorite: key => write(d=>{d.favorites=d.favorites.filter(i=>i.resourceKey!==key);return null;}),
-    updateResourceMeta: input => write(d=>(d.resourceMeta[input.resourceKey]={...input,note:input.note??"",tags:tags(input.tags),updatedAt:Date.now()})),
+    updateResourceMeta: input => write(d=>{
+      const old=d.resourceMeta[input.resourceKey]??d.favorites.find(item=>item.resourceKey===input.resourceKey);
+      const next={...input,note:input.note??old?.note??"",tags:input.tags===undefined?tags(old?.tags):tags(input.tags),updatedAt:Date.now()};
+      d.resourceMeta[input.resourceKey]=next;
+      const favorite=d.favorites.find(item=>item.resourceKey===input.resourceKey);if(favorite)Object.assign(favorite,{note:next.note,tags:next.tags,updatedAt:next.updatedAt});
+      return next;
+    }),
     updateTagOrder: input => write(d=>(d.tagOrder=tags(input))),
     deleteTags: input => write(d=>{for(const i of [...d.favorites,...d.bookmarks,...Object.values(d.resourceMeta),...d.virtualFolders]) i.tags=(i.tags??[]).filter(t=>!input.includes(t));d.tagOrder=d.tagOrder.filter(t=>!input.includes(t));return d;}),
     createBookshelf: input => write(d=>{const i={...input,id:crypto.randomUUID(),createdAt:Date.now(),updatedAt:Date.now(),sortIndex:d.bookshelves.length};d.bookshelves.push(i);return i;}),
@@ -127,14 +149,13 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     moveVirtualFolderItems: input=>write(d=>{if(input.fromFolderId===input.toFolderId)throw new Error("请选择其他书架。");const count=addItems(folder(d,input.toFolderId),input.items);removeItems(folder(d,input.fromFolderId),input.items.map(i=>i.resourceKey));return {virtualFolders:d.virtualFolders,targetAlreadyHadCount:input.items.length-count,addedCount:count,movedCount:input.items.length};}),
     getBookmarks: ()=>read(()=>data.bookmarks),
     toggleBookmark: input=>write(d=>{const old=d.bookmarks.find(i=>i.resourceKey===input.resourceKey&&bookmarkMatches(i,input.pageIndex,input.pageId));if(old){d.bookmarks=d.bookmarks.filter(i=>i!==old);return {bookmarked:false};}const item={...input,id:crypto.randomUUID(),createdAt:Date.now(),updatedAt:Date.now(),sortIndex:d.bookmarks.length};d.bookmarks.push(item);return {bookmarked:true,bookmark:item};}),
-    updateBookmarkMeta: (id,input)=>write(d=>{const i=d.bookmarks.find(i=>i.id===id);if(!i)throw new Error("书签已不存在。");Object.assign(i,input,{tags:tags(input.tags),updatedAt:Date.now()});return i;}),
+    updateBookmarkMeta: (id,input)=>write(d=>{const i=d.bookmarks.find(i=>i.id===id);if(!i)throw new Error("书签已不存在。");if(input.note!==undefined)i.note=input.note;if(input.tags!==undefined)i.tags=tags(input.tags);if(input.bookmarkTitle!==undefined)i.bookmarkTitle=input.bookmarkTitle.trim().slice(0,180)||undefined;i.updatedAt=Date.now();return i;}),
     reorderBookmarks: keys=>write(d=>(d.bookmarks=reorder(d.bookmarks,keys,i=>i.id))),
     removeBookmark: id=>write(d=>{d.bookmarks=d.bookmarks.filter(i=>i.id!==id);return null;}),
     isPageBookmarked: (key,page,id)=>read(()=>data.bookmarks.some(i=>i.resourceKey===key&&bookmarkMatches(i,page,id))),
     selectFolder: ()=>call("chooseFolder"),
     listDirectory: async path=>{const result=await call<import("../types").目录结果>("listDirectory",{path});if(result.ok){const hidden=data.excludedResourcePaths??[];result.data.items=result.data.items.filter(i=>!hidden.some(p=>withinPath(i.path,p)));result.data.total=result.data.items.length;}return result;},
     getResourcePages: async input=>{
-      await queue;
       const result = await call<阅读资源结果>('getResourcePages', input);
       if (result.ok && result.data.sourceType !== 'pdf' && result.data.sourceType !== 'epub') result.data.pages = sortReaderPages(result.data.pages, normalizePageSort(data.readingProgress[result.data.resourceKey]?.readerViewState?.pageSort));
       return result;
@@ -163,6 +184,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     }),
     getPageImage: input=>call("getPageImage",input),
     getThumbnail: input=>call("getThumbnail",input),
+    refreshThumbnails: ()=>call("refreshThumbnails"),
     getReadablePageCount: input=>call("getReadablePageCount",input),
     getBookmarkPagePreview: input=>call("getBookmarkPagePreview",input),
     checkResourcePath: input=>call("checkResourcePath",input),
@@ -178,7 +200,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
       const result=await call<string|null>("chooseFile");if(!result.ok)return result;if(!result.data)return ok(null);
       const opened=await api.getResourcePages({path:result.data,type:/\.(zip|cbz|rar|cbr|7z|cb7)$/i.test(result.data)?'archive':/\.pdf$/i.test(result.data)?'pdf':/\.epub$/i.test(result.data)?'epub':'image'});if(!opened.ok)return opened;
       const resource=opened.data, initialPageIndex=data.readingProgress[resource.resourceKey]?.currentPageIndex??0;
-      const saved=await write(d=>{const item={resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:initialPageIndex,totalPages:resource.total,updatedAt:Date.now()};d.temporaryOpened=[item,...d.temporaryOpened.filter(i=>i.resourceKey!==item.resourceKey)];return null;});
+      const saved=await write(d=>{const item={resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:initialPageIndex,totalPages:resource.total,updatedAt:Date.now()};d.recentOpened=[item,...d.recentOpened.filter(i=>i.resourceKey!==item.resourceKey)].slice(0,d.settings.recentOpenedLimit);d.removedRecentResourceKeys=d.removedRecentResourceKeys.filter(key=>key!==item.resourceKey);return null;});
       if(!saved.ok)return saved;external.push({resource,initialPageIndex});listeners.forEach(fn=>fn());return ok(null);
     },
     removeTemporaryOpened:key=>write(d=>{d.temporaryOpened=d.temporaryOpened.filter(i=>i.resourceKey!==key);return null;}),
@@ -201,6 +223,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     restoreResourceIndex:()=>write(d=>{d.excludedResourcePaths=[];return d;}),
     minimizeWindow:()=>{void native("background");}, closeWindow:()=>{void native("close");},
     toggleMaximizeWindow:async()=>ok(false),isWindowMaximized:async()=>ok(false),
+    setReaderVolumeKeys:enabled=>call("setReaderVolumeKeys",{enabled}),
     setFullscreen:enabled=>call("setFullscreen",{enabled}),isFullscreen:()=>call("isFullscreen"),
   };
   return api;

@@ -67,19 +67,19 @@ test('packaged reader sorts real folders/archives, restores identities and runs 
   await page.getByRole('button',{name:'下一页',exact:true}).click();
   await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);await openSettings();await page.getByRole('combobox',{name:'页面排序'}).click();await page.getByRole('option',{name:'文件名自然降序',exact:true}).click();await resumeBook(path.join(books,'漫画.cbz'),'archive');
   await expect(page.locator('#reader-title')).toContainText('/ 2.png');await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('3');
-  await page.getByRole('button',{name:'画面调整',exact:true}).click();await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.4');await page.getByRole('slider',{name:'锐化',exact:true}).fill('80');await page.getByRole('slider',{name:'降噪',exact:true}).fill('60');await page.getByRole('button',{name:'关闭面板'}).click();
+  await page.getByRole('button',{name:'画面调整',exact:true}).click();await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.4');await page.getByRole('slider',{name:'锐化',exact:true}).fill('80');await page.getByRole('slider',{name:'降噪',exact:true}).fill('60');await page.keyboard.press('Escape');
   const start=performance.now();await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready',{timeout:15000});const processingMs=Math.round(performance.now()-start);
   await page.getByRole('button',{name:'返回',exact:true}).click();await app.close();app=null;
   page=await launch(path.join(books,'漫画.cbz'));
   await expect(page.locator('#reader-title')).toContainText('/ 2.png');await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('3');await expect(page.getByRole('button',{name:'开始自动阅读',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'画面调整',exact:true}).click();await expect(page.getByRole('slider',{name:'伽马',exact:true})).toHaveValue('1.4');await page.getByRole('button',{name:'恢复默认'}).click();await page.getByRole('button',{name:'关闭面板'}).click();await expect(page.locator('.reader-processed-image')).toHaveCount(0);await page.getByRole('button',{name:'返回',exact:true}).click();await app.close();app=null;
+  await page.getByRole('button',{name:'画面调整',exact:true}).click();await expect(page.getByRole('slider',{name:'伽马',exact:true})).toHaveValue('1.4');await page.getByRole('button',{name:'恢复默认'}).click();await page.keyboard.press('Escape');await expect(page.locator('.reader-processed-image')).toHaveCount(0);await page.getByRole('button',{name:'返回',exact:true}).click();await app.close();app=null;
   const docs=[];
   for(const name of ['文档.pdf','章节.epub']) {
     page=await launch(path.join(books,name));await expect(page.locator(name.endsWith('.pdf')?'.reader-canvas':'.reader-chapter').first()).toBeVisible();
     await openSettings();await expect(page.getByRole('combobox',{name:'页面排序'})).toHaveCount(0);await expect(page.getByText('PDF / EPUB 保持文档原有顺序。')).toBeVisible();await resumeBook(path.join(books,name),name.endsWith('.pdf')?'pdf':'epub');
     await page.getByRole('button',{name:'画面调整',exact:true}).click();await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.3');
-    if(name.endsWith('.pdf')) {await page.getByRole('slider',{name:'锐化',exact:true}).fill('50');await page.getByRole('slider',{name:'降噪',exact:true}).fill('50');await page.getByRole('button',{name:'关闭面板'}).click();await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready',{timeout:15000});}
-    else {await expect(page.getByRole('slider',{name:'锐化',exact:true})).toBeDisabled();await page.getByRole('button',{name:'关闭面板'}).click();}
+    if(name.endsWith('.pdf')) {await page.getByRole('slider',{name:'锐化',exact:true}).fill('50');await page.getByRole('slider',{name:'降噪',exact:true}).fill('50');await page.keyboard.press('Escape');await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready',{timeout:15000});}
+    else {await expect(page.getByRole('slider',{name:'锐化',exact:true})).toBeDisabled();await page.keyboard.press('Escape');}
     docs.push({format:path.extname(name),displayEffects:true,rasterProcessing:name.endsWith('.pdf')});await page.getByRole('button',{name:'返回',exact:true}).click();await app.close();app=null;
   }
   for(const name of names)assert.equal(createHash('sha256').update(await fs.readFile(path.join(books,name))).digest('hex'),originalHash);

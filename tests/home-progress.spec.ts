@@ -59,9 +59,9 @@ for (const width of [1440, 960]) {
     await expect(books.first().locator('.omi-home__cover-action')).toHaveCSS('opacity', '0');
     await expect(books.first()).toHaveCSS('transform', 'none');
     await page.screenshot({ path: `test-results/home-progress-${width}.png` });
-    await expect(books.nth(0).locator('.omi-home__book-progress')).toContainText('1 / 208 页');
+    await expect(books.nth(0).locator('.omi-home__book-progress')).toContainText('1 / 208');
     await expect(books.nth(0).locator('.omi-home__book-progress')).toContainText('<1%');
-    await expect(books.nth(1).locator('.omi-home__book-progress')).toContainText('87 / 147 页');
+    await expect(books.nth(1).locator('.omi-home__book-progress')).toContainText('87 / 147');
     await expect(books.nth(2).locator('.omi-home__book-progress')).toContainText('10 / 10 章');
     await books.first().locator('img').dispatchEvent('error');
     await expect(books.first().locator('.omi-home__cover-placeholder')).toBeVisible();

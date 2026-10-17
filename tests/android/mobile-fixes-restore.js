@@ -1,0 +1,12 @@
+const assert=(v,m)=>{if(!v)throw new Error(m);},pause=ms=>new Promise(r=>setTimeout(r,ms));
+const wait=async(fn,label)=>{const end=Date.now()+15000;while(!await fn()){if(Date.now()>end)throw new Error(label);await pause(70);}};
+const api=window.omicomic,data=(await api.getAppData()).data,root=data.library.roots.find(r=>r.name==='OmiSmoke');
+const base=root.path+'/Fixes116',meta=data.resourceMeta['folder:'+base+'/Pages64'];
+assert(meta.note==='独立修改后的简介'&&meta.tags.includes('彩色'),'Metadata not retained after process restart');assert(data.settings.tagSearchMode==='exact','Search mode not retained');
+const visible=el=>el&&el.getBoundingClientRect().width>0;
+const button=label=>[...document.querySelectorAll('button')].find(el=>visible(el)&&(el.getAttribute('aria-label')===label||el.textContent.trim()===label));
+const tap=async el=>{assert(el,'Missing button');await pause(350);const r=el.getBoundingClientRect();window.__omiTap={x:r.x+r.width/2,y:r.y+r.height/2,viewport:innerWidth};await wait(()=>!window.__omiTap,'native touch');};
+await tap(button('打开资源库'));await wait(()=>document.querySelector('.mobile-resource-card'),'library');
+let reads=0;const original=api.listDirectory;api.listDirectory=path=>{reads++;return original(path);};
+await tap(button('资源库目录'));await wait(()=>button('展开 Fixes116'),'cached root');await tap(button('展开 Fixes116'));await wait(()=>button('ArchiveLeaf'),'cached tree after process restart');await pause(250);assert(reads===0,'Persistent tree caused '+reads+' directory reads');
+return {metadataRetained:true,searchModeRetained:true,directoryIndexRetained:true,drawerDirectoryReads:reads};

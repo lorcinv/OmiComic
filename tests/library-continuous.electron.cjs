@@ -43,10 +43,10 @@ test('packaged library scrolls continuously and identifies real collection folde
   }, books), true);
   await page.reload(); await page.locator('.omi-home__library').click();
   const cards = page.locator('.resource-card');
-  await expect(page.getByText('实际 63 项', { exact: true })).toBeVisible();
-  await expect(cards.filter({ hasText: '000 集合' }).locator('.resource-card-info > span').first()).toHaveText('文件夹 · 含 1 项目');
-  await expect(cards.filter({ hasText: '001 图片' }).locator('.resource-card-info > span').first()).toHaveText('文件夹');
-  await expect(cards.filter({ hasText: '002 图片' }).locator('.resource-card-info > span').first()).toHaveText('文件夹 · 含 2 项目');
+  await expect(page.locator('.page-size-effective')).toHaveCount(0);
+  await expect(cards.filter({ hasText: '000 集合' }).locator('.resource-card-info > span').first()).toHaveText('1 文件夹');
+  await expect(cards.filter({ hasText: '001 图片' }).locator('.resource-card-info > span').first()).toHaveText('0/2 · 0%');
+  await expect(cards.filter({ hasText: '002 图片' }).locator('.resource-card-info > span').first()).toHaveText('');
   await cards.filter({ hasText: '000 集合' }).dblclick();
   await expect(cards).toHaveCount(1);
   await page.keyboard.press('Escape');

@@ -20,6 +20,47 @@ function nativeStore() {
 }
 
 describe('Android durable library adapter',()=>{
+  it('opens pages and reads the committed snapshot while a save is held, then commits in order',async()=>{
+    const store=nativeStore();let release!:()=>void;let saving=false;
+    const native:NativeCall=async(method,args)=>{
+      if(method==='saveData'&&saving)await new Promise<void>(resolve=>{release=resolve;});
+      if(method==='getResourcePages')return {resourceKey:'folder:/local/a',sourcePath:'/local/a',sourceType:'folder',pages:[],total:0} as any;
+      return store.native(method,args);
+    };
+    const api=await createAndroidApi(native);await api.updateSettings({colorTheme:'mist'});saving=true;
+    const write=api.updateSettings({colorTheme:'night'});await new Promise(resolve=>setTimeout(resolve,0));
+    const timeout=new Promise<'blocked'>(resolve=>setTimeout(()=>resolve('blocked'),100));
+    const read=await Promise.race([Promise.all([api.getAppData(),api.getResourcePages({path:'/local/a',type:'folder'})]),timeout]);
+    expect(read).not.toBe('blocked');if(read==='blocked')throw new Error('Reads waited for disk');
+    expect(read[0].ok&&read[0].data.settings.colorTheme).toBe('mist');expect(read[1].ok).toBe(true);
+    saving=false;release();expect((await write).ok).toBe(true);
+    const committed=await api.getAppData();expect(committed.ok&&committed.data.settings.colorTheme).toBe('night');
+  });
+  it('persists independent reading and cover disk budgets and exposes cache management',async()=>{
+    const n=nativeStore(),api=await createAndroidApi(n.native);const first=await api.getAppData();if(!first.ok)throw new Error();
+    expect(first.data.settings).toMatchObject({androidReaderDiskCacheSizeMb:512,androidThumbnailCacheSizeMb:128,readerMemoryCacheSizeMb:100});
+    await api.updateSettings({androidReaderDiskCacheSizeMb:768,androidThumbnailCacheSizeMb:192});
+    const restored=await (await createAndroidApi(n.native)).getAppData();if(!restored.ok)throw new Error();
+    expect(restored.data.settings).toMatchObject({androidReaderDiskCacheSizeMb:768,androidThumbnailCacheSizeMb:192,readerMemoryCacheSizeMb:100});
+    await api.getAndroidCacheInfo!();await api.clearAndroidReadCache!();expect(n.calls.slice(-2).map(c=>c.method)).toEqual(['getAndroidCacheInfo','clearAndroidReadCache']);
+  });
+  it('tag-only and note-only edits preserve the other field and survive restart',async()=>{
+    const n=nativeStore(),api=await createAndroidApi(n.native),item={resourceKey:'archive:/local/a.cbz',sourcePath:'/local/a.cbz',sourceType:'archive' as const,title:'a.cbz'};
+    await api.addFavorite(item);await api.updateResourceMeta({...item,note:'原简介',tags:['原标签']});
+    await api.updateResourceMeta({...item,tags:['新标签']});await api.updateResourceMeta({...item,note:'新简介'});
+    const reopened=await createAndroidApi(n.native),data=await reopened.getAppData();if(!data.ok)throw new Error();
+    expect(data.data.resourceMeta[item.resourceKey]).toMatchObject({note:'新简介',tags:['新标签']});expect(data.data.favorites[0]).toMatchObject({note:'新简介',tags:['新标签']});
+  });
+  it('bookmark rename preserves its physical page, metadata, order and source file across restart',async()=>{
+    const n=nativeStore(),api=await createAndroidApi(n.native);
+    const item={resourceKey:'archive:/local/books/a.cbz',sourcePath:'/local/books/a.cbz',sourceType:'archive' as const,title:'a.cbz'};
+    const added=await api.toggleBookmark({...item,pageIndex:5,totalPages:12,pageName:'000006.png',tags:['科幻'],note:'夜空'});if(!added.ok || !added.data.bookmark)throw new Error();
+    const id=added.data.bookmark.id;
+    await api.updateBookmarkMeta(id,{bookmarkTitle:'月光书签'});
+    const reopened=await createAndroidApi(n.native),marks=await reopened.getBookmarks();if(!marks.ok)throw new Error();
+    expect(marks.data[0]).toMatchObject({id,bookmarkTitle:'月光书签',title:'a.cbz',sourcePath:item.sourcePath,pageIndex:5,pageName:'000006.png',tags:['科幻'],note:'夜空',sortIndex:0});
+    expect(n.calls.filter(call=>call.method==='changeLocalResource')).toHaveLength(0);
+  });
   it('serializes concurrent updates and restores complete progress after restart',async()=>{
     const n=nativeStore();const api=await createAndroidApi(n.native);
     await Promise.all([api.updateSettings({colorTheme:'night'}),api.addLibraryRoot({path:'/local/books',name:'漫画'}),api.saveReadingProgress({resourceKey:'archive:/local/books/a.cbz',sourcePath:'/local/books/a.cbz',sourceType:'archive',title:'a.cbz',currentPageIndex:3,totalPages:10,percent:40,completed:false,hasStartedReading:true,firstReadAt:10,updatedAt:20})]);

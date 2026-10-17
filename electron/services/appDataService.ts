@@ -1,3 +1,6 @@
+import { desktopTypography } from "../shared/desktopTypography";
+import os from 'node:os';
+import { desktopPerformance, type DesktopPerformanceProfile } from '../shared/desktopPerformance';
 import type { ReaderPreferences, PageSort } from "../shared/readerPreferences";
 import { normalizeReaderPreferences, normalizePageSort, sortReaderPages, pageIdentity, resolvePageIndex, bookmarkMatches, type IdentifiedPage } from "../shared/readerPreferences";
 import { app } from "electron";
@@ -37,6 +40,13 @@ export interface LibraryRoot {
 }
 
 export interface AppSettings {
+  language?: 'zh-CN' | 'en' | 'ja';
+  desktopInfoFontSize?: number;
+  desktopGlobalFontSize?: number;
+  desktopReaderAutoHide?: boolean;
+  desktopPerformanceProfile?: 'auto' | 'balanced' | 'high' | 'custom';
+  desktopPerformanceRevision?: number;
+
   colorTheme: 主题配色;
   cardSize: 卡片尺寸;
   cardScale: number;
@@ -125,6 +135,7 @@ export interface FavoriteItem {
 }
 
 export interface BookmarkItem {
+  bookmarkTitle?: string;
   id: string;
   resourceKey: string;
   sourcePath: string;
@@ -144,6 +155,7 @@ export interface BookmarkItem {
 }
 
 export interface 整理信息输入 {
+  bookmarkTitle?: string;
   note?: string;
   tags?: string[];
 }
@@ -367,7 +379,7 @@ function 修正标签列表(输入: unknown): string[] {
   return 标签列表;
 }
 
-function 修正整理信息(输入: 整理信息输入): Required<整理信息输入> {
+function 修正整理信息(输入: 整理信息输入): Required<Pick<整理信息输入, "note" | "tags">> {
   return {
     note: 读取可空文本(输入.note),
     tags: 修正标签列表(输入.tags),
@@ -436,26 +448,23 @@ function 修正设置(输入: unknown): AppSettings {
   const tagSearchMode = 标签搜索模式选项.has(String(设置.tagSearchMode))
     ? 设置.tagSearchMode as 标签搜索模式
     : 默认设置.tagSearchMode;
-  const readerMemoryCacheSizeMb = 读取范围整数(
-    设置.readerMemoryCacheSizeMb,
-    默认设置.readerMemoryCacheSizeMb,
-    0,
-    2048,
-  );
-  const readerPreloadPages = 读取范围整数(
-    设置.readerPreloadPages,
-    默认设置.readerPreloadPages,
-    0,
-    20,
-  );
-  const readerImageLoadConcurrency = 读取范围整数(
-    设置.readerImageLoadConcurrency,
-    默认设置.readerImageLoadConcurrency,
-    1,
-    8,
-  );
+  const legacyCustom = [设置.readerMemoryCacheSizeMb, 设置.readerPreloadPages, 设置.readerImageLoadConcurrency]
+    .some((value,index) => value !== undefined && Number(value) !== [200,5,4][index]);
+  const oldRestrictivePreset = 设置.desktopPerformanceRevision !== 2 && 设置.desktopPerformanceProfile === 'custom'
+    && Number(设置.readerMemoryCacheSizeMb) === 500 && Number(设置.readerPreloadPages) === 5 && Number(设置.readerImageLoadConcurrency) === 5;
+  const desktopPerformanceProfile: DesktopPerformanceProfile = oldRestrictivePreset ? 'auto' : ['auto','balanced','high','custom'].includes(String(设置.desktopPerformanceProfile))
+    ? 设置.desktopPerformanceProfile as DesktopPerformanceProfile : legacyCustom ? 'custom' : 'auto';
+  const budget = desktopPerformanceProfile === 'custom' ? 设置 : desktopPerformance(desktopPerformanceProfile, os.totalmem(), os.availableParallelism());
+  const readerMemoryCacheSizeMb = 读取范围整数(budget.readerMemoryCacheSizeMb, 默认设置.readerMemoryCacheSizeMb, 0, 16384);
+  const readerPreloadPages = 读取范围整数(budget.readerPreloadPages, 默认设置.readerPreloadPages, 0, 120);
+  const readerImageLoadConcurrency = 读取范围整数(budget.readerImageLoadConcurrency, 默认设置.readerImageLoadConcurrency, 1, 24);
 
   return {
+    language: 设置.language === 'en' || 设置.language === 'ja' ? 设置.language : 'zh-CN',
+    ...desktopTypography(设置),
+    desktopReaderAutoHide: 设置.desktopReaderAutoHide === true,
+    desktopPerformanceProfile,
+    desktopPerformanceRevision: 2,
     colorTheme,
     cardSize,
     cardScale: 读取范围整数(设置.cardScale, 默认设置.cardScale, 40, 200),
@@ -791,6 +800,7 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
     const 当前时间 = Date.now();
     const id = 读取字符串(项目.id) ?? 创建书签ID(resourceKey, pageIndex);
     书签列表.push({
+      bookmarkTitle: 读取字符串(项目.bookmarkTitle),
       id,
       resourceKey,
       sourcePath,
@@ -1115,7 +1125,8 @@ export async function 保存应用数据(数据: OmiComicAppData): Promise<void>
 export async function 更新设置(局部设置: Partial<AppSettings>): Promise<AppSettings> {
   if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新设置(局部设置));
   const 数据 = await 读取应用数据();
-  数据.settings = 修正设置({ ...数据.settings, ...局部设置 });
+  const custom = !局部设置.desktopPerformanceProfile && ['readerMemoryCacheSizeMb','readerPreloadPages','readerImageLoadConcurrency'].some(key => key in 局部设置);
+  数据.settings = 修正设置({ ...数据.settings, ...局部设置, ...(custom ? {desktopPerformanceProfile: 'custom' as const} : {}) });
   数据.recentOpened = 修正最近打开并补足历史(
     数据.recentOpened,
     数据.readingProgress,
@@ -1459,7 +1470,8 @@ export async function 更新资源整理信息(输入: ResourceMetaInput): Promi
   if (!正在数据变更事务中()) return 排队执行数据变更(() => 更新资源整理信息(输入));
   const 数据 = await 读取应用数据();
   if (!资源类型选项.has(输入.sourceType)) throw new Error("INVALID_RESOURCE_META_TYPE");
-  const 整理信息 = 修正整理信息(输入);
+  const 原信息 = 数据.resourceMeta[输入.resourceKey] ?? 数据.favorites.find(item=>item.resourceKey===输入.resourceKey);
+  const 整理信息 = 修正整理信息({note:输入.note ?? 原信息?.note,tags:输入.tags ?? 原信息?.tags});
   const 当前时间 = Date.now();
   const 元数据: ResourceMetaItem = {
     resourceKey: 输入.resourceKey,
@@ -2128,11 +2140,12 @@ export async function 更新书签整理信息(id: string, 输入: 整理信息�
   const 整理信息 = 修正整理信息(输入);
   const 更新后书签: BookmarkItem = {
     ...书签,
-    note: 整理信息.note,
-    tags: 整理信息.tags,
+    bookmarkTitle: typeof 输入.bookmarkTitle === 'string' ? 输入.bookmarkTitle.trim().slice(0,180) || undefined : 书签.bookmarkTitle,
+    note: 输入.note === undefined ? 书签.note : 整理信息.note,
+    tags: 输入.tags === undefined ? 书签.tags : 整理信息.tags,
     updatedAt: Date.now(),
   };
-  数据.bookmarks = [
+  数据.bookmarks = 输入.bookmarkTitle !== undefined ? 数据.bookmarks.map(item => item.id === id ? 更新后书签 : item) : [
     更新后书签,
     ...数据.bookmarks.filter((项目) => 项目.id !== id),
   ].map((项目, 索引) => ({ ...项目, sortIndex: 索引 }));

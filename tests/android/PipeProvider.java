@@ -15,10 +15,10 @@ public final class PipeProvider extends ContentProvider {
     MatrixCursor result=new MatrixCursor(columns);Object[] values=new Object[columns.length];
     for(int i=0;i<columns.length;i++){
       String column=columns[i];
-      if(column.equals(DocumentsContract.Document.COLUMN_DOCUMENT_ID))values[i]="stream";
-      else if(column.equals(DocumentsContract.Document.COLUMN_DISPLAY_NAME))values[i]="Stream.cbr";
+      if(column.equals(DocumentsContract.Document.COLUMN_DOCUMENT_ID))values[i]=uri.getLastPathSegment();
+      else if(column.equals(DocumentsContract.Document.COLUMN_DISPLAY_NAME))values[i]=uri.getLastPathSegment().equals("large")?"LargeStream.cbr":"Stream.cbr";
       else if(column.equals(DocumentsContract.Document.COLUMN_MIME_TYPE))values[i]=getType(uri);
-      else if(column.equals(DocumentsContract.Document.COLUMN_SIZE))values[i]=48595L;
+      else if(column.equals(DocumentsContract.Document.COLUMN_SIZE))values[i]=uri.getLastPathSegment().equals("large")?2L*1024*1024*1024:48595L;
       else if(column.equals(DocumentsContract.Document.COLUMN_LAST_MODIFIED))values[i]=1791590400000L;
     }
     result.addRow(values);return result;

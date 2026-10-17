@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
 
 export const 卡片缩放档位 = [40, 55, 75, 100, 125, 150, 200] as const;
@@ -86,7 +87,7 @@ export default function CardScaleControl({ value, label, scope, className = "", 
           onChange={event => onChange(卡片缩放档位[Number(event.currentTarget.value)])}
           onPointerUp={onCommit} onKeyUp={onCommit} onBlur={onCommit} />
       </div>
-      <output aria-hidden="true">{columns} 列</output>
+      <output aria-hidden="true">{columns}{t(" 列")}</output>
     </div>
   );
 }

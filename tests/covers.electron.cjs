@@ -25,8 +25,14 @@ test('real PDF/EPUB and collection covers render, stay bounded, and never interr
   const collection = path.join(books, 'Collection'); await fs.mkdir(collection);
   await fs.writeFile(path.join(collection, '01-first.cbz'), zip([['1.png', pixel]]));
   await fs.writeFile(path.join(collection, '02-note.txt'), 'fixture');
+  await fs.writeFile(path.join(collection, '03-second.cbz'), zip([['1.png', pixel]]));
   const pdfCollection = path.join(books, 'PDF Collection'); await fs.mkdir(pdfCollection);
-  await fs.writeFile(path.join(pdfCollection, 'nested.pdf'), pdf);
+  await fs.mkdir(path.join(pdfCollection, 'Child'));
+  await fs.writeFile(path.join(pdfCollection, 'Child', 'nested.pdf'), pdf);
+  const mixed = path.join(books, 'Mixed Folder'); await fs.mkdir(mixed);
+  await fs.mkdir(path.join(mixed,'Nested'));
+  await fs.writeFile(path.join(mixed,'cover.png'),pixel);
+  await fs.writeFile(path.join(mixed,'unsupported.psd'),'unsupported fixture');
   const pairs = path.join(books, 'Pair Book'); await fs.mkdir(pairs);
   for (let index = 1; index <= 10; index++) {
     const portrait = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="${index % 2 ? '#bacbdf' : '#d1dfeb'}"/><text x="300" y="480" font-family="Arial" font-size="120" fill="#466385" text-anchor="middle">${index}</text></svg>`).render().asPng();
@@ -49,13 +55,20 @@ test('real PDF/EPUB and collection covers render, stay bounded, and never interr
     await expect(card(name).locator('.resource-preview > img')).toBeVisible({ timeout: 20000 });
     await expect.poll(() => card(name).locator('.resource-preview > img').evaluate(img => img.complete && img.naturalWidth > 0 && Math.max(img.naturalWidth, img.naturalHeight) <= 360)).toBe(true);
   }
-  await expect(card('Collection').locator('.resource-card-info')).toContainText('文件夹 · 含 2 项目');
-  await expect(card('PDF Collection').locator('.resource-card-info')).toContainText('文件夹 · 含 1 项目');
+  await expect(card('Collection').locator('.resource-card-info')).toHaveText('');
+  await expect(card('PDF Collection').locator('.resource-card-info')).toContainText('1 文件夹');
   for (const [name, type] of [['Broken.pdf', 'pdf'], ['TextOnly.epub', 'epub']]) {
     await expect(card(name).locator(`.resource-icon-symbol .is-${type}`)).toBeVisible();
     await expect(card(name).locator('.resource-icon-symbol')).toHaveText('');
   }
   await page.screenshot({ path: 'test-results/pc-real-covers.png' });
+  await expect(card('Mixed Folder').locator('.resource-card-info')).toContainText('1 文件夹 · 1 图片');
+  await card('Mixed Folder').dblclick();
+  await expect(card('Nested')).toBeVisible();
+  await expect(card('cover.png')).toBeVisible();
+  await expect(page.locator('.reader-layout')).not.toBeVisible();
+  await page.getByRole('button',{name:'上一级',exact:true}).click();
+  await expect(card('Mixed Folder')).toBeVisible();
 
   const sessionCheck = await page.evaluate(async filePath => {
     const api = window.omicomic;
@@ -81,7 +94,7 @@ test('real PDF/EPUB and collection covers render, stay bounded, and never interr
   await expect(page.getByRole('slider', { name: '阅读进度' })).toHaveAttribute('aria-valuenow', '10');
   await expect.poll(async () => (await page.evaluate(() => window.omicomic.getAppData())).data.readingProgress[`folder:${pairs}`]?.percent).toBe(100);
   await page.getByRole('button', { name: '返回', exact: true }).click();
-  await expect(card('Pair Book').locator('.resource-card-page')).toHaveText('10 / 10');
+  await expect(card('Pair Book').locator('.resource-card-page')).toHaveText('10/10 · 100%');
   await card('Pair Book').dblclick(); await pair([9, 10]);
   await page.getByRole('button', { name: '当前双页，点击切换单页', exact: true }).click();
   const jump = page.getByRole('textbox', { name: '跳转到页码' }); await jump.fill('6'); await jump.press('Enter'); await pair([6]);

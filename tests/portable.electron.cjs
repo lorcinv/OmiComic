@@ -76,6 +76,28 @@ test('portable ZIP contains only the runtime and reads all formats after extract
   const libraryResult = JSON.parse(await fs.readFile('test-results/library-continuous-smoke.json', 'utf8'));
   assert.equal(libraryResult.executable, executable);
   assert.equal(libraryResult.libraryPassed, true);
+  const coversOutput = execFileSync(process.execPath, ['--test', 'tests/large-covers.electron.cjs'], {
+    env: runtimeEnv, windowsHide: true, encoding: 'utf8', timeout: 130000, stdio: 'pipe',
+  });
+  t.diagnostic(coversOutput.trim());
+  const coversResult = JSON.parse(await fs.readFile('test-results/large-covers-smoke.json', 'utf8'));
+  assert.equal(coversResult.executable, executable);
+  assert.equal(coversResult.version, version);
+  assert.equal(coversResult.realLibraryCovers, 7);
+  const artworkOutput = execFileSync(process.execPath, ['--test', 'tests/home-artwork.electron.cjs'], {
+    env: runtimeEnv, windowsHide: true, encoding: 'utf8', timeout: 85000, stdio: 'pipe',
+  });
+  t.diagnostic(artworkOutput.trim());
+  const artworkResult = JSON.parse(await fs.readFile('test-results/home-artwork-smoke.json', 'utf8'));
+  assert.equal(artworkResult.executable, executable);
+  assert.equal(artworkResult.artworkPassed, true);
+  const imagesOutput = execFileSync(process.execPath, ['--test', 'tests/desktop-images.electron.cjs'], {
+    env: runtimeEnv, windowsHide: true, encoding: 'utf8', timeout: 100000, stdio: 'pipe',
+  });
+  t.diagnostic(imagesOutput.trim());
+  const imagesResult = JSON.parse(await fs.readFile('test-results/desktop-images-smoke.json', 'utf8'));
+  assert.equal(imagesResult.executable, executable); assert.equal(imagesResult.version, version);
+  assert.equal(imagesResult.byteExact, true); assert.equal(imagesResult.canvasProcessingPassed, true);
   const bytes = await fs.readFile(archive);
   const result = { version, archive, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), zipEntries: entries.length, userDataFilesIncluded: false, uninstallerIncluded: false, extractedRuntimePassed: true };
   await fs.writeFile('test-results/portable-smoke.json', JSON.stringify(result, null, 2) + '\n');

@@ -2,10 +2,11 @@
 <resources>
   <style name="OmiTheme" parent="android:style/Theme.Material.Light.NoActionBar">
     <item name="android:fontFamily">sans</item>
-    <item name="android:colorAccent">#71849A</item>
+    <item name="android:windowBackground">#F8F8F7</item>
+    <item name="android:colorAccent">#4B669B</item>
     <item name="android:windowLightStatusBar">true</item>
-    <item name="android:statusBarColor">#E9EBEE</item>
-    <item name="android:navigationBarColor">#E9EBEE</item>
+    <item name="android:statusBarColor">#F8F8F7</item>
+    <item name="android:navigationBarColor">#F8F8F7</item>
     <item name="android:windowLightNavigationBar">true</item>
     <item name="android:windowActionModeOverlay">true</item>
     <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>

@@ -94,12 +94,15 @@ test('double pages fit the viewport, fall back for broad pairs and respond to re
   await page.getByRole('button', { name: '当前单页，点击切换双页', exact: true }).click();
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained(page);
   await page.setViewportSize({ width: 800, height: 960 });
-  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1); await contained(page);
+  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained(page);
   await page.setViewportSize({ width: 1440, height: 960 });
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained(page);
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('[data-reader-page-index="2"] img')).toBeVisible();
+  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained(page);
+  await fit(page, '适应高度');
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1); await contained(page);
+  await page.keyboard.press('Tab');
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('[data-reader-page-index="3"] img')).toBeVisible(); await contained(page);
   await page.screenshot({ path: 'test-results/reader-wide-pair-fallback.png' });
@@ -128,9 +131,9 @@ test('panorama uses its cross axis, clears old scroll, and restores the ordinary
   await expect(zoom).toBeEnabled(); await expect(zoom).toContainText('适应宽度'); await contained(page);
 });
 
-test('restoring the final page does not lose it when its former pair no longer fits', async ({ page }) => {
+test('restoring the final page keeps it visible inside its fitted pair', async ({ page }) => {
   await open(page, [[1200, 1000], [1200, 1000]], 1);
-  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1);
+  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2);
   await expect(page.locator('[data-reader-page-index="1"] img')).toBeVisible();
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
   await contained(page);

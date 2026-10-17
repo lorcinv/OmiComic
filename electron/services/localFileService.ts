@@ -18,7 +18,7 @@ export async function changeLocalResource(input: { path: string; action: "rename
   const root = roots.find(p => withinPath(source, p));
   if (!root) throw new Error("只能操作已授权目录中的资源。");
   const [realSource, realRoot, stat] = await Promise.all([fs.realpath(source), fs.realpath(root), fs.lstat(source)]);
-  if (stat.isDirectory() && roots.some(p => withinPath(p, source))) throw new Error("不能对资源根目录执行此操作，请选择目录中的具体漫画。");
+  if (stat.isDirectory() && roots.some(p => withinPath(p, source))) throw new Error("不能对资源库目录执行此操作，请选择目录中的具体漫画。");
   if (stat.isSymbolicLink() || !withinPath(realSource, realRoot)) throw new Error("不能修改指向授权目录外的链接。");
   if (!stat.isFile() && !stat.isDirectory()) throw new Error("不支持此文件类型。");
   let destination: string | undefined;

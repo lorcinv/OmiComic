@@ -52,6 +52,7 @@ test('Android nested controls stay usable and a page preview opens with one clic
   await expect(page.locator('.reader-layout')).toHaveCount(0);
   await page.locator('.resource-detail-thumbnail').nth(2).click();
   await expect(page.locator('.reader-layout')).toBeVisible();
-  await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('3');
+  await page.locator('.reader-stage').click();
+  await expect(page.locator('.reader-progress-rail')).toHaveAttribute('aria-valuenow','3');
   expect(await page.evaluate(()=>(window as any).__doubleClicks)).toBe(0);
 });

@@ -10,10 +10,12 @@ const { canPairPages, fitPage, fitSpread, fitPanorama, panoramaScrollBounds } = 
 const viewport = { width: 1400, height: 800 };
 const portrait = { width: 600, height: 900 }, broad = { width: 1200, height: 1000 };
 
-test('broad pairs fall back to single pages and narrow windows unpair portraits', () => {
+test('fit-window contains pairs on phones while explicit scale modes keep their limits', () => {
   assert.equal(canPairPages(portrait, portrait, viewport, 'fit-window'), true);
   assert.equal(canPairPages(broad, portrait, viewport, 'fit-height'), false);
-  assert.equal(canPairPages(portrait, portrait, { width: 750, height: 800 }, 'fit-window'), false);
+  assert.equal(canPairPages(portrait, portrait, { width: 390, height: 800 }, 'fit-window'), true);
+  const phonePair = fitSpread([portrait, portrait], {width:390,height:800}, 'fit-window');
+  assert.ok(phonePair[0].width + phonePair[1].width <= 390);
   assert.equal(canPairPages(portrait, portrait, viewport, 'original'), false);
   const pair = fitSpread([portrait, portrait], viewport, 'fit-window');
   assert.ok(pair[0].width + pair[1].width <= viewport.width);

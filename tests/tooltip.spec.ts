@@ -48,7 +48,7 @@ test('nested cover actions own one rounded tooltip within their exact hit area',
   const favorite = book.getByRole('button', { name: '收藏', exact: true });
   const tooltip = page.getByRole('tooltip');
   await book.locator('.resource-preview img').hover({ position: { x: 20, y: 20 } });
-  await expect(tooltip).toHaveText('双击打开文件夹：Book');
+  await page.waitForTimeout(350); await expect(tooltip).toHaveCount(0);
   await info.locator('svg').hover();
   await expect(tooltip).toHaveText('资源信息');
   await expect(tooltip).toHaveCount(1);
@@ -66,11 +66,10 @@ test('nested cover actions own one rounded tooltip within their exact hit area',
   // 移出按钮一像素就结束按钮提示，再进入父卡片的延时判定。
   await page.mouse.move(trigger.x - 1, trigger.y + 6);
   await expect(tooltip).toHaveCount(0);
-  await expect(tooltip).toHaveText('双击打开文件夹：Book');
+  await page.waitForTimeout(350); await expect(tooltip).toHaveCount(0);
   await favorite.hover();
   await expect(tooltip).toHaveText('收藏');
-  await book.locator('.preview-tag-row > .preview-tag-chip').hover();
-  await expect(tooltip).toHaveText('作画参考');
+  await expect(book.locator('.preview-tag-row')).toHaveCount(0);
   await page.mouse.move(225, 140);
   await expect(tooltip).toHaveCount(0);
   // 未满足延迟就离开，不允许残留的定时器弹出旧提示。
@@ -151,10 +150,7 @@ test('long tooltips stay in the viewport, dismiss on wheel and do not overlap Ct
     .getByRole('button', { name: '收藏', exact: true }).click();
   await page.locator('.library-sidebar').getByRole('button', { name: /^收藏/ }).click();
   const book = page.locator('.resource-card').filter({ has: page.locator('.resource-details strong', { hasText: /^Book$/ }) });
-  await book.locator('.recent-source').hover();
-  await expect(tooltip).toHaveText('/comics/Book');
-  await page.waitForTimeout(350);
-  await expect(tooltip).toHaveCount(1);
+  await expect(book.locator('.recent-source')).toHaveCount(0);
   await page.keyboard.down('Control');
   await book.locator('.resource-preview img').hover({ position: { x: 30, y: 30 } });
   await expect(tooltip).toHaveText('这是一条资源备注');

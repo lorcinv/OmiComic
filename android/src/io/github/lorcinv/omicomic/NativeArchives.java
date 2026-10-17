@@ -16,14 +16,24 @@ import me.zhanghai.android.libarchive.ArchiveException;
 final class NativeArchives implements Closeable {
   private static final long MAX_IMAGE=64L*1024*1024, MAX_TOTAL=8L*1024*1024*1024;
   private static final int MAX_ENTRIES=30000, CACHE_BYTES=24*1024*1024;
-  private final Map<String,LinkedHashMap<String,Integer>> indexes=new LinkedHashMap<>(4,.75f,true);
+  private static final class PageEntry {
+    final int ordinal; final Long modifiedAt;
+    PageEntry(int ordinal,Long modifiedAt){this.ordinal=ordinal;this.modifiedAt=modifiedAt;}
+  }
+  private final Map<String,LinkedHashMap<String,PageEntry>> indexes=new LinkedHashMap<>(4,.75f,true);
   private final Map<String,byte[]> pages=new LinkedHashMap<>(8,.75f,true);
+  private final Map<String,ZipArchive> zipIndexes=new HashMap<>();
   private int cachedBytes;
   private String currentKey;
   private final DiskCache disk;
-  private long indexBuilds;
+  private final DiskCache pageDisk;
+  private final boolean retainPages;
+  private final java.util.concurrent.atomic.AtomicBoolean caching=new java.util.concurrent.atomic.AtomicBoolean(true);
+  private final java.util.concurrent.atomic.AtomicLong cacheEpoch=new java.util.concurrent.atomic.AtomicLong();
+  void setCaching(boolean enabled){if(caching.getAndSet(enabled)!=enabled)cacheEpoch.incrementAndGet();}
+  private long indexBuilds,pageDecodes,pageDiskHits,zipRandomReads;
 
-  NativeArchives(DiskCache cache){disk=cache;}
+  NativeArchives(DiskCache cache,DiskCache pageDisk,boolean retainPages){disk=cache;this.pageDisk=pageDisk;this.retainPages=retainPages;}
   private Handle reader;
   private int nextOrdinal;
 
@@ -62,7 +72,7 @@ final class NativeArchives implements Closeable {
     if(name==null){byte[] raw=ArchiveEntry.pathname(entry);if(raw!=null)name=new String(raw,StandardCharsets.UTF_8);}
     return name;
   }
-  private static boolean image(String name) {
+  static boolean image(String name) {
     if(name==null||name.startsWith("__MACOSX/")||name.indexOf('\0')>=0)return false;
     String path=name.replace('\\','/');
     if(path.startsWith("/")||path.matches("^[A-Za-z]:.*"))return false;
@@ -74,7 +84,15 @@ final class NativeArchives implements Closeable {
     if(ArchiveEntry.isEncrypted(entry))throw new IOException("此压缩包已加密，暂不支持密码漫画。");
   }
   synchronized List<String> images(SeekableSource source,String key)throws IOException {
-    LinkedHashMap<String,Integer> index=indexes.get(key);
+    LinkedHashMap<String,PageEntry> index=indexes.get(key);
+    if(index==null){
+      ZipArchive zip=ZipArchive.restore(disk.get("zip2\n"+key),source.size());
+      if(zip==null){zip=ZipArchive.open(source);if(zip!=null){indexBuilds++;disk.put("zip2\n"+key,zip.serialize());}}
+      if(zip!=null){
+        zipIndexes.put(key,zip);index=new LinkedHashMap<>();int ordinal=0;
+        for(ZipArchive.Entry entry:zip.entries.values())index.put(entry.name,new PageEntry(ordinal++,entry.modified));
+      }
+    }
     if(index==null)index=loadIndex(key);
     if(index==null) {
       // Limit native decoder memory to one archive (solid RAR/7z can have large dictionaries).
@@ -92,7 +110,12 @@ final class NativeArchives implements Closeable {
           total+=size;
           String name=name(entry);
           if(ArchiveEntry.filetype(entry)==ArchiveEntry.AE_IFREG&&image(name)&&size<=MAX_IMAGE) {
-            if(index.put(name,ordinal)!=null)throw new IOException("压缩包中存在重复的图片路径。");
+            Long modifiedAt=null;
+            if(ArchiveEntry.mtimeIsSet(entry)) {
+              try { modifiedAt=Math.addExact(Math.multiplyExact(ArchiveEntry.mtime(entry),1000),ArchiveEntry.mtimeNsec(entry)/1000000); }
+              catch(ArithmeticException invalidTime) { /* Invalid timestamps remain absent. */ }
+            }
+            if(index.put(name,new PageEntry(ordinal,modifiedAt))!=null)throw new IOException("压缩包中存在重复的图片路径。");
           }
           ordinal++;
         }
@@ -101,16 +124,35 @@ final class NativeArchives implements Closeable {
       saveIndex(key,index);
     }
     indexes.put(key,index);
-    int entries=0;for(Map<String,Integer> value:indexes.values())entries+=value.size();
-    while(indexes.size()>1&&(indexes.size()>32||entries>60000)){String oldest=indexes.keySet().iterator().next();entries-=indexes.remove(oldest).size();}
+    int entries=0;for(Map<String,PageEntry> value:indexes.values())entries+=value.size();
+    while(indexes.size()>1&&(indexes.size()>32||entries>60000)){String oldest=indexes.keySet().iterator().next();entries-=indexes.remove(oldest).size();zipIndexes.remove(oldest);}
     List<String> result=new ArrayList<>(index.keySet());result.sort(LocalLibrary::natural);return result;
   }
-  synchronized byte[] read(SeekableSource source,String identity,String name)throws IOException {
+  synchronized Long modifiedAt(String key,String name) {
+    Map<String,PageEntry> index=indexes.get(key);
+    PageEntry entry=index==null?null:index.get(name);
+    return entry==null?null:entry.modifiedAt;
+  }
+  byte[] read(SeekableSource source,String identity,String name)throws IOException {
+    long epoch=cacheEpoch.get();
     String key=identity+"\n"+name;
-    byte[] cached=pages.get(key);if(cached!=null)return cached;
-    if(!indexes.containsKey(identity))images(source,identity);
-    Integer ordinal=indexes.get(identity).get(name);
-    if(ordinal==null)throw new IOException("压缩包图片已不存在或超出读取上限。");
+    synchronized(this){byte[] cached=pages.get(key);if(cached!=null)return cached;}
+    byte[] cached=pageDisk.get(key);if(cached!=null){synchronized(this){pageDiskHits++;rememberPage(key,cached,epoch);}return cached;}
+    ZipArchive zip;PageEntry metadata;
+    synchronized(this){
+      if(!indexes.containsKey(identity))images(source,identity);
+      metadata=indexes.get(identity).get(name);zip=zipIndexes.get(identity);
+      if(metadata==null)throw new IOException("压缩包图片已不存在或超出读取上限。");
+    }
+    if(zip!=null){
+      // pread has an independent cursor. A background ZIP page must not hold
+      // the stateful RAR/7z decoder lock while the user requests another page.
+      byte[] data=zip.read(source,name,MAX_IMAGE);synchronized(this){pageDecodes++;zipRandomReads++;rememberPage(key,data,epoch);}
+      if(retainPages&&caching.get()&&epoch==cacheEpoch.get())pageDisk.put(key,data);return data;
+    }
+    int ordinal=metadata.ordinal;
+    synchronized(this){
+    cached=pages.get(key);if(cached!=null)return cached;
     try {
       if(reader==null||!identity.equals(currentKey)||ordinal<nextOrdinal) {
         closeReader();reader=open(source);currentKey=identity;nextOrdinal=0;
@@ -124,32 +166,43 @@ final class NativeArchives implements Closeable {
       checkEncryption(entry);
       if(!name.equals(name(entry)))throw new IOException("压缩包内容已改变，请重新打开漫画。");
       byte[] data=readEntry(reader.archive,entry);
-        if(data.length<=CACHE_BYTES/2) {
-          pages.put(key,data);cachedBytes+=data.length;
-          while(cachedBytes>CACHE_BYTES||pages.size()>12){String oldest=pages.keySet().iterator().next();cachedBytes-=pages.remove(oldest).length;}
-        }
+        pageDecodes++;
+        rememberPage(key,data,epoch);
+        if(retainPages&&caching.get()&&epoch==cacheEpoch.get())pageDisk.put(key,data);
         return data;
     } catch(IOException error) { closeReader();throw friendly(error); }
+    }
   }
-  private LinkedHashMap<String,Integer> loadIndex(String key) {
+  private void rememberPage(String key,byte[] data,long epoch) {
+    if(!caching.get()||epoch!=cacheEpoch.get())return;
+    if(data.length>CACHE_BYTES/2)return;
+    byte[] old=pages.put(key,data);cachedBytes+=data.length-(old==null?0:old.length);
+    while(cachedBytes>CACHE_BYTES||pages.size()>12){String first=pages.keySet().iterator().next();cachedBytes-=pages.remove(first).length;}
+  }
+  private LinkedHashMap<String,PageEntry> loadIndex(String key) {
     byte[] cached=disk.get(key);if(cached==null)return null;
     try {
       JSONArray rows=new JSONArray(new String(cached,StandardCharsets.UTF_8));
       if(rows.length()>MAX_ENTRIES)return null;
-      LinkedHashMap<String,Integer> result=new LinkedHashMap<>();
+      LinkedHashMap<String,PageEntry> result=new LinkedHashMap<>();
       for(int i=0;i<rows.length();i++){
         JSONArray row=rows.getJSONArray(i);String name=row.getString(0);int ordinal=row.getInt(1);
-        if(!image(name)||ordinal<0||ordinal>=MAX_ENTRIES||result.put(name,ordinal)!=null)return null;
+        // Older indexes omit timestamps; rebuild them once after upgrading.
+        if(row.length()!=3)return null;
+        Long modifiedAt=row.isNull(2)?null:row.getLong(2);
+        if(!image(name)||ordinal<0||ordinal>=MAX_ENTRIES||result.put(name,new PageEntry(ordinal,modifiedAt))!=null)return null;
       }
       return result;
     }catch(Exception invalid){return null;}
   }
-  private void saveIndex(String key,Map<String,Integer> index) {
-    JSONArray rows=new JSONArray();for(Map.Entry<String,Integer> entry:index.entrySet())rows.put(new JSONArray().put(entry.getKey()).put(entry.getValue()));
+  private void saveIndex(String key,Map<String,PageEntry> index) {
+    JSONArray rows=new JSONArray();for(Map.Entry<String,PageEntry> entry:index.entrySet())rows.put(new JSONArray().put(entry.getKey()).put(entry.getValue().ordinal).put(entry.getValue().modifiedAt==null?JSONObject.NULL:entry.getValue().modifiedAt));
     disk.put(key,rows.toString().getBytes(StandardCharsets.UTF_8));
   }
   /** Covers do not build a whole-book index or disturb the active reader. */
   static byte[] cover(SeekableSource source)throws IOException {
+    ZipArchive zip=ZipArchive.open(source);
+    if(zip!=null){List<String> names=new ArrayList<>(zip.entries.keySet());names.sort(LocalLibrary::natural);if(names.isEmpty())throw new IOException("压缩包没有可阅读图片。");return zip.read(source,names.get(0),MAX_IMAGE);}
     Handle handle=open(source);
     try {
       long entry,skipped=0;int count=0;
@@ -198,6 +251,7 @@ final class NativeArchives implements Closeable {
   synchronized void forget(String path) {
     if(currentKey!=null&&matches(currentKey,path))closeReader();
     indexes.keySet().removeIf(key->matches(key,path));
+    zipIndexes.keySet().retainAll(indexes.keySet());
     Iterator<Map.Entry<String,byte[]>> it=pages.entrySet().iterator();
     while(it.hasNext()){Map.Entry<String,byte[]> entry=it.next();if(matches(entry.getKey(),path)){cachedBytes-=entry.getValue().length;it.remove();}}
   }
@@ -207,5 +261,5 @@ final class NativeArchives implements Closeable {
     if(reader!=null){try{reader.close();}catch(IOException ignored){}reader=null;}
     currentKey=null;nextOrdinal=0;
   }
-  @Override public synchronized void close(){closeReader();indexes.clear();pages.clear();cachedBytes=0;}
+  @Override public synchronized void close(){closeReader();indexes.clear();zipIndexes.clear();pages.clear();cachedBytes=0;}
 }

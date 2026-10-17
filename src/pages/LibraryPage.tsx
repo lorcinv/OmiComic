@@ -1,13 +1,40 @@
+import { cardDropAtPoint } from "../utils/cardDrag";
+import { FontSizeControl } from "../components/FontSizeControl";
+import HomeArtworkSettings from '../components/HomeArtworkSettings';
+import AboutOmiComic from '../components/AboutOmiComic';
+import { uiOptions, setUiLanguage, normalizeLanguage } from '../i18n';
+import AppIcon from '../components/AppIcon';
+import { t, tr } from '../i18n';
+import ModalOverlay from '../components/ModalOverlay';
+import { cancelMobileNavigation, mobileNavigate, mobileNavigationEpoch, type MobileNavigationOrigin } from '../hooks/mobileNavigation';
+import { useMobileDrawerGesture } from '../hooks/mobileDrawerGesture';
 import { useContinuousLibrary } from '../hooks/useContinuousLibrary';
+import { useMobileCoverQueue } from '../hooks/useMobileCoverQueue';
 import BookReaderSettings from '../components/BookReaderSettings';
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
-import { getResourceThumbnail } from "../reader/thumbnailClient";
+import { getResourceThumbnail, clearResourceThumbnailCache } from "../reader/thumbnailClient";
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
+import type { ReactNode, CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import ArrowIcon from "../ArrowIcon";
 import { isAndroid, singleTapNavigation } from "../platform";
+import useMobileLayout from "../hooks/useMobileLayout";
+import MobileLibraryBar from "../components/MobileLibraryBar";
+import MobileIcon from "../components/MobileIcon";
+import MobileSettings from "../components/MobileSettings";
+import RenameBookmarkDialog from "../components/RenameBookmarkDialog";
+import { consumeDismissGesture } from "../hooks/consumeDismissGesture";
+import MobileLibraryDrawer, { clearMobileTreeCache } from "../components/MobileLibraryDrawer";
+import MobileSheet, { dismissMobileSheet } from "../components/MobileSheet";
+import MobileReorderList from "../components/MobileReorderList";
+import MobileResourceCard from "../components/MobileResourceCard";
+import MobileBookshelfCard from "../components/MobileBookshelfCard";
+import MobileActionBar, { type MobileAction } from "../components/MobileActionBar";
+import { matchesMobileSearch } from "../library/mobileSearch";
+import { getMobileDisplay, mobileDisplayScope, mobileDisplayLabels, patchMobileDisplay } from "../library/mobileDisplay";
+import MobilePagePager, { MobileDetailPager } from "../components/MobilePagePager";
+import MobileDetailMetadata from "../components/MobileDetailMetadata";
 import LocalFileDialog, { type LocalFileTarget } from "../components/LocalFileDialog";
 import 资源详情缩略图 from "../components/DetailPagePreview";
 import { useBoundedRecord } from "../hooks/useBoundedRecord";
@@ -18,7 +45,7 @@ import GlassSelect from "../GlassSelect";
 import type { GlassSelectOption } from "../GlassSelect";
 import type { OmiBrandOriginGetter } from "../OmiBrandIcon";
 import OmiPageBrand from "../components/OmiPageBrand";
-import { 应用主题配色, 主题选项 } from "../theme";
+import { 应用主题配色, 主题选项, applyDesktopTypography } from "../theme";
 import type {
   AppSettings,
   Bookshelf,
@@ -60,15 +87,18 @@ import type {
 } from "../types";
 
 interface LibraryPageProps {
+  onReady?: () => void;
   onOpenReader: (
     resource: 阅读资源结果,
     initialPageIndex: number,
     context?: 阅读打开上下文,
     transitionOrigin?: OmiBrandOriginGetter,
-  ) => void;
+    motionEpoch?: number,
+  ) => void | Promise<void>;
   onHome: () => void;
   refreshToken: number;
   isActive: boolean;
+  backgroundPaused?: boolean;
 }
 
 interface 历史条目 {
@@ -91,7 +121,7 @@ type 选择视图 = Exclude<资源库视图, "bookshelf">;
 type 收藏输入 = Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex">;
 
 type 右侧抽屉 = "settings" | "tag-filter" | null;
-type 设置分类 = "appearance" | "library" | "progress" | "safety" | "reader-default" | "reader";
+type 设置分类 = "appearance" | "library" | "progress" | "safety" | "reader-default" | "reader" | "about";
 
 const 设置分类选项: Array<{ id: 设置分类; label: string; description: string }> = [
   { id: "appearance", label: "外观与主题", description: "界面配色与主题预览" },
@@ -100,15 +130,24 @@ const 设置分类选项: Array<{ id: 设置分类; label: string; description: 
   { id: "reader-default", label: "默认阅读", description: "新书首次打开时的阅读方式" },
   { id: "reader", label: "阅读器", description: "页面排序、自动阅读、沉浸与缓存" },
   { id: "safety", label: "安全与确认", description: "删除软件记录前的确认选项" },
+  { id: "about", label: "关于 OmiComic", description: "版本、介绍与项目主页" },
 ];
 
 type 资源信息目标 =
   | { kind: "resource"; input: ResourceMetaInput; fileType: 资源类型; localPath?: string; progressText?: string | null; thumbnailUrl?: string | null }
   | { kind: "bookmark"; item: BookmarkItem; fileType: 资源类型; thumbnailUrl?: string | null };
 
+interface 手机资源操作目标 {
+  view: 选择视图; key: string; input: ResourceMetaInput; info: 资源信息目标 | null;
+}
+
 interface 缩略图状态 {
+  byteSize?: number;
   itemCount?: number;
+  childFolderCount?: number;
+  folderSummary?: { folders: number; books: number; images: number; unsupported: number };
   sourceVersion?: string;
+  retryAfter?: number;
   status: 缩略图加载状态;
   url: string | null;
 }
@@ -199,45 +238,9 @@ type 书架转存目标组 = 加入书架目标组;
 
 type 侧栏图标名称 = "library" | "bookshelf" | "favorite" | "bookmark" | "recent" | "settings";
 
-function SidebarIcon({ name }: { name: 侧栏图标名称 }) {
-  const commonProps = {
-    fill: "none",
-    stroke: "currentColor",
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    strokeWidth: 1.8,
-  };
-
-  return (
-    <svg className="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true" {...commonProps}>
-      {name === "library" && (
-        <>
-          <path d="M4.5 5.5h6.25a2 2 0 0 1 2 2v11H6.5a2 2 0 0 1-2-2z" />
-          <path d="M19.5 5.5h-4.25a2.5 2.5 0 0 0-2.5 2.5v10.5h4.75a2 2 0 0 0 2-2z" />
-        </>
-      )}
-      {name === "bookshelf" && (
-        <>
-          <path d="M4 5.5h5v13H4zM10.5 5.5h4v13h-4z" />
-          <path d="m15.8 6.3 3.4-.9 3 11.9-3.4.9zM3 19.5h18" />
-        </>
-      )}
-      {name === "favorite" && <path d="M20.1 5.9a4.7 4.7 0 0 0-6.7 0L12 7.3l-1.4-1.4a4.7 4.7 0 0 0-6.7 6.7L12 20l8.1-7.4a4.7 4.7 0 0 0 0-6.7z" />}
-      {name === "bookmark" && <path d="M6.5 4.5h11v15l-5.5-3.6-5.5 3.6z" />}
-      {name === "recent" && (
-        <>
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M12 7.5V12l3.2 2" />
-        </>
-      )}
-      {name === "settings" && (
-        <>
-          <circle cx="12" cy="12" r="2.8" />
-          <path d="M19.2 13.5a7.6 7.6 0 0 0 0-3l1.6-1.2-1.8-3-1.9.8a8 8 0 0 0-2.6-1.5L14.2 3h-3.5l-.3 2.6a8 8 0 0 0-2.6 1.5L6 6.3l-1.8 3 1.6 1.2a7.6 7.6 0 0 0 0 3l-1.6 1.2 1.8 3 1.9-.8a8 8 0 0 0 2.6 1.5l.3 2.6h3.5l.3-2.6a8 8 0 0 0 2.6-1.5l1.9.8 1.8-3z" />
-        </>
-      )}
-    </svg>
-  );
+function SidebarIcon({name}:{name:侧栏图标名称}) {
+  const names = {library:'library',bookshelf:'shelf',favorite:'heart',bookmark:'bookmark',recent:'history',settings:'settings'} as const;
+  return <AppIcon name={names[name]} className="sidebar-nav-icon"/>;
 }
 
 interface 阅读返回定位快照 {
@@ -670,7 +673,7 @@ function PreviewTagRow({ tags, tagKey, onMoreClick }: PreviewTagRowProps) {
   const 隐藏标签 = 标签列表.slice(可见数量);
 
   return (
-    <span className="preview-tag-row" aria-label="标签" ref={行容器}>
+    <span className="preview-tag-row" aria-label={t("标签")} ref={行容器}>
       {显示标签.map((标签) => (
         <span className="preview-tag-chip" title={标签} key={标签}>{标签}</span>
       ))}
@@ -679,9 +682,9 @@ function PreviewTagRow({ tags, tagKey, onMoreClick }: PreviewTagRowProps) {
           role="button"
           tabIndex={0}
           className="preview-tag-chip preview-tag-more"
-          aria-label={`显示其余 ${隐藏标签.length} 个标签`}
+          aria-label={tr`显示其余 ${隐藏标签.length} 个标签`}
           aria-haspopup="dialog"
-          title={`另有 ${隐藏标签.length} 个标签`}
+          title={tr`另有 ${隐藏标签.length} 个标签`}
           onClick={(事件) => onMoreClick(事件, tagKey, 隐藏标签)}
           onDoubleClick={(事件) => 事件.stopPropagation()}
           onKeyDown={(事件) => {
@@ -814,7 +817,7 @@ function 标签按模式匹配(资源标签: string[], 查询: string, 模式: �
   return 资源标签.some((标签) => 标签匹配查询(标签, 修正查询));
 }
 
-function 匹配整理搜索(
+function 匹配桌面整理搜索(
   搜索内容: string,
   文本列表: Array<string | undefined | null>,
   标签列表: string[],
@@ -925,15 +928,68 @@ function 获取卡片进度显示状态(
   };
 }
 
-function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPageProps) {
+function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, backgroundPaused = false }: LibraryPageProps) {
+  const [初始目录就绪, 设置初始目录就绪] = useState(false);
+  useEffect(() => { if (初始目录就绪) onReady?.(); }, [初始目录就绪,onReady]);
+  const 手机布局 = useMobileLayout();
+  const [手机侧栏, 设置手机侧栏] = useState<"library" | "bookshelf" | null>(null);
+  const [手机根目录管理, 设置手机根目录管理] = useState<LibraryRoot | null>(null);
+  const [手机分类管理, 设置手机分类管理] = useState<Bookshelf | null>(null);
+  const [手机书架管理, 设置手机书架管理] = useState<VirtualFolder | null>(null);
+  const [手机选中书架, 设置手机选中书架] = useState<Set<string>>(new Set());
+  const [手机显示选项, 设置手机显示选项] = useState(false);
+  const [手机显示设置, 设置手机显示设置] = useState<Partial<AppSettings>>({});
+  const [手机操作目标, 设置手机操作目标] = useState<手机资源操作目标 | null>(null);
+  const [手机排序中, 设置手机排序中] = useState(false);
+  const [手机设置子页, 设置手机设置子页] = useState(false);
+  const [书签重命名, 设置书签重命名] = useState<BookmarkItem | null>(null);
+  const [手机详情菜单, 设置手机详情菜单] = useState(false);
+  const [手机书架排序, 设置手机书架排序] = useState(false);
+  const [手机每页数量, 设置手机每页数量] = useState<50 | 100 | 150 | 200 | 500>(50);
+  const [手机预览宽度, 设置手机预览宽度] = useState(88);
+  const 手机导航区域 = useRef<HTMLElement>(null);
+  function 匹配整理搜索(query: string, texts: Array<string | undefined | null>, tags: string[], mode: 搜索匹配模式): boolean {
+    return 手机布局 ? matchesMobileSearch(query, texts, tags, mode) : 匹配桌面整理搜索(query, texts, tags, mode);
+  }
+  const [手机筛选展开, 设置手机筛选展开] = useState(false);
+  const [音量键翻页, 设置音量键翻页] = useState(false);
+  const [反转音量键, 设置反转音量键] = useState(false);
   const [本地文件目标, 设置本地文件目标] = useState<LocalFileTarget | null>(null);
   const [移除索引数量, 设置移除索引数量] = useState(0);
   useEffect(() => {
     const back = (event: Event) => {
       if (!isActive) return;
+      // Custom events dispatched directly on window run target listeners in
+      // registration order. Let the sheet consume Back before navigating a folder.
+      if (document.querySelector('.mobile-settings-page')) {event.preventDefault();return;}
+      if (document.querySelector('.mobile-sheet-overlay') && !document.querySelector('.root-delete-overlay,.settings-window-overlay')) { event.preventDefault(); return; }
+      if (书签重命名) { event.preventDefault(); return; }
       if (本地文件目标) { event.preventDefault(); return; }
-      if (资源信息目标) { 关闭资源详情页面(); event.preventDefault(); return; }
+      if (批量删除确认) { 设置批量删除确认(null); event.preventDefault(); return; }
+      if (待删除标签列表) { if (!删除确认处理中) 设置待删除标签列表(null); event.preventDefault(); return; }
+      if (待删除根目录) { if (!删除确认处理中) 设置待删除根目录(null); event.preventDefault(); return; }
+      if (待删除书架) { if (!删除确认处理中) 设置待删除书架(null); event.preventDefault(); return; }
+      if (待删除书架列表) { if (!删除确认处理中) 设置待删除书架列表(null); event.preventDefault(); return; }
+      if (待删除虚拟文件夹) { if (!删除确认处理中) 设置待删除虚拟文件夹(null); event.preventDefault(); return; }
+      if (待清空虚拟文件夹) { if (!删除确认处理中) 设置待清空虚拟文件夹(null); event.preventDefault(); return; }
+      if (待清空无效资源) { if (!删除确认处理中) 设置待清空无效资源(null); event.preventDefault(); return; }
+      if (待全局清空无效资源) { if (!删除确认处理中) 设置待全局清空无效资源(null); event.preventDefault(); return; }
+      if (移动到书架目标) { 设置移动到书架目标(null); event.preventDefault(); return; }
+      if (加入虚拟文件夹目标) { 设置加入虚拟文件夹目标(null); event.preventDefault(); return; }
+      if (书架弹窗) { 设置书架弹窗(null); event.preventDefault(); return; }
+      if (虚拟文件夹弹窗) { 设置虚拟文件夹弹窗(null); event.preventDefault(); return; }
+      if (当前右侧抽屉 === "settings" && 手机设置子页) { 设置手机设置子页(false); event.preventDefault(); return; }
       if (当前右侧抽屉) { 设置当前右侧抽屉(null); event.preventDefault(); return; }
+      if (标签添加弹窗打开) { 关闭标签添加弹窗(); event.preventDefault(); return; }
+      if (资源详情路径浮层打开) { 设置资源详情路径浮层打开(false); event.preventDefault(); return; }
+      if (资源信息目标 && 资源详情编辑模式) { void 完成资源详情信息编辑(); event.preventDefault(); return; }
+      if (资源信息目标) { void 返回手机上一页(); event.preventDefault(); return; }
+      if (选择模式) { 退出选择模式(); 设置手机操作目标(null); 设置手机排序中(false); event.preventDefault(); return; }
+      if (手机操作目标) { 设置手机操作目标(null); event.preventDefault(); return; }
+      if (手机书架管理 || 手机书架排序) { 设置手机书架管理(null); 设置手机书架排序(false); event.preventDefault(); return; }
+      if (手机筛选展开) { 设置手机筛选展开(false); event.preventDefault(); return; }
+      if (正在打开资源路径 || 正在读取) { 打开阅读请求序号.current++; 读取序号.current++; 设置正在打开资源路径(null); 设置正在读取(false); event.preventDefault(); return; }
+      if (当前视图 === "virtual-folder") { 返回书架根层(); event.preventDefault(); return; }
       if (当前视图 === "directory" && 当前目录?.parentPath && 当前根目录) {
         void 打开目录(当前目录.parentPath,当前根目录); event.preventDefault();
       }
@@ -982,6 +1038,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const [沉浸自动隐藏延迟, 设置沉浸自动隐藏延迟] = useState<沉浸自动隐藏延迟>(默认设置.immersiveAutoHideDelay);
   const [隐藏阅读器底部按钮, 设置隐藏阅读器底部按钮] = useState(默认设置.readerHideFooterControls);
   const [隐藏沉浸模式进度条, 设置隐藏沉浸模式进度条] = useState(默认设置.readerHideImmersiveProgress);
+  const [界面语言, 设置界面语言] = useState<'zh-CN'|'en'|'ja'>('zh-CN');
+  const [信息字号, 设置信息字号] = useState(12);
+  const [全局字号, 设置全局字号] = useState(14);
+  const [桌面自动隐藏, 设置桌面自动隐藏] = useState(false);
+  const [桌面性能模式, 设置桌面性能模式] = useState<NonNullable<AppSettings['desktopPerformanceProfile']>>('auto');
   const [阅读器内存缓存大小, 设置阅读器内存缓存大小] = useState(默认设置.readerMemoryCacheSizeMb);
   const [阅读器预加载页数, 设置阅读器预加载页数] = useState(默认设置.readerPreloadPages);
   const [阅读器图片线程数, 设置阅读器图片线程数] = useState(默认设置.readerImageLoadConcurrency);
@@ -1007,6 +1068,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const [当前虚拟文件夹ID, 设置当前虚拟文件夹ID] = useState<string | null>(null);
   const [数据已加载, 设置数据已加载] = useState(false);
   const [当前视图, 设置当前视图] = useState<资源库视图>("directory");
+  const 手机显示范围 = mobileDisplayScope(当前视图);
+  const { layout: 手机卡片布局, columns: 手机列数, coverSize: 手机封面尺寸 } = getMobileDisplay(手机显示设置, 手机显示范围);
   const [目录空白菜单, 设置目录空白菜单] = useState<{ x: number; y: number } | null>(null);
   const [资源菜单, 设置资源菜单] = useState<{
     x: number;
@@ -1064,7 +1127,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const [虚拟文件夹弹窗, 设置虚拟文件夹弹窗] = useState<虚拟文件夹弹窗状态>(null);
   const [虚拟文件夹名称输入, 设置虚拟文件夹名称输入] = useState("");
   const [虚拟文件夹备注输入, 设置虚拟文件夹备注输入] = useState("");
-  const [待删除虚拟文件夹, 设置待删除虚拟文件夹] = useState<VirtualFolder | null>(null);
+  const [待删除虚拟文件夹, 设置待删除虚拟文件夹] = useState<(VirtualFolder & { selection?: VirtualFolder[] }) | null>(null);
   const [待清空虚拟文件夹, 设置待清空虚拟文件夹] = useState<清空书架确认状态>(null);
   const [待清空无效资源, 设置待清空无效资源] = useState<清空无效资源确认状态>(null);
   const [待全局清空无效资源, 设置待全局清空无效资源] = useState<全局清空无效资源确认状态>(null);
@@ -1106,6 +1169,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   const 资源详情预览滚动容器 = useRef<HTMLDivElement>(null);
   const 资源详情编辑快照 = useRef<{ note: string; tags: string } | null>(null);
   const 资源详情加载序号 = useRef(0);
+  const 手机详情封面起点 = useRef<MobileNavigationOrigin>();
   const [整理备注输入, 设置整理备注输入] = useState("");
   const [整理标签输入, 设置整理标签输入] = useState("");
   const [标签添加弹窗打开, 设置标签添加弹窗打开] = useState(false);
@@ -1218,7 +1282,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   useEffect(() => () => {
     if (缩放保存定时器.current !== null) window.clearTimeout(缩放保存定时器.current);
     if (Object.keys(待保存缩放.current).length) {
-      void window.omicomic.updateSettings({ ...界面设置快照.current, ...待保存缩放.current });
+      void window.omicomic.updateSettings(待保存缩放.current);
       待保存缩放.current = {};
     }
   }, []);
@@ -1226,7 +1290,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   function 应用界面设置(设置: AppSettings): void {
     设置 = { ...设置, cardScale: 规范卡片缩放(设置.cardScale), detailThumbnailScale: 规范卡片缩放(设置.detailThumbnailScale) };
     界面设置快照.current = 设置;
+    设置手机显示设置(设置);
+    设置手机每页数量(设置.mobilePageSize ?? 50);
+    设置手机预览宽度(设置.mobilePreviewWidth ?? 88);
+    设置音量键翻页(Boolean(设置.readerVolumeKeys));
+    设置反转音量键(Boolean(设置.readerVolumeKeysReversed));
     设置当前主题配色(应用主题配色(设置.colorTheme));
+    setUiLanguage(设置.language); 设置界面语言(normalizeLanguage(设置.language));
+    const 字号 = applyDesktopTypography(设置);
+    设置信息字号(字号.desktopInfoFontSize);
+    设置全局字号(字号.desktopGlobalFontSize);
+    设置桌面自动隐藏(设置.desktopReaderAutoHide === true);
+    设置桌面性能模式(设置.desktopPerformanceProfile ?? 'auto');
     设置卡片缩放(设置.cardScale);
     设置详情缩略图缩放(设置.detailThumbnailScale);
     设置每页数量(设置.pageSize);
@@ -1261,15 +1336,21 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 保存界面设置(局部设置: Partial<AppSettings>, 保存成功后?: () => void | Promise<void>): void {
+    // Commit an in-flight density edit with the next setting. Otherwise the
+    // response still contains the old columns and briefly resets the scroll anchor.
+    if (缩放保存定时器.current !== null) window.clearTimeout(缩放保存定时器.current);
+    缩放保存定时器.current = null;
+    局部设置 = { ...待保存缩放.current, ...局部设置 };
+    待保存缩放.current = {};
     const 请求序号 = 设置保存请求序号.current + 1;
     设置保存请求序号.current = 请求序号;
     const 完整设置 = { ...界面设置快照.current, ...局部设置 };
     应用界面设置(完整设置);
-    void window.omicomic.updateSettings(完整设置)
+    void window.omicomic.updateSettings(局部设置)
       .then((结果) => {
         if (请求序号 !== 设置保存请求序号.current) return;
         if (结果.ok) {
-          应用界面设置({ ...结果.data, ...局部设置 });
+          应用界面设置({ ...完整设置, ...结果.data, ...局部设置 });
           if (保存成功后) {
             void Promise.resolve(保存成功后()).catch(() => {
               if (请求序号 === 设置保存请求序号.current) 设置错误信息("设置已保存，但界面数据刷新失败，请稍后重试。");
@@ -1561,10 +1642,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     });
   }, [当前目录, 搜索内容, 排序, 文件夹优先, 资源元数据表, 已选标签列表, 搜索模式, 隐藏已加入书架资源, 已加入书架资源集合]);
 
-  const 目录连续列表 = useContinuousLibrary(列表容器, isActive && 当前视图 === "directory" && !资源信息目标 && !正在读取,
-    筛选排序后项目.length, 获取卡片列数(卡片缩放), 每页数量,
-    JSON.stringify([当前目录?.path, 搜索内容, 排序, 文件夹优先, 隐藏已加入书架资源, 已选标签列表]));
-  const 实际每页数量 = 当前视图 === "directory" ? 目录连续列表.pageSize : 每页数量;
   const 筛选后收藏列表 = useMemo(() => {
     return 收藏列表.filter((项目) => {
       const 整理信息 = 获取资源整理信息({
@@ -1590,7 +1667,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       const 标签匹配 = 资源标签匹配筛选模式(标签列表, 已选标签列表, 搜索模式);
       const 搜索匹配 = 匹配整理搜索(
         书签搜索内容,
-        [项目.title, 项目.sourcePath, 项目.pageName, 项目.note],
+        [项目.bookmarkTitle ?? 项目.title, 项目.note, 项目.title, 项目.sourcePath, 项目.pageName],
         标签列表,
         搜索模式,
       );
@@ -1941,7 +2018,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 观察器 = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(更新标记宽度);
     观察器?.observe(首位按钮);
     return () => 观察器?.disconnect();
-  }, [当前书架?.id, 轨道书架列表, 内联编辑书架栏?.id]);
+  }, [当前视图, 当前书架?.id, 轨道书架列表, 内联编辑书架栏?.id]);
 
   useLayoutEffect(() => {
     if (!书架分类展开 || !当前书架) {
@@ -2111,6 +2188,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     };
   }, [移动到书架目标?.anchor]);
   const 筛选后移动到书架可选目标列表 = 移动到书架可选目标列表;
+  function 比较书架文件夹(左侧: VirtualFolder, 右侧: VirtualFolder): number {
+    if (手机布局 || 排序 === "name-asc") return 左侧.sortIndex - 右侧.sortIndex || 左侧.createdAt - 右侧.createdAt || 文件名排序器.compare(左侧.name, 右侧.name);
+    if (排序 === "name-desc") return 文件名排序器.compare(右侧.name, 左侧.name);
+    if (排序 === "time-asc") return 左侧.createdAt - 右侧.createdAt || 文件名排序器.compare(左侧.name, 右侧.name);
+    if (排序 === "time-desc" || 排序 === "type") return 右侧.createdAt - 左侧.createdAt || 文件名排序器.compare(左侧.name, 右侧.name);
+    return 文件名排序器.compare(左侧.name, 右侧.name);
+  }
   const 筛选后书架文件夹列表 = useMemo(() => {
     const 搜索 = 搜索内容;
     return 当前书架文件夹列表
@@ -2138,19 +2222,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           return 标签匹配 && 搜索匹配;
         });
       })
-      .sort((左侧, 右侧) => {
-        if (排序 === "name-asc") {
-          return 左侧.sortIndex - 右侧.sortIndex
-            || 左侧.createdAt - 右侧.createdAt
-            || 文件名排序器.compare(左侧.name, 右侧.name);
-        }
-        if (排序 === "name-desc") return 文件名排序器.compare(右侧.name, 左侧.name);
-        if (排序 === "time-asc") return 左侧.createdAt - 右侧.createdAt || 文件名排序器.compare(左侧.name, 右侧.name);
-        if (排序 === "time-desc" || 排序 === "type") {
-          return 右侧.createdAt - 左侧.createdAt || 文件名排序器.compare(左侧.name, 右侧.name);
-        }
-        return 文件名排序器.compare(左侧.name, 右侧.name);
-      });
+      .sort(比较书架文件夹);
   }, [当前书架文件夹列表, 搜索内容, 搜索模式, 排序, 已选标签列表, 资源元数据表]);
   const 筛选后虚拟文件夹项目 = useMemo(() => {
     const 项目列表 = 当前虚拟文件夹?.items ?? [];
@@ -2285,9 +2357,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           : 当前视图 === "virtual-folder"
             ? 虚拟文件夹卡片项目.length
             : 筛选排序后项目.length;
+  const 连续列表启用 = true;
+  const 目录连续列表 = useContinuousLibrary(列表容器, isActive && 连续列表启用 && !资源信息目标 && !正在读取,
+    当前分页项目总数, 手机布局 ? 手机卡片布局 === 'list' ? 1 : 手机列数 : 获取卡片列数(卡片缩放), 手机布局 ? 手机每页数量 : 每页数量,
+    JSON.stringify([当前视图,当前目录?.path,当前书架ID,当前虚拟文件夹ID,搜索内容,最近搜索内容,收藏搜索内容,书签搜索内容,排序,文件夹优先,隐藏已加入书架资源,已选标签列表]),手机布局);
+  const 实际每页数量 = 连续列表启用 ? 目录连续列表.pageSize : 每页数量;
+  const 手机连续样式 = {paddingTop:目录连续列表.offset,paddingBottom:目录连续列表.bottom};
   const 总页数 = Math.max(1, Math.ceil(当前分页项目总数 / 实际每页数量));
-  const 安全当前页 = 当前视图 === "directory" ? 目录连续列表.page : Math.min(Math.max(当前页, 1), 总页数);
+  const 安全当前页 = 连续列表启用 ? 目录连续列表.page : Math.min(Math.max(当前页, 1), 总页数);
   const 获取当前分页切片 = <T,>(项目列表: T[]): T[] => {
+    if (连续列表启用) return 项目列表.slice(目录连续列表.start,目录连续列表.end);
     const 起始位置 = (安全当前页 - 1) * 实际每页数量;
     return 项目列表.slice(起始位置, 起始位置 + 实际每页数量);
   };
@@ -2297,23 +2376,23 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   );
   const 当前页最近打开卡片项目 = useMemo(
     () => 获取当前分页切片(最近打开卡片项目),
-    [安全当前页, 实际每页数量, 最近打开卡片项目],
+    [手机布局,目录连续列表.start,目录连续列表.end,安全当前页, 实际每页数量, 最近打开卡片项目],
   );
   const 当前页收藏卡片项目 = useMemo(
     () => 获取当前分页切片(收藏卡片项目),
-    [安全当前页, 实际每页数量, 收藏卡片项目],
+    [手机布局,目录连续列表.start,目录连续列表.end,安全当前页, 实际每页数量, 收藏卡片项目],
   );
   const 当前页书签卡片项目 = useMemo(
     () => 获取当前分页切片(书签卡片项目),
-    [安全当前页, 实际每页数量, 书签卡片项目],
+    [手机布局,目录连续列表.start,目录连续列表.end,安全当前页, 实际每页数量, 书签卡片项目],
   );
   const 当前页书架文件夹列表 = useMemo(
     () => 获取当前分页切片(筛选后书架文件夹列表),
-    [安全当前页, 实际每页数量, 筛选后书架文件夹列表],
+    [手机布局,目录连续列表.start,目录连续列表.end,安全当前页, 实际每页数量, 筛选后书架文件夹列表],
   );
   const 当前页虚拟文件夹卡片项目 = useMemo(
     () => 获取当前分页切片(虚拟文件夹卡片项目),
-    [安全当前页, 实际每页数量, 虚拟文件夹卡片项目],
+    [手机布局,目录连续列表.start,目录连续列表.end,安全当前页, 实际每页数量, 虚拟文件夹卡片项目],
   );
   const 书架文件夹缩略图候选项目 = useMemo(() => {
     const 文件表 = new Map<string, 文件条目>();
@@ -2328,13 +2407,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       });
     };
 
-    for (const 文件夹 of 当前页书架文件夹列表) {
+    const 封面书架 = isAndroid() ? 当前页书架文件夹列表.slice(Math.max(0,目录连续列表.visibleStart-目录连续列表.start),目录连续列表.visibleEnd-目录连续列表.start) : 当前页书架文件夹列表;
+    for (const 文件夹 of 封面书架) {
       加入候选(文件夹, 获取书架文件夹设定封面资源(文件夹));
       加入候选(文件夹, 文件夹.items[0] ?? null);
+      if (手机布局) 文件夹.items.slice(1,3).forEach(item => 加入候选(文件夹,item));
     }
 
     return Array.from(文件表.values());
-  }, [当前页书架文件夹列表]);
+  }, [当前页书架文件夹列表, 手机布局,目录连续列表.visibleStart,目录连续列表.visibleEnd,目录连续列表.start]);
   const 全部标签列表 = useMemo(() => {
     const 标签集合 = new Set<string>();
     for (const 元数据 of Object.values(资源元数据表)) {
@@ -2371,13 +2452,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   );
   const 缩略图目标项目 = useMemo(
     () => {
-      if (当前视图 === "recent") return 当前页最近打开卡片项目.map(({ 文件 }) => 文件);
-      if (当前视图 === "favorites") return 当前页收藏卡片项目.map(({ 文件 }) => 文件);
       if (当前视图 === "bookshelf") return 书架文件夹缩略图候选项目;
-      if (当前视图 === "virtual-folder") return 当前页虚拟文件夹卡片项目.map(({ 文件 }) => 文件);
-      return 当前页项目;
+      const items=当前视图 === "recent" ? 当前页最近打开卡片项目.map(({ 文件 }) => 文件)
+        : 当前视图 === "favorites" ? 当前页收藏卡片项目.map(({ 文件 }) => 文件)
+        : 当前视图 === "virtual-folder" ? 当前页虚拟文件夹卡片项目.map(({ 文件 }) => 文件) : 当前页项目;
+      if(!isAndroid())return items;
+      const start=Math.max(0,目录连续列表.visibleStart-目录连续列表.start),end=目录连续列表.visibleEnd-目录连续列表.start;
+      // Visible rows precede a single look-ahead row. DOM overscan stays mounted
+      // for smooth scrolling but no longer starts dozens of archive extractions.
+      return [...items.slice(start,end),...items.slice(end,end+目录连续列表.columns),...items.slice(Math.max(0,start-目录连续列表.columns),start)];
     },
-    [当前视图, 当前页最近打开卡片项目, 当前页收藏卡片项目, 书架文件夹缩略图候选项目, 当前页虚拟文件夹卡片项目, 当前页项目],
+    [当前视图, 当前页最近打开卡片项目, 当前页收藏卡片项目, 书架文件夹缩略图候选项目, 当前页虚拟文件夹卡片项目, 当前页项目,目录连续列表.visibleStart,目录连续列表.visibleEnd,目录连续列表.start,目录连续列表.columns],
   );
   const 当前目录阅读队列 = useMemo<阅读相邻资源项[]>(() => (
     筛选排序后项目
@@ -2433,14 +2518,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     : 当前视图;
   const 当前选择视图Key列表 = useMemo(() => {
     if (当前视图 === "directory") return 筛选排序后项目.map((项目) => 项目.id);
-    if (当前视图 === "recent") return 当前页最近打开卡片项目.map(({ 项目 }) => 项目.resourceKey);
-    if (当前视图 === "favorites") return 当前页收藏卡片项目.map(({ 项目 }) => 项目.resourceKey);
-    if (当前视图 === "bookmarks") return 当前页书签卡片项目.map(({ 项目 }) => 项目.id);
-    if (当前视图 === "virtual-folder") return 当前页虚拟文件夹卡片项目.map(({ 项目 }) => 项目.resourceKey);
+    if (当前视图 === "recent") return (手机布局 ? 最近打开卡片项目 : 当前页最近打开卡片项目).map(({ 项目 }) => 项目.resourceKey);
+    if (当前视图 === "favorites") return (手机布局 ? 收藏卡片项目 : 当前页收藏卡片项目).map(({ 项目 }) => 项目.resourceKey);
+    if (当前视图 === "bookmarks") return (手机布局 ? 书签卡片项目 : 当前页书签卡片项目).map(({ 项目 }) => 项目.id);
+    if (当前视图 === "virtual-folder") return (手机布局 ? 虚拟文件夹卡片项目 : 当前页虚拟文件夹卡片项目).map(({ 项目 }) => 项目.resourceKey);
     return [];
-  }, [当前视图, 筛选排序后项目, 当前页项目, 当前页最近打开卡片项目, 当前页收藏卡片项目, 当前页书签卡片项目, 当前页虚拟文件夹卡片项目]);
+  }, [手机布局, 当前视图, 筛选排序后项目, 最近打开卡片项目, 收藏卡片项目, 书签卡片项目, 虚拟文件夹卡片项目, 当前页最近打开卡片项目, 当前页收藏卡片项目, 当前页书签卡片项目, 当前页虚拟文件夹卡片项目]);
   const 左下统计文本 = useMemo(() => {
-    if (当前视图 === "recent") return `${阅读记录标题} ${当前阅读记录列表.length} 项`;
+    if (当前视图 === "recent") return `${t(阅读记录标题)} ${当前阅读记录列表.length} 项`;
     if (当前视图 === "favorites") return `收藏 ${收藏列表.length} 项`;
     if (当前视图 === "bookmarks") return `书签 ${书签列表.length} 项`;
     if (当前视图 === "bookshelf") return `${当前书架?.name ?? "书架栏"} ${当前书架文件夹列表.length} 项`;
@@ -2548,7 +2633,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 容器 = 列表容器.current;
     const 目标位置 = 待恢复滚动位置.current;
     if (!容器 || !目标位置) return;
-    if (当前视图 === "directory") { 待恢复滚动位置.current = null; return; }
+    if (连续列表启用) { 待恢复滚动位置.current = null; return; }
 
     容器.scrollTo({
       top: 目标位置 === "bottom" ? 容器.scrollHeight : 0,
@@ -2745,7 +2830,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       }
     }
 
-    void 恢复本地数据();
+    void 恢复本地数据().finally(() => { if (!已取消) 设置初始目录就绪(true); });
     return () => {
       已取消 = true;
     };
@@ -2756,8 +2841,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     let 已取消 = false;
 
     async function 刷新阅读数据(): Promise<void> {
+      const 保存序号 = 设置保存请求序号.current;
       const 结果 = await window.omicomic.getAppData();
       if (已取消 || !结果.ok) return;
+      if (isAndroid() && 保存序号 === 设置保存请求序号.current) {
+        const { readerVolumeKeys, readerVolumeKeysReversed } = 结果.data.settings;
+        界面设置快照.current = { ...界面设置快照.current, readerVolumeKeys, readerVolumeKeysReversed };
+        设置音量键翻页(Boolean(readerVolumeKeys));设置反转音量键(Boolean(readerVolumeKeysReversed));
+      }
       设置阅读进度表(结果.data.readingProgress);
       设置最近打开列表(结果.data.recentOpened);
       设置临时存放列表(结果.data.temporaryOpened ?? []);
@@ -2911,28 +3002,28 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     function 更新悬浮卡片位置(事件: MouseEvent): void {
       设置中键拖拽悬浮卡片((当前) => 当前 ? { ...当前, x: 事件.clientX, y: 事件.clientY } : 当前);
+      if (书架文件夹拖拽Key) 设置书架文件夹拖拽落点(cardDropAtPoint(事件, 'shelf', 书架文件夹拖拽Key));
+      if (书架资源拖拽Key) 设置书架资源拖拽落点(cardDropAtPoint(事件, 'resource', 书架资源拖拽Key));
+      if (收藏拖拽Key) 设置收藏拖拽落点(cardDropAtPoint(事件, 'favorite', 收藏拖拽Key));
+      if (书签拖拽Key) 设置书签拖拽落点(cardDropAtPoint(事件, 'bookmark', 书签拖拽Key));
     }
 
     window.addEventListener("mousemove", 更新悬浮卡片位置);
     return () => window.removeEventListener("mousemove", 更新悬浮卡片位置);
-  }, [Boolean(中键拖拽悬浮卡片)]);
+  }, [Boolean(中键拖拽悬浮卡片), 书架文件夹拖拽Key, 书架资源拖拽Key, 收藏拖拽Key, 书签拖拽Key]);
 
   useEffect(() => {
     if (!书架文件夹拖拽Key || !当前书架) return;
     const 当前拖拽Key = 书架文件夹拖拽Key;
     const 当前书架ID = 当前书架.id;
 
-    function 完成拖拽(): void {
-      if (书架文件夹拖拽落点) {
-        const 当前顺序 = 当前书架文件夹列表
-          .slice()
-          .sort((左侧, 右侧) => (
-            左侧.sortIndex - 右侧.sortIndex
-              || 左侧.createdAt - 右侧.createdAt
-              || 文件名排序器.compare(左侧.name, 右侧.name)
-          ))
+    function 完成拖拽(事件: MouseEvent): void {
+      if (事件.button !== 1) return;
+      const 最终落点 = cardDropAtPoint(事件, 'shelf', 当前拖拽Key);
+      if (最终落点) {
+        const 当前顺序 = 当前书架文件夹列表.slice().sort(比较书架文件夹)
           .map((文件夹) => 文件夹.id);
-        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 书架文件夹拖拽落点);
+        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 最终落点);
         if (!数组内容相同(当前顺序, 新顺序)) {
           void 保存书架文件夹拖拽顺序(当前书架ID, 新顺序);
         }
@@ -2954,15 +3045,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       window.removeEventListener("mouseup", 完成拖拽);
       window.removeEventListener("blur", 取消拖拽);
     };
-  }, [书架文件夹拖拽Key, 书架文件夹拖拽落点, 当前书架, 当前书架文件夹列表]);
+  }, [书架文件夹拖拽Key, 当前书架, 当前书架文件夹列表, 排序]);
 
   useEffect(() => {
     if (!书架资源拖拽Key || !当前虚拟文件夹) return;
     const 当前拖拽Key = 书架资源拖拽Key;
     const 当前文件夹 = 当前虚拟文件夹;
 
-    function 完成拖拽(): void {
-      if (书架资源拖拽落点) {
+    function 完成拖拽(事件: MouseEvent): void {
+      if (事件.button !== 1) return;
+      const 最终落点 = cardDropAtPoint(事件, 'resource', 当前拖拽Key);
+      if (最终落点) {
         const 当前顺序 = [...当前文件夹.items]
           .sort((左侧, 右侧) => (
             左侧.sortIndex - 右侧.sortIndex
@@ -2970,7 +3063,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               || 文件名排序器.compare(左侧.title, 右侧.title)
           ))
           .map((项目) => 项目.resourceKey);
-        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 书架资源拖拽落点);
+        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 最终落点);
         if (!数组内容相同(当前顺序, 新顺序)) {
           void 保存书架资源拖拽顺序(当前文件夹.id, 新顺序);
         }
@@ -2998,10 +3091,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     if (!收藏拖拽Key) return;
     const 当前拖拽Key = 收藏拖拽Key;
 
-    function 完成拖拽(): void {
-      if (收藏拖拽落点) {
+    function 完成拖拽(事件: MouseEvent): void {
+      if (事件.button !== 1) return;
+      const 最终落点 = cardDropAtPoint(事件, 'favorite', 当前拖拽Key);
+      if (最终落点) {
         const 当前顺序 = 获取收藏拖拽当前顺序();
-        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 收藏拖拽落点);
+        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 最终落点);
         if (!数组内容相同(当前顺序, 新顺序)) {
           void 保存收藏拖拽顺序(新顺序);
         }
@@ -3029,10 +3124,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     if (!书签拖拽Key) return;
     const 当前拖拽Key = 书签拖拽Key;
 
-    function 完成拖拽(): void {
-      if (书签拖拽落点) {
+    function 完成拖拽(事件: MouseEvent): void {
+      if (事件.button !== 1) return;
+      const 最终落点 = cardDropAtPoint(事件, 'bookmark', 当前拖拽Key);
+      if (最终落点) {
         const 当前顺序 = 获取书签拖拽当前顺序();
-        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 书签拖拽落点);
+        const 新顺序 = 计算卡片拖拽后顺序(当前顺序, 当前拖拽Key, 最终落点);
         if (!数组内容相同(当前顺序, 新顺序)) {
           void 保存书签拖拽顺序(新顺序);
         }
@@ -3182,8 +3279,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         (目标 instanceof Element && !!目标.closest(".resource-detail-direct-summary textarea, .resource-detail-direct-tags button"))
         || 标签添加浮层.current?.contains(目标)
         || 标签添加触发区.current?.contains(目标)
-        || (目标 instanceof Element && 目标.closest(".resource-detail-action"))
+        || (目标 instanceof Element && 目标.closest(".resource-detail-action, .mobile-library-back"))
       ) return;
+      consumeDismissGesture(事件);
       void 完成资源详情信息编辑();
     }
 
@@ -3227,6 +3325,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           || 标签添加浮层.current?.contains(目标)
         )
       ) return;
+      consumeDismissGesture(事件);
       关闭标签添加弹窗();
     }
 
@@ -3250,6 +3349,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     function 处理路径浮层外部点击(事件: PointerEvent): void {
       const 目标 = 事件.target;
       if (目标 instanceof Node && 资源详情路径控件.current?.contains(目标)) return;
+      consumeDismissGesture(事件);
       设置资源详情路径浮层打开(false);
     }
 
@@ -3262,6 +3362,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     function 关闭完整标签预览(事件?: Event): void {
       if (事件?.target instanceof Element && 事件.target.closest(".preview-tag-popover")) return;
+      if(事件) consumeDismissGesture(事件);
       设置完整标签浮层(null);
     }
 
@@ -3337,7 +3438,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }, [资源详情顶部折叠]);
 
   useDetailPreviewWheel({
-    enabled: isActive && 资源信息目标 !== null,
+    enabled: isActive && !手机布局 && 资源信息目标 !== null,
     panel: 资源详情滚动容器,
     preview: 资源详情预览滚动容器,
     collapsed: 资源详情顶部折叠,
@@ -3502,17 +3603,28 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     选择模式,
   ]);
 
+  const 手机封面目标 = useMemo(()=>isAndroid()?缩略图目标项目.filter(file=>支持真实缩略图(file.type)):[],[缩略图目标项目]);
+  useMobileCoverQueue(手机封面目标,isAndroid()&&isActive&&!正在打开资源路径&&!backgroundPaused,(文件,结果)=>{
+    设置缩略图表(原表=>({...原表,[文件.path]:结果.ok&&结果.data.url
+      ? {status:'loaded',url:结果.data.url,itemCount:结果.data.itemCount,byteSize:结果.data.byteSize,sourceVersion:`${文件.size??''}:${文件.modifiedAt??''}`}
+      : {status:'error',url:null,itemCount:结果.ok?结果.data.itemCount:undefined,retryAfter:Date.now()+10_000,sourceVersion:`${文件.size??''}:${文件.modifiedAt??''}`}}));
+  });
   useEffect(() => {
+    if(isAndroid())return;
     const 本次序号 = ++缩略图请求序号.current;
-    if (!isActive || 正在打开资源路径) return;
+    if (!isActive || 正在打开资源路径 || backgroundPaused) return;
+    const 封面取消 = new AbortController();
     const 版本 = (文件: 文件条目) => `${文件.size ?? ""}:${文件.modifiedAt ?? ""}`;
+    const 可复用 = (状态: 缩略图状态 | undefined, 文件: 文件条目) => 状态?.sourceVersion === 版本(文件)
+      && (状态.status === "loaded" || (状态.status === "error" && (状态.retryAfter === undefined || Date.now() < 状态.retryAfter)));
     const 可加载项目 = 缩略图目标项目.filter((文件) => 支持真实缩略图(文件.type));
 
     设置缩略图表((原表) => {
-      const 新表: Record<string, 缩略图状态> = {};
+      const 新表: Record<string, 缩略图状态> = { ...原表 };
       for (const 文件 of 缩略图目标项目) {
         const 原状态 = 原表[文件.path];
-        if (原状态?.sourceVersion === 版本(文件) && (原状态.status === "loaded" || 原状态.status === "error")) {
+        delete 新表[文件.path];
+        if (可复用(原状态, 文件)) {
           新表[文件.path] = 原状态;
         } else {
           新表[文件.path] = { status: 支持真实缩略图(文件.type) ? "idle" : "error", url: null };
@@ -3524,7 +3636,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     async function 加载缩略图批次(): Promise<void> {
       const 加载队列 = 可加载项目.filter((文件) => {
         const 状态 = 缩略图表[文件.path];
-        return 状态?.sourceVersion !== 版本(文件) || (状态?.status !== "loaded" && 状态?.status !== "error");
+        return !可复用(状态, 文件);
       });
       if (加载队列.length === 0) return;
       const 并发数 = isAndroid() ? 2 : 6;
@@ -3545,7 +3657,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 [文件.path]: { status: "loading", url: null },
               };
             });
-            const 结果 = await getResourceThumbnail({ path: 文件.path, type: 文件.type });
+            const 结果 = await getResourceThumbnail({ path: 文件.path, type: 文件.type }, 封面取消.signal, 版本(文件));
             if (本次序号 !== 缩略图请求序号.current) return;
 
             设置缩略图表((原表) => {
@@ -3553,8 +3665,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               return {
                 ...原表,
                 [文件.path]: 结果.ok && 结果.data.url
-                  ? { status: "loaded", url: 结果.data.url, itemCount: 结果.data.itemCount, sourceVersion: 版本(文件) }
-                  : { status: "error", url: null, itemCount: 结果.ok ? 结果.data.itemCount : undefined, sourceVersion: 版本(文件) },
+                  ? { status: "loaded", url: 结果.data.url, itemCount: 结果.data.itemCount, childFolderCount: 结果.data.childFolderCount, folderSummary: 结果.data.folderSummary, byteSize: 结果.data.byteSize, sourceVersion: 版本(文件) }
+                  : { status: "error", url: null, itemCount: 结果.ok ? 结果.data.itemCount : undefined, childFolderCount: 结果.ok ? 结果.data.childFolderCount : undefined, folderSummary: 结果.ok ? 结果.data.folderSummary : undefined, sourceVersion: 版本(文件),
+                    retryAfter: (isAndroid() || 文件.type === "archive") && (!结果.ok || 结果.data.retryable) ? Date.now() + 10_000 : undefined },
               };
             });
           } catch {
@@ -3563,7 +3676,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               if (!(文件.path in 原表)) return 原表;
               return {
                 ...原表,
-                [文件.path]: { status: "error", url: null, sourceVersion: 版本(文件) },
+                [文件.path]: { status: "error", url: null, sourceVersion: 版本(文件),
+                  retryAfter: isAndroid() || 文件.type === "archive" ? Date.now() + 10_000 : undefined },
               };
             });
           }
@@ -3576,12 +3690,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
 
     void 加载缩略图批次();
-    return () => { if (缩略图请求序号.current === 本次序号) 缩略图请求序号.current += 1; };
-  }, [缩略图目标项目, isActive, 正在打开资源路径]);
+    return () => { 封面取消.abort(); if (缩略图请求序号.current === 本次序号) 缩略图请求序号.current += 1; };
+  }, [缩略图目标项目, isActive, 正在打开资源路径, backgroundPaused]);
 
   useEffect(() => {
     const 本次序号 = ++路径状态请求序号.current;
-    if (!isActive) return;
+    if (!isActive || backgroundPaused || (isAndroid() && 正在打开资源路径)) return;
     const 路径项目Map = new Map<string, 文件条目>();
     for (const 文件 of 缩略图目标项目) {
       if (!文件.path || 路径项目Map.has(文件.path)) continue;
@@ -3640,7 +3754,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     void 检查路径批次();
     return () => { if (路径状态请求序号.current === 本次序号) 路径状态请求序号.current += 1; };
-  }, [缩略图目标项目, isActive]);
+  }, [缩略图目标项目, isActive, backgroundPaused, isAndroid() ? 正在打开资源路径 : null]);
 
   useEffect(() => {
     if (当前视图 !== "virtual-folder" || !当前虚拟文件夹 || 当前虚拟文件夹无效资源项目.length === 0) return;
@@ -3666,16 +3780,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     可见书签ID集合.current = new Set();
 
     if (当前视图 !== "bookmarks") {
-      书签预览状态Ref.current = {};
-      设置书签预览表({});
+      // Retain decoded bookmark previews when switching tabs.
       return;
     }
 
     设置书签预览表((原表) => {
-      const 新表: Record<string, 缩略图状态> = {};
+      const 新表: Record<string, 缩略图状态> = { ...原表 };
     for (const { 项目 } of 当前页书签卡片项目) {
-        新表[项目.id] = 原表[项目.id]
-          ?? (项目.thumbnailUrl
+        新表[项目.id] = 原表[项目.id]?.status === 'loaded' ? 原表[项目.id]
+          : (项目.thumbnailUrl && !手机布局
             ? { status: "loaded", url: 项目.thumbnailUrl }
             : { status: "idle", url: null });
       }
@@ -3799,7 +3912,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
   useEffect(() => {
     const 本次序号 = ++可阅读页数请求序号.current;
-    if (!isActive) return;
+    if (!isActive || backgroundPaused || (isAndroid() && 正在打开资源路径)) return;
     const 可统计项目Map = new Map<string, 文件条目>();
     for (const 文件 of 缩略图目标项目) {
       const key = 获取可阅读页数Key(文件);
@@ -3877,7 +3990,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     void 加载可阅读页数批次();
     return () => { if (可阅读页数请求序号.current === 本次序号) 可阅读页数请求序号.current += 1; };
-  }, [缩略图目标项目, isActive]);
+  }, [缩略图目标项目, isActive, backgroundPaused, isAndroid() ? 正在打开资源路径 : null]);
 
   useEffect(() => {
     function 处理分页快捷键(事件: KeyboardEvent): void {
@@ -3902,6 +4015,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     根目录路径: string,
     历史处理: 历史操作 = "push",
     重置分页 = true,
+    motion = mobileNavigationEpoch(),
   ): Promise<boolean> {
     const 本次序号 = ++读取序号.current;
     设置正在读取(true);
@@ -3916,6 +4030,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         return false;
       }
 
+      const commit = () => {
+        if (本次序号 !== 读取序号.current) return;
+        设置正在读取(false);
       设置当前目录(结果.data);
       设置当前根目录(根目录路径);
       设置当前视图("directory");
@@ -3937,6 +4054,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         const 新记录 = [...已保留记录, { path: 结果.data.path, rootPath: 根目录路径 }];
         return { entries: 新记录, index: 新记录.length - 1 };
       });
+
+      };
+      if (手机布局 && isActive && 当前目录 && (当前视图 !== 'directory' || 当前目录.path !== 结果.data.path)) await mobileNavigate(commit, 'folder', undefined, undefined, motion);
+      else commit();
 
       return true;
     } catch {
@@ -4024,25 +4145,59 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     起始页: number,
     上下文?: 阅读打开上下文,
     转场原点?: OmiBrandOriginGetter,
+    motion = mobileNavigationEpoch(),
   ): void {
     记录阅读返回定位();
-    onOpenReader(资源, 起始页, 上下文, 转场原点);
+    if(!isAndroid()){
+      if(手机布局)onOpenReader(资源, 起始页, 上下文, 转场原点, motion);
+      else onOpenReader(资源, 起始页, 上下文, 转场原点);
+      return;
+    }
+    const request=打开阅读请求序号.current;
+    void Promise.resolve(onOpenReader(资源, 起始页, 上下文, 转场原点, motion)).catch(()=>{
+      if(request===打开阅读请求序号.current)设置错误信息('阅读器打开失败，请重试。');
+    }).finally(()=>{if(request===打开阅读请求序号.current)设置正在打开资源路径(null);});
   }
 
   function 读取漫画清单(input: Parameters<typeof window.omicomic.getResourcePages>[0]) {
     if (打开清单任务.current?.path === input.path) return 打开清单任务.current.promise;
     设置正在打开资源路径(input.path);
-    const promise = window.omicomic.getResourcePages(input).finally(() => {
+    const promise = window.omicomic.getResourcePages(input).then(result=>{
+      if(isAndroid()&&!result.ok&&打开清单任务.current?.promise===promise)设置正在打开资源路径(null);
+      return result;
+    },error=>{
+      if(isAndroid()&&打开清单任务.current?.promise===promise)设置正在打开资源路径(null);
+      throw error;
+    }).finally(() => {
       if (打开清单任务.current?.promise === promise) {
         打开清单任务.current = null;
-        设置正在打开资源路径(null);
+        if(!isAndroid())设置正在打开资源路径(null);
       }
     });
     打开清单任务.current = { path: input.path, promise };
     return promise;
   }
 
+  async function 打开混合目录(path: string, type: string, request: number, motion: number): Promise<boolean> {
+    if (isAndroid() || type !== 'folder') return false;
+    let summary: Pick<缩略图状态,'itemCount'|'childFolderCount'|'folderSummary'> | undefined = 缩略图表[path];
+    if (summary?.childFolderCount === undefined) {
+      const result = await window.omicomic.getThumbnail({path,type:'folder'});
+      if (request !== 打开阅读请求序号.current) return true;
+      if (result.ok) summary = result.data;
+    }
+    const mixed = (summary?.childFolderCount ?? 0) > 0 || (summary?.itemCount ?? 0) > 0
+      || Boolean(summary?.folderSummary?.books && summary.folderSummary.images);
+    if (!mixed) return false;
+    const normalize = (value:string) => {const normalized=value.replace(/\\/g,'/').replace(/\/$/,'');return /^[a-z]:/i.test(normalized)?normalized.toLowerCase():normalized;};
+    const source = normalize(path);
+    const root = [...根目录列表].sort((a,b)=>b.path.length-a.path.length).find(item => source === normalize(item.path) || source.startsWith(normalize(item.path)+'/'));
+    await 打开目录(path,root?.path ?? path,'push',true,motion);
+    return true;
+  }
+
   async function 打开资源(文件: 文件条目): Promise<void> {
+    const motion = mobileNavigationEpoch();
     if (!当前根目录) return;
     const 本次打开序号 = ++打开阅读请求序号.current;
     if (
@@ -4055,11 +4210,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     设置错误信息(null);
     try {
+      if (await 打开混合目录(文件.path, 文件.type, 本次打开序号, motion)) return;
       const 结果 = await 读取漫画清单({ path: 文件.path, type: 文件.type });
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       if (!结果.ok) {
         if (文件.type === "folder" && 结果.error.code === "NO_IMAGES") {
-          const 已进入目录 = await 打开目录(文件.path, 当前根目录);
+          const 已进入目录 = await 打开目录(文件.path, 当前根目录, 'push', true, motion);
           if (本次打开序号 !== 打开阅读请求序号.current) return;
           if (已进入目录) {
             设置错误信息(null);
@@ -4084,14 +4240,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         结果.data,
         起始页,
         创建阅读上下文("directory", 结果.data.resourceKey, 当前目录阅读队列),
+        undefined, motion,
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
+      if(isAndroid())设置正在打开资源路径(null);
       设置错误信息("无法打开该阅读资源，请稍后重试。");
     }
   }
 
   async function 打开最近项目(项目: RecentOpenedItem, 转场原点?: OmiBrandOriginGetter): Promise<void> {
+    const motion = mobileNavigationEpoch();
     const 本次打开序号 = ++打开阅读请求序号.current;
     if (路径是否失效(项目.sourcePath)) {
       设置错误信息("资源原路径已失效或不可读取，不会进入阅读器。请通过右键菜单复制原路径或移除此记录。");
@@ -4099,6 +4258,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
     设置错误信息(null);
     try {
+      if (await 打开混合目录(项目.sourcePath, 项目.sourceType, 本次打开序号, motion)) return;
       const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
@@ -4119,14 +4279,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         起始页,
         创建阅读上下文("recent", 结果.data.resourceKey, 最近打开阅读队列),
         转场原点,
+        motion,
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
-      设置错误信息("最近打开的资源不存在或无法访问。");
+      if(isAndroid())设置正在打开资源路径(null);
+      设置错误信息("最近阅读的资源不存在或无法访问。");
     }
   }
 
   async function 打开收藏项目(项目: FavoriteItem): Promise<void> {
+    const motion = mobileNavigationEpoch();
     const 本次打开序号 = ++打开阅读请求序号.current;
     if (路径是否失效(项目.sourcePath)) {
       设置错误信息("收藏资源原路径已失效或不可读取，不会进入阅读器。请通过右键菜单复制原路径、查看资源信息或移除此记录。");
@@ -4134,6 +4297,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
     设置错误信息(null);
     try {
+      if (await 打开混合目录(项目.sourcePath, 项目.sourceType, 本次打开序号, motion)) return;
       const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
@@ -4153,14 +4317,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         结果.data,
         起始页,
         创建阅读上下文("favorites", 结果.data.resourceKey, 收藏阅读队列),
+        undefined, motion,
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
+      if(isAndroid())设置正在打开资源路径(null);
       设置错误信息("收藏资源不存在或无法访问。");
     }
   }
 
   async function 打开虚拟文件夹项目(项目: VirtualFolderItem): Promise<void> {
+    const motion = mobileNavigationEpoch();
     const 本次打开序号 = ++打开阅读请求序号.current;
     if (路径是否失效(项目.sourcePath)) {
       设置错误信息("书架中的资源原路径已失效或不可读取，不会进入阅读器。此记录不会自动删除，可右键从当前书架移除。");
@@ -4170,6 +4337,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
     设置错误信息(null);
     try {
+      if (await 打开混合目录(项目.sourcePath, 项目.sourceType, 本次打开序号, motion)) return;
       const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
@@ -4189,14 +4357,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         结果.data,
         起始页,
         创建阅读上下文("virtual-folder", 结果.data.resourceKey, 虚拟文件夹阅读队列),
+        undefined, motion,
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
+      if(isAndroid())设置正在打开资源路径(null);
       设置错误信息("书架中的资源不存在或无法访问。");
     }
   }
 
   async function 打开书签项目(项目: BookmarkItem): Promise<void> {
+    const motion = mobileNavigationEpoch();
     const 本次打开序号 = ++打开阅读请求序号.current;
     if (路径是否失效(项目.sourcePath)) {
       设置错误信息("书签资源原路径已失效或不可读取，不会进入阅读器。此书签不会自动删除，可右键查看资源信息或删除此书签。");
@@ -4219,9 +4390,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         设置错误信息("书签页码已超出当前资源页数，已跳转到最后一页。");
       }
       void 保存资源当前进度(结果.data, 起始页);
-      打开阅读器(结果.data, 起始页);
+      打开阅读器(结果.data, 起始页, undefined, undefined, motion);
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
+      if(isAndroid())设置正在打开资源路径(null);
       设置错误信息("书签资源不存在或无法访问。");
     }
   }
@@ -4231,7 +4403,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 修正页码 = Number.isFinite(输入页码)
       ? Math.min(Math.max(输入页码, 1), 总页数)
       : 安全当前页;
-    if (当前视图 === "directory") { 设置页码输入(String(修正页码)); 目录连续列表.jump(修正页码); return; }
+    if (连续列表启用) { 设置页码输入(String(修正页码)); 目录连续列表.jump(修正页码); return; }
     待恢复滚动位置.current = "top";
     退出选择模式();
     设置当前页(修正页码);
@@ -4239,7 +4411,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 跳转页码(目标页码: number): void {
-    if (当前视图 === "directory") { 目录连续列表.jump(目标页码); return; }
+    if (连续列表启用) { 目录连续列表.jump(目标页码); return; }
     待恢复滚动位置.current = "top";
     退出选择模式();
     设置当前页(Math.min(Math.max(目标页码, 1), 总页数));
@@ -4253,7 +4425,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 回到当前页顶部(): void {
-    if (当前视图 === "directory") { 目录连续列表.jump(安全当前页); return; }
+    if (连续列表启用) { 目录连续列表.jump(安全当前页); return; }
     自动翻页锁定.current = false;
     自动翻页冷却截止.current = Date.now() + 250;
     待恢复滚动位置.current = null;
@@ -4447,14 +4619,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     ];
   }
 
-  function 获取卡片拖拽落点位置(事件: ReactMouseEvent<HTMLElement>): "before" | "after" {
-    const 矩形 = 事件.currentTarget.getBoundingClientRect();
-    const 中心X = 矩形.left + 矩形.width / 2;
-    const 中心Y = 矩形.top + 矩形.height / 2;
-    const 同行拖拽 = Math.abs(事件.clientY - 中心Y) <= 矩形.height * 0.45;
-    if (同行拖拽) return 事件.clientX < 中心X ? "before" : "after";
-    return 事件.clientY < 中心Y ? "before" : "after";
-  }
 
   async function 保存根目录顺序(新顺序: string[]): Promise<void> {
     const 结果 = await window.omicomic.reorderLibraryRoots(新顺序);
@@ -4542,6 +4706,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       return;
     }
     设置虚拟文件夹列表(结果.data);
+    if (!手机布局 && 排序 !== "name-asc") 保存界面设置({ sortMode: "name-asc" });
   }
 
   function 获取收藏拖拽当前顺序(): string[] {
@@ -4678,13 +4843,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     });
   }
 
-  function 更新书架资源拖拽落点(事件: ReactMouseEvent<HTMLElement>, resourceKey: string): void {
-    if (!书架资源拖拽Key || 书架资源拖拽Key === resourceKey) return;
-    设置书架资源拖拽落点({
-      key: resourceKey,
-      position: 获取卡片拖拽落点位置(事件),
-    });
-  }
 
   function 开始书架文件夹中键拖拽(事件: ReactMouseEvent<HTMLElement>, 文件夹: VirtualFolder): void {
     if (事件.button !== 1 || 删除确认处理中) return;
@@ -4706,13 +4864,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     });
   }
 
-  function 更新书架文件夹拖拽落点(事件: ReactMouseEvent<HTMLElement>, folderId: string): void {
-    if (!书架文件夹拖拽Key || 书架文件夹拖拽Key === folderId) return;
-    设置书架文件夹拖拽落点({
-      key: folderId,
-      position: 获取卡片拖拽落点位置(事件),
-    });
-  }
 
   function 开始收藏中键拖拽(
     事件: ReactMouseEvent<HTMLElement>,
@@ -4739,13 +4890,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     });
   }
 
-  function 更新收藏拖拽落点(事件: ReactMouseEvent<HTMLElement>, resourceKey: string): void {
-    if (!收藏拖拽Key || 收藏拖拽Key === resourceKey) return;
-    设置收藏拖拽落点({
-      key: resourceKey,
-      position: 获取卡片拖拽落点位置(事件),
-    });
-  }
 
   function 开始书签中键拖拽(
     事件: ReactMouseEvent<HTMLElement>,
@@ -4772,16 +4916,31 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     });
   }
 
-  function 更新书签拖拽落点(事件: ReactMouseEvent<HTMLElement>, id: string): void {
-    if (!书签拖拽Key || 书签拖拽Key === id) return;
-    设置书签拖拽落点({
-      key: id,
-      position: 获取卡片拖拽落点位置(事件),
-    });
+
+  function 取消手机后台打开请求(): void {
+    读取序号.current++; 打开阅读请求序号.current++;
+    设置正在读取(false); 设置正在打开资源路径(null);
+    window.dispatchEvent(new Event("omi-cancel-reader-prepare"));
   }
 
-  function 打开书架(): void {
-    if (资源信息目标) 关闭资源详情页面();
+  function 手机栏目序号(视图: 资源库视图): number {
+    return ['directory', 'bookshelf', 'favorites', 'bookmarks', 'recent'].indexOf(视图 === 'virtual-folder' ? 'bookshelf' : 视图);
+  }
+
+  function 切换手机栏目(目标: 资源库视图, commit: () => void): void {
+    取消手机后台打开请求();
+    const 当前序号 = 手机栏目序号(当前视图), 目标序号 = 手机栏目序号(目标);
+    if (当前序号 === 目标序号) { cancelMobileNavigation(); commit(); return; }
+    void mobileNavigate(commit, 目标序号 > 当前序号 ? 'tab-next' : 'tab-prev');
+  }
+
+  function 打开书架(已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true) {
+      if (当前视图 === 'virtual-folder') 返回书架根层();
+      else 切换手机栏目('bookshelf', () => 打开书架(true));
+      return;
+    }
+    if (资源信息目标) 关闭资源详情页面(true);
     if (排序 === "type") 设置排序("name-asc");
     if (!当前书架ID && 书架列表[0]) 设置当前书架ID(书架列表[0].id);
     设置当前视图("bookshelf");
@@ -4790,14 +4949,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     回到第一页();
   }
 
-  function 进入书架文件夹(文件夹: VirtualFolder): void {
+  function 进入书架文件夹(文件夹: VirtualFolder, 已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 进入书架文件夹(文件夹, true), "folder"); return; }
     设置当前虚拟文件夹ID(文件夹.id);
     设置当前视图("virtual-folder");
     设置错误信息(null);
     回到第一页();
   }
 
-  function 返回书架根层(): void {
+  function 返回书架根层(已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 返回书架根层(true), "folder"); return; }
     if (排序 === "type") 设置排序("name-asc");
     if (!当前书架ID && 书架列表[0]) 设置当前书架ID(书架列表[0].id);
     设置当前视图("bookshelf");
@@ -4814,8 +4975,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
   }
 
-  function 切换阅读记录分类(分类: "recent" | "temporary"): void {
-    if (资源信息目标) 关闭资源详情页面();
+  function 切换阅读记录分类(分类: "recent" | "temporary", 已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true) { 切换手机栏目('recent', () => 切换阅读记录分类(分类, true)); return; }
+    if (资源信息目标) 关闭资源详情页面(true);
     退出选择模式();
     设置最近菜单(null);
     设置整理空白菜单(null);
@@ -4874,6 +5036,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   async function 同步文件操作(数据: OmiComicAppData): Promise<void> {
+    clearMobileTreeCache();
+    clearResourceThumbnailCache();
+    设置缩略图表({});
+    设置手机操作目标(null);
     同步应用数据状态(数据);
     关闭资源详情页面();
     退出选择模式();
@@ -4939,11 +5105,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   async function 处理刷新按钮(): Promise<void> {
+    clearMobileTreeCache();
+    clearResourceThumbnailCache();
     if (正在读取 || 正在检查全局无效资源) return;
 
     设置错误信息(null);
     设置正在检查全局无效资源(true);
     try {
+      const 封面刷新 = await window.omicomic.refreshThumbnails?.();
+      if (封面刷新 && !封面刷新.ok) throw new Error(封面刷新.error.message);
       const 清理目标 = await 扫描全局无效资源记录();
       if (清理目标) {
         设置错误信息(`检测到 ${清理目标.count} 个路径失效资源，原记录不会自动删除。`);
@@ -4984,8 +5154,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     ]);
   }
 
-  function 打开资源库(): void {
-    if (资源信息目标) 关闭资源详情页面();
+  function 打开资源库(已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true) { 切换手机栏目('directory', () => 打开资源库(true)); return; }
+    if (手机布局 && 当前视图 === 'directory' && 当前根目录) { 设置手机筛选展开(false); 设置搜索内容(''); if(当前目录?.path===当前根目录) {回到第一页();目录连续列表.jump(1);} else void 打开目录(当前根目录,当前根目录); return; }
+    if (资源信息目标) 关闭资源详情页面(true);
     设置错误信息(null);
     设置当前虚拟文件夹ID(null);
     if (当前目录 && 当前根目录) {
@@ -5299,17 +5471,20 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
   async function 删除虚拟文件夹记录(): Promise<void> {
     if (!待删除虚拟文件夹 || 删除确认处理中) return;
-    const 删除ID = 待删除虚拟文件夹.id;
+    const 删除书架 = 待删除虚拟文件夹.selection ?? [待删除虚拟文件夹];
     设置删除确认处理中(true);
     try {
-      const 结果 = await window.omicomic.deleteVirtualFolder(删除ID);
+      for (const 文件夹 of 删除书架) {
+      const 结果 = await window.omicomic.deleteVirtualFolder(文件夹.id);
       if (!结果.ok) {
         设置错误信息(结果.error.message);
         return;
       }
       设置虚拟文件夹列表(结果.data);
+      }
       设置待删除虚拟文件夹(null);
-      if (当前视图 === "virtual-folder" && 当前虚拟文件夹ID === 删除ID) {
+      设置手机书架管理(null);
+      if (当前视图 === "virtual-folder" && 删除书架.some(item=>item.id===当前虚拟文件夹ID)) {
         设置当前虚拟文件夹ID(null);
         设置当前视图("bookshelf");
       }
@@ -5572,7 +5747,25 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
   }
 
-  function 打开资源详情页面(目标: 资源信息目标): void {
+  function 关闭所有右键菜单(): void {
+    设置目录空白菜单(null); 设置资源菜单(null); 设置最近菜单(null); 设置收藏菜单(null);
+    设置书签菜单(null); 设置书架菜单(null); 设置书架栏空白菜单(null); 设置虚拟文件夹菜单(null);
+    设置书架空白菜单(null); 设置书架内部空白菜单(null); 设置整理空白菜单(null);
+    设置虚拟文件夹资源菜单(null); 设置根目录菜单(null); 设置标签菜单(null);
+  }
+
+  function 打开资源详情页面(目标: 资源信息目标, 已转场: unknown = false): void {
+    关闭所有右键菜单();
+    if (手机布局 && 已转场 !== true) {
+      取消手机后台打开请求();
+      const keys = 目标.kind === 'bookmark' ? [目标.item.id] : [目标.input.resourceKey, 目标.localPath, 目标.input.sourcePath];
+      const card = [...document.querySelectorAll<HTMLElement>('.page-panel.is-visible .mobile-resource-card')].find(element => keys.includes(element.dataset.selectionKey));
+      const rect = card?.querySelector('.resource-preview')?.getBoundingClientRect();
+      const origin = rect && rect.width > 0 && rect.height > 0 ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, selectionKey: card?.dataset.selectionKey } : undefined;
+      手机详情封面起点.current = origin;
+      void mobileNavigate(() => 打开资源详情页面(目标, true), 'detail', undefined, origin);
+      return;
+    }
     设置完整标签浮层(null);
     设置资源信息目标(目标);
     设置资源详情顶部折叠(false);
@@ -5624,7 +5817,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       });
   }
 
-  function 关闭资源详情页面(): void {
+  function 关闭资源详情页面(已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true) { void mobileNavigate(() => 关闭资源详情页面(true), 'detail-back', undefined, 手机详情封面起点.current); return; }
     if (整理保存中) return;
     资源详情加载序号.current += 1;
     设置资源信息目标(null);
@@ -5638,6 +5832,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     设置整理错误(null);
     设置标签添加弹窗打开(false);
     设置标签添加输入("");
+  }
+
+  async function 返回手机上一页(): Promise<void> {
+    if (资源信息目标) {
+      if (资源详情编辑模式 && !(await 完成资源详情信息编辑())) return;
+      关闭资源详情页面();
+    } else if (当前视图 === "directory" && 当前目录?.parentPath && 当前根目录) {
+      await 打开目录(当前目录.parentPath, 当前根目录);
+    } else onHome();
   }
 
   function 打开资源详情阅读器(页码 = 资源详情所选页): void {
@@ -5666,7 +5869,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
   }
 
-  function 打开设置窗口(): void {
+  useEffect(() => {
+    const open = () => 打开设置窗口();
+    window.addEventListener("omi-open-settings", open);
+    return () => window.removeEventListener("omi-open-settings", open);
+  }, []);
+  useEffect(() => { 设置手机操作目标(null); 设置手机排序中(false); }, [当前视图, 当前目录?.path, 当前虚拟文件夹ID]);
+  useEffect(() => { 设置手机书架管理(null); }, [当前视图, 当前书架ID]);
+  useEffect(() => { if (!手机书架管理) { 设置手机选中书架(new Set()); 设置手机书架排序(false); } }, [手机书架管理]);
+
+  function 打开设置窗口(已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 打开设置窗口(true), "forward"); return; }
+    设置手机显示选项(false);
+    设置手机设置子页(false);
     设置当前设置分类("library");
     设置设置窗口偏移({ x: 0, y: 0 });
     设置完整标签浮层(null);
@@ -5694,6 +5909,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 开始拖动设置窗口(事件: ReactPointerEvent<HTMLElement>): void {
+    if (手机布局) return;
     if (事件.button !== 0 || !事件.isPrimary) return;
     const 目标 = 事件.target;
     if (目标 instanceof HTMLElement && 目标.closest("button, input, select, textarea, a")) return;
@@ -5752,7 +5968,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     }
   }
 
-  function 关闭右侧抽屉(): void {
+  function 关闭右侧抽屉(已转场: unknown = false): void {
+    if (手机布局 && 已转场 !== true && 当前右侧抽屉 === "settings") { void mobileNavigate(() => 关闭右侧抽屉(true), "back"); return; }
     const 恢复设置按钮焦点 = 当前右侧抽屉 === "settings";
     设置当前右侧抽屉(null);
     设置整理错误(null);
@@ -5800,10 +6017,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     return 保存成功;
   }
 
-  async function 保存资源信息(): Promise<boolean> {
+  async function 保存资源信息(更改?: 整理信息输入): Promise<boolean> {
     if (!资源信息目标 || 整理保存中) return false;
     const 本次保存目标 = 资源信息目标;
-    const 输入: 整理信息输入 = {
+    const 输入: 整理信息输入 = 更改 ?? {
       note: 整理备注输入.trim(),
       tags: 解析标签输入(整理标签输入),
     };
@@ -5933,7 +6150,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
   function 渲染路径失效标记(路径: string) {
     if (!路径是否失效(路径)) return null;
-    return <span className="resource-invalid-badge">路径失效</span>;
+    return <span className="resource-invalid-badge">{t("路径失效")}</span>;
   }
 
   function 获取书架资源右键整理目标(项目: VirtualFolderItem): {
@@ -6080,6 +6297,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 退出选择模式(): void {
+    设置手机排序中(false);
     设置选择模式(null);
     设置已选项目Key集合(new Set());
     设置批量删除确认(null);
@@ -6310,14 +6528,163 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         设置正在读取(false);
       }
     } catch {
-      设置错误信息("根目录移除失败，请稍后重试。");
+      设置错误信息("资源库目录移除失败，请稍后重试。");
     } finally {
       设置删除确认处理中(false);
     }
   }
 
+  async function 手机保存卡片顺序(keys: string[]): Promise<void> {
+    if (当前视图 === "favorites") await 保存收藏拖拽顺序(keys);
+    else if (当前视图 === "bookmarks") await 保存书签拖拽顺序(keys);
+    else if (当前视图 === "virtual-folder" && 当前虚拟文件夹) await 保存书架资源拖拽顺序(当前虚拟文件夹.id, keys);
+  }
+
+  function 手机当前排序Keys(): string[] {
+    if (当前视图 === "favorites") return 获取收藏拖拽当前顺序();
+    if (当前视图 === "bookmarks") return 获取书签拖拽当前顺序();
+    return [...(当前虚拟文件夹?.items ?? [])].sort((a,b) => a.sortIndex - b.sortIndex).map(item => item.resourceKey);
+  }
+
+  function 手机拖动卡片(from: string, to: string): void {
+    const keys = 手机当前排序Keys();
+    const start = keys.indexOf(from), end = keys.indexOf(to);
+    if (start < 0 || end < 0 || start === end) return;
+    keys.splice(start, 1); keys.splice(end, 0, from);
+    void 手机保存卡片顺序(keys);
+  }
+
+  function 渲染手机资源卡片(文件: 文件条目, input: ResourceMetaInput, key: string, open: () => void,
+    pages: string, tags: string[], bookmark?: BookmarkItem, index?: number) {
+    const thumb = bookmark ? 书签预览表[bookmark.id] ?? (bookmark.thumbnailUrl ? {status:"loaded" as const,url:bookmark.thumbnailUrl} : undefined) : 缩略图表[文件.path];
+    const collection = !bookmark && 文件.type === "folder" && (Boolean(thumb?.itemCount) || !thumb || thumb.status === "loading");
+    const progress = 阅读进度表[input.resourceKey] ?? 最近打开列表.find(item => item.resourceKey === input.resourceKey);
+    const countKey = 获取可阅读页数Key(文件);
+    const total = Math.max(0, Math.floor(bookmark?.totalPages ?? progress?.totalPages ?? (countKey ? 可阅读页数表[countKey]?.count : 0) ?? 0));
+    const started = progress && (progress.hasStartedReading || progress.currentPageIndex > 0 || progress.completed);
+    const current = total ? Math.min(total, Math.max(0, bookmark ? bookmark.pageIndex + 1 : started ? progress.currentPageIndex + 1 : 0)) : 0;
+    const mobilePages = total ? `${current}/${total}${bookmark ? '' : ` · ${Math.round(current / total * 100)}%`}` : "";
+    const bytes = thumb?.byteSize ?? (文件.type !== "folder" ? 文件.size : undefined);
+    const mobileSize = !bytes ? undefined : bytes < 1024 * 1024 * .1 ? "<0.1MB" : `${Number((bytes / (1024 * 1024)).toFixed(1))}MB`;
+    const info: 资源信息目标 | null = collection ? null : bookmark
+      ? { kind: "bookmark", item: bookmark, fileType: 文件.type, thumbnailUrl: thumb?.url }
+      : { kind: "resource", input, fileType: 文件.type, localPath: 文件.path, progressText: pages, thumbnailUrl: thumb?.url };
+    return <MobileResourceCard key={key} id={key} index={index} bookmarkId={bookmark?.id} title={bookmark?.bookmarkTitle ?? input.title} type={文件.type}
+      layout={手机卡片布局} thumbnail={thumb?.url} tags={tags} bookmarkDate={bookmark ? new Date(bookmark.createdAt).toLocaleDateString("sv-SE") : undefined} pages={collection ? thumb?.itemCount ? `${thumb.itemCount} 项` : "" : mobilePages}
+      size={bookmark ? undefined : mobileSize}
+      invalid={路径是否失效(文件.path)} favorite={收藏Key集合.has(input.resourceKey)}
+      onFavorite={collection || bookmark || input.sourceType === "unknown" ? undefined : () => { if (input.sourceType !== "unknown") void 切换收藏({ ...input, sourceType: input.sourceType }); }}
+      onInfo={info ? () => 打开资源详情页面(info) : undefined} onOpen={open}
+      onHold={() => { if (当前选择视图 && !手机排序中) { 设置手机操作目标({view:当前选择视图,key,input,info}); 设置选择模式(当前选择视图); 设置已选项目Key集合(old=>new Set([...(选择模式===当前选择视图?old:[]),key])); } }}
+      selecting={选择模式 === 当前视图} selected={手机排序中 || 已选项目Key集合.has(key)} onSelect={() => 切换选择项目(key)}
+      sorting={手机排序中} onReorder={手机拖动卡片} />;
+  }
+
+  function 渲染对话框(内容: ReactNode) {
+    // Mobile drawers already live at body level; dialogs must share that layer.
+    return 手机布局 ? createPortal(内容, document.body) : 内容;
+  }
+
+  async function 手机打开资源所在目录(input: ResourceMetaInput): Promise<void> {
+    设置手机操作目标(null); 退出选择模式(); 取消手机后台打开请求();
+    设置手机筛选展开(false); 设置搜索内容(''); 设置已选标签列表([]);
+    const sourcePath = input.sourcePath.replace(/\/$/, '');
+    // Android document grants are virtual roots, not real /local directories.
+    // A directly granted file cannot expose its parent without a directory grant.
+    if (/^\/local\/[^/]+\/[^/]+$/.test(sourcePath) && input.sourceType !== 'folder') {
+      设置错误信息('这个文件通过单独授权打开，尚未授权所在目录。请先在资源库添加所在目录。');
+      return;
+    }
+    const exactRoot = 根目录列表.find(root => root.path === sourcePath);
+    const path = exactRoot || (/^\/local\/[^/]+\/[^/]+$/.test(sourcePath) && input.sourceType === 'folder') ? sourcePath : 获取父目录路径(sourcePath);
+    const root = [...根目录列表].sort((a, b) => b.path.length - a.path.length).find(item => path === item.path || path.startsWith(item.path + '/') || path.startsWith(item.path + '\\'));
+    const grantedRoot = /^\/local\/[^/]+\/[^/]+/.exec(path)?.[0];
+    await 打开目录(path, root?.path ?? grantedRoot ?? path);
+  }
+
+  function 渲染手机操作栏() {
+    let target = 手机操作目标;
+    if (!target) return null;
+    const multi = 选择模式 === target.view;
+    const count = multi ? 已选项目Key集合.size : 1;
+    if (multi && count === 1 && !已选项目Key集合.has(target.key)) {
+      const key = [...已选项目Key集合][0];
+      const bookmark = target.view === "bookmarks" ? 书签列表.find(item => item.id === key) : undefined;
+      const item = target.view === "recent" ? 最近打开列表.find(item => item.resourceKey === key)
+        : target.view === "favorites" ? 收藏列表.find(item => item.resourceKey === key)
+        : target.view === "virtual-folder" ? 当前虚拟文件夹?.items.find(item => item.resourceKey === key) : bookmark;
+      const file = target.view === "directory" ? 当前目录?.items.find(item => item.id === key) : undefined;
+      const input = file ? 获取文件资源元数据输入(file) : item ? {resourceKey:item.resourceKey,sourcePath:item.sourcePath,sourceType:item.sourceType,title:item.title} : null;
+      if (input) target = {...target,key,input,info:bookmark ? {kind:"bookmark",item:bookmark,fileType:bookmark.sourceType,thumbnailUrl:书签预览表[bookmark.id]?.url} : input.sourceType === "folder" && 缩略图表[input.sourcePath]?.itemCount ? null : {kind:"resource",input,fileType:input.sourceType,localPath:input.sourcePath,thumbnailUrl:缩略图表[input.sourcePath]?.url}};
+    }
+    const close = () => { if (!multi) 设置手机操作目标(null); };
+    const resourceInputs = () => multi ? 获取已选资源输入(target.view) : [target.input];
+    const rename: MobileAction = { label: target.view === "bookmarks" ? "重命名书签" : "重命名", icon: "rename", disabled: count !== 1, onClick: () => { if(target.view === "bookmarks") 设置书签重命名(书签列表.find(item => item.id===target.key) ?? null); else 设置本地文件目标({path:target.input.sourcePath,title:target.input.title,mode:"rename"}); close(); } };
+    const info: MobileAction = { label: "信息页", icon: "ⓘ", disabled: !target.info || count !== 1, onClick: () => { if (target.info) 打开资源详情页面(target.info); close(); } };
+    const add: MobileAction = { label: "加入书架", icon: "＋", disabled: count === 0, onClick: () => { 选择已有虚拟文件夹加入(resourceInputs(), count > 1 ? `已选择 ${count} 个资源` : target.input.title); close(); } };
+    const remove: MobileAction = { label: target.view === "bookmarks" ? "删除书签" : target.view === "favorites" ? "删除收藏" : target.view === "recent" ? "删除历史" : "删除", icon: "⌫", disabled: count === 0, onClick: () => {
+      if (target.view === "directory") 设置本地文件目标({path:target.input.sourcePath,paths:resourceInputs().map(input => input.sourcePath),title:count > 1 ? `${count} 个资源` : target.input.title,mode:"delete"});
+      else if (multi) 请求删除选中(target.view);
+      else 请求右键删除记录(target.view, target.key);
+      close();
+    } };
+    const actions = target.view === "virtual-folder"
+      ? [{label:"设为封面",icon:"▧",disabled:count !== 1,onClick:() => { void 设置当前书架封面(target.input.resourceKey); close(); }},rename,info]
+      : target.view === "bookmarks" || target.view === "favorites" ? [rename,info,remove] : [rename,info,add,remove];
+    const floating: MobileAction[] = [];
+    const openPath: MobileAction = {label:'打开路径',icon:'open-folder',disabled:count !== 1,onClick:() => { void 手机打开资源所在目录(target.input); }};
+    if (target.view === 'recent') floating.push(openPath);
+    if (["virtual-folder","favorites","bookmarks"].includes(target.view)) {
+      floating.push({label:"置顶",icon:"↑",disabled:count === 0,onClick:() => { const keys = 手机当前排序Keys(); const selected = multi ? [...已选项目Key集合] : [target.key]; void 手机保存卡片顺序([...keys.filter(key => selected.includes(key)),...keys.filter(key => !selected.includes(key))]); close(); }},
+        {label:手机排序中 ? "完成排序" : "排序",icon:"↕",active:手机排序中,onClick:() => { if (!手机排序中) { 设置选择模式(target.view); 设置已选项目Key集合(new Set(当前选择视图Key列表)); } 设置手机排序中(value => !value); }});
+    }
+    if (target.view === "virtual-folder") floating.push(add,
+      {label:"移入书架",icon:"↗",disabled:count === 0,onClick:() => { 打开批量转存到书架弹窗("move",resourceInputs(),target.input.title); close(); }},
+      {label:"移出书架",icon:"−",disabled:count === 0,onClick:() => { if (multi) 请求删除选中("virtual-folder"); else 请求右键删除记录("virtual-folder",target.key); close(); }});
+    if (multi) floating.push({label:count === 当前选择视图Key列表.length ? "取消全选" : "全选",icon:"☑",disabled:手机排序中,onClick:() => count === 当前选择视图Key列表.length ? 取消全选() : 全选当前选择视图()});
+    if (target.view === 'virtual-folder') floating.push(openPath);
+    return <MobileActionBar actions={actions} floating={floating} selected={multi ? count : undefined} onDismiss={multi ? undefined : close} />;
+  }
+
+  function 渲染手机书架操作栏() {
+    if (!手机书架管理) return null;
+    const selected = 筛选后书架文件夹列表.filter(item => 手机选中书架.has(item.id));
+    const target = selected[0] ?? 手机书架管理;
+    const all = selected.length === 筛选后书架文件夹列表.length;
+    return <MobileActionBar selected={selected.length} actions={[
+      {label:'重命名',icon:'rename',disabled:selected.length !== 1,onClick:() => 打开虚拟文件夹弹窗({mode:'rename',folder:target})},
+      {label:'重置封面',icon:'reset',disabled:selected.length !== 1 || !target.coverResourceKey,onClick:() => {void 清除书架设定封面(target);}},
+      {label:'删除书架',icon:'delete',disabled:!selected.length,onClick:() => 设置待删除虚拟文件夹({...target,selection:selected})}
+    ]} floating={[
+      {label:'置顶',icon:'pin',disabled:!selected.length,onClick:() => {const keys=筛选后书架文件夹列表.map(item=>item.id);void 保存书架文件夹拖拽顺序(target.bookshelfId,[...keys.filter(id=>手机选中书架.has(id)),...keys.filter(id=>!手机选中书架.has(id))]);}},
+      {label:手机书架排序?'完成排序':'排序',icon:'sort',active:手机书架排序,onClick:() => {if(!手机书架排序)设置手机选中书架(new Set(筛选后书架文件夹列表.map(item=>item.id)));设置手机书架排序(value=>!value);}},
+      {label:all?'取消全选':'全选',icon:'select',disabled:手机书架排序,onClick:() => 设置手机选中书架(new Set(all ? [] : 筛选后书架文件夹列表.map(item=>item.id)))}
+    ]}/>;
+  }
+
+  function 渲染桌面卡片元信息(文件: 文件条目, 进度: ReadingProgress | null, 页数: number | null, 缩略图: 缩略图状态, 书签?: BookmarkItem) {
+    const 合集 = !书签 && 文件.type === "folder" && Boolean(缩略图.itemCount);
+    const 总页数 = Math.max(0, Math.floor(书签?.totalPages ?? ((进度?.totalPages ?? 0) > 0 ? 进度!.totalPages : 页数 ?? 0)));
+    const 已开始 = 进度 && (进度.hasStartedReading || 进度.currentPageIndex > 0 || 进度.completed);
+    const 当前页 = 总页数 ? Math.min(总页数, Math.max(0, 书签 ? 书签.pageIndex + 1 : 已开始 ? 进度.currentPageIndex + 1 : 0)) : 0;
+    const 百分比 = 总页数 ? Math.round(当前页 / 总页数 * 100) : 0;
+    const summary = 缩略图.folderSummary;
+    const 合集说明 = summary?.folders ? [tr`${summary.folders} 文件夹`, summary.books ? tr`${summary.books} 文档` : '', summary.images ? tr`${summary.images} 图片` : ''].filter(Boolean).join(' · ')
+      : 缩略图.childFolderCount ? tr`${缩略图.childFolderCount} 文件夹` : '';
+    const 页码 = 合集 ? 合集说明
+      : 书签 ? (总页数 ? `${当前页}/${总页数}` : "")
+      : 显示进度文本 && 总页数 ? (进度文本模式 === "percent" ? `${百分比}%` : `${当前页}/${总页数} · ${百分比}%`) : "";
+    const 字节数 = 缩略图.byteSize ?? (文件.type !== "folder" ? 文件.size : undefined);
+    const 大小 = !书签 && !合集 && 字节数 ? (字节数 < 104857.6 ? "<0.1MB" : `${Number((字节数 / 1048576).toFixed(1))}MB`) : "";
+    return <span className="resource-card-meta">
+      {页码 && <span className="resource-card-page">{页码}</span>}
+      {大小 && <span className="resource-card-size">{大小}</span>}
+      {书签 && <><span aria-hidden="true">·</span><time>{new Date(书签.createdAt ?? 书签.updatedAt).toLocaleDateString("sv-SE")}</time></>}
+    </span>;
+  }
+
   function 渲染收藏按钮(收藏输入: Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex"> | null) {
-    if (!收藏输入) return null;
+    if (!收藏输入 || (收藏输入.sourceType === "folder" && 缩略图表[收藏输入.sourcePath]?.itemCount)) return null;
 
     const 已收藏 = 收藏Key集合.has(收藏输入.resourceKey);
     return (
@@ -6325,9 +6692,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         className={`favorite-button ${已收藏 ? "is-active" : ""}`}
         role="button"
         tabIndex={0}
-        aria-label={已收藏 ? "取消收藏" : "收藏"}
+        aria-label={已收藏 ? t("取消收藏") : t("收藏")}
         aria-pressed={已收藏}
-        title={已收藏 ? "取消收藏" : "收藏"}
+        title={已收藏 ? t("取消收藏") : t("收藏")}
         onClick={(事件) => {
           事件.stopPropagation();
           void 切换收藏(收藏输入);
@@ -6340,23 +6707,23 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           void 切换收藏(收藏输入);
         }}
       >
-        <svg className="preview-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M20.8 4.8a5.5 5.5 0 0 0-7.8 0L12 5.9l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.4a5.5 5.5 0 0 0 0-7.8Z" />
-        </svg>
+        <AppIcon name="heart" className="preview-action-icon"/>
       </span>
     );
   }
 
   function 渲染资源信息按钮(目标: 资源信息目标 | null) {
     if (!目标) return null;
+    const path = 目标.kind === "resource" ? 目标.input.sourcePath : 目标.item.sourcePath;
+    if (目标.fileType === "folder" && 缩略图表[path]?.itemCount) return null;
 
     return (
       <span
         className="resource-info-button"
         role="button"
         tabIndex={0}
-        aria-label="打开资源信息"
-        title="资源信息"
+        aria-label={t("打开资源信息")}
+        title={t("资源信息")}
         onClick={(事件) => {
           事件.stopPropagation();
           打开资源详情页面(目标);
@@ -6369,9 +6736,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           打开资源详情页面(目标);
         }}
       >
-        <svg className="preview-action-icon is-more" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
-        </svg>
+        <AppIcon name="dots" className="preview-action-icon is-more"/>
       </span>
     );
   }
@@ -6382,7 +6747,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     if (视图 === "bookmarks") return "书签";
     if (视图 === "virtual-folder") return "书架";
     if (视图 === "directory") return "当前目录";
-    return "最近打开";
+    return "最近阅读";
   }
 
   function 获取批量删除标题(视图: 管理视图, 数量: number): string {
@@ -6390,30 +6755,31 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     if (视图 === "favorites") return `确认移除选中的 ${数量} 条收藏记录？`;
     if (视图 === "bookmarks") return `确认删除选中的 ${数量} 条书签？`;
     if (视图 === "virtual-folder") return `确认从当前书架移除选中的 ${数量} 个资源？`;
-    return `确认删除选中的 ${数量} 条最近打开记录？`;
+    return `确认删除选中的 ${数量} 条最近阅读记录？`;
   }
 
   function 获取批量删除说明(视图: 管理视图): string {
     if (视图 === "recent" && 是临时存放) return "只删除临时存放中的引用，原文件、标签、收藏、书签和阅读进度均保留。";
-    if (视图 === "favorites") return "此操作不会删除磁盘中的真实文件，也不会删除阅读进度、书签或最近打开记录。";
-    if (视图 === "bookmarks") return "此操作不会删除磁盘中的真实文件，也不会删除阅读进度、收藏或最近打开记录。";
+    if (视图 === "favorites") return "此操作不会删除磁盘中的真实文件，也不会删除阅读进度、书签或最近阅读记录。";
+    if (视图 === "bookmarks") return "此操作不会删除磁盘中的真实文件，也不会删除阅读进度、收藏或最近阅读记录。";
     if (视图 === "virtual-folder") return "只移除当前书架中的内部引用，不会删除原始漫画文件、收藏、书签或阅读进度。";
     return "此操作不会删除磁盘中的真实文件，也不会删除阅读进度、收藏或书签。";
   }
 
   function 渲染选择工具条(视图: 选择视图, 总数: number) {
+    if (手机布局) return null;
     if (总数 <= 0) return null;
     const 正在选择 = 选择模式 === 视图;
     return (
-      <div className="selection-toolbar" aria-label={`${获取选择视图名称(视图)}选择操作`}>
+      <div className="selection-toolbar" aria-label={tr`${获取选择视图名称(视图)}选择操作`}>
         {!正在选择 ? (
-          <button type="button" className="compact-toolbar-button" onClick={() => 进入选择模式(视图)}>选择</button>
+          <button type="button" className="compact-toolbar-button" onClick={() => 进入选择模式(视图)}>{t("选择")}</button>
         ) : (
           <>
-            <span>已选择 {已选项目Key集合.size} 项</span>
-            <button type="button" onClick={全选当前选择视图}>全选</button>
-            <button type="button" onClick={取消全选}>取消全选</button>
-            <button type="button" onClick={退出选择模式}>退出选择</button>
+            <span>{t("已选择 ")}{已选项目Key集合.size}{t(" 项")}</span>
+            <button type="button" onClick={全选当前选择视图}>{t("全选")}</button>
+            <button type="button" onClick={取消全选}>{t("取消全选")}</button>
+            <button type="button" onClick={退出选择模式}>{t("退出选择")}</button>
           </>
         )}
       </div>
@@ -6427,7 +6793,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     if (!资源信息目标) return null;
 
     const 是书签 = 资源信息目标.kind === "bookmark";
-    const 标题 = 是书签 ? 资源信息目标.item.title : 资源信息目标.input.title;
+    const 标题 = 是书签 ? (资源信息目标.item.bookmarkTitle ?? 资源信息目标.item.title) : 资源信息目标.input.title;
     const 路径 = 是书签 ? 资源信息目标.item.sourcePath : 资源信息目标.input.sourcePath;
     const 类型 = 资源信息目标.fileType;
     const 信息 = 类型信息[类型];
@@ -6541,7 +6907,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       window.requestAnimationFrame(更新标签添加浮层位置);
                     }}
                   >
-                    <span className="tag-add-symbol" aria-hidden="true">+</span>
+                    <MobileIcon name="add"/>
                   </button>
                 </span>
                 {标签添加弹窗打开 && createPortal(
@@ -6625,11 +6991,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     const 有选中标签 = 已选标签列表.length > 0;
     const 待删除数量 = 待删除标签选择集合.size;
 
+    if(手机布局) return <MobileSheet side="right" title={t("标签管理")} onClose={关闭右侧抽屉} beforeClose={()=>{if(标签删除选择模式){退出标签删除选择模式();return false;}return true;}}>
+      <div className="mobile-tag-manager">
+        <div className="mobile-tag-manage-actions">
+          <button className={标签删除选择模式?'is-active':''} onClick={()=>标签删除选择模式?退出标签删除选择模式():设置标签删除选择模式(true)}><MobileIcon name="select"/>{标签删除选择模式?t("取消"):t("选择")}</button>
+          <button disabled={!标签删除选择模式||!全部标签列表.length} onClick={()=>设置当前可见标签为待删除(全部标签列表)}>{t("全选")}</button>
+          <button disabled={!待删除数量} onClick={请求删除已选择标签}><MobileIcon name="delete"/>{t("删除")}{待删除数量?` ${待删除数量}`:''}</button>
+        </div>
+        <div className="mobile-tag-catalogue"><MobileReorderList items={全部标签列表} itemKey={tag=>tag} onReorder={keys=>{if(!标签删除选择模式)void 保存标签排序(keys);}} render={tag=><button className={`tag-chip ${待删除标签选择集合.has(tag)?'is-delete-selected':''}`} aria-pressed={待删除标签选择集合.has(tag)} onClick={()=>{if(!标签删除选择模式)设置标签删除选择模式(true);切换待删除标签(tag);}}>{tag}</button>}/>{!全部标签列表.length&&<p className="drawer-muted">{t("暂无标签")}</p>}</div>
+      </div>
+    </MobileSheet>;
+
     return (
       <div
         className={`settings-overlay organize-drawer-overlay drawer-opacity-${整理侧边栏透明度}`}
         role="presentation"
-        onMouseDown={关闭右侧抽屉}
+        onMouseDown={事件 => { consumeDismissGesture(事件.nativeEvent); 关闭右侧抽屉(); }}
       >
         <aside
           className="settings-panel organize-drawer tag-filter-drawer"
@@ -6640,19 +7017,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         >
           <header className="settings-panel-header">
             <div>
-              <h2 id="tag-filter-title">标签筛选</h2>
-              <p>{搜索模式 === "fuzzy" ? "模糊模式下，多个标签命中任一项即生效。" : "精准模式下，多个标签按完整标签名同时生效。"}</p>
+              <h2 id="tag-filter-title">{t("标签筛选")}</h2>
+
             </div>
           </header>
           <div className="settings-panel-body">
             <div className="tag-drawer-search-area">
               <label className="organize-field">
-                <span>搜索标签</span>
+                <span>{t("搜索标签")}</span>
                 <span className="tag-drawer-search-box">
                   <input
                     ref={标签搜索输入框}
                     value={标签搜索内容}
-                    placeholder={搜索模式 === "fuzzy" ? "输入标签名或拼音片段" : "输入完整标签名"}
+                    placeholder={搜索模式 === "fuzzy" ? t("输入标签名或拼音片段") : t("输入完整标签名")}
                     onFocus={() => 设置标签搜索建议可见(true)}
                     onBlur={() => window.setTimeout(() => 设置标签搜索建议可见(false), 120)}
                     onChange={(事件) => {
@@ -6663,8 +7040,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   {标签搜索内容 && (
                     <button
                       type="button"
-                      aria-label="清空标签搜索"
-                      title="清空标签搜索"
+                      aria-label={t("清空标签搜索")}
+                      title={t("清空标签搜索")}
                       onMouseDown={(事件) => 事件.preventDefault()}
                       onClick={() => {
                         设置标签搜索内容("");
@@ -6678,7 +7055,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 </span>
               </label>
               {标签搜索建议可见 && 抽屉标签建议列表.length > 0 && (
-                <div className="tag-suggestions tag-drawer-suggestions" aria-label="标签建议">
+                <div className="tag-suggestions tag-drawer-suggestions" aria-label={t("标签建议")}>
                   {抽屉标签建议列表.map((标签) => (
                     <button
                       type="button"
@@ -6693,26 +7070,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               )}
             </div>
             <div className="tag-drawer-mode-row">
-              <span className="tag-drawer-mode-label">搜索模式</span>
-              <div className="search-mode-toggle" role="group" aria-label="标签侧边栏搜索模式">
+              <span className="tag-drawer-mode-label">{t("搜索模式")}</span>
+              <div className="search-mode-toggle" role="group" aria-label={t("标签侧边栏搜索模式")}>
                 <button
                   type="button"
                   className={搜索模式 === "fuzzy" ? "is-active" : ""}
                   onClick={() => 更新标签搜索模式("fuzzy")}
-                >
-                  模糊
-                </button>
+                >{t("模糊")}</button>
                 <button
                   type="button"
                   className={搜索模式 === "exact" ? "is-active" : ""}
                   onClick={() => 更新标签搜索模式("exact")}
-                >
-                  精准
-                </button>
+                >{t("精准")}</button>
               </div>
             </div>
             <section className="settings-section">
-              <h3>当前筛选</h3>
+              <h3>{t("当前筛选")}</h3>
               <div className="tag-filter-list">
                 {已选标签列表.length > 0 ? 已选标签列表.map((标签) => (
                   <button
@@ -6723,18 +7096,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   >
                     {标签}
                   </button>
-                )) : <span className="drawer-muted">全部标签</span>}
+                )) : <span className="drawer-muted">{t("全部标签")}</span>}
               </div>
               <button type="button" className="secondary-action drawer-copy-button" onClick={() => {
                   设置已选标签列表([]);
                   回到第一页();
-                }} disabled={!有选中标签}>
-                清除选择
-              </button>
+                }} disabled={!有选中标签}>{t("清除选择")}</button>
             </section>
             <section className="settings-section tag-manage-section">
-              <h3>标签管理</h3>
-              <p className="settings-section-note">选择模式只用于删除标签本身，不改变当前筛选。</p>
+              <h3>{t("标签管理")}</h3>
+
               <div className="tag-filter-actions">
                 <button
                   type="button"
@@ -6743,41 +7114,32 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     if (标签删除选择模式) 退出标签删除选择模式();
                     else 设置标签删除选择模式(true);
                   }}
-                >
-                  选择
-                </button>
+                >{t("选择")}</button>
                 <button
                   type="button"
                   className="secondary-action drawer-copy-button"
                   disabled={!标签删除选择模式 || 显示标签.length === 0}
                   onClick={() => 设置当前可见标签为待删除(显示标签)}
-                >
-                  全选
-                </button>
+                >{t("全选")}</button>
                 <button
                   type="button"
                   className="danger-soft-action drawer-copy-button"
                   disabled={!标签删除选择模式 || 待删除数量 === 0}
                   onClick={请求删除已选择标签}
-                >
-                  删除{待删除数量 > 0 ? ` ${待删除数量}` : ""}
+                >{t("删除")}{待删除数量 > 0 ? ` ${待删除数量}` : ""}
                 </button>
                 {标签删除选择模式 && (
                   <button
                     type="button"
                     className="secondary-action drawer-copy-button"
                     onClick={退出标签删除选择模式}
-                  >
-                    取消
-                  </button>
+                  >{t("取消")}</button>
                 )}
               </div>
-              {标签删除选择模式 && (
-                <p className="drawer-muted">删除选择模式中，点击下方标签选择待删除项，按 Esc 退出，按 Del 删除。</p>
-              )}
+
             </section>
-            <section className="settings-section">
-              <h3>全部标签</h3>
+            <section className="settings-section tag-all-section">
+              <h3>{t("全部标签")}</h3>
               <div className="tag-filter-list">
                 {显示标签.length > 0 ? 显示标签.map((标签) => (
                   <button
@@ -6795,11 +7157,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       if (!标签删除选择模式) 处理标签拖放(标签);
                     }}
                     aria-pressed={标签删除选择模式 ? 待删除标签选择集合.has(标签) : 已选标签列表.includes(标签)}
-                    title={标签删除选择模式 ? "点击选择或取消待删除标签" : "拖拽调整标签顺序"}
+                    title={标签删除选择模式 ? t("点击选择或取消待删除标签") : t("拖拽调整标签顺序")}
                   >
                     {标签}
                   </button>
-                )) : <span className="drawer-muted">暂无标签</span>}
+                )) : <span className="drawer-muted">{t("暂无标签")}</span>}
               </div>
             </section>
           </div>
@@ -6839,6 +7201,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     if (!当前页面) return;
 
     资源.requestedPageId = pageIdentity(当前页面);
+    // Android's reader records the open only after its prepared page and entry
+    // transition are visible. An early save here reorders the list under the tap.
+    if (手机布局) return;
     const completed = 当前页索引 >= 资源.total - 1;
     const 结果 = await window.omicomic.saveReadingProgress({
       resourceKey: 资源.resourceKey,
@@ -6868,7 +7233,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   }
 
   function 处理网格滚轮(事件: ReactWheelEvent<HTMLDivElement>): void {
-    if (当前视图 === "directory" || 事件.ctrlKey || !是否显示分页 || Math.abs(事件.deltaY) < 1) return;
+    if (连续列表启用 || 事件.ctrlKey || !是否显示分页 || Math.abs(事件.deltaY) < 1) return;
 
     if (滚轮停止定时器.current !== null) {
       window.clearTimeout(滚轮停止定时器.current);
@@ -6936,7 +7301,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             value={内联编辑书架栏.name}
             autoFocus
             disabled={删除确认处理中}
-            aria-label={`重命名分类 ${书架.name}`}
+            aria-label={tr`重命名分类 ${书架.name}`}
             onChange={(事件) => 设置内联编辑书架栏({ id: 书架.id, name: 事件.target.value })}
             onBlur={() => void 保存内联编辑书架栏()}
             onKeyDown={(事件) => {
@@ -6961,6 +7326,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         key={书架.id}
         data-bookshelf-panel-id={表面 === "panel" ? 书架.id : undefined}
         className={[
+          "bookshelf-category-tab",
           是当前分类 ? "is-active" : "",
           是面板拖拽源 ? "is-panel-sort-source" : "",
           是面板拖拽落点 ? `is-panel-sort-drop-${书架分类面板拖拽落点?.position}` : "",
@@ -7003,10 +7369,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
   function 渲染资源详情页面() {
     if (!资源信息目标) return null;
     const 是书签 = 资源信息目标.kind === "bookmark";
-    const 标题 = 是书签 ? 资源信息目标.item.title : 资源信息目标.input.title;
+    const 标题 = 是书签 ? (资源信息目标.item.bookmarkTitle ?? 资源信息目标.item.title) : 资源信息目标.input.title;
     const 路径 = 是书签 ? 资源信息目标.item.sourcePath : 资源信息目标.input.sourcePath;
     const 类型 = 资源信息目标.fileType;
-    const 阅读单位 = 类型 === "epub" ? "章" : "页";
+    const 阅读单位 = t(类型 === "epub" ? "章" : "页");
     const 信息 = 类型信息[类型];
     const 当前标签 = 解析标签输入(整理标签输入);
     const 资源Key = 是书签 ? 资源信息目标.item.resourceKey : 资源信息目标.input.resourceKey;
@@ -7025,14 +7391,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
     return (
       <section
         ref={资源详情滚动容器}
-        className={`resource-detail-page ${资源详情顶部折叠 ? "is-header-collapsed" : ""}`}
+        className={`resource-detail-page ${!手机布局 && 资源详情顶部折叠 ? "is-header-collapsed" : ""}`}
         aria-labelledby="resource-detail-title"
       >
+        {手机布局 && <header className="mobile-detail-toolbar"><button className="mobile-icon-button" aria-label={t("返回资源列表")} onClick={() => void 返回手机上一页()}><MobileIcon name="back"/></button><button className="mobile-icon-button" aria-label={t("详情操作")} onClick={() => 设置手机详情菜单(true)}><MobileIcon name="more"/></button></header>}
         <div className="resource-detail-compact-shell">
           <div className="resource-detail-compact-bar" aria-hidden={!资源详情顶部折叠}>
             <div className="resource-detail-compact-copy">
               <strong title={标题}>{标题}</strong>
-              <span>{总页数 > 0 ? `第 ${当前页索引 + 1} / ${总页数} ${阅读单位} · ${Math.round(进度百分比)}%` : (类型 === "pdf" || 类型 === "epub" ? "打开后继续阅读" : "正在读取页面清单")}</span>
+              <span>{总页数 > 0 ? tr`第 ${当前页索引 + 1} / ${总页数} ${t(阅读单位)} · ${Math.round(进度百分比)}%` : (类型 === "pdf" || 类型 === "epub" ? t("打开后继续阅读") : t("正在读取页面清单"))}</span>
             </div>
             <button
               type="button"
@@ -7041,7 +7408,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               onClick={() => 打开资源详情阅读器(当前页索引)}
               tabIndex={资源详情顶部折叠 ? 0 : -1}
             >
-              {阅读按钮文案}
+              {t(阅读按钮文案)}
             </button>
             <button
               type="button"
@@ -7053,9 +7420,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 设置资源详情顶部折叠(false);
               }}
               tabIndex={资源详情顶部折叠 ? 0 : -1}
-            >
-              展开详情
-            </button>
+            >{t("展开详情")}</button>
           </div>
         </div>
         <header className="resource-detail-hero">
@@ -7063,19 +7428,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             {资源信息目标.thumbnailUrl ? (
               <img src={资源信息目标.thumbnailUrl} alt="" draggable={false} />
             ) : (
-              <span aria-hidden="true">{信息.icon}</span>
+              <span aria-hidden="true">{手机布局 ? <MobileIcon name="library"/> : 信息.icon}</span>
             )}
           </div>
           <div className="resource-detail-intro">
             <p className="resource-detail-kicker">
-              {是书签 ? "书签资源" : 信息.label}{总页数 > 0 ? ` · 共 ${总页数} ${阅读单位}` : ""}
+              {是书签 ? t("书签资源") : 信息.label}{手机布局 && 总页数 > 0 ? tr` · 共 ${总页数} ${t(阅读单位)}` : ""}
             </p>
             <h2 id="resource-detail-title">{标题}</h2>
             <div className="resource-detail-reading-launch">
               <div className="resource-detail-reading-status">
                 <div className="resource-detail-progress-copy">
-                  <span>阅读进度</span>
-                  <strong>{总页数 > 0 ? `第 ${当前页索引 + 1} ${阅读单位} / 共 ${总页数} ${阅读单位}` : (类型 === "pdf" || 类型 === "epub" ? "打开后继续阅读" : "等待页面清单")}</strong>
+                  <span>{t("阅读进度")}</span>
+                  <strong>{总页数 > 0 ? tr`第 ${当前页索引 + 1} ${t(阅读单位)} / 共 ${总页数} ${t(阅读单位)}` : (类型 === "pdf" || 类型 === "epub" ? t("打开后继续阅读") : t("等待页面清单"))}</strong>
                   <em>{Math.round(进度百分比)}%</em>
                 </div>
                 <span className="resource-detail-progress-track" aria-hidden="true">
@@ -7090,120 +7455,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   onClick={() => 打开资源详情阅读器(当前页索引)}
                 >
                   <SidebarIcon name="bookshelf" />
-                  <span>{阅读按钮文案}</span>
+                  <span>{t(阅读按钮文案)}</span>
                 </button>
               </div>
             </div>
-            <section
-              className={`resource-detail-direct-editor ${资源详情编辑模式 ? "is-editing" : "is-readonly"} ${资源详情有未保存修改 ? "is-dirty" : ""}`}
-              aria-label={资源详情编辑模式 ? "资源信息编辑" : "资源信息摘要，双击编辑"}
-              tabIndex={资源详情编辑模式 ? -1 : 0}
-              onDoubleClick={开始资源详情信息编辑}
-              onKeyDown={(事件) => {
-                if (!资源详情编辑模式 && (事件.key === "Enter" || 事件.key === " ")) {
-                  事件.preventDefault();
-                  开始资源详情信息编辑();
-                }
-              }}
-            >
-              <div className="resource-detail-direct-tags">
-                <span className="resource-detail-field-label">标签</span>
-                <div className="resource-detail-tag-viewport">
-                  <div className="resource-tag-editor resource-detail-tag-editor">
-                    {当前标签.length > 0 ? 当前标签.map((标签) => (
-                      资源详情编辑模式 ? (
-                        <button
-                          type="button"
-                          className="tag-chip editable-tag-chip"
-                          key={标签}
-                          aria-label={`移除标签：${标签}`}
-                          onClick={() => 移除整理标签(标签)}
-                        >
-                          <span>{标签}</span><span aria-hidden="true">×</span>
-                        </button>
-                      ) : (
-                        <span className="tag-chip resource-detail-tag-chip-readonly" key={标签}>{标签}</span>
-                      )
-                    )) : <span className="drawer-muted">未设置标签</span>}
+            <MobileDetailMetadata key={资源Key} mobile={手机布局} tags={当前标签} note={整理备注输入} error={t(整理错误 ?? '')} onSave={async patch=>{
+              const saved=await 保存资源信息(patch);
+              if(saved){if(patch.tags)设置整理标签输入(patch.tags.join(", "));if(patch.note!==undefined)设置整理备注输入(patch.note);}
+              return saved;
+            }}/>
 
-                    <span className={`tag-add-wrap ${标签添加弹窗打开 ? "is-open" : ""}`} ref={标签添加触发区}>
-                      <button
-                        type="button"
-                        className="tag-chip tag-add-button"
-                        aria-label="添加标签"
-                        onClick={(事件) => {
-                          事件.preventDefault();
-                          事件.stopPropagation();
-                          开始资源详情信息编辑();
-                          设置资源详情路径浮层打开(false);
-                          if (标签添加弹窗打开) {
-                            关闭标签添加弹窗();
-                            return;
-                          }
-                          标签添加忽略外部点击截止.current = performance.now() + 120;
-                          设置标签添加输入("");
-                          设置标签添加弹窗打开(true);
-                          window.requestAnimationFrame(更新标签添加浮层位置);
-                        }}
-                      ><span className="tag-add-symbol" aria-hidden="true">+</span><span>添加标签</span></button>
-                    </span>
-                  </div>
-                </div>
-                {资源详情编辑模式 && 标签添加弹窗打开 && createPortal(
-                  <span
-                    ref={标签添加浮层}
-                    className="tag-add-popover resource-detail-tag-add-popover"
-                    style={标签添加浮层样式}
-                    onMouseDown={(事件) => 事件.stopPropagation()}
-                    onClick={(事件) => 事件.stopPropagation()}
-                  >
-                    <input
-                      autoFocus
-                      value={标签添加输入}
-                      placeholder="输入标签，逗号分隔"
-                      onChange={(事件) => 设置标签添加输入(事件.target.value)}
-                      onKeyDown={(事件) => {
-                        if (事件.key === "Enter") {
-                          事件.preventDefault();
-                          添加整理标签();
-                        } else if (事件.key === "Escape") {
-                          事件.preventDefault();
-                          关闭标签添加弹窗();
-                        }
-                      }}
-                    />
-                    <button type="button" onClick={添加整理标签}>添加</button>
-                    <button type="button" onClick={关闭标签添加弹窗}>取消</button>
-                  </span>,
-                  document.body,
-                )}
-              </div>
-              <div className="resource-detail-direct-summary">
-                <span className="resource-detail-field-label">简介</span>
-                {资源详情编辑模式 ? (
-                  <textarea
-                    autoFocus
-                    value={整理备注输入}
-                    rows={3}
-                    maxLength={2000}
-                    aria-label="资源简介"
-                    placeholder="记录简介、阅读印象或整理说明"
-                    onChange={(事件) => 设置整理备注输入(事件.target.value)}
-                  />
-                ) : (
-                  <p className={整理备注输入.trim() ? "" : "is-empty"}>
-                    {整理备注输入.trim() || "暂无简介，双击此区域即可补充。"}
-                  </p>
-                )}
-              </div>
-              {整理错误 && (
-                <div className="resource-detail-direct-footer">
-                <span className={`resource-detail-save-status ${整理错误 ? "is-error" : ""}`} role={整理错误 ? "alert" : "status"}>
-                    {整理错误}
-                </span>
-                </div>
-              )}
-            </section>
           </div>
         </header>
 
@@ -7213,22 +7474,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             aria-labelledby="resource-preview-heading"
           >
             <div className="resource-detail-section-heading">
-              <div>
-                <h3 id="resource-preview-heading">缩略预览</h3>
-                <p>{类型 === "pdf" || 类型 === "epub"
-                  ? (总页数 > 0 ? `共 ${总页数} ${阅读单位} · 使用上方按钮继续阅读` : "使用上方按钮开始阅读")
-                  : 总页数 > 0 ? `共 ${总页数} 页 · ${singleTapNavigation() ? "点击从该页阅读" : "单击选择，双击从该页阅读"}` : "正在读取页面清单"}</p>
+              <div className="resource-detail-preview-title">
+                <h3 id="resource-preview-heading">{t("缩略预览")}</h3>
+                {!手机布局 ? (总页数 > 0 && <p>{tr`共 ${总页数} ${t(阅读单位)}`}</p>) : <p>{类型 === "pdf" || 类型 === "epub"
+                  ? (总页数 > 0 ? tr`共 ${总页数} ${t(阅读单位)} · 使用上方按钮继续阅读` : t("使用上方按钮开始阅读"))
+                  : 总页数 > 0 ? tr`共 ${总页数} 页 · ${t(singleTapNavigation() ? "点击从该页阅读" : "单击选择，双击从该页阅读")}` : t("正在读取页面清单")}</p>}
               </div>
               <div className="resource-detail-preview-controls">
-                {资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && (
-                  <nav className="detail-pagination" aria-label="预览分页">
-                    <button type="button" aria-label="上一组预览" disabled={资源详情预览页 === 0}
+                {资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && (手机布局 ? <MobileDetailPager current={资源详情预览页+1} total={Math.ceil(资源详情阅读资源.pages.length/48)} onPage={page=>设置资源详情预览页(page-1)}/> : (
+                  <nav className="detail-pagination" aria-label={t("预览分页")}>
+                    <button type="button" aria-label={t("上一组预览")} disabled={资源详情预览页 === 0}
                       onClick={() => { 设置资源详情预览页((页) => Math.max(0, 页 - 1)); 资源详情预览滚动容器.current?.scrollTo({ top: 0 }); }}>‹</button>
                     <span>{资源详情预览页 + 1} / {Math.ceil(资源详情阅读资源.pages.length / 48)}</span>
-                    <button type="button" aria-label="下一组预览" disabled={(资源详情预览页 + 1) * 48 >= 资源详情阅读资源.pages.length}
+                    <button type="button" aria-label={t("下一组预览")} disabled={(资源详情预览页 + 1) * 48 >= 资源详情阅读资源.pages.length}
                       onClick={() => { 设置资源详情预览页((页) => 页 + 1); 资源详情预览滚动容器.current?.scrollTo({ top: 0 }); }}>›</button>
                   </nav>
-                )}
+                ))}
                 <div className="resource-detail-path-control" ref={资源详情路径控件}>
                   <button
                     type="button"
@@ -7238,12 +7499,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       if (标签添加弹窗打开) 关闭标签添加弹窗();
                       设置资源详情路径浮层打开((当前) => !当前);
                     }}
-                  >
-                    路径
-                  </button>
+                  >{t("路径")}</button>
                   {资源详情路径浮层打开 && (
-                    <div className="resource-detail-path-popover" role="dialog" aria-label="资源路径">
-                      <span>资源路径</span>
+                    <div className="resource-detail-path-popover" role="dialog" aria-label={t("资源路径")}>
+                      <span>{t("资源路径")}</span>
                       <p>{路径}</p>
                       <button
                         type="button"
@@ -7251,17 +7510,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           复制路径(路径);
                           设置资源详情路径浮层打开(false);
                         }}
-                      >
-                        复制路径
-                      </button>
+                      >{t("复制路径")}</button>
                     </div>
                   )}
                 </div>
-                {资源详情阅读资源 && 资源详情阅读资源.pages.length > 0 && (
-                  <span>已选择第 {Math.min(资源详情所选页 + 1, Math.max(1, 总页数))} 页</span>
+                {手机布局 && 资源详情阅读资源 && 资源详情阅读资源.pages.length > 0 && (
+                  <span>{t("已选择第 ")}{Math.min(资源详情所选页 + 1, Math.max(1, 总页数))}{t(" 页")}</span>
                 )}
                 {类型 !== "pdf" && 类型 !== "epub" && <CardScaleControl
-                  className="resource-detail-size-control" label="缩略预览大小" scope="detail"
+                  className="resource-detail-size-control" label={t("缩略预览大小")} scope="detail"
                   motion={缩放动效.detail}
                   value={详情缩略图缩放} onChange={value => 调整卡片缩放(value, "detail")} onCommit={保存缩放设置}
                 />}
@@ -7272,7 +7529,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               className="resource-detail-thumbnail-grid"
               style={{ "--card-columns": 获取卡片列数(详情缩略图缩放) } as CSSProperties}
               role="region"
-              aria-label="页面缩略图"
+              aria-label={t("页面缩略图")}
               tabIndex={0}
             >
               {资源详情加载状态 === "loading" && Array.from({ length: 8 }, (_, 索引) => (
@@ -7280,20 +7537,21 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               ))}
               {资源详情加载状态 === "error" && (
                 <div className="resource-detail-preview-empty">
-                  <strong>无法读取页面预览</strong>
-                  <span>{整理错误 ?? "请返回后重新打开资源信息。"}</span>
+                  <strong>{t("无法读取页面预览")}</strong>
+                  <span>{整理错误 ?? t("请返回后重新打开资源信息。")}</span>
                 </div>
               )}
               {资源详情加载状态 === "loaded" && 资源详情阅读资源 && (类型 === "pdf" || 类型 === "epub") && (
-                <div className="resource-detail-preview-empty"><strong>{信息.label} 文档</strong><span>使用上方阅读按钮打开，沿用当前阅读模式。</span></div>
+                <div className="resource-detail-preview-empty"><strong>{信息.label}{t(" 文档")}</strong><span>{t("使用上方阅读按钮打开，沿用当前阅读模式。")}</span></div>
               )}
               {资源详情阅读资源?.pages.slice(资源详情预览页 * 48, (资源详情预览页 + 1) * 48).map((页面) => (
                 <资源详情缩略图
                   key={`${资源详情阅读资源.resourceKey}:${页面.index}`}
                   page={页面}
                   selected={资源详情所选页 === 页面.index}
+                  selectable={手机布局}
                   onSelect={() => 设置资源详情所选页(页面.index)}
-                  onOpen={() => 打开资源详情阅读器(页面.index)}
+                  onOpen={() => { 设置资源详情所选页(页面.index); 打开资源详情阅读器(页面.index); }}
                 />
               ))}
             </div>
@@ -7303,74 +7561,128 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       </section>
     );
   }
+  useMobileDrawerGesture(手机导航区域, 手机布局 && isActive && !资源信息目标 && !选择模式 && !手机书架排序, side => {
+    if (side === 'right') 设置当前右侧抽屉("tag-filter");
+    else if (当前视图 === 'directory') 设置手机侧栏('library');
+    else if (当前视图 === 'bookshelf' || 当前视图 === 'virtual-folder') 设置手机侧栏('bookshelf');
+    else return false;
+    return true;
+  });
+
   return (
-    <section className="library-layout" aria-labelledby="library-title">
+    <section className={`library-layout ${手机布局 ? `is-mobile-library mobile-cards-${手机卡片布局}` : ""} ${手机筛选展开 ? "is-mobile-filters-open" : ""}`} ref={手机导航区域}
+      aria-labelledby="library-title" style={手机布局 ? { "--mobile-columns": 手机列数, "--mobile-cover-size": `${手机封面尺寸}px`, "--mobile-preview-width": `${手机预览宽度}px` } as CSSProperties : undefined}>
+      {手机布局 && !资源信息目标 && <MobileLibraryBar title={资源信息目标 ? t("漫画详情") : 当前视图 === "directory" ? 当前目录 ? (根目录列表.find(root => root.path === 当前目录.path)?.name ?? 获取目录名称(当前目录.path)) : t("资源库") : 当前视图 === "bookshelf" ? t("我的书架") : 当前视图 === "virtual-folder" ? 视图标题 : t(视图标题)}
+        detail={Boolean(资源信息目标)}
+        drawerLabel={当前视图 === "bookshelf" || 当前视图 === "virtual-folder" ? "书架分类" : "资源库目录"}
+        onDrawer={!资源信息目标 && 当前视图 === "directory" ? () => 设置手机侧栏("library") : !资源信息目标 && (当前视图 === "bookshelf" || 当前视图 === "virtual-folder") ? () => 设置手机侧栏("bookshelf") : undefined}
+        onOptions={() => 设置手机显示选项(true)} layout={手机卡片布局}
+        onLayout={() => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, { layout: 手机卡片布局 === "grid" ? "list" : "grid" }))}
+        searchOpen={手机筛选展开} query={当前搜索内容} suggestions={标签建议列表}
+        onQuery={value => { if (当前视图 === "recent") 设置最近搜索内容(value); else if (当前视图 === "favorites") 设置收藏搜索内容(value); else if (当前视图 === "bookmarks") 设置书签搜索内容(value); else 设置搜索内容(value); 回到第一页(); }}
+        onSearch={设置手机筛选展开} />}
+      {书签重命名 && <RenameBookmarkDialog bookmark={书签重命名} onClose={() => 设置书签重命名(null)} onSaved={item => { 设置书签列表(old => old.map(value => value.id===item.id ? item : value)); if(资源信息目标?.kind==='bookmark' && 资源信息目标.item.id===item.id) 设置资源信息目标({...资源信息目标,item}); }}/>}
+      {手机布局 && 手机详情菜单 && 资源信息目标 && <MobileSheet title={t("漫画操作")} onClose={() => 设置手机详情菜单(false)}>
+        <button className="mobile-settings-link" onClick={() => { if(资源信息目标.kind==='bookmark') 设置书签重命名(资源信息目标.item); else 打开详情文件操作("rename"); 设置手机详情菜单(false); }}><MobileIcon name="rename"/>{资源信息目标.kind==='bookmark' ? t("重命名书签") : t("重命名")}</button>
+        <button className="mobile-settings-link" onClick={() => { 打开详情文件操作("delete"); 设置手机详情菜单(false); }}><MobileIcon name="delete"/>{t("删除")}</button>
+      </MobileSheet>}
+      {手机布局 && 手机侧栏 === "library" && <MobileLibraryDrawer roots={根目录列表} current={当前目录?.path ?? null} onClose={() => 设置手机侧栏(null)} onOpen={(path,root) => { 设置手机筛选展开(false); void 打开目录(path,root); }} onReorder={paths => void 保存根目录顺序(paths)} onManage={设置手机根目录管理} onAdd={() => { 设置手机侧栏(null); void 添加目录(); }} onFile={() => { 设置手机侧栏(null); void 直接打开文件(); }} />}
+      {手机布局 && 手机根目录管理 && <MobileSheet title={手机根目录管理.name} showClose={false} onClose={() => 设置手机根目录管理(null)}>
+        <button className="mobile-settings-link" onClick={() => { 设置待删除根目录(手机根目录管理); 设置手机根目录管理(null); }}><MobileIcon name="delete"/>{t("删除资源库")}</button>
+      </MobileSheet>}
+      {手机布局 && 手机侧栏 === "bookshelf" && <MobileSheet side title={t("书架分类")} onClose={() => 设置手机侧栏(null)}>
+        <MobileReorderList items={书架列表} itemKey={item => item.id} onReorder={keys => void 保存书架分类面板顺序(keys,书架列表.map(item => item.id))} render={item => <div className={`mobile-category-row ${当前书架ID === item.id ? "is-active" : ""}`}><button onClick={() => { dismissMobileSheet(() => { 设置当前书架ID(item.id); 打开书架(); }); }}>{item.name}</button><button aria-label={tr`管理分类 ${item.name}`} onClick={() => { 设置手机分类管理(item); }}><MobileIcon name="more"/></button></div>} />
+        <div className="mobile-drawer-footer"><button onClick={() => { 打开书架弹窗({mode:"create"}); }}><MobileIcon name="add"/>{t("新建分类")}</button><button onClick={() => { 打开虚拟文件夹弹窗({mode:"create"}); }}><MobileIcon name="add"/>{t("新建书架")}</button></div>
+      </MobileSheet>}
+      {手机布局 && 手机分类管理 && <MobileSheet title={手机分类管理.name} showClose={false} onClose={() => 设置手机分类管理(null)}>
+        <button className="mobile-settings-link" onClick={() => { 打开书架弹窗({mode:"rename",bookshelf:手机分类管理}); 设置手机分类管理(null); }}>{t("重命名分类")}</button>
+        <button className="mobile-settings-link" disabled={书架列表.length < 2} onClick={() => { 请求删除书架栏(手机分类管理); 设置手机分类管理(null); }}>{t("删除分类")}</button>
+      </MobileSheet>}
+      {手机布局 && 渲染手机书架操作栏()}
+      {手机布局 && 手机显示选项 && <MobileSheet title={t("显示选项")} onClose={() => 设置手机显示选项(false)}>
+        <p className="settings-hint">{t("仅调整")}{t(mobileDisplayLabels[手机显示范围])}{t("的显示方式。")}</p>
+        <label className="mobile-option-row"><span>{t("网格列数 ")}<b>{手机列数}</b></span><input aria-label={t("网格列数")} type="range" min="2" max="6" step="1" value={手机列数} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {columns:Number(event.target.value)}))} /></label>
+        <label className="mobile-option-row"><span>{t("列表封面尺寸 ")}<b>{手机封面尺寸}</b></span><input aria-label={t("列表封面尺寸")} type="range" min="64" max="132" step="4" value={手机封面尺寸} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {coverSize:Number(event.target.value)}))} /></label>
+        <div className="mobile-option-row"><span>{t("资源库默认排序")}</span><GlassSelect value={排序} options={uiOptions(排序方式选项)} ariaLabel={t("资源库默认排序")} onChange={value => 保存界面设置({sortMode:value})} /></div>
+        <button className="mobile-settings-link" disabled={正在读取 || 正在检查全局无效资源} onClick={() => { 设置手机显示选项(false); void 处理刷新按钮(); }}>{t("刷新资源库 ")}<MobileIcon name="refresh"/></button>
+        {移除索引数量 > 0 && <button className="mobile-settings-link" onClick={async () => { const result = await window.omicomic.restoreResourceIndex(); if (result.ok) { await 同步文件操作(result.data); 设置手机显示选项(false); } else 设置错误信息(result.error.message); }}>{t("恢复文件索引 (")}{移除索引数量})</button>}
+        <button className="mobile-settings-link" onClick={() => { 设置手机显示选项(false); 设置当前右侧抽屉("tag-filter"); }}>{t("标签管理 ")}<MobileIcon name="chevron"/></button>
+        <button className="mobile-settings-link" onClick={() => 打开设置窗口()}>{t("应用设置 ")}<MobileIcon name="chevron"/></button>
+      </MobileSheet>}
+      {手机布局 && !资源信息目标 && 渲染手机操作栏()}
       <aside className="library-sidebar">
         <OmiPageBrand onActivate={onHome} onRead={origin => {
           const 最近项目 = [...最近打开列表].sort((a, b) => b.updatedAt - a.updatedAt)[0];
           if (最近项目) return 打开最近项目(最近项目, origin);
         }} disabled={!数据已加载 || !isActive} readDisabled={最近打开列表.length === 0} titleId="library-title" />
 
-        <nav className="sidebar-primary-nav" aria-label="主导航">
+        <nav className="sidebar-primary-nav" aria-label={t("主导航")}>
           <button
             type="button"
             className={`sidebar-item ${当前视图 === "directory" ? "is-active" : ""}`}
+            aria-current={手机布局 && 当前视图 === 'directory' ? 'page' : undefined}
             onClick={打开资源库}
           >
             <SidebarIcon name="library" />
-            <span>资源库</span>
+            <span>{t("资源库")}</span>
           </button>
           <button
             type="button"
             className={`sidebar-item ${当前视图 === "bookshelf" || 当前视图 === "virtual-folder" ? "is-active" : ""}`}
+            aria-current={手机布局 && (当前视图 === 'bookshelf' || 当前视图 === 'virtual-folder') ? 'page' : undefined}
             onClick={打开书架}
           >
             <SidebarIcon name="bookshelf" />
-            <span>书架</span>
+            <span>{t("书架")}</span>
             <em className="sidebar-count">{虚拟文件夹列表.length}</em>
           </button>
           <button
             type="button"
             className={`sidebar-item ${当前视图 === "favorites" ? "is-active" : ""}`}
+            aria-current={手机布局 && 当前视图 === 'favorites' ? 'page' : undefined}
             onClick={() => {
-              if (资源信息目标) 关闭资源详情页面();
-              设置当前视图("favorites");
-              设置错误信息(null);
+              if (资源信息目标) 关闭资源详情页面(手机布局);
+              if(手机布局 && 当前视图 === "favorites") 回到第一页();
+              if (手机布局) { 切换手机栏目('favorites', () => { 设置当前视图("favorites"); 设置错误信息(null); }); }
+              else { 设置当前视图("favorites"); 设置错误信息(null); }
             }}
           >
             <SidebarIcon name="favorite" />
-            <span>收藏</span>
+            <span>{t("收藏")}</span>
             <em className="sidebar-count">{收藏列表.length}</em>
           </button>
           <button
             type="button"
             className={`sidebar-item ${当前视图 === "bookmarks" ? "is-active" : ""}`}
+            aria-current={手机布局 && 当前视图 === 'bookmarks' ? 'page' : undefined}
             onClick={() => {
-              if (资源信息目标) 关闭资源详情页面();
-              设置当前视图("bookmarks");
-              设置错误信息(null);
+              if (资源信息目标) 关闭资源详情页面(手机布局);
+              if(手机布局 && 当前视图 === "bookmarks") 回到第一页();
+              if (手机布局) { 切换手机栏目('bookmarks', () => { 设置当前视图("bookmarks"); 设置错误信息(null); }); }
+              else { 设置当前视图("bookmarks"); 设置错误信息(null); }
             }}
           >
             <SidebarIcon name="bookmark" />
-            <span>书签</span>
+            <span>{t("书签")}</span>
             <em className="sidebar-count">{书签列表.length}</em>
           </button>
           <button
             type="button"
-            className={`sidebar-item ${当前视图 === "recent" && 是临时存放 ? "is-active" : ""}`}
+            className={`sidebar-item ${手机布局 ? "mobile-hidden" : ""} ${当前视图 === "recent" && 是临时存放 ? "is-active" : ""}`}
             onClick={() => 切换阅读记录分类("temporary")}
           >
             <svg className="sidebar-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5h14l1 11H2L3 5Zm-.5 7H7l1.5 2h3l1.5-2h4.5M7 3h6" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" /></svg>
-            <span>临时存放</span>
+            <span>{t("临时存放")}</span>
             <em className="sidebar-count">{临时存放列表.length}</em>
           </button>
           <button
             type="button"
             className={`sidebar-item ${当前视图 === "recent" && !是临时存放 ? "is-active" : ""}`}
-            onClick={() => 切换阅读记录分类("recent")}
+            aria-current={手机布局 && 当前视图 === 'recent' && !是临时存放 ? 'page' : undefined}
+            onClick={() => { if(手机布局 && 当前视图==="recent") 回到第一页(); 切换阅读记录分类("recent"); }}
           >
             <SidebarIcon name="recent" />
-            <span>最近阅读</span>
+            <span>{t("最近阅读")}</span>
             <em className="sidebar-count">{最近打开列表.length}</em>
           </button>
         </nav>
@@ -7379,12 +7691,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           <button
             ref={设置触发按钮}
             className={`sidebar-item sidebar-settings-button ${当前右侧抽屉 === "settings" ? "is-active" : ""}`}
-            aria-label="设置"
+            aria-label={t("设置")}
             type="button"
             onClick={打开设置窗口}
           >
             <SidebarIcon name="settings" />
-            <span>设置</span>
+            <span>{t("设置")}</span>
           </button>
           <p className="sidebar-view-count" title={左下统计文本}>
             <span>{左下统计文本}</span>
@@ -7393,21 +7705,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
       </aside>
       <div ref={资源主区域} className={`library-main ${资源信息目标 ? "is-resource-detail" : ""}`}
         style={{ "--card-columns": 获取卡片列数(卡片缩放) } as CSSProperties}>
-        <h1 className="visually-hidden">{视图标题}</h1>
+        <h1 className="visually-hidden">{当前视图 === "virtual-folder" ? 视图标题 : t(视图标题)}</h1>
+        {!手机布局 && 资源信息目标 && <div className="resource-detail-window-drag" aria-hidden="true" />}
 
         {!资源信息目标 && <div className="library-controls">
           {移除索引数量 > 0 && <button className="restore-index-button" onClick={async () => {
             const 结果 = await window.omicomic.restoreResourceIndex();
             if (结果.ok) await 同步文件操作(结果.data);
             else 设置错误信息(结果.error.message);
-          }}>恢复文件索引 ({移除索引数量})</button>}
+          }}>{t("恢复文件索引 (")}{移除索引数量})</button>}
           <div className="search-shell">
             <label className="search-control">
               <span aria-hidden="true">⌕</span>
               <input
                 ref={主搜索输入框}
-                aria-label={正在显示最近打开 ? `搜索${阅读记录标题}` : 正在显示收藏 ? "搜索收藏" : 正在显示书签 ? "搜索书签" : 正在显示书架 ? "搜索书架" : 正在显示虚拟文件夹 ? "搜索当前书架" : "搜索当前目录"}
-                placeholder={正在显示最近打开 ? `搜索${阅读记录标题}名称、路径、备注或标签` : 正在显示收藏 ? "搜索收藏文件名、备注或标签" : 正在显示书签 ? "搜索书签资源、页面、备注或标签" : 正在显示书架 ? "搜索书架、内部资源、备注或标签" : 正在显示虚拟文件夹 ? "搜索当前书架内资源、备注或标签" : "搜索当前目录、备注或标签"}
+                aria-label={正在显示最近打开 ? tr`搜索${t(阅读记录标题)}` : 正在显示收藏 ? t("搜索收藏") : 正在显示书签 ? t("搜索书签") : 正在显示书架 ? t("搜索书架") : 正在显示虚拟文件夹 ? t("搜索当前书架") : t("搜索当前目录")}
+                placeholder={正在显示最近打开 ? tr`搜索${t(阅读记录标题)}名称、路径、备注或标签` : 正在显示收藏 ? t("搜索收藏文件名、备注或标签") : 正在显示书签 ? t("搜索书签资源、页面、备注或标签") : 正在显示书架 ? t("搜索书架、内部资源、备注或标签") : 正在显示虚拟文件夹 ? t("搜索当前书架内资源、备注或标签") : t("搜索当前目录、备注或标签")}
                 value={当前搜索内容}
                 disabled={!正在显示最近打开 && !正在显示收藏 && !正在显示书签 && !正在显示书架 && !正在显示虚拟文件夹 && !当前目录}
                 onFocus={() => 设置主搜索建议可见(true)}
@@ -7429,8 +7742,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               {!当前搜索内容 && <kbd className="search-shortcut">Ctrl K</kbd>}
               {当前搜索内容 && (
                 <button
-                  aria-label="清空搜索"
-                  title="清空搜索"
+                  aria-label={t("清空搜索")}
+                  title={t("清空搜索")}
                   onClick={() => {
                     if (正在显示最近打开) 设置最近搜索内容("");
                     else if (正在显示收藏) 设置收藏搜索内容("");
@@ -7444,7 +7757,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               )}
             </label>
             {主搜索建议可见 && 标签建议列表.length > 0 && (
-              <div className="tag-suggestions" aria-label="标签建议">
+              <div className="tag-suggestions" aria-label={t("标签建议")}>
                 {标签建议列表.map((标签) => (
                   <button
                     type="button"
@@ -7463,17 +7776,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             type="button"
             className={`tag-filter-button ${已选标签列表.length > 0 ? "is-active" : ""}`}
             onClick={() => 设置当前右侧抽屉("tag-filter")}
-            title="按标签筛选"
-          >
-            标签{已选标签列表.length > 0 ? ` ${已选标签列表.length}` : ""}
+            title={t("按标签筛选")}
+          >{t("标签")}{已选标签列表.length > 0 ? ` ${已选标签列表.length}` : ""}
           </button>
 
           <GlassSelect
             className="compact-sort-control"
-            ariaLabel="排序方式"
-            title="排序方式"
+            ariaLabel={t("排序方式")}
+            title={t("排序方式")}
             value={排序}
-            options={排序方式选项}
+            options={uiOptions(排序方式选项.map(option => ({ ...option, label: 正在显示书架 && option.value === "name-asc" ? "手动顺序" : option.label })))}
             disabled={正在显示最近打开 || 正在显示收藏 || 正在显示书签 || 正在显示虚拟文件夹 || (!正在显示书架 && !当前目录)}
             onChange={(新排序) => {
               设置排序(新排序);
@@ -7484,18 +7796,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
           <div className="view-selection-group">
           <details className="view-options-menu" ref={视图菜单容器}>
-            <summary title="调整缩略图和进度显示">
-              <span className="view-options-icon" aria-hidden="true">▦</span>
-              <span>视图</span>
+            <summary title={t("调整缩略图和进度显示")}>
+              <span className="view-options-icon" aria-hidden="true"><AppIcon name="grid"/></span>
+              <span>{t("视图")}</span>
             </summary>
             <div className="view-options-popover">
               <div className="view-options-heading">
-                <strong>视图设置</strong>
-                <span>{当前视图 === "directory" ? "调整卡片和阅读进度显示" : "调整当前页面的卡片大小"}</span>
+                <strong>{t("视图设置")}</strong>
+                <span>{当前视图 === "directory" ? t("调整卡片和阅读进度显示") : t("调整当前页面的卡片大小")}</span>
               </div>
               <div className="view-option-row">
-                <span>卡片大小</span>
-                <CardScaleControl className="thumbnail-size-control" label="缩略图大小" scope="library"
+                <span>{t("卡片大小")}</span>
+                <CardScaleControl className="thumbnail-size-control" label={t("缩略图大小")} scope="library"
                   motion={缩放动效.library}
                   value={卡片缩放} disabled={!当前目录 && !正在显示非目录视图}
                   onChange={value => 调整卡片缩放(value, "library")} onCommit={保存缩放设置} />
@@ -7503,42 +7815,38 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               {!正在显示非目录视图 && 当前目录 && (
                 <>
                   <div className="view-option-row view-option-toggle-row">
-                    <span>阅读进度</span>
+                    <span>{t("阅读进度")}</span>
                     <label>
                       <input
                         type="checkbox"
                         checked={显示进度条}
                         onChange={(事件) => 保存界面设置({ showProgressBar: 事件.target.checked })}
-                      />
-                      进度条
-                    </label>
+                      />{t("进度条")}</label>
                     <label>
                       <input
                         type="checkbox"
                         checked={显示进度文本}
                         onChange={(事件) => 保存界面设置({ showProgressText: 事件.target.checked })}
-                      />
-                      进度文本
-                    </label>
+                      />{t("进度文本")}</label>
                   </div>
                   <div className="view-option-row view-option-select-row">
                     <div className="view-option-field">
-                      <span>文本方式</span>
+                      <span>{t("文本方式")}</span>
                       <GlassSelect
                         value={进度文本模式}
-                        options={进度文本模式下拉选项}
-                        ariaLabel="进度文本方式"
+                        options={uiOptions(进度文本模式下拉选项)}
+                        ariaLabel={t("进度文本方式")}
                         className="view-option-glass-select"
                         disabled={!显示进度文本}
                         onChange={(新模式) => 保存界面设置({ progressTextMode: 新模式 })}
                       />
                     </div>
                     <div className="view-option-field">
-                      <span>进度条</span>
+                      <span>{t("进度条")}</span>
                       <GlassSelect
                         value={进度条粗细}
-                        options={进度条粗细下拉选项}
-                        ariaLabel="进度条粗细"
+                        options={uiOptions(进度条粗细下拉选项)}
+                        ariaLabel={t("进度条粗细")}
                         className="view-option-glass-select"
                         disabled={!显示进度条}
                         onChange={(新粗细) => 保存界面设置({ progressBarThickness: 新粗细 })}
@@ -7561,8 +7869,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   className={`library-refresh-button ${正在读取 || 正在检查全局无效资源 ? "is-refreshing" : ""}`}
                   disabled={正在读取 || 正在检查全局无效资源}
                   onClick={() => void 处理刷新按钮()}
-                  title="刷新并检测失效资源"
-                  aria-label="刷新并检测失效资源"
+                  title={t("刷新并检测失效资源")}
+                  aria-label={t("刷新并检测失效资源")}
                   aria-busy={正在读取 || 正在检查全局无效资源}
                 >
                   <svg className="navigation-refresh-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -7572,38 +7880,38 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
         </div>}
 
-        {资源信息目标 && <div className="resource-detail-footer">
+        {资源信息目标 && !手机布局 && <div className="resource-detail-footer">
           <div className="resource-detail-file-actions">
-            <button type="button" className="resource-detail-action" aria-label="重命名本地文件" onClick={() => 打开详情文件操作("rename")}><span>重命名</span></button>
-            <button type="button" className="resource-detail-action" onClick={() => 打开详情文件操作("delete")}><span>删除…</span></button>
+            <button type="button" className="resource-detail-action" aria-label={t("重命名本地文件")} onClick={() => 打开详情文件操作("rename")}><span>{t("重命名")}</span></button>
+            <button type="button" className="resource-detail-action" onClick={() => 打开详情文件操作("delete")}><span>{t("删除…")}</span></button>
           </div>
-          <button type="button" className="resource-detail-action resource-detail-back" aria-label="返回资源列表" onClick={async () => {
+          <button type="button" className="resource-detail-action resource-detail-back" aria-label={t("返回资源列表")} onClick={async () => {
             if (资源详情编辑模式 && !(await 完成资源详情信息编辑())) return;
             关闭资源详情页面();
-          }}><ArrowIcon direction="left" /><span>返回</span></button>
+          }}><ArrowIcon direction="left" /><span>{t("返回")}</span></button>
         </div>}
         {资源信息目标 ? 渲染资源详情工作区() : <>
         <div className="library-body">
-          {正在打开资源路径 && <div className="library-opening-status" role="status" aria-live="polite" aria-busy="true">正在打开 {正在打开资源路径.split(/[\\/]/).pop()}…</div>}
+          {!手机布局 && 正在打开资源路径 && <div className="library-opening-status" role="status" aria-live="polite" aria-busy="true">{t("正在打开 ")}{正在打开资源路径.split(/[\\/]/).pop()}…</div>}
           {错误信息 && (
             <div className="error-banner" role="alert">
-              <span>{错误信息}</span>
-              <button onClick={() => 设置错误信息(null)} aria-label="关闭错误提示">×</button>
+              <span>{t(错误信息 ?? '')}</span>
+              <button onClick={() => 设置错误信息(null)} aria-label={t("关闭错误提示")}>×</button>
             </div>
           )}
           {成功提示 && (
             <div className="error-banner success-banner" style={错误信息 ? { top: 62 } : undefined} role="status">
               <span>{成功提示}</span>
-              <button onClick={关闭成功提示} aria-label="关闭提示">×</button>
+              <button onClick={关闭成功提示} aria-label={t("关闭提示")}>×</button>
             </div>
           )}
 
           {正在显示最近打开 ? (
             最近打开卡片项目.length === 0 ? (
               <div className="empty-library compact-empty">
-                <div className="empty-illustration" aria-hidden="true">◴</div>
-                <h2>{当前阅读记录列表.length === 0 ? `暂无${阅读记录标题}${是临时存放 ? "文件" : "记录"}` : `没有匹配的${阅读记录标题}`}</h2>
-                <p>{当前阅读记录列表.length === 0 ? 是临时存放 ? "直接打开、尚未加入资源库的文件会留在这里。右键可将所在目录加入资源库。" : "阅读文件夹图片或漫画压缩包后，这里会显示最近资源卡片。" : "请尝试缩短关键词、清空搜索内容或取消标签筛选。"}</p>
+                <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="history"/> : '◴'}</div>
+                <h2>{当前阅读记录列表.length === 0 ? tr`暂无${t(阅读记录标题)}${t(是临时存放 ? "文件" : "记录")}` : tr`没有匹配的${t(阅读记录标题)}`}</h2>
+                <p>{当前阅读记录列表.length === 0 ? 是临时存放 ? t("直接打开、尚未加入资源库的文件会留在这里。右键可将所在目录加入资源库。") : t("阅读文件夹图片或漫画压缩包后，这里会显示最近资源卡片。") : t("请尝试缩短关键词、清空搜索内容或取消标签筛选。")}</p>
                 {当前阅读记录列表.length > 0 && (
                   <button
                     className="secondary-action empty-primary"
@@ -7612,17 +7920,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       设置已选标签列表([]);
                       回到第一页();
                     }}
-                  >
-                    清空搜索
-                  </button>
+                  >{t("清空搜索")}</button>
                 )}
               </div>
             ) : (
               <>
                 <div
-                  ref={列表容器}
+                  ref={列表容器} onScroll={目录连续列表.sync}
                   className={`resource-list-scroll recent-resource-list-scroll ${选择模式 === "recent" ? "is-selection-dragging-enabled" : ""}`}
-                  aria-label={`${阅读记录标题}资源列表`}
+                  aria-label={tr`${t(阅读记录标题)}资源列表`}
                   onWheel={处理网格滚轮}
                   onMouseDown={(事件) => 开始框选(事件, "recent")}
                   onMouseMove={更新框选}
@@ -7639,7 +7945,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     设置整理空白菜单({ x: 事件.clientX, y: 事件.clientY, 视图: "recent" });
                   }}
                 >
-                  <div className={`resource-list recent-resource-list size-${缩略图尺寸}`}>
+                  <div className={`resource-list recent-resource-list size-${缩略图尺寸}`} style={手机连续样式}>
                 {当前页最近打开卡片项目.map(({ 项目, 文件 }) => {
                   const 信息 = 类型信息[文件.type];
                   const 阅读进度 = 获取最近打开阅读进度(项目);
@@ -7670,6 +7976,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   const 整理信息 = 获取资源整理信息(资源整理输入);
                   const 路径失效 = 路径是否失效(文件.path);
 
+                  if (手机布局) return 渲染手机资源卡片(文件, 资源整理输入, 项目.resourceKey, () => void 打开最近项目(项目), 进度显示状态.文本?.replace(/第|页|章/g, "").trim() ?? (可阅读页数 ? String(可阅读页数) : ""), 整理信息.tags);
                   return (
                     <button
                       key={项目.resourceKey}
@@ -7690,13 +7997,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         设置整理空白菜单(null);
                         设置最近菜单({ x: 事件.clientX, y: 事件.clientY, 项目 });
                       }}
-                      title={`${singleTapNavigation() ? "点击" : "双击"}继续阅读：${项目.title}`}
+
                     >
                       {选择模式 === "recent" && (
                         <span className="selection-check" onClick={(事件) => 事件.stopPropagation()}>
                           <input
                             type="checkbox"
-                            aria-label={`选择 ${项目.title}`}
+                            aria-label={tr`选择 ${项目.title}`}
                             checked={已选项目Key集合.has(项目.resourceKey)}
                             onChange={() => 切换选择项目(项目.resourceKey)}
                           />
@@ -7720,7 +8027,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           <span className="resource-icon-symbol">{信息.icon}</span>
                         )}
                         {渲染路径失效标记(文件.path)}
-                        {渲染预览标签(整理信息.tags, 项目.resourceKey)}
+
+
+                        {渲染收藏按钮(收藏输入)}
+                      </span>
+                      <span className="resource-details">
+                        <strong title={项目.title}>{项目.title}</strong>
+
+                      </span>
+                      <span className="resource-card-info">
+                        {渲染桌面卡片元信息(文件, 阅读进度 ?? null, 可阅读页数, 缩略图)}
                         {渲染资源信息按钮({
                           kind: "resource",
                           input: 资源整理输入,
@@ -7728,29 +8044,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           progressText: 进度显示状态.文本,
                           thumbnailUrl: 缩略图.url,
                         })}
-                        {渲染收藏按钮(收藏输入)}
                       </span>
-                      <span className="resource-details">
-                        <strong>{项目.title}</strong>
-                        <em
-                          className="recent-source"
-                          data-tooltip-disabled
-                          onMouseEnter={(事件) => 开始路径悬停(`recent-path:${项目.resourceKey}`, 项目.sourcePath, 事件)}
-                          onMouseMove={(事件) => 更新路径悬停(`recent-path:${项目.resourceKey}`, 项目.sourcePath, 事件)}
-                          onMouseLeave={() => 结束路径悬停(`recent-path:${项目.resourceKey}`)}
-                        >
-                          {项目.sourcePath}
-                        </em>
-                      </span>
-                      <span className="resource-card-info">
-                        <span>{信息.label} · {阅读记录标题}</span>
-                        {显示进度文本 && 进度显示状态.文本 && (
-                          <span className={`resource-card-page${进度显示状态.显示胶囊 ? " is-pill" : ""}`}>
-                            {进度显示状态.文本}
-                          </span>
-                        )}
-                      </span>
-                      {进度显示状态.显示进度条 && (
+                      {!缩略图.itemCount && 进度显示状态.显示进度条 && (
                         <span className="resource-progress" aria-hidden="true">
                           <span className="resource-progress-track">
                             <span
@@ -7769,7 +8064,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             )
           ) : 正在显示书架 ? (
             <div
-              className="bookshelf-root-view"
+              className="bookshelf-root-view" ref={列表容器} onScroll={目录连续列表.sync}
               onContextMenu={(事件) => {
                 const 目标 = 事件.target;
                 if (
@@ -7783,7 +8078,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               <div
                 ref={书架分类控件}
                 className="bookshelf-category-strip"
-                aria-label="书架分类"
+                aria-label={t("书架分类")}
                 data-tooltip-disabled
               >
                 <button
@@ -7793,9 +8088,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   aria-expanded={书架分类展开}
                   aria-controls="bookshelf-category-panel"
                   onClick={() => 设置书架分类展开((原状态) => !原状态)}
-                  title="展开全部分类"
+                  title={t("展开全部分类")}
                 >
-                  <span>分类</span>
+                  <span>{t("分类")}</span>
                   <span className="bookshelf-category-label-chevron" aria-hidden="true" />
                 </button>
                 <div
@@ -7813,7 +8108,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     style={{ width: 书架分类轨道标记宽度 }}
                     aria-hidden="true"
                   />
-                  <div className="bookshelf-category-list" role="tablist" aria-label="书架分类轨道">
+                  <div className="bookshelf-category-list" role="tablist" aria-label={t("书架分类轨道")}>
                     {轨道书架列表.map((书架) => 渲染书架分类项(书架, "rail"))}
                   </div>
                 </div>
@@ -7822,17 +8117,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     type="button"
                     className="bookshelf-category-add"
                     onClick={() => 打开书架弹窗({ mode: "create" })}
-                    title="新建书架分类"
-                  >
-                    ＋ 新建分类
-                  </button>
+                    title={t("新建书架分类")}
+                  >{t("＋ 新建分类")}</button>
                   <button
                     type="button"
                     className="primary-action bookshelf-create-button"
                     onClick={() => 打开虚拟文件夹弹窗({ mode: "create" })}
-                  >
-                    新建书架
-                  </button>
+                  >{t("新建书架")}</button>
                 </div>
                 {书架分类展开 && (
                   <div
@@ -7846,7 +8137,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       ref={书架分类面板网格}
                       className="bookshelf-category-panel-grid"
                       role="tablist"
-                      aria-label="全部书架分类"
+                      aria-label={t("全部书架分类")}
                     >
                       <span
                         className={`bookshelf-category-panel-selection ${书架分类面板选择框 ? "is-visible" : ""}`}
@@ -7865,9 +8156,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
 
               {筛选后书架文件夹列表.length === 0 ? (
                 <div className="empty-library compact-empty">
-                  <div className="empty-illustration" aria-hidden="true">▤</div>
-                  <h2>{当前书架文件夹列表.length === 0 ? "暂无书架" : "没有匹配的书架"}</h2>
-                  <p>{当前书架文件夹列表.length === 0 ? "点击新建书架后，它会显示在当前书架栏中。" : "请尝试清空搜索内容。"}</p>
+                  <div className="empty-illustration" aria-hidden="true"><AppIcon name="shelf"/></div>
+                  <h2>{当前书架文件夹列表.length === 0 ? t("暂无书架") : t("没有匹配的书架")}</h2>
+                  <p>{当前书架文件夹列表.length === 0 ? t("点击新建书架后，它会显示在当前书架栏中。") : t("请尝试清空搜索内容。")}</p>
                   <button
                     className="secondary-action empty-primary"
                     type="button"
@@ -7876,11 +8167,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       else 设置搜索内容("");
                     }}
                   >
-                    {当前书架文件夹列表.length === 0 ? "新建书架" : "清空搜索"}
+                    {当前书架文件夹列表.length === 0 ? t("新建书架") : t("清空搜索")}
                   </button>
                 </div>
               ) : (
-                <div className={`bookshelf-folder-grid size-${缩略图尺寸} ${书架文件夹拖拽Key ? "is-card-middle-dragging" : ""}`} aria-label="书架列表" onWheel={处理网格滚轮}>
+                <div className={`bookshelf-folder-grid size-${缩略图尺寸} ${书架文件夹拖拽Key ? "is-card-middle-dragging" : ""}`} aria-label={t("书架列表")} style={手机连续样式} onWheel={处理网格滚轮}>
                   {当前页书架文件夹列表.map((文件夹) => {
                     const 预览资源 = 获取书架文件夹显示封面资源(文件夹);
                     const 缩略图 = 预览资源 ? 缩略图表[预览资源.sourcePath] : null;
@@ -7890,9 +8181,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     const 是否有第二预览 = 第二缩略图?.status === "loaded" && !!第二缩略图.url;
                     const 最近更新 = new Date(文件夹.updatedAt || 文件夹.createdAt).toLocaleDateString("zh-CN");
 
+                    if (手机布局) return <MobileBookshelfCard key={文件夹.id} id={文件夹.id} title={文件夹.name} sorting={手机书架排序} selecting={Boolean(手机书架管理)} selected={手机书架排序 || 手机选中书架.has(文件夹.id)} onSelect={() => 设置手机选中书架(old => {const next=new Set(old);if(next.has(文件夹.id))next.delete(文件夹.id);else next.add(文件夹.id);return next;})} onReorder={(from,to) => {const keys=筛选后书架文件夹列表.map(item=>item.id),start=keys.indexOf(from),end=keys.indexOf(to);if(start<0||end<0)return;keys.splice(start,1);keys.splice(end,0,from);void 保存书架文件夹拖拽顺序(文件夹.bookshelfId,keys);}} onOpen={() => 进入书架文件夹(文件夹)} onManage={() => {if(!手机书架排序){设置手机书架管理(文件夹);设置手机选中书架(old=>new Set([...old,文件夹.id]));}}}>
+                      <div className="mobile-bookshelf-stack" aria-hidden="true">
+                        {[预览资源,文件夹.items[1],文件夹.items[2]].map((item,index) => {
+                          const cover=item ? 缩略图表[item.sourcePath] : undefined;
+                          return <span key={index} className={`mobile-shelf-layer layer-${index+1} ${cover?.url ? "has-cover" : "is-glass"}`}>
+                            {cover?.url ? <img src={cover.url} alt="" draggable={false}/> : index===0 ? <MobileIcon name="shelf"/> : null}
+                          </span>;
+                        })}
+                      </div>
+                      <div className="bookshelf-folder-info"><strong>{文件夹.name}</strong><span>{文件夹.items.length}{t(" 个资源")}</span></div>
+                    </MobileBookshelfCard>;
+
                     return (
                       <article
                         key={文件夹.id}
+                        data-card-drag-scope="shelf" data-card-drag-key={文件夹.id}
                         className={`bookshelf-folder-card ${书架文件夹拖拽Key === 文件夹.id ? "is-card-middle-drag-source" : ""} ${书架文件夹拖拽落点?.key === 文件夹.id ? `is-card-middle-drop-${书架文件夹拖拽落点.position}` : ""}`}
                         tabIndex={0}
                         onClick={() => { if (singleTapNavigation()) 进入书架文件夹(文件夹); }}
@@ -7901,7 +8205,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         onMouseEnter={(事件) => 开始资源备注悬停(`bookshelf-folder:${文件夹.id}`, 文件夹.note, 事件)}
                         onMouseMove={(事件) => {
                           更新资源备注悬停(`bookshelf-folder:${文件夹.id}`, 文件夹.note, 事件);
-                          更新书架文件夹拖拽落点(事件, 文件夹.id);
                         }}
                         onMouseLeave={隐藏书架备注悬浮窗}
                         onAuxClick={(事件) => {
@@ -7931,14 +8234,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                             {是否有预览 ? (
                               <img src={缩略图.url ?? ""} alt="" draggable={false} />
                             ) : (
-                              <span className="bookshelf-folder-empty-mark">▤</span>
+                              <span className="bookshelf-folder-empty-mark"><AppIcon name="shelf"/></span>
                             )}
                           </span>
                           <span className="bookshelf-folder-front" />
                         </div>
                         <div className="bookshelf-folder-info">
                           <strong>{文件夹.name}</strong>
-                          <span>{文件夹.items.length} 个资源 · 更新于 {最近更新}</span>
+                          <span>{文件夹.items.length}{t(" 个资源")}{!手机布局 && tr` · 更新于 ${最近更新}`}</span>
                         </div>
                       </article>
                     );
@@ -7949,16 +8252,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           ) : 正在显示收藏 ? (
             收藏卡片项目.length === 0 ? (
               <div className="empty-library compact-empty">
-                <div className="empty-illustration" aria-hidden="true">♥</div>
-                <h2>{收藏列表.length === 0 ? "暂无收藏" : "没有匹配的收藏"}</h2>
-                <p>{收藏列表.length === 0 ? "在资源卡片右下角点击爱心后，收藏资源会显示在这里。" : "请尝试清空搜索内容或选择全部标签。"}</p>
+                <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="heart"/> : '♥'}</div>
+                <h2>{收藏列表.length === 0 ? t("暂无收藏") : t("没有匹配的收藏")}</h2>
+                <p>{收藏列表.length === 0 ? t("在资源卡片右下角点击爱心后，收藏资源会显示在这里。") : t("请尝试清空搜索内容或选择全部标签。")}</p>
               </div>
             ) : (
               <>
                 <div
-                  ref={列表容器}
+                  ref={列表容器} onScroll={目录连续列表.sync}
                   className={`resource-list-scroll recent-resource-list-scroll ${选择模式 === "favorites" ? "is-selection-dragging-enabled" : ""} ${收藏拖拽Key ? "is-card-middle-dragging" : ""}`}
-                  aria-label="收藏资源列表"
+                  aria-label={t("收藏资源列表")}
                   onWheel={处理网格滚轮}
                   onMouseDown={(事件) => 开始框选(事件, "favorites")}
                   onMouseMove={更新框选}
@@ -7975,7 +8278,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     设置整理空白菜单({ x: 事件.clientX, y: 事件.clientY, 视图: "favorites" });
                   }}
                 >
-                  <div className={`resource-list recent-resource-list size-${缩略图尺寸}`}>
+                  <div className={`resource-list recent-resource-list size-${缩略图尺寸}`} style={手机连续样式}>
                 {当前页收藏卡片项目.map(({ 项目, 文件 }) => {
                   const 信息 = 类型信息[文件.type];
                   const 阅读进度 = 阅读进度表[项目.resourceKey] ?? null;
@@ -8006,10 +8309,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   const 整理信息 = 获取资源整理信息(资源整理输入, 项目);
                   const 路径失效 = 路径是否失效(文件.path);
 
+                  if (手机布局) return 渲染手机资源卡片(文件, 资源整理输入, 项目.resourceKey, () => void 打开收藏项目(项目), 进度显示状态.文本?.replace(/第|页|章/g, "").trim() ?? (可阅读页数 ? String(可阅读页数) : ""), 整理信息.tags);
                   return (
                     <button
                       key={项目.resourceKey}
                       data-selection-key={项目.resourceKey}
+                        data-card-drag-scope="favorite" data-card-drag-key={项目.resourceKey}
                       className={`resource-card resource-${文件.type} ${
                         进度显示状态.已完成 ? "progress-completed" : 进度显示状态.显示进度条 ? "progress-reading" : ""
                       } progress-thickness-${进度条粗细} ${已选项目Key集合.has(项目.resourceKey) ? "is-selected" : ""} ${路径失效 ? "is-path-invalid" : ""} ${收藏拖拽Key === 项目.resourceKey ? "is-card-middle-drag-source" : ""} ${收藏拖拽落点?.key === 项目.resourceKey ? `is-card-middle-drop-${收藏拖拽落点.position}` : ""}`}
@@ -8023,7 +8328,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       onMouseEnter={(事件) => 开始资源备注悬停(`favorite:${项目.resourceKey}`, 整理信息.note, 事件)}
                       onMouseMove={(事件) => {
                         更新资源备注悬停(`favorite:${项目.resourceKey}`, 整理信息.note, 事件);
-                        更新收藏拖拽落点(事件, 项目.resourceKey);
                       }}
                       onMouseLeave={隐藏书架备注悬浮窗}
                       onAuxClick={(事件) => {
@@ -8047,7 +8351,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         <span className="selection-check" onClick={(事件) => 事件.stopPropagation()}>
                           <input
                             type="checkbox"
-                            aria-label={`选择 ${项目.title}`}
+                            aria-label={tr`选择 ${项目.title}`}
                             checked={已选项目Key集合.has(项目.resourceKey)}
                             onChange={() => 切换选择项目(项目.resourceKey)}
                           />
@@ -8071,7 +8375,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           <span className="resource-icon-symbol">{信息.icon}</span>
                         )}
                         {渲染路径失效标记(文件.path)}
-                        {渲染预览标签(整理信息.tags, 项目.resourceKey)}
+
+
+                        {渲染收藏按钮(收藏输入)}
+                      </span>
+                      <span className="resource-details">
+                        <strong title={项目.title}>{项目.title}</strong>
+
+                      </span>
+                      <span className="resource-card-info">
+                        {渲染桌面卡片元信息(文件, 阅读进度 ?? null, 可阅读页数, 缩略图)}
                         {渲染资源信息按钮({
                           kind: "resource",
                           input: 资源整理输入,
@@ -8079,29 +8392,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           progressText: 进度显示状态.文本,
                           thumbnailUrl: 缩略图.url,
                         })}
-                        {渲染收藏按钮(收藏输入)}
                       </span>
-                      <span className="resource-details">
-                        <strong>{项目.title}</strong>
-                        <em
-                          className="recent-source"
-                          data-tooltip-disabled
-                          onMouseEnter={(事件) => 开始路径悬停(`favorite-path:${项目.resourceKey}`, 项目.sourcePath, 事件)}
-                          onMouseMove={(事件) => 更新路径悬停(`favorite-path:${项目.resourceKey}`, 项目.sourcePath, 事件)}
-                          onMouseLeave={() => 结束路径悬停(`favorite-path:${项目.resourceKey}`)}
-                        >
-                          {项目.sourcePath}
-                        </em>
-                      </span>
-                      <span className="resource-card-info">
-                        <span>{信息.label} · 收藏</span>
-                        {显示进度文本 && 进度显示状态.文本 && (
-                          <span className={`resource-card-page${进度显示状态.显示胶囊 ? " is-pill" : ""}`}>
-                            {进度显示状态.文本}
-                          </span>
-                        )}
-                      </span>
-                      {进度显示状态.显示进度条 && (
+                      {!缩略图.itemCount && 进度显示状态.显示进度条 && (
                         <span className="resource-progress" aria-hidden="true">
                           <span className="resource-progress-track">
                             <span
@@ -8121,16 +8413,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           ) : 正在显示书签 ? (
             书签卡片项目.length === 0 ? (
               <div className="empty-library compact-empty">
-                <div className="empty-illustration" aria-hidden="true">★</div>
-                <h2>{书签列表.length === 0 ? "暂无书签" : "没有匹配的书签"}</h2>
-                <p>{书签列表.length === 0 ? "在阅读器中点击页码旁的书签按钮后，当前页会显示在这里。" : "请尝试清空搜索内容或选择全部标签。"}</p>
+                <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="bookmark"/> : '★'}</div>
+                <h2>{书签列表.length === 0 ? t("暂无书签") : t("没有匹配的书签")}</h2>
+                <p>{书签列表.length === 0 ? t("在阅读器中点击页码旁的书签按钮后，当前页会显示在这里。") : t("请尝试清空搜索内容或选择全部标签。")}</p>
               </div>
             ) : (
               <>
                 <div
-                  ref={列表容器}
+                  ref={列表容器} onScroll={目录连续列表.sync}
                   className={`resource-list-scroll bookmark-list-scroll ${选择模式 === "bookmarks" ? "is-selection-dragging-enabled" : ""} ${书签拖拽Key ? "is-card-middle-dragging" : ""}`}
-                  aria-label="书签卡片列表"
+                  aria-label={t("书签卡片列表")}
                   onWheel={处理网格滚轮}
                   onMouseDown={(事件) => 开始框选(事件, "bookmarks")}
                   onMouseMove={更新框选}
@@ -8147,7 +8439,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     设置整理空白菜单({ x: 事件.clientX, y: 事件.clientY, 视图: "bookmarks" });
                   }}
                 >
-                  <div className={`resource-list bookmark-resource-list size-${缩略图尺寸}`}>
+                  <div className={`resource-list bookmark-resource-list size-${缩略图尺寸}`} style={手机连续样式}>
                 {当前页书签卡片项目.map(({ 项目, 文件 }) => {
                   const 信息 = 类型信息[文件.type];
                   const 缩略图 = 书签预览表[项目.id] ?? (
@@ -8159,11 +8451,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   const 标签列表 = 获取整理标签(项目);
                   const 书签备注 = 获取整理备注(项目);
                   const 路径失效 = 路径是否失效(文件.path);
+                  if (手机布局) return 渲染手机资源卡片(文件, { resourceKey: 项目.resourceKey, sourcePath: 项目.sourcePath, sourceType: 项目.sourceType, title: 项目.title }, 项目.id, () => void 打开书签项目(项目), `${项目.pageIndex + 1}/${项目.totalPages}`, 标签列表, 项目);
                   return (
                     <button
                       key={项目.id}
                       data-bookmark-card-id={项目.id}
                       data-selection-key={项目.id}
+                        data-card-drag-scope="bookmark" data-card-drag-key={项目.id}
                       className={`resource-card bookmark-card resource-${文件.type} progress-thickness-${进度条粗细} ${已选项目Key集合.has(项目.id) ? "is-selected" : ""} ${路径失效 ? "is-path-invalid" : ""} ${书签拖拽Key === 项目.id ? "is-card-middle-drag-source" : ""} ${书签拖拽落点?.key === 项目.id ? `is-card-middle-drop-${书签拖拽落点.position}` : ""}`}
                       onMouseDown={(事件) => 开始书签中键拖拽(
                         事件,
@@ -8175,7 +8469,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       onMouseEnter={(事件) => 开始资源备注悬停(`bookmark:${项目.id}`, 书签备注, 事件)}
                       onMouseMove={(事件) => {
                         更新资源备注悬停(`bookmark:${项目.id}`, 书签备注, 事件);
-                        更新书签拖拽落点(事件, 项目.id);
                       }}
                       onMouseLeave={隐藏书架备注悬浮窗}
                       onAuxClick={(事件) => {
@@ -8199,7 +8492,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         <span className="selection-check" onClick={(事件) => 事件.stopPropagation()}>
                           <input
                             type="checkbox"
-                            aria-label={`选择 ${项目.title}`}
+                            aria-label={tr`选择 ${项目.title}`}
                             checked={已选项目Key集合.has(项目.id)}
                             onChange={() => 切换选择项目(项目.id)}
                           />
@@ -8227,7 +8520,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           <span className="resource-icon-symbol">{信息.icon}</span>
                         )}
                         {渲染路径失效标记(文件.path)}
-                        {渲染预览标签(标签列表, 项目.id)}
+
+
+                      </span>
+                      <span className="resource-details bookmark-card-details">
+                        <strong title={项目.bookmarkTitle ?? 项目.title}>{项目.bookmarkTitle ?? 项目.title}</strong>
+
+                      </span>
+                      <span className="resource-card-info bookmark-card-info">
+                        {渲染桌面卡片元信息(文件, null, null, 缩略图, 项目)}
                         {渲染资源信息按钮({
                           kind: "bookmark",
                           item: 项目,
@@ -8235,25 +8536,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           thumbnailUrl: 缩略图.url,
                         })}
                       </span>
-                      <span className="resource-details bookmark-card-details">
-                        <strong>{项目.title}</strong>
-                        <em className="recent-source">
-                          {项目.pageName ?? "页面名称未知"}
-                        </em>
-                      </span>
-                      <span className="resource-card-info bookmark-card-info">
-                        <span>{信息.label} · {格式化日期时间(项目.updatedAt)}</span>
-                        <span className="resource-card-page is-pill">{页码文本}</span>
-                      </span>
-                      <span
-                        className="bookmark-card-source"
-                        data-tooltip-disabled
-                        onMouseEnter={(事件) => 开始路径悬停(`bookmark-path:${项目.id}`, 项目.sourcePath, 事件)}
-                        onMouseMove={(事件) => 更新路径悬停(`bookmark-path:${项目.id}`, 项目.sourcePath, 事件)}
-                        onMouseLeave={() => 结束路径悬停(`bookmark-path:${项目.id}`)}
-                      >
-                        {项目.sourcePath}
-                      </span>
+
                     </button>
                   );
                 })}
@@ -8264,12 +8547,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
           ) : 正在显示虚拟文件夹 ? (
             !当前虚拟文件夹 ? (
               <div className="empty-library compact-empty">
-                <div className="empty-illustration" aria-hidden="true">▤</div>
-                <h2>请选择书架</h2>
-                <p>返回书架栏后，{singleTapNavigation() ? "点击" : "双击"}书架卡片进入内部资源视图。</p>
-                <button className="secondary-action empty-primary" type="button" onClick={返回书架根层}>
-                  返回书架
-                </button>
+                <div className="empty-illustration" aria-hidden="true"><AppIcon name="shelf"/></div>
+                <h2>{t("请选择书架")}</h2>
+                <p>{t("返回书架栏后，")}{singleTapNavigation() ? t("点击") : t("双击")}{t("书架卡片进入内部资源视图。")}</p>
+                <button className="secondary-action empty-primary" type="button" onClick={返回书架根层}>{t("返回书架")}</button>
               </div>
             ) : 虚拟文件夹卡片项目.length === 0 ? (
               <div
@@ -8279,15 +8560,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   if (当前虚拟文件夹) 设置书架内部空白菜单({ x: 事件.clientX, y: 事件.clientY });
                 }}
               >
-                <div className="empty-illustration" aria-hidden="true">▤</div>
-                <h2>{当前虚拟文件夹.items.length === 0 ? "此书架为空" : "没有匹配的资源"}</h2>
-                <p>{当前虚拟文件夹.items.length === 0 ? "在资源卡片右键菜单中选择加入书架。" : "请尝试清空搜索内容或选择全部标签。"}</p>
+                <div className="empty-illustration" aria-hidden="true"><AppIcon name="shelf"/></div>
+                <h2>{当前虚拟文件夹.items.length === 0 ? t("此书架为空") : t("没有匹配的资源")}</h2>
+                <p>{当前虚拟文件夹.items.length === 0 ? t("在资源卡片右键菜单中选择加入书架。") : t("请尝试清空搜索内容或选择全部标签。")}</p>
               </div>
             ) : (
               <div
-                ref={列表容器}
+                ref={列表容器} onScroll={目录连续列表.sync}
                 className={`resource-list-scroll recent-resource-list-scroll ${选择模式 === "virtual-folder" ? "is-selection-dragging-enabled" : ""} ${书架资源拖拽Key ? "is-card-middle-dragging" : ""}`}
-                aria-label="书架资源列表"
+                aria-label={t("书架资源列表")}
                 onWheel={处理网格滚轮}
                 onMouseDown={(事件) => 开始框选(事件, "virtual-folder")}
                 onMouseMove={更新框选}
@@ -8303,7 +8584,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   设置书架内部空白菜单({ x: 事件.clientX, y: 事件.clientY });
                 }}
               >
-                <div className={`resource-list recent-resource-list size-${缩略图尺寸}`}>
+                <div className={`resource-list recent-resource-list size-${缩略图尺寸}`} style={手机连续样式}>
                   {当前页虚拟文件夹卡片项目.map(({ 项目, 文件 }) => {
                     const 信息 = 类型信息[文件.type];
                     const 阅读进度 = 阅读进度表[项目.resourceKey] ?? null;
@@ -8337,10 +8618,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     const 整理信息 = 获取资源整理信息(资源整理输入);
                     const 路径失效 = 路径是否失效(文件.path);
 
-                    return (
+                    if (手机布局) return 渲染手机资源卡片(文件, 资源整理输入, 项目.resourceKey, () => void 打开虚拟文件夹项目(项目), 进度显示状态.文本?.replace(/第|页|章/g, "").trim() ?? (可阅读页数 ? String(可阅读页数) : ""), 整理信息.tags);
+                  return (
                       <button
                         key={项目.id}
                         data-selection-key={项目.resourceKey}
+                        data-card-drag-scope="resource" data-card-drag-key={项目.resourceKey}
                         className={`resource-card resource-${文件.type} ${
                           进度显示状态.已完成 ? "progress-completed" : 进度显示状态.显示进度条 ? "progress-reading" : ""
                         } progress-thickness-${进度条粗细} ${已选项目Key集合.has(项目.resourceKey) ? "is-selected" : ""} ${路径失效 ? "is-path-invalid" : ""} ${书架资源拖拽Key === 项目.resourceKey ? "is-card-middle-drag-source" : ""} ${书架资源拖拽落点?.key === 项目.resourceKey ? `is-card-middle-drop-${书架资源拖拽落点.position}` : ""}`}
@@ -8356,7 +8639,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         onMouseEnter={(事件) => 开始资源备注悬停(`virtual-folder:${项目.resourceKey}`, 整理信息.note, 事件)}
                         onMouseMove={(事件) => {
                           更新资源备注悬停(`virtual-folder:${项目.resourceKey}`, 整理信息.note, 事件);
-                          更新书架资源拖拽落点(事件, 项目.resourceKey);
                         }}
                         onMouseLeave={隐藏书架备注悬浮窗}
                         onAuxClick={(事件) => {
@@ -8379,7 +8661,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           <span className="selection-check" onClick={(事件) => 事件.stopPropagation()}>
                             <input
                               type="checkbox"
-                              aria-label={`选择 ${项目.title}`}
+                              aria-label={tr`选择 ${项目.title}`}
                               checked={已选项目Key集合.has(项目.resourceKey)}
                               onChange={() => 切换选择项目(项目.resourceKey)}
                             />
@@ -8403,37 +8685,25 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                             <span className="resource-icon-symbol">{信息.icon}</span>
                           )}
                           {渲染路径失效标记(文件.path)}
-                          {渲染预览标签(整理信息.tags, 项目.id)}
-                          {渲染资源信息按钮({
+
+
+                          {渲染收藏按钮(收藏输入)}
+                        </span>
+                        <span className="resource-details">
+                          <strong title={项目.title}>{项目.title}</strong>
+
+                        </span>
+                        <span className="resource-card-info">
+                        {渲染桌面卡片元信息(文件, 阅读进度 ?? null, 可阅读页数, 缩略图)}
+                        {渲染资源信息按钮({
                             kind: "resource",
                             input: 资源整理输入,
                             fileType: 文件.type,
                             progressText: 进度显示状态.文本,
                             thumbnailUrl: 缩略图.url,
                           })}
-                          {渲染收藏按钮(收藏输入)}
-                        </span>
-                        <span className="resource-details">
-                          <strong>{项目.title}</strong>
-                          <em
-                            className="recent-source"
-                            data-tooltip-disabled
-                            onMouseEnter={(事件) => 开始路径悬停(`virtual-folder-path:${项目.resourceKey}`, 项目.sourcePath, 事件)}
-                            onMouseMove={(事件) => 更新路径悬停(`virtual-folder-path:${项目.resourceKey}`, 项目.sourcePath, 事件)}
-                            onMouseLeave={() => 结束路径悬停(`virtual-folder-path:${项目.resourceKey}`)}
-                          >
-                            {项目.sourcePath}
-                          </em>
-                        </span>
-                        <span className="resource-card-info">
-                          <span>{信息.label} · 书架</span>
-                          {显示进度文本 && 进度显示状态.文本 && (
-                            <span className={`resource-card-page${进度显示状态.显示胶囊 ? " is-pill" : ""}`}>
-                              {进度显示状态.文本}
-                            </span>
-                          )}
-                        </span>
-                        {进度显示状态.显示进度条 && (
+                      </span>
+                        {!缩略图.itemCount && 进度显示状态.显示进度条 && (
                           <span className="resource-progress" aria-hidden="true">
                             <span className="resource-progress-track">
                               <span
@@ -8449,47 +8719,43 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 </div>
               </div>
             )
-          ) : 正在读取 ? (
-            <div className="empty-library compact-empty">
+          ) : 正在读取 && (!手机布局 || !当前目录) ? (
+            手机布局 ? null : <div className="empty-library compact-empty">
               <div className="loading-mark" aria-hidden="true">…</div>
-              <h2>正在读取目录</h2>
-              <p>请稍候。</p>
+              <h2>{t("正在读取目录")}</h2>
+              <p>{t("请稍候。")}</p>
             </div>
           ) : !当前目录 ? (
             <div className="empty-library">
-              <div className="empty-illustration" aria-hidden="true">▦</div>
-              <h2>从本地目录开始浏览</h2>
-              <p>{document.documentElement.dataset.platform === "android" ? "选择漫画目录，直接阅读图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF 和 EPUB。" : "选择漫画根目录后，这里会显示文件夹、图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF、EPUB 和未知文件。"}</p>
-              <button className="primary-action empty-primary" onClick={() => void 添加目录()}>
-                添加漫画目录
-              </button>
+              <div className="empty-illustration" aria-hidden="true"><AppIcon name="library"/></div>
+              <h2>{t("从本地目录开始浏览")}</h2>
+              <p>{document.documentElement.dataset.platform === "android" ? t("选择漫画目录，直接阅读图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF 和 EPUB。") : t("添加漫画目录后，这里会显示文件夹、图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF 和 EPUB。")}</p>
+              <button className="primary-action empty-primary" onClick={() => void 添加目录()}>{t("添加漫画目录")}</button>
             </div>
           ) : 当前目录.items.length === 0 ? (
             <div className="empty-library compact-empty">
-              <div className="empty-illustration" aria-hidden="true">空</div>
-              <h2>此文件夹为空</h2>
-              <p>可以返回上一级或选择其他根目录。</p>
+              <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="library"/> : t("空")}</div>
+              <h2>{t("此文件夹为空")}</h2>
+              <p>{t("可以返回上一级或切换资源库目录。")}</p>
             </div>
           ) : 筛选排序后项目.length === 0 ? (
             <div className="empty-library compact-empty">
-              <div className="empty-illustration" aria-hidden="true">⌕</div>
-              <h2>没有匹配项目</h2>
-              <p>请尝试缩短关键词或清空搜索内容。</p>
+              <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="search"/> : '⌕'}</div>
+              <h2>{t("没有匹配项目")}</h2>
+              <p>{t("请尝试缩短关键词或清空搜索内容。")}</p>
               <button
                 className="secondary-action empty-primary"
                 onClick={() => {
                   设置搜索内容("");
                   回到第一页();
                 }}
-              >
-                清空搜索
-              </button>
+              >{t("清空搜索")}</button>
             </div>
           ) : (
             <div
               ref={列表容器}
               className={`resource-list-scroll is-continuous ${选择模式 === "directory" ? "is-selection-dragging-enabled" : ""}`}
-              aria-label="当前目录文件列表"
+              aria-label={t("当前目录文件列表")}
               onScroll={目录连续列表.sync}
               onMouseDown={(事件) => 开始框选(事件, "directory")}
               onMouseMove={更新框选}
@@ -8526,7 +8792,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 const 收藏输入 = 获取文件收藏输入(文件);
                 const 资源整理输入 = 获取文件资源元数据输入(文件);
                 const 整理信息 = 资源整理输入 ? 获取资源整理信息(资源整理输入) : null;
-                return (
+                if (手机布局 && 资源整理输入) return 渲染手机资源卡片(文件, { ...资源整理输入, title: 文件.name }, 文件.id, () => void 打开资源(文件), 进度显示状态.文本?.replace(/第|页|章/g, "").trim() ?? (可阅读页数 ? String(可阅读页数) : ""), 整理信息?.tags ?? [], undefined, 目录连续列表.start + 可见索引);
+                  return (
                   <button
                     key={文件.id}
                     data-library-index={目录连续列表.start + 可见索引}
@@ -8556,25 +8823,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         itemKey: 文件.id,
                       });
                     }}
-                    title={
-                      文件.type === "folder"
-                        ? `${singleTapNavigation() ? "点击" : "双击"}打开文件夹：${文件.name}`
-                        : 文件.type === "image"
-                          ? `${singleTapNavigation() ? "点击" : "双击"}阅读：${文件.name}`
-                          : 文件.type === "archive"
-                            ? `${singleTapNavigation() ? "点击" : "双击"}阅读压缩包：${文件.name}`
-                            : 文件.type === "pdf"
-                              ? `${singleTapNavigation() ? "点击" : "双击"}阅读 PDF：${文件.name}`
-                              : 文件.type === "epub"
-                                ? `${singleTapNavigation() ? "点击" : "双击"}阅读 EPUB：${文件.name}`
-                          : 文件.name
-                    }
+
                   >
                     {选择模式 === "directory" && (
                       <span className="selection-check" onClick={(事件) => 事件.stopPropagation()}>
                         <input
                           type="checkbox"
-                          aria-label={`选择 ${文件.name}`}
+                          aria-label={tr`选择 ${文件.name}`}
                           checked={已选项目Key集合.has(文件.id)}
                           onChange={() => 切换选择项目(文件.id)}
                         />
@@ -8599,8 +8854,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       ) : (
                         <span className="resource-icon-symbol">{信息.icon}</span>
                       )}
-                      {渲染预览标签(整理信息?.tags ?? [], 文件.id)}
-                      {渲染资源信息按钮(资源整理输入 ? {
+
+
+                      {渲染收藏按钮(收藏输入)}
+                    </span>
+                    <span className="resource-details">
+                      <strong title={文件.name}>{文件.name}</strong>
+                      {文件.hasError && <em>{文件.errorMessage}</em>}
+                    </span>
+                    <span className="resource-card-info">
+                        {渲染桌面卡片元信息(文件, 阅读进度 ?? null, 可阅读页数, 缩略图)}
+                        {渲染资源信息按钮(资源整理输入 ? {
                         kind: "resource",
                         input: 资源整理输入,
                         localPath: 文件.path,
@@ -8608,24 +8872,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         progressText: 进度显示状态.文本,
                         thumbnailUrl: 缩略图.url,
                       } : null)}
-                      {渲染收藏按钮(收藏输入)}
-                    </span>
-                    <span className="resource-details">
-                      <strong>{文件.name}</strong>
-                      {文件.hasError && <em>{文件.errorMessage}</em>}
-                    </span>
-                    <span className="resource-card-info">
-                      <span>
-                        {信息.label}
-                        {文件.type === "folder" ? (缩略图.itemCount !== undefined ? ` · 含 ${缩略图.itemCount} 项目` : "") : ` · ${格式化大小(文件.size)}`}
                       </span>
-                      {显示进度文本 && 进度显示状态.文本 && (
-                        <span className={`resource-card-page${进度显示状态.显示胶囊 ? " is-pill" : ""}`}>
-                          {进度显示状态.文本}
-                        </span>
-                      )}
-                    </span>
-                    {进度显示状态.显示进度条 && (
+                    {!缩略图.itemCount && 进度显示状态.显示进度条 && (
                       <span className="resource-progress" aria-hidden="true">
                         <span className="resource-progress-track">
                           <span
@@ -8645,31 +8893,30 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         </div>
 
         {(是否显示分页 || 当前视图 === "directory" || 正在显示虚拟文件夹 || (正在显示最近打开 && 是临时存放)) && (
-        <footer className={`library-footer ${是否显示分页 ? "has-pagination" : ""}`}>
+        <footer className={`library-footer ${是否显示分页 ? "has-pagination" : ""} ${总页数 <= 1 ? "is-single-page" : ""}`}>
           <div className="library-footer-actions">
-            {正在显示最近打开 && 是临时存放 && <button type="button" className="primary-action add-library-button" onClick={() => void 直接打开文件()}><span aria-hidden="true">＋</span> 打开文件</button>}
+            {正在显示最近打开 && 是临时存放 && <button type="button" className="primary-action add-library-button" onClick={() => void 直接打开文件()}><span aria-hidden="true">＋</span>{t(" 打开文件")}</button>}
             {当前视图 === "directory" && (
               <button type="button" className="primary-action add-library-button" onClick={() => void 添加目录()} disabled={正在读取}>
-                <span aria-hidden="true">＋</span> 添加目录
-              </button>
+                <span aria-hidden="true">＋</span>{t("添加目录")}</button>
             )}
             {当前视图 === "directory" && (
               <div className="root-library-dropdown" ref={根目录下拉容器}>
                 <button
                   type="button"
                   className="root-library-trigger"
-                  aria-label="切换资源目录"
+                  aria-label={t("切换资源目录")}
                   aria-haspopup="listbox"
                   aria-expanded={根目录下拉打开}
-                  title={当前根目录项目?.path ?? "切换资源目录"}
+                  title={当前根目录项目?.path ?? t("切换资源目录")}
                   disabled={根目录列表.length === 0}
                   onClick={() => 设置根目录下拉打开((当前) => !当前)}
                 >
-                  <span>{当前根目录项目?.name ?? (根目录列表.length === 0 ? "尚未添加目录" : "选择资源目录")}</span>
+                  <span>{当前根目录项目?.name ?? (根目录列表.length === 0 ? t("尚未添加目录") : t("选择资源目录"))}</span>
                   <span className="root-library-chevron" aria-hidden="true" />
                 </button>
                 {根目录下拉打开 && (
-                  <div className="root-library-options" role="listbox" aria-label="资源目录列表">
+                  <div className="root-library-options" role="listbox" aria-label={t("资源目录列表")}>
                     {根目录列表.map((根目录) => (
                       <button
                         type="button"
@@ -8700,13 +8947,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         {根目录.path === 当前根目录 && <span className="root-library-option-check" aria-hidden="true">✓</span>}
                       </button>
                     ))}
-                    <p className="root-library-options-hint">右键删除引用 · 中键拖动排序</p>
+                    <p className="root-library-options-hint">{t("右键删除引用 · 中键拖动排序")}</p>
                   </div>
                 )}
               </div>
             )}
             {(当前视图 === "directory" || 正在显示虚拟文件夹) && (
-              <div className="navigation-actions footer-navigation-actions" role="group" aria-label="目录导航">
+              <div className="navigation-actions footer-navigation-actions" role="group" aria-label={t("目录导航")}>
 
                 <button
                   type="button"
@@ -8715,8 +8962,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     if (正在显示虚拟文件夹) 返回书架根层();
                     else if (当前目录?.parentPath && 当前根目录) void 打开目录(当前目录.parentPath, 当前根目录);
                   }}
-                  title={正在显示虚拟文件夹 ? "返回书架" : "上一级"}
-                  aria-label={正在显示虚拟文件夹 ? "返回书架" : "上一级"}
+                  title={正在显示虚拟文件夹 ? t("返回书架") : t("上一级")}
+                  aria-label={正在显示虚拟文件夹 ? t("返回书架") : t("上一级")}
                 >
                   <ArrowIcon direction="up" />
                 </button>
@@ -8724,31 +8971,29 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   <span className="navigation-divider" aria-hidden="true" />
                 )}
                 {当前视图 === "directory" && (
-                  <button type="button" disabled={!可以返回} onClick={() => void 返回上一处()} title="返回" aria-label="返回">
+                  <button type="button" disabled={!可以返回} onClick={() => void 返回上一处()} title={t("返回")} aria-label={t("返回")}>
                     <ArrowIcon direction="left" />
                   </button>
                 )}
                 {当前视图 === "directory" && (
-                  <button type="button" disabled={!可以前进} onClick={() => void 前进下一处()} title="前进" aria-label="前进">
+                  <button type="button" disabled={!可以前进} onClick={() => void 前进下一处()} title={t("前进")} aria-label={t("前进")}>
                     <ArrowIcon direction="right" />
                   </button>
                 )}
               </div>
             )}
           </div>
-          {是否显示分页 && (
-            <div className="pagination-bar" aria-label="分页">
-              <button type="button" onClick={回到当前页顶部}>顶部</button>
-              <button disabled={安全当前页 === 1} onClick={() => 跳转页码(1)}>首页</button>
-              <button disabled={安全当前页 === 1} onClick={() => 跳转页码(安全当前页 - 1)}>
-                上一页
-              </button>
+          {手机布局 && 是否显示分页 && !手机操作目标 && !手机书架管理 && <MobilePagePager current={安全当前页} total={总页数} onPage={跳转页码}/>}
+          {!手机布局 && 是否显示分页 && (
+            <div className="pagination-bar" aria-label={t("分页")}>
+              <button type="button" onClick={回到当前页顶部}>{t("顶部")}</button>
+              <button disabled={安全当前页 === 1} onClick={() => 跳转页码(1)}>{t("首页")}</button>
+              <button disabled={安全当前页 === 1} onClick={() => 跳转页码(安全当前页 - 1)}>{t("上一页")}</button>
               <label className="page-input">
-                <span>第</span>
                 <input
                   inputMode="numeric"
                   value={正在输入页码 ? 页码输入 : String(安全当前页)}
-                  aria-label="当前页码"
+                  aria-label={t("当前页码")}
                   onFocus={() => { 设置页码输入(String(安全当前页)); 设置正在输入页码(true); }}
                   onChange={(事件) => 设置页码输入(事件.target.value.replace(/\D/g, ""))}
                   onBlur={() => { 设置正在输入页码(false); 应用页码输入(); }}
@@ -8760,22 +9005,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   }}
                 />
               </label>
-              <span>页 / 共 {总页数} 页</span>
+              <span>/ {总页数}</span>
               <button
                 disabled={安全当前页 === 总页数}
                 onClick={() => 跳转页码(安全当前页 + 1)}
-              >
-                下一页
-              </button>
-              <button disabled={安全当前页 === 总页数} onClick={() => 跳转页码(总页数)}>
-                尾页
-              </button>
+              >{t("下一页")}</button>
+              <button disabled={安全当前页 === 总页数} onClick={() => 跳转页码(总页数)}>{t("尾页")}</button>
               <div className="page-size-control">
-                <span>每页</span>
+                <span>{t("每页")}</span>
                 <GlassSelect
                   value={每页数量}
-                  options={每页数量下拉选项}
-                  ariaLabel="每页数量"
+                  options={uiOptions(每页数量下拉选项)}
+                  ariaLabel={t("每页数量")}
                   className="page-size-glass-select"
                   onChange={(新每页数量) => {
                     设置每页数量(新每页数量);
@@ -8783,24 +9024,24 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     if (当前视图 !== "directory") 回到第一页();
                   }}
                 />
-                {当前视图 === "directory" && <span className="page-size-effective" title="按完整行向上取整，每页不拆行">实际 {实际每页数量} 项</span>}
               </div>
             </div>
           )}
         </footer>
         )}
         </>}
-        {当前右侧抽屉 === "settings" && (
+        {手机布局 && 当前右侧抽屉 === "settings" && <MobileSettings settings={界面设置快照.current} displayScope={手机显示范围} onSaved={应用界面设置} onClose={关闭右侧抽屉} bookSettings={<BookReaderSettings preferred={资源详情阅读资源} onSaved={更新书籍阅读设置}/>}/>}
+        {!手机布局 && 当前右侧抽屉 === "settings" && (
           <div
             className="settings-window-overlay"
             role="presentation"
             onPointerDown={(事件) => {
-              if (事件.target === 事件.currentTarget) 关闭右侧抽屉();
+              if (事件.target === 事件.currentTarget) { consumeDismissGesture(事件.nativeEvent); 关闭右侧抽屉(); }
             }}
           >
             <section
               ref={设置窗口元素}
-              className="settings-window"
+              className={`settings-window ${手机布局 ? `is-mobile-settings ${手机设置子页 ? "is-category-open" : ""}` : ""}`}
               style={{ transform: `translate3d(${设置窗口偏移.x}px, ${设置窗口偏移.y}px, 0)` }}
               role="dialog"
               aria-modal="true"
@@ -8808,13 +9049,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               onKeyDown={处理设置窗口键盘}
             >
               <header className="settings-window-header" onPointerDown={开始拖动设置窗口}>
-                <h2 id="settings-title">设置</h2>
-                <button type="button" aria-label="关闭设置" onClick={关闭右侧抽屉}>×</button>
+                <h2 id="settings-title">{手机布局 && 手机设置子页 ? 设置分类选项.find(item => item.id === 当前设置分类)?.label : t("设置")}</h2>
+                <button type="button" aria-label={t("关闭设置")} onClick={关闭右侧抽屉}>×</button>
               </header>
 
               <div className="settings-window-layout">
-                <nav className="settings-category-nav" aria-label="设置分类" role="tablist" aria-orientation="vertical">
-                  {设置分类选项.map((分类) => {
+                <nav className="settings-category-nav" aria-label={t("设置分类")} role="tablist" aria-orientation="vertical">
+                  {设置分类选项.filter(分类 => !手机布局 || 分类.id !== "progress").map((分类) => {
                     const 是当前分类 = 当前设置分类 === 分类.id;
                     return (
                       <button
@@ -8826,10 +9067,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         aria-selected={是当前分类}
                         aria-current={是当前分类 ? "page" : undefined}
                         aria-controls={`settings-section-${分类.id}`}
-                        onClick={() => 设置当前设置分类(分类.id)}
+                        onClick={() => { 设置当前设置分类(分类.id); 设置手机设置子页(true); }}
                       >
-                        <span>{分类.label}</span>
-                        <small>{分类.description}</small>
+                        <span>{t(分类.label)}</span>
+                        <small>{t(分类.description)}</small>
                       </button>
                     );
                   })}
@@ -8844,16 +9085,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   aria-labelledby="settings-category-appearance"
                   hidden={当前设置分类 !== "appearance"}
                 >
-                  <h3>主题配色</h3>
-                  <p className="settings-section-note">选择后立即应用并自动保存，首页、资源库和阅读界面同步切换。</p>
-                  <div className="theme-options" role="radiogroup" aria-label="主题配色">
+                  <div className="settings-row"><span>{t('语言 / Language')}</span><GlassSelect ariaLabel="语言 / Language" value={界面语言} options={[{value:'zh-CN',label:'简体中文'},{value:'en',label:'English'},{value:'ja',label:'日本語'}]} onChange={value => 保存界面设置({language:normalizeLanguage(value)})}/></div>
+                  <div className="settings-row"><span>{t('全局字号')}</span><FontSizeControl label={t('全局字号')} value={全局字号} onChange={value => 保存界面设置({desktopGlobalFontSize:value, desktopInfoFontSize:信息字号})}/></div>
+                  <div className="settings-row"><span>{t('页码与信息字号')}</span><FontSizeControl label={t('页码与信息字号')} value={信息字号} onChange={value => 保存界面设置({desktopInfoFontSize:value, desktopGlobalFontSize:全局字号})}/></div>
+                  <HomeArtworkSettings />
+                  <h3>{t("主题配色")}</h3>
+                  <div className="theme-options" role="radiogroup" aria-label={t("主题配色")}>
                     {主题选项.map((配色) => (
                       <label className={`theme-option ${当前主题配色 === 配色.id ? "is-selected" : ""}`} key={配色.id}>
                         <input
                           type="radio"
                           name="color-theme"
                           value={配色.id}
-                          aria-label={配色.label}
+                          aria-label={t(配色.label)}
                           checked={当前主题配色 === 配色.id}
                           onChange={() => 保存界面设置({ colorTheme: 配色.id })}
                         />
@@ -8862,8 +9106,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                           <span className="theme-preview-content"><i /><i /><i /></span>
                           <span className="theme-preview-palette"><i /><i /><i /></span>
                         </span>
-                        <span className="theme-option-title"><strong>{配色.label}</strong><span aria-hidden="true">{当前主题配色 === 配色.id ? "✓" : ""}</span></span>
-                        <span className="theme-option-description">{配色.description}</span>
+                        <span className="theme-option-title"><strong>{t(配色.label)}</strong><span aria-hidden="true">{当前主题配色 === 配色.id ? "✓" : ""}</span></span>
+                        <span className="theme-option-description">{t(配色.description)}</span>
                       </label>
                     ))}
                   </div>
@@ -8876,19 +9120,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   aria-labelledby="settings-category-library"
                   hidden={当前设置分类 !== "library"}
                 >
-                  <h3>资源库设置</h3>
-                  <div className="settings-row">
-                    <span>卡片尺寸</span>
-                    <CardScaleControl label="卡片尺寸" scope="library" value={卡片缩放}
+                  <h3>{t("资源库设置")}</h3>
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("卡片尺寸")}</span>
+                    <CardScaleControl label={t("卡片尺寸")} scope="library" value={卡片缩放}
                       motion={缩放动效.library}
                       onChange={value => 调整卡片缩放(value, "library")} onCommit={保存缩放设置} />
                   </div>
                   <div className="settings-row">
-                    <span>每页数量</span>
+                    <span>{t("每页数量")}</span>
                     <GlassSelect
                       value={每页数量}
-                      options={每页数量下拉选项}
-                      ariaLabel="每页数量"
+                      options={uiOptions(每页数量下拉选项)}
+                      ariaLabel={t("每页数量")}
                       className="settings-glass-select"
                       onChange={(新每页数量) => {
                         设置每页数量(新每页数量);
@@ -8897,13 +9141,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       }}
                     />
                   </div>
-                  <p className="settings-help">资源库连续滚动，页码用于定位。每页数量按完整行向上取整，例如 7 列、每页 60 时实际为 63 项。</p>
                   <div className="settings-row">
-                    <span>最近打开记录上限</span>
+                    <span>{t("最近阅读记录上限")}</span>
                     <GlassSelect
                       value={最近打开记录上限}
-                      options={最近打开上限下拉选项}
-                      ariaLabel="最近打开记录上限"
+                      options={uiOptions(最近打开上限下拉选项)}
+                      ariaLabel={t("最近阅读记录上限")}
                       className="settings-glass-select"
                       onChange={(新上限) => {
                         设置最近打开记录上限(新上限);
@@ -8912,12 +9155,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       }}
                     />
                   </div>
-                  <div className="settings-row">
-                    <span>默认排序</span>
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("默认排序")}</span>
                     <GlassSelect
                       value={排序}
-                      options={排序方式选项}
-                      ariaLabel="默认排序"
+                      options={uiOptions(排序方式选项)}
+                      ariaLabel={t("默认排序")}
                       className="settings-glass-select"
                       onChange={(新排序) => {
                         设置排序(新排序);
@@ -8936,7 +9179,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         回到第一页();
                       }}
                     />
-                    <span>文件夹优先</span>
+                    <span>{t("文件夹优先")}</span>
                   </label>
                   <label className="settings-toggle">
                     <input
@@ -8948,14 +9191,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         回到第一页();
                       }}
                     />
-                    <span>根目录隐藏已加入书架的资源</span>
+                    <span>{t("资源库隐藏已加入书架的资源")}</span>
                   </label>
-                  <div className="settings-row">
-                    <span>信息与标签面板透明度</span>
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("信息与标签面板透明度")}</span>
                     <GlassSelect
                       value={整理侧边栏透明度}
-                      options={整理透明度下拉选项}
-                      ariaLabel="信息与标签面板透明度"
+                      options={uiOptions(整理透明度下拉选项)}
+                      ariaLabel={t("信息与标签面板透明度")}
                       className="settings-glass-select"
                       onChange={(新透明度) => {
                         设置整理侧边栏透明度(新透明度);
@@ -8963,12 +9206,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       }}
                     />
                   </div>
-                  <div className="settings-row">
-                    <span>书架备注悬停延迟</span>
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("书架备注悬停延迟")}</span>
                     <GlassSelect
                       value={书架备注悬停延迟}
-                      options={备注悬停延迟下拉选项}
-                      ariaLabel="书架备注悬停延迟"
+                      options={uiOptions(备注悬停延迟下拉选项)}
+                      ariaLabel={t("书架备注悬停延迟")}
                       className="settings-glass-select"
                       onChange={(新延迟) => {
                         设置书架备注悬停延迟(新延迟);
@@ -8976,12 +9219,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       }}
                     />
                   </div>
-                  <div className="settings-row">
-                    <span>标签搜索模式</span>
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("标签搜索模式")}</span>
                     <GlassSelect
                       value={搜索模式}
-                      options={搜索模式下拉选项}
-                      ariaLabel="标签搜索模式"
+                      options={uiOptions(搜索模式下拉选项)}
+                      ariaLabel={t("标签搜索模式")}
                       className="settings-glass-select"
                       onChange={更新标签搜索模式}
                     />
@@ -8996,7 +9239,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   aria-labelledby="settings-category-progress"
                   hidden={当前设置分类 !== "progress"}
                 >
-                  <h3>进度显示设置</h3>
+                  <h3>{t("进度显示设置")}</h3>
                   <label className="settings-toggle">
                     <input
                       type="checkbox"
@@ -9006,7 +9249,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ showProgressBar: 事件.target.checked });
                       }}
                     />
-                    <span>显示进度条</span>
+                    <span>{t("显示进度条")}</span>
                   </label>
                   <label className="settings-toggle">
                     <input
@@ -9017,14 +9260,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ showProgressText: 事件.target.checked });
                       }}
                     />
-                    <span>显示进度文本</span>
+                    <span>{t("显示进度文本")}</span>
                   </label>
                   <div className="settings-row">
-                    <span>进度文本模式</span>
+                    <span>{t("进度文本模式")}</span>
                     <GlassSelect
                       value={进度文本模式}
-                      options={进度文本模式下拉选项}
-                      ariaLabel="进度文本模式"
+                      options={uiOptions(进度文本模式下拉选项)}
+                      ariaLabel={t("进度文本模式")}
                       className="settings-glass-select"
                       disabled={!显示进度文本}
                       onChange={(新模式) => {
@@ -9034,11 +9277,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     />
                   </div>
                   <div className="settings-row">
-                    <span>进度条粗细</span>
+                    <span>{t("进度条粗细")}</span>
                     <GlassSelect
                       value={进度条粗细}
-                      options={进度条粗细下拉选项}
-                      ariaLabel="进度条粗细"
+                      options={uiOptions(进度条粗细下拉选项)}
+                      ariaLabel={t("进度条粗细")}
                       className="settings-glass-select"
                       disabled={!显示进度条}
                       onChange={(新粗细) => {
@@ -9057,8 +9300,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   aria-labelledby="settings-category-safety"
                   hidden={当前设置分类 !== "safety"}
                 >
-                  <h3>安全与确认</h3>
-                  <p className="settings-section-note">这些开关只控制删除软件记录前是否确认，不会删除磁盘中的真实文件。</p>
+                  <h3>{t("安全与确认")}</h3>
                   <label className="settings-toggle">
                     <input
                       type="checkbox"
@@ -9069,7 +9311,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ confirmBeforeBatchDelete: 新设置 });
                       }}
                     />
-                    <span>收藏批量删除前确认</span>
+                    <span>{t("收藏批量删除前确认")}</span>
                   </label>
                   <label className="settings-toggle">
                     <input
@@ -9081,7 +9323,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ confirmBeforeBatchDelete: 新设置 });
                       }}
                     />
-                    <span>书签批量删除前确认</span>
+                    <span>{t("书签批量删除前确认")}</span>
                   </label>
                   <label className="settings-toggle">
                     <input
@@ -9093,7 +9335,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ confirmBeforeBatchDelete: 新设置 });
                       }}
                     />
-                    <span>最近打开批量删除前确认</span>
+                    <span>{t("最近阅读批量删除前确认")}</span>
                   </label>
                   <label className="settings-toggle">
                     <input
@@ -9104,7 +9346,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ confirmBeforeDeleteTags: 事件.target.checked });
                       }}
                     />
-                    <span>删除标签前确认</span>
+                    <span>{t("删除标签前确认")}</span>
                   </label>
                 </section>
 
@@ -9116,10 +9358,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   aria-labelledby="settings-category-reader-default"
                   hidden={当前设置分类 !== "reader-default"}
                 >
-                  <h3>默认阅读界面</h3>
-                  <p className="settings-section-note">
-                    仅用于首次打开、尚无书籍专属阅读状态的新书；已阅读书籍会继续使用上次的设置。全景上下阅读时会临时切换为单页，退出后恢复原单双页设置。
-                  </p>
+                  <h3>{t("默认阅读界面")}</h3>
                   <label className="settings-toggle">
                     <input
                       type="checkbox"
@@ -9129,9 +9368,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ readerDefaultPanorama: 事件.target.checked });
                       }}
                     />
-                    <span>默认开启全景模式</span>
+                    <span>{t("默认开启全景模式")}</span>
                   </label>
-                  <label className="settings-toggle">
+                  <label className="settings-toggle mobile-hidden">
                     <input
                       type="checkbox"
                       checked={默认开启沉浸}
@@ -9140,14 +9379,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ readerDefaultImmersive: 事件.target.checked });
                       }}
                     />
-                    <span>默认开启沉浸模式</span>
+                    <span>{t("默认开启沉浸模式")}</span>
                   </label>
                   <div className="settings-row">
-                    <span>默认阅读流向</span>
+                    <span>{t("默认阅读流向")}</span>
                     <GlassSelect
                       value={阅读器默认流向}
-                      options={阅读流向下拉选项}
-                      ariaLabel="默认阅读流向"
+                      options={uiOptions(阅读流向下拉选项)}
+                      ariaLabel={t("默认阅读流向")}
                       className="settings-glass-select"
                       onChange={(新流向) => {
                         设置阅读器默认流向(新流向);
@@ -9156,11 +9395,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     />
                   </div>
                   <div className="settings-row">
-                    <span>默认单双页</span>
+                    <span>{t("默认单双页")}</span>
                     <GlassSelect
                       value={阅读器默认页模式}
-                      options={阅读页模式下拉选项}
-                      ariaLabel="默认单双页"
+                      options={uiOptions(阅读页模式下拉选项)}
+                      ariaLabel={t("默认单双页")}
                       className="settings-glass-select"
                       onChange={(新模式) => {
                         设置阅读器默认页模式(新模式);
@@ -9169,11 +9408,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     />
                   </div>
                   <div className="settings-row">
-                    <span>默认翻页方向</span>
+                    <span>{t("默认翻页方向")}</span>
                     <GlassSelect
                       value={双页阅读方向}
-                      options={翻页方向下拉选项}
-                      ariaLabel="默认翻页方向"
+                      options={uiOptions(翻页方向下拉选项)}
+                      ariaLabel={t("默认翻页方向")}
                       className="settings-glass-select"
                       onChange={(新方向) => {
                         设置双页阅读方向(新方向);
@@ -9182,11 +9421,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     />
                   </div>
                   <div className="settings-row">
-                    <span>默认缩放模式</span>
+                    <span>{t("默认缩放模式")}</span>
                     <GlassSelect
                       value={阅读器默认缩放模式}
-                      options={缩放模式下拉选项}
-                      ariaLabel="默认缩放模式"
+                      options={uiOptions(缩放模式下拉选项)}
+                      ariaLabel={t("默认缩放模式")}
                       className="settings-glass-select"
                       onChange={(新模式) => {
                         设置阅读器默认缩放模式(新模式);
@@ -9204,8 +9443,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   aria-labelledby="settings-category-reader"
                   hidden={当前设置分类 !== "reader"}
                 >
-                  <h3>阅读器设置</h3>
-                  {当前设置分类 === "reader" && <BookReaderSettings preferred={资源详情阅读资源} onSaved={更新书籍阅读设置} />}
+                  <h3>{t("阅读器设置")}</h3>
+                  {isAndroid() && <div className="mobile-volume-settings">
+                    <label className="settings-toggle"><input type="checkbox" checked={音量键翻页} onChange={event => { 设置音量键翻页(event.target.checked); 保存界面设置({ readerVolumeKeys: event.target.checked }); }} /><span>{t("音量键翻页")}</span></label>
+                    <p>{t("阅读时，音量＋上一页、音量－下一页。退出阅读后恢复调节音量。")}</p>
+                    <label className="settings-toggle"><input type="checkbox" checked={反转音量键} disabled={!音量键翻页} onChange={event => { 设置反转音量键(event.target.checked); 保存界面设置({ readerVolumeKeysReversed: event.target.checked }); }} /><span>{t("反转音量键翻页方向")}</span></label>
+                  </div>}
+                  {!手机布局 && 当前设置分类 === "reader" && <BookReaderSettings preferred={资源详情阅读资源} onSaved={更新书籍阅读设置} />}
 
                   <label className="settings-toggle">
                     <input
@@ -9216,9 +9460,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ smartDetectSpreadPage: 事件.target.checked });
                       }}
                     />
-                    <span>智能识别跨页图：{智能识别跨页图 ? "开" : "关"}</span>
+                    <span>{t("智能识别跨页图：")}{智能识别跨页图 ? t("开") : t("关")}</span>
                   </label>
-                  <label className="settings-toggle">
+                  <label className="settings-toggle mobile-hidden">
                     <input
                       type="checkbox"
                       checked={滚轮翻页}
@@ -9227,9 +9471,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ wheelPageTurn: 事件.target.checked });
                       }}
                     />
-                    <span>鼠标滚轮翻页</span>
+                    <span>{t("鼠标滚轮翻页")}</span>
                   </label>
-                  <label className="settings-toggle">
+                  <label className="settings-toggle mobile-hidden">
                     <input
                       type="checkbox"
                       checked={隐藏阅读器底部按钮}
@@ -9238,9 +9482,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ readerHideFooterControls: 事件.target.checked });
                       }}
                     />
-                    <span>阅读器隐藏底部按钮</span>
+                    <span>{t("阅读器隐藏底部按钮")}</span>
                   </label>
-                  <label className="settings-toggle">
+                  <label className="settings-toggle mobile-hidden">
                     <input
                       type="checkbox"
                       checked={隐藏沉浸模式进度条}
@@ -9249,14 +9493,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         保存界面设置({ readerHideImmersiveProgress: 事件.target.checked });
                       }}
                     />
-                    <span>沉浸模式隐藏进度条</span>
+                    <span>{t("沉浸模式隐藏进度条")}</span>
                   </label>
                   <div className="settings-row">
-                    <span>自动隐藏延迟</span>
+                    <span>{t("自动隐藏延迟")}</span>
                     <GlassSelect
                       value={沉浸自动隐藏延迟}
-                      options={沉浸隐藏延迟下拉选项}
-                      ariaLabel="沉浸模式自动隐藏延迟"
+                      options={uiOptions(沉浸隐藏延迟下拉选项)}
+                      ariaLabel={t("沉浸模式自动隐藏延迟")}
                       className="settings-glass-select"
                       onChange={(新延迟) => {
                         设置沉浸自动隐藏延迟(新延迟);
@@ -9264,63 +9508,65 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       }}
                     />
                   </div>
+                  <div className="settings-row"><span>{t('阅读性能')}</span><GlassSelect value={桌面性能模式} ariaLabel={t('阅读性能')} options={uiOptions([{value:'auto' as const,label:'自动'},{value:'balanced' as const,label:'均衡'},{value:'high' as const,label:'高性能'},{value:'custom' as const,label:'自定义'}])} onChange={value=>保存界面设置({desktopPerformanceProfile:value})}/></div>
+                  <label className="settings-toggle"><input type="checkbox" checked={桌面自动隐藏} onChange={event=>保存界面设置({desktopReaderAutoHide:event.target.checked})}/><span>{t('普通阅读工具栏自动隐藏')}</span></label>
                   <label className="settings-row">
-                    <span>图片缓存预算（估算 MB）</span>
+                    <span>{t("图片缓存预算（估算 MB）")}</span>
                     <input
                       type="number"
                       min={0}
-                      max={2048}
+                      max={16384}
                       step={50}
                       value={阅读器内存缓存大小}
-                      aria-label="图片缓存预算（估算 MB）"
-                      title="0 表示仅保留当前可见页；该数值为图片数据与解码位图的估算预算"
+                      aria-label={t("图片缓存预算（估算 MB）")}
+                      title={t("0 表示仅保留当前可见页；该数值为图片数据与解码位图的估算预算")}
                       onChange={(事件) => {
-                        const 新大小 = Math.min(Math.max(Math.round(Number(事件.target.value) || 0), 0), 2048);
+                        const 新大小 = Math.min(Math.max(Math.round(Number(事件.target.value) || 0), 0), 16384);
                         设置阅读器内存缓存大小(新大小);
                         保存界面设置({ readerMemoryCacheSizeMb: 新大小 });
                       }}
                     />
                   </label>
                   <label className="settings-row">
-                    <span>前后各预加载页数</span>
+                    <span>{t("阅读预加载页数")}</span>
                     <input
                       type="number"
                       min={0}
-                      max={20}
+                      max={120}
                       step={1}
                       value={阅读器预加载页数}
-                      aria-label="前后各预加载页数"
-                      title="0 表示关闭推测预加载；其余数值分别应用于当前页前后两侧"
+                      aria-label={t("阅读预加载页数")}
+                      title={t("0 表示关闭预加载")}
                       onChange={(事件) => {
-                        const 新页数 = Math.min(Math.max(Math.round(Number(事件.target.value) || 0), 0), 20);
+                        const 新页数 = Math.min(Math.max(Math.round(Number(事件.target.value) || 0), 0), 120);
                         设置阅读器预加载页数(新页数);
                         保存界面设置({ readerPreloadPages: 新页数 });
                       }}
                     />
                   </label>
                   <label className="settings-row">
-                    <span>图片并发加载数</span>
+                    <span>{t("图片并发加载数")}</span>
                     <input
                       type="number"
                       min={1}
-                      max={8}
+                      max={24}
                       step={1}
                       value={阅读器图片线程数}
-                      aria-label="图片并发加载数"
-                      title="限制阅读器同时进行的图片读取请求数量"
+                      aria-label={t("图片并发加载数")}
+                      title={t("限制阅读器同时进行的图片读取请求数量")}
                       onChange={(事件) => {
-                        const 新线程数 = Math.min(Math.max(Math.round(Number(事件.target.value) || 1), 1), 8);
+                        const 新线程数 = Math.min(Math.max(Math.round(Number(事件.target.value) || 1), 1), 24);
                         设置阅读器图片线程数(新线程数);
                         保存界面设置({ readerImageLoadConcurrency: 新线程数 });
                       }}
                     />
                   </label>
-                  <div className="settings-row">
-                    <span>切换按钮背景透明度</span>
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("上/下一篇按钮透明度")}</span>
                     <GlassSelect
                       value={图书切换按钮透明度}
-                      options={图书按钮透明度下拉选项}
-                      ariaLabel="切换按钮背景透明度"
+                      options={uiOptions(图书按钮透明度下拉选项)}
+                      ariaLabel={t("上/下一篇按钮透明度")}
                       className="settings-glass-select"
                       onChange={(新透明度) => {
                         设置图书切换按钮透明度(新透明度);
@@ -9329,6 +9575,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     />
                   </div>
                 </section>
+                <section id="settings-section-about" className="settings-section" role="tabpanel" data-settings-category="about" aria-labelledby="settings-category-about" hidden={当前设置分类 !== "about"}>
+                  <AboutOmiComic />
+                </section>
               </div>
               </div>
             </section>
@@ -9336,7 +9585,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
         )}
         {当前右侧抽屉 === "tag-filter" && 渲染标签筛选抽屉()}
         {完整标签浮层 && createPortal(
-          <div className="preview-tag-popover" style={完整标签浮层.style} role="dialog" aria-label="隐藏标签列表">
+          <div className="preview-tag-popover" style={完整标签浮层.style} role="dialog" aria-label={t("隐藏标签列表")}>
             {完整标签浮层.tags.map((标签) => (
               <span className="preview-tag-popover-chip" key={标签}>{标签}</span>
             ))}
@@ -9377,11 +9626,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   )}
                 </span>
                 <span className="resource-details">
-                  <strong>{中键拖拽悬浮卡片.title}</strong>
-                  <em className="recent-source">{中键拖拽悬浮卡片.subtitle}</em>
+                  <strong title={中键拖拽悬浮卡片.title}>{中键拖拽悬浮卡片.title}</strong>
+
                 </span>
                 <span className="resource-card-info">
-                  <span>{中键拖拽悬浮卡片.typeLabel} · 书架</span>
+
                 </span>
               </>
             ) : (
@@ -9392,7 +9641,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     {中键拖拽悬浮卡片.thumbnailUrl ? (
                       <img src={中键拖拽悬浮卡片.thumbnailUrl} alt="" draggable={false} />
                     ) : (
-                      <span className="bookshelf-folder-empty-mark">▤</span>
+                      <span className="bookshelf-folder-empty-mark"><AppIcon name="shelf"/></span>
                     )}
                   </span>
                   <span className="bookshelf-folder-front" />
@@ -9420,9 +9669,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 设置待删除根目录(根目录菜单.项目);
                 设置根目录菜单(null);
               }}
-            >
-              删除此根目录
-            </button>
+            >{t("移除此资源库目录")}</button>
           </div>
         )}
         {目录空白菜单 && 当前选择视图 === "directory" && (
@@ -9440,9 +9687,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 进入当前视图选择模式();
                 设置目录空白菜单(null);
               }}
-            >
-              选择文件
-            </button>
+            >{t("选择文件")}</button>
             {选择模式 === "directory" && 已选项目Key集合.size > 0 && (
               <button
                 type="button"
@@ -9451,9 +9696,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   void 批量加入收藏(获取已选资源输入("directory"), `已选择 ${已选项目Key集合.size} 个资源`);
                   设置目录空白菜单(null);
                 }}
-              >
-                加入收藏
-              </button>
+              >{t("加入收藏")}</button>
             )}
           </div>
         )}
@@ -9472,9 +9715,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 进入选择模式(整理空白菜单.视图);
                 设置整理空白菜单(null);
               }}
-            >
-              选择文件
-            </button>
+            >{t("选择文件")}</button>
           </div>
         )}
         {资源菜单 && (
@@ -9484,8 +9725,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "rename" }); 设置资源菜单(null); }}>重命名本地文件</button>
-            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "delete" }); 设置资源菜单(null); }}>删除资源…</button>
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "rename" }); 设置资源菜单(null); }}>{t("重命名本地文件")}</button>
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "delete" }); 设置资源菜单(null); }}>{t("删除资源…")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9500,9 +9741,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 });
                 设置资源菜单(null);
               }}
-            >
-              查看资源信息
-            </button>
+            >{t("查看资源信息")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9511,9 +9750,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 void 批量加入收藏(目标.items, 目标.title);
                 设置资源菜单(null);
               }}
-            >
-              加入收藏
-            </button>
+            >{t("加入收藏")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9522,9 +9759,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 选择已有虚拟文件夹加入(目标.items, 目标.title, { x: 资源菜单.x, y: 资源菜单.y });
                 设置资源菜单(null);
               }}
-            >
-              加入书架
-            </button>
+            >{t("加入书架")}</button>
           </div>
         )}
         {最近菜单 && (
@@ -9534,6 +9769,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:最近菜单.项目.sourcePath,title:最近菜单.项目.title,mode:"rename"}); 设置最近菜单(null); }}>{t("重命名本地文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9542,9 +9778,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 进入当前视图选择模式();
                 设置最近菜单(null);
               }}
-            >
-              选择文件
-            </button>
+            >{t("选择文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9563,9 +9797,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 });
                 设置最近菜单(null);
               }}
-            >
-              查看资源信息
-            </button>
+            >{t("查看资源信息")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9573,9 +9805,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 复制路径(最近菜单.项目.sourcePath);
                 设置最近菜单(null);
               }}
-            >
-              复制原路径
-            </button>
+            >{t("复制原路径")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9594,9 +9824,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 void 批量加入收藏(items, 使用选中项 ? `已选择 ${items.length} 个资源` : 最近菜单.项目.title);
                 设置最近菜单(null);
               }}
-            >
-              加入收藏
-            </button>
+            >{t("加入收藏")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9609,9 +9837,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 }], 最近菜单.项目.title, { x: 最近菜单.x, y: 最近菜单.y });
                 设置最近菜单(null);
               }}
-            >
-              加入书架
-            </button>
+            >{t("加入书架")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9620,11 +9846,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 设置最近菜单(null);
               }}
             >
-              {是临时存放 ? "删除临时引用" : 选择模式 === "recent" && 已选项目Key集合.has(最近菜单.项目.resourceKey) && 已选项目Key集合.size > 1
-                ? `删除选中的 ${已选项目Key集合.size} 条最近记录`
-                : "删除此最近记录"}
+              {是临时存放 ? t("删除临时引用") : 选择模式 === "recent" && 已选项目Key集合.has(最近菜单.项目.resourceKey) && 已选项目Key集合.size > 1
+                ? tr`删除选中的 ${已选项目Key集合.size} 条最近记录`
+                : t("删除此最近记录")}
             </button>
-            {是临时存放 && <button type="button" role="menuitem" onClick={() => void 临时文件目录加入资源库(最近菜单.项目)}>将所在目录加入资源库</button>}
+            {是临时存放 && <button type="button" role="menuitem" onClick={() => void 临时文件目录加入资源库(最近菜单.项目)}>{t("将所在目录加入资源库")}</button>}
           </div>
         )}
         {收藏菜单 && (
@@ -9634,6 +9860,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:收藏菜单.项目.sourcePath,title:收藏菜单.项目.title,mode:"rename"}); 设置收藏菜单(null); }}>{t("重命名本地文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9642,9 +9869,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 进入当前视图选择模式();
                 设置收藏菜单(null);
               }}
-            >
-              选择文件
-            </button>
+            >{t("选择文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9663,9 +9888,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 });
                 设置收藏菜单(null);
               }}
-            >
-              查看资源信息
-            </button>
+            >{t("查看资源信息")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9673,23 +9896,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 复制路径(收藏菜单.项目.sourcePath);
                 设置收藏菜单(null);
               }}
-            >
-              复制原路径
-            </button>
+            >{t("复制原路径")}</button>
             <button
               type="button"
               role="menuitem"
               onClick={() => void 调整收藏项目顺序(收藏菜单.项目.resourceKey, "top")}
-            >
-              置顶
-            </button>
+            >{t("置顶")}</button>
             <button
               type="button"
               role="menuitem"
               onClick={() => void 调整收藏项目顺序(收藏菜单.项目.resourceKey, "bottom")}
-            >
-              置底
-            </button>
+            >{t("置底")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9702,9 +9919,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 }], 收藏菜单.项目.title, { x: 收藏菜单.x, y: 收藏菜单.y });
                 设置收藏菜单(null);
               }}
-            >
-              加入书架
-            </button>
+            >{t("加入书架")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9714,8 +9929,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               }}
             >
               {选择模式 === "favorites" && 已选项目Key集合.has(收藏菜单.项目.resourceKey) && 已选项目Key集合.size > 1
-                ? `移除选中的 ${已选项目Key集合.size} 条收藏`
-                : "移除收藏"}
+                ? tr`移除选中的 ${已选项目Key集合.size} 条收藏`
+                : t("移除收藏")}
             </button>
           </div>
         )}
@@ -9733,9 +9948,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 开始内联编辑书架栏(书架菜单.项目);
                 设置书架菜单(null);
               }}
-            >
-              重命名书架栏
-            </button>
+            >{t("重命名书架栏")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9744,8 +9957,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               }}
             >
               {已选书架栏ID集合.has(书架菜单.项目.id) && 获取已选书架栏列表().length > 1
-                ? `删除选中的 ${获取已选书架栏列表().length} 个书架栏`
-                : "删除书架栏"}
+                ? tr`删除选中的 ${获取已选书架栏列表().length} 个书架栏`
+                : t("删除书架栏")}
             </button>
           </div>
         )}
@@ -9763,9 +9976,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 打开书架弹窗({ mode: "create" });
                 设置书架栏空白菜单(null);
               }}
-            >
-              新增书架栏
-            </button>
+            >{t("新增书架栏")}</button>
           </div>
         )}
         {虚拟文件夹菜单 && (
@@ -9782,9 +9993,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 打开虚拟文件夹弹窗({ mode: "rename", folder: 虚拟文件夹菜单.项目 });
                 设置虚拟文件夹菜单(null);
               }}
-            >
-              重命名
-            </button>
+            >{t("重命名")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9792,17 +10001,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 打开虚拟文件夹弹窗({ mode: "note", folder: 虚拟文件夹菜单.项目 });
                 设置虚拟文件夹菜单(null);
               }}
-            >
-              编辑备注
-            </button>
+            >{t("编辑备注")}</button>
             <button
               type="button"
               role="menuitem"
               disabled={!虚拟文件夹菜单.项目.coverResourceKey}
               onClick={() => void 清除书架设定封面(虚拟文件夹菜单.项目)}
-            >
-              清除设定封面
-            </button>
+            >{t("清除设定封面")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9810,9 +10015,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 设置待删除虚拟文件夹(虚拟文件夹菜单.项目);
                 设置虚拟文件夹菜单(null);
               }}
-            >
-              删除
-            </button>
+            >{t("删除")}</button>
           </div>
         )}
         {书架空白菜单 && (
@@ -9829,9 +10032,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 打开虚拟文件夹弹窗({ mode: "create" });
                 设置书架空白菜单(null);
               }}
-            >
-              新建书架
-            </button>
+            >{t("新建书架")}</button>
           </div>
         )}
         {书架内部空白菜单 && 当前虚拟文件夹 && (
@@ -9849,9 +10050,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 进入当前视图选择模式();
                 设置书架内部空白菜单(null);
               }}
-            >
-              选择文件
-            </button>
+            >{t("选择文件")}</button>
             {选择模式 === "virtual-folder" && 已选项目Key集合.size > 0 && (
               <button
                 type="button"
@@ -9860,9 +10059,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   void 批量加入收藏(获取已选资源输入("virtual-folder"), `已选择 ${已选项目Key集合.size} 个资源`);
                   设置书架内部空白菜单(null);
                 }}
-              >
-                加入收藏
-              </button>
+              >{t("加入收藏")}</button>
             )}
             <button
               type="button"
@@ -9872,9 +10069,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 设置待清空虚拟文件夹({ folder: 当前虚拟文件夹 });
                 设置书架内部空白菜单(null);
               }}
-            >
-              清空书架
-            </button>
+            >{t("清空书架")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9887,9 +10082,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 });
                 设置书架内部空白菜单(null);
               }}
-            >
-              清空无效资源
-            </button>
+            >{t("清空无效资源")}</button>
           </div>
         )}
         {虚拟文件夹资源菜单 && (
@@ -9899,6 +10092,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:虚拟文件夹资源菜单.项目.sourcePath,title:虚拟文件夹资源菜单.项目.title,mode:"rename"}); 设置虚拟文件夹资源菜单(null); }}>{t("重命名本地文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9918,9 +10112,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 });
                 设置虚拟文件夹资源菜单(null);
               }}
-            >
-              查看资源信息
-            </button>
+            >{t("查看资源信息")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9930,9 +10122,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 复制路径(项目.sourcePath);
                 设置虚拟文件夹资源菜单(null);
               }}
-            >
-              复制原路径
-            </button>
+            >{t("复制原路径")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9941,9 +10131,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 const 项目 = 虚拟文件夹资源菜单?.项目;
                 if (项目) void 设置当前书架封面(项目.resourceKey);
               }}
-            >
-              设为封面
-            </button>
+            >{t("设为封面")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9951,9 +10139,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 const 项目 = 虚拟文件夹资源菜单?.项目;
                 if (项目) void 调整当前书架项目顺序(项目.resourceKey, "top");
               }}
-            >
-              置顶
-            </button>
+            >{t("置顶")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9961,9 +10147,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 const 项目 = 虚拟文件夹资源菜单?.项目;
                 if (项目) void 调整当前书架项目顺序(项目.resourceKey, "bottom");
               }}
-            >
-              置底
-            </button>
+            >{t("置底")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9974,9 +10158,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 void 批量加入收藏(目标.items, 目标.title);
                 设置虚拟文件夹资源菜单(null);
               }}
-            >
-              加入收藏
-            </button>
+            >{t("加入收藏")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9991,9 +10173,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 选择已有虚拟文件夹加入(目标.items, 目标.title, { x: 虚拟文件夹资源菜单.x, y: 虚拟文件夹资源菜单.y });
                 设置虚拟文件夹资源菜单(null);
               }}
-            >
-              加入书架
-            </button>
+            >{t("加入书架")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10004,9 +10184,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 打开批量转存到书架弹窗("move", 目标.items, 目标.title, { x: 虚拟文件夹资源菜单.x, y: 虚拟文件夹资源菜单.y });
                 设置虚拟文件夹资源菜单(null);
               }}
-            >
-              移动到书架
-            </button>
+            >{t("移动到书架")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10017,9 +10195,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 打开批量转存到书架弹窗("copy", 目标.items, 目标.title, { x: 虚拟文件夹资源菜单.x, y: 虚拟文件夹资源菜单.y });
                 设置虚拟文件夹资源菜单(null);
               }}
-            >
-              复制到书架
-            </button>
+            >{t("复制到书架")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10036,9 +10212,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 }
                 void 从当前虚拟文件夹移除(项目.resourceKey);
               }}
-            >
-              从当前书架移除
-            </button>
+            >{t("从当前书架移除")}</button>
           </div>
         )}
         {书签菜单 && (
@@ -10048,6 +10222,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
+            <button type="button" role="menuitem" onClick={() => { 设置书签重命名(书签菜单.项目); 设置书签菜单(null); }}>{t("重命名书签")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10056,9 +10231,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 进入当前视图选择模式();
                 设置书签菜单(null);
               }}
-            >
-              选择文件
-            </button>
+            >{t("选择文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10071,9 +10244,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 });
                 设置书签菜单(null);
               }}
-            >
-              查看资源信息
-            </button>
+            >{t("查看资源信息")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10081,23 +10252,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 复制路径(书签菜单.项目.sourcePath);
                 设置书签菜单(null);
               }}
-            >
-              复制原路径
-            </button>
+            >{t("复制原路径")}</button>
             <button
               type="button"
               role="menuitem"
               onClick={() => void 调整书签项目顺序(书签菜单.项目.id, "top")}
-            >
-              置顶
-            </button>
+            >{t("置顶")}</button>
             <button
               type="button"
               role="menuitem"
               onClick={() => void 调整书签项目顺序(书签菜单.项目.id, "bottom")}
-            >
-              置底
-            </button>
+            >{t("置底")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10107,8 +10272,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               }}
             >
               {选择模式 === "bookmarks" && 已选项目Key集合.has(书签菜单.项目.id) && 已选项目Key集合.size > 1
-                ? `删除选中的 ${已选项目Key集合.size} 条书签`
-                : "删除此书签"}
+                ? tr`删除选中的 ${已选项目Key集合.size} 条书签`
+                : t("删除此书签")}
             </button>
           </div>
         )}
@@ -10126,9 +10291,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 请求删除标签列表([标签菜单.标签]);
                 设置标签菜单(null);
               }}
-            >
-              删除此标签
-            </button>
+            >{t("删除此标签")}</button>
           </div>
         )}
         {移动到书架目标 && (
@@ -10150,24 +10313,24 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               className="bookshelf-target-dialog"
               style={转存书架菜单样式}
               role="menu"
-              aria-label={移动到书架目标.action === "copy" ? "复制到书架" : "移动到书架"}
+              aria-label={移动到书架目标.action === "copy" ? t("复制到书架") : t("移动到书架")}
               onClick={(事件) => 事件.stopPropagation()}
             >
               <div className="bookshelf-target-cascade">
-                <div className="bookshelf-target-menu bookshelf-target-bars" role="menu" aria-label="书架栏">
+                <div className="bookshelf-target-menu bookshelf-target-bars" role="menu" aria-label={t("书架栏")}>
                   <label className="virtual-folder-field virtual-folder-search-field">
-                    <span>搜索书架</span>
+                    <span>{t("搜索书架")}</span>
                     <input
                       value={转存书架搜索内容}
                       disabled={删除确认处理中}
-                      placeholder="输入书架名称"
+                      placeholder={t("输入书架名称")}
                       onChange={(事件) => 设置转存书架搜索内容(事件.target.value)}
                     />
                   </label>
                   <div className="bookshelf-target-bar-list">
                     {转存书架目标组列表.length === 0 ? (
                       <p className="drawer-muted">
-                        {移动到书架可选目标总数 === 0 ? "暂无其他书架。" : "没有匹配的书架栏。"}
+                        {移动到书架可选目标总数 === 0 ? t("暂无其他书架。") : t("没有匹配的书架栏。")}
                       </p>
                     ) : (
                       转存书架目标组列表.map((组) => (
@@ -10187,13 +10350,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     )}
                   </div>
                 </div>
-                <div className="virtual-folder-target-list bookshelf-target-submenu" role="menu" aria-label="书架">
+                <div className="virtual-folder-target-list bookshelf-target-submenu" role="menu" aria-label={t("书架")}>
                   {移动到书架可选目标总数 === 0 ? (
                     <p className="drawer-muted">
-                      {移动到书架目标.action === "copy" ? "暂无其他书架可复制。" : "暂无其他书架可移动。"}
+                      {移动到书架目标.action === "copy" ? t("暂无其他书架可复制。") : t("暂无其他书架可移动。")}
                     </p>
                   ) : 筛选后移动到书架可选目标列表.length === 0 ? (
-                    <p className="drawer-muted">{转存书架目标组列表.length === 0 ? "没有匹配的书架。" : "当前书架栏暂无可用书架。"}</p>
+                    <p className="drawer-muted">{转存书架目标组列表.length === 0 ? t("没有匹配的书架。") : t("当前书架栏暂无可用书架。")}</p>
                   ) : (
                     筛选后移动到书架可选目标列表.map((文件夹) => (
                       <button
@@ -10203,7 +10366,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         onClick={() => void 转存到虚拟文件夹(文件夹.id)}
                       >
                         <span>{文件夹.name}</span>
-                        <em>{文件夹.items.length} 项</em>
+                        <em>{文件夹.items.length}{t(" 项")}</em>
                       </button>
                     ))
                   )}
@@ -10212,8 +10375,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             </div>
           </div>
         )}
-        {书架弹窗 && (
-          <div
+        {书架弹窗 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10223,9 +10386,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog virtual-folder-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="bookshelf-edit-title">{书架弹窗.mode === "create" ? "新建书架栏" : "重命名书架栏"}</h2>
+              <h2 id="bookshelf-edit-title">{书架弹窗.mode === "create" ? t("新建书架栏") : t("重命名书架栏")}</h2>
               <label className="virtual-folder-field">
-                <span>名称</span>
+                <span>{t("名称")}</span>
                 <input
                   value={书架名称输入}
                   disabled={删除确认处理中}
@@ -10236,20 +10399,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   }}
                 />
               </label>
-              <p>书架栏用于分组管理 OmiComic 内部的书架，不会创建真实文件夹，也不会移动、复制或修改漫画文件。</p>
+              <p>{t("书架栏用于分组管理 OmiComic 内部的书架，不会创建真实文件夹，也不会移动、复制或修改漫画文件。")}</p>
               <div className="root-delete-actions">
-                <button type="button" disabled={删除确认处理中} onClick={() => 打开书架弹窗(null)}>
-                  取消
-                </button>
-                <button type="button" className="primary-action" disabled={删除确认处理中} onClick={() => void 保存书架弹窗()}>
-                  保存
-                </button>
+                <button type="button" disabled={删除确认处理中} onClick={() => 打开书架弹窗(null)}>{t("取消")}</button>
+                <button type="button" className="primary-action" disabled={删除确认处理中} onClick={() => void 保存书架弹窗()}>{t("保存")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {(待删除书架 ||待删除书架列表) && (
-          <div
+        {(待删除书架 ||待删除书架列表) && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10262,11 +10421,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="bookshelf-delete-title">删除书架栏</h2>
-              <p>{书架列表.length - 获取待删除书架栏列表().length < 1 ? "至少需要保留一个书架栏，当前选择不能全部删除。" : "只删除 OmiComic 内部的书架栏记录和其中的书架引用，不会删除任何原始漫画文件。"}</p>
+              <h2 id="bookshelf-delete-title">{t("删除书架栏")}</h2>
+              <p>{书架列表.length - 获取待删除书架栏列表().length < 1 ? t("至少需要保留一个书架栏，当前选择不能全部删除。") : t("只删除 OmiComic 内部的书架栏记录和其中的书架引用，不会删除任何原始漫画文件。")}</p>
               <strong>
                 {获取待删除书架栏列表().length > 1
-                  ? `已选择 ${获取待删除书架栏列表().length} 个书架栏`
+                  ? tr`已选择 ${获取待删除书架栏列表().length} 个书架栏`
                   : 获取待删除书架栏列表()[0]?.name}
               </strong>
               <div className="root-delete-actions">
@@ -10277,15 +10436,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     设置待删除书架(null);
                     设置待删除书架列表(null);
                   }}
-                >
-                  取消
-                </button>
-                <button type="button" className="danger-action" disabled={删除确认处理中 || 书架列表.length - 获取待删除书架栏列表().length < 1} onClick={() => void 删除书架记录()}>
-                  删除
-                </button>
+                >{t("取消")}</button>
+                <button type="button" className="danger-action" disabled={删除确认处理中 || 书架列表.length - 获取待删除书架栏列表().length < 1} onClick={() => void 删除书架记录()}>{t("删除")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
         {加入虚拟文件夹目标 && (
           <div
@@ -10306,24 +10461,24 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               className="bookshelf-target-dialog"
               style={加入书架菜单样式}
               role="menu"
-              aria-label="加入书架"
+              aria-label={t("加入书架")}
               onClick={(事件) => 事件.stopPropagation()}
             >
               {使用分栏加入书架目标 ? (
                 <div className="bookshelf-target-cascade">
-                  <div className="bookshelf-target-menu bookshelf-target-bars" role="menu" aria-label="书架栏">
+                  <div className="bookshelf-target-menu bookshelf-target-bars" role="menu" aria-label={t("书架栏")}>
                     <label className="virtual-folder-field virtual-folder-search-field">
-                      <span>搜索书架</span>
+                      <span>{t("搜索书架")}</span>
                       <input
                         value={加入书架搜索内容}
                         disabled={删除确认处理中}
-                        placeholder="输入书架名称"
+                        placeholder={t("输入书架名称")}
                         onChange={(事件) => 设置加入书架搜索内容(事件.target.value)}
                       />
                     </label>
                     <div className="bookshelf-target-bar-list">
                       {加入书架目标组列表.length === 0 ? (
-                        <p className="drawer-muted">没有匹配的书架栏。</p>
+                        <p className="drawer-muted">{t("没有匹配的书架栏。")}</p>
                       ) : (
                         加入书架目标组列表.map((组) => (
                           <button
@@ -10349,13 +10504,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         设置加入书架目标书架栏ID(null);
                         打开书架弹窗({ mode: "create" });
                       }}
-                    >
-                      新建书架栏
-                    </button>
+                    >{t("新建书架栏")}</button>
                   </div>
-                  <div className="virtual-folder-target-list bookshelf-target-submenu" role="menu" aria-label="书架">
+                  <div className="virtual-folder-target-list bookshelf-target-submenu" role="menu" aria-label={t("书架")}>
                     {加入书架可选目标列表.length === 0 ? (
-                      <p className="drawer-muted">{加入书架目标组列表.length === 0 ? "没有匹配的书架。" : "当前书架栏暂无可加入的书架。"}</p>
+                      <p className="drawer-muted">{加入书架目标组列表.length === 0 ? t("没有匹配的书架。") : t("当前书架栏暂无可加入的书架。")}</p>
                     ) : (
                       加入书架可选目标列表.map((文件夹) => {
                         const 加入状态 = 获取书架目标加入状态(文件夹, 加入虚拟文件夹目标.items);
@@ -10371,10 +10524,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                             <span>{文件夹.name}</span>
                             <em>
                               {加入状态 === "all"
-                                ? "已加入"
+                                ? t("已加入")
                                 : 加入状态 === "partial"
-                                  ? `部分已加入 · ${文件夹.items.length} 项`
-                                  : `${文件夹.items.length} 项`}
+                                  ? tr`部分已加入 · ${文件夹.items.length} 项`
+                                  : tr`${文件夹.items.length} 项`}
                             </em>
                           </button>
                         );
@@ -10392,25 +10545,23 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                       设置加入书架目标书架栏ID(null);
                       打开虚拟文件夹弹窗({ mode: "create", items: 待加入项目, bookshelfId: 目标书架栏ID });
                     }}
-                  >
-                    新建书架并加入
-                  </button>
+                  >{t("新建书架并加入")}</button>
                 </div>
               ) : (
                 <>
                   <div className="bookshelf-target-single-menu">
                     <label className="virtual-folder-field virtual-folder-search-field">
-                      <span>搜索书架</span>
+                      <span>{t("搜索书架")}</span>
                       <input
                         value={加入书架搜索内容}
                         disabled={删除确认处理中}
-                        placeholder="输入书架名称"
+                        placeholder={t("输入书架名称")}
                         onChange={(事件) => 设置加入书架搜索内容(事件.target.value)}
                       />
                     </label>
                     <div className="virtual-folder-target-list">
                       {加入书架可选目标列表.length === 0 ? (
-                        <p className="drawer-muted">{虚拟文件夹列表.length === 0 ? "暂无书架，请先新建。" : "没有匹配的书架。"}</p>
+                        <p className="drawer-muted">{虚拟文件夹列表.length === 0 ? t("暂无书架，请先新建。") : t("没有匹配的书架。")}</p>
                       ) : (
                         加入书架可选目标列表.map((文件夹) => {
                           const 加入状态 = 获取书架目标加入状态(文件夹, 加入虚拟文件夹目标.items);
@@ -10426,10 +10577,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                               <span>{文件夹.name}</span>
                               <em>
                                 {加入状态 === "all"
-                                  ? "已加入"
+                                  ? t("已加入")
                                   : 加入状态 === "partial"
-                                    ? `部分已加入 · ${文件夹.items.length} 项`
-                                    : `${文件夹.items.length} 项`}
+                                    ? tr`部分已加入 · ${文件夹.items.length} 项`
+                                    : tr`${文件夹.items.length} 项`}
                               </em>
                             </button>
                           );
@@ -10447,17 +10598,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                         设置加入书架目标书架栏ID(null);
                         打开虚拟文件夹弹窗({ mode: "create", items: 待加入项目, bookshelfId: 目标书架栏ID });
                       }}
-                    >
-                      新建书架并加入
-                    </button>
+                    >{t("新建书架并加入")}</button>
                   </div>
                 </>
               )}
             </div>
           </div>
         )}
-        {虚拟文件夹弹窗 && (
-          <div
+        {虚拟文件夹弹窗 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10469,14 +10618,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             <div className="root-delete-dialog virtual-folder-dialog" onClick={(事件) => 事件.stopPropagation()}>
               <h2 id="virtual-folder-edit-title">
                 {虚拟文件夹弹窗.mode === "create"
-                  ? "新建书架"
+                  ? t("新建书架")
                   : 虚拟文件夹弹窗.mode === "rename"
-                    ? "重命名书架"
-                    : "编辑书架备注"}
+                    ? t("重命名书架")
+                    : t("编辑书架备注")}
               </h2>
               {(虚拟文件夹弹窗.mode === "create" || 虚拟文件夹弹窗.mode === "rename") && (
                 <label className="virtual-folder-field">
-                  <span>名称</span>
+                  <span>{t("名称")}</span>
                   <input
                     value={虚拟文件夹名称输入}
                     disabled={删除确认处理中}
@@ -10490,7 +10639,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
               )}
               {(虚拟文件夹弹窗.mode === "create" || 虚拟文件夹弹窗.mode === "note") && (
                 <label className="virtual-folder-field">
-                  <span>备注</span>
+                  <span>{t("备注")}</span>
                   <textarea
                     value={虚拟文件夹备注输入}
                     disabled={删除确认处理中}
@@ -10499,20 +10648,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   />
                 </label>
               )}
-              <p>书架只保存 OmiComic 内部引用，不会创建真实文件夹，也不会移动、复制或修改漫画文件。</p>
+              <p>{t("书架只保存 OmiComic 内部引用，不会创建真实文件夹，也不会移动、复制或修改漫画文件。")}</p>
               <div className="root-delete-actions">
-                <button type="button" disabled={删除确认处理中} onClick={() => 打开虚拟文件夹弹窗(null)}>
-                  取消
-                </button>
-                <button type="button" className="primary-action" disabled={删除确认处理中} onClick={() => void 保存虚拟文件夹弹窗()}>
-                  保存
-                </button>
+                <button type="button" disabled={删除确认处理中} onClick={() => 打开虚拟文件夹弹窗(null)}>{t("取消")}</button>
+                <button type="button" className="primary-action" disabled={删除确认处理中} onClick={() => void 保存虚拟文件夹弹窗()}>{t("保存")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {待删除虚拟文件夹 && (
-          <div
+        {待删除虚拟文件夹 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10522,22 +10667,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="virtual-folder-delete-title">删除书架</h2>
-              <p>只删除 OmiComic 内部的书架记录和其中的资源引用，不会删除任何原始漫画文件。</p>
-              <strong>{待删除虚拟文件夹.name}</strong>
+              <h2 id="virtual-folder-delete-title">{t("删除书架")}</h2>
+              <p>{t("只删除 OmiComic 内部的书架记录和其中的资源引用，不会删除任何原始漫画文件。")}</p>
+              <strong>{待删除虚拟文件夹.selection?.map(item=>item.name).join('、') ?? 待删除虚拟文件夹.name}</strong>
               <div className="root-delete-actions">
-                <button type="button" disabled={删除确认处理中} onClick={() => 设置待删除虚拟文件夹(null)}>
-                  取消
-                </button>
-                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 删除虚拟文件夹记录()}>
-                  删除
-                </button>
+                <button type="button" disabled={删除确认处理中} onClick={() => 设置待删除虚拟文件夹(null)}>{t("取消")}</button>
+                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 删除虚拟文件夹记录()}>{t("删除")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {待清空虚拟文件夹 && (
-          <div
+        {待清空虚拟文件夹 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10547,22 +10688,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="virtual-folder-clear-title">清空书架</h2>
-              <p>只清空 OmiComic 内部引用，不会删除任何原始漫画文件；不会移动、复制或修改任何漫画文件，只会更新 omicomic-data.json 中该书架的 items。</p>
+              <h2 id="virtual-folder-clear-title">{t("清空书架")}</h2>
+              <p>{t("只清空 OmiComic 内部引用，不会删除任何原始漫画文件；不会移动、复制或修改任何漫画文件，只会更新 omicomic-data.json 中该书架的 items。")}</p>
               <strong>{待清空虚拟文件夹.folder.name}</strong>
               <div className="root-delete-actions">
-                <button type="button" disabled={删除确认处理中} onClick={() => 设置待清空虚拟文件夹(null)}>
-                  取消
-                </button>
-                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 清空虚拟文件夹记录()}>
-                  清空
-                </button>
+                <button type="button" disabled={删除确认处理中} onClick={() => 设置待清空虚拟文件夹(null)}>{t("取消")}</button>
+                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 清空虚拟文件夹记录()}>{t("清空")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {待清空无效资源 && (
-          <div
+        {待清空无效资源 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10575,11 +10712,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="invalid-resource-clear-title">清空无效资源</h2>
-              <p>
-                检测到 {待清空无效资源.resourceKeys.length} 个路径失效资源。清空只会移除当前书架中的 OmiComic 内部引用，
-                不会删除、移动、复制或修改任何原始漫画文件，也不会影响收藏、书签、阅读进度或 resourceMeta。
-              </p>
+              <h2 id="invalid-resource-clear-title">{t("清空无效资源")}</h2>
+              <p>{t("检测到")}{待清空无效资源.resourceKeys.length}{t("个路径失效资源。清空只会移除当前书架中的 OmiComic 内部引用， 不会删除、移动、复制或修改任何原始漫画文件，也不会影响收藏、书签、阅读进度或资源信息。")}</p>
               <strong>{待清空无效资源.folder.name}</strong>
               <div className="root-delete-actions">
                 <button
@@ -10589,18 +10723,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     if (当前虚拟文件夹无效资源Key) 设置已忽略无效资源清理Key(当前虚拟文件夹无效资源Key);
                     设置待清空无效资源(null);
                   }}
-                >
-                  取消
-                </button>
-                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 清空当前书架无效资源记录()}>
-                  清空无效资源
-                </button>
+                >{t("取消")}</button>
+                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 清空当前书架无效资源记录()}>{t("清空无效资源")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {待全局清空无效资源 && (
-          <div
+        {待全局清空无效资源 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10610,25 +10740,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="global-invalid-resource-clear-title">清空无效资源记录</h2>
-              <p>
-                检测到 {待全局清空无效资源.count} 个路径失效资源。清空只会移除 OmiComic 内部 omicomic-data.json 中的相关记录，
-                不会删除真实漫画文件，不会移动真实漫画文件，也不会复制真实漫画文件。
-              </p>
-              <strong>包含最近打开、收藏、书签、阅读进度、resourceMeta 与书架内部引用。</strong>
+              <h2 id="global-invalid-resource-clear-title">{t("清空无效资源记录")}</h2>
+              <p>{t("检测到")}{待全局清空无效资源.count}{t("个路径失效资源。清空只会移除 OmiComic 内部 omicomic-data.json 中的相关记录， 不会删除真实漫画文件，不会移动真实漫画文件，也不会复制真实漫画文件。")}</p>
+              <strong>{t("包含最近阅读、收藏、书签、阅读进度、资源信息和书架引用。")}</strong>
               <div className="root-delete-actions">
-                <button type="button" disabled={删除确认处理中} onClick={() => 设置待全局清空无效资源(null)}>
-                  取消
-                </button>
-                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 清空全局无效资源记录()}>
-                  确认清空
-                </button>
+                <button type="button" disabled={删除确认处理中} onClick={() => 设置待全局清空无效资源(null)}>{t("取消")}</button>
+                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 清空全局无效资源记录()}>{t("确认清空")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {待删除根目录 && (
-          <div
+        {待删除根目录 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10638,8 +10761,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="root-delete-title">删除根目录</h2>
-              <p>将从 OmiComic 内部删除此根目录，并清理与该根目录相关的最近打开、收藏、书签、阅读进度、资源信息和书架内部资源引用；不会删除磁盘中的真实文件夹或任何原始漫画文件。</p>
+              <h2 id="root-delete-title">{t("移除资源库目录")}</h2>
+              <p>{t("将从资源库移除此目录，并清理相关的最近阅读、收藏、书签、阅读进度、资源信息和书架引用；不会删除磁盘中的文件夹或漫画文件。")}</p>
               <strong
                 data-tooltip-disabled
                 onMouseEnter={(事件) => 开始路径悬停(`delete-root:${待删除根目录.path}`, 待删除根目录.path, 事件)}
@@ -10649,18 +10772,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                 {待删除根目录.path}
               </strong>
               <div className="root-delete-actions">
-                <button type="button" disabled={删除确认处理中} onClick={() => 设置待删除根目录(null)}>
-                  取消
-                </button>
-                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 确认删除根目录记录()}>
-                  删除
-                </button>
+                <button type="button" disabled={删除确认处理中} onClick={() => 设置待删除根目录(null)}>{t("取消")}</button>
+                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 确认删除根目录记录()}>{t("删除")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {待删除标签列表 && (
-          <div
+        {待删除标签列表 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10673,11 +10792,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="tag-delete-title">删除标签</h2>
-              <p>
-                将从 OmiComic 的标签记录中移除这些标签，并从所有资源和书签的 tags 数组中移除；
-                不会删除任何漫画文件、资源、书签、收藏或阅读进度。
-              </p>
+              <h2 id="tag-delete-title">{t("删除标签")}</h2>
+              <p>{t("将从 OmiComic 的标签记录中移除这些标签，并从所有资源和书签的 tags 数组中移除； 不会删除任何漫画文件、资源、书签、收藏或阅读进度。")}</p>
               <div className="tag-delete-list">
                 {待删除标签列表.map((标签) => (
                   <span className="tag-chip" key={标签}>{标签}</span>
@@ -10690,9 +10806,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   disabled={删除确认处理中}
                   onChange={(事件) => 设置删除标签不再提醒(事件.target.checked)}
                 />
-                <span>不再提醒</span>
+                <span>{t("不再提醒")}</span>
               </label>
-              {整理错误 && <p className="organize-edit-error">{整理错误}</p>}
+              {整理错误 && <p className="organize-edit-error">{t(整理错误 ?? '')}</p>}
               <div className="root-delete-actions">
                 <button
                   type="button"
@@ -10701,23 +10817,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     设置待删除标签列表(null);
                     设置删除标签不再提醒(false);
                   }}
-                >
-                  取消
-                </button>
+                >{t("取消")}</button>
                 <button
                   type="button"
                   className="danger-action"
                   disabled={删除确认处理中}
                   onClick={() => void 确认删除标签列表()}
-                >
-                  删除标签
-                </button>
+                >{t("删除标签")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
-        {批量删除确认 && (
-          <div
+        {批量删除确认 && 渲染对话框(
+          <ModalOverlay
             className="root-delete-overlay"
             role="dialog"
             aria-modal="true"
@@ -10730,9 +10842,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
             }}
           >
             <div className="root-delete-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="batch-delete-title">删除选中</h2>
-              <p>{获取批量删除标题(批量删除确认, 已选项目Key集合.size)}</p>
-              <p>{获取批量删除说明(批量删除确认)}</p>
+              <h2 id="batch-delete-title">{t("删除选中")}</h2>
+              <p>{t(获取批量删除标题(批量删除确认, 已选项目Key集合.size))}</p>
+              <p>{t(获取批量删除说明(批量删除确认))}</p>
               <label className="batch-delete-skip">
                 <input
                   type="checkbox"
@@ -10740,7 +10852,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                   disabled={删除确认处理中}
                   onChange={(事件) => 设置批量删除不再提醒(事件.target.checked)}
                 />
-                <span>不再提醒</span>
+                <span>{t("不再提醒")}</span>
               </label>
               <div className="root-delete-actions">
                 <button
@@ -10750,15 +10862,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive }: LibraryPa
                     设置批量删除确认(null);
                     设置批量删除不再提醒(false);
                   }}
-                >
-                  取消
-                </button>
-                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 确认批量删除()}>
-                  删除
-                </button>
+                >{t("取消")}</button>
+                <button type="button" className="danger-action" disabled={删除确认处理中} onClick={() => void 确认批量删除()}>{t("删除")}</button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
         {本地文件目标 && <LocalFileDialog target={本地文件目标} onClose={() => 设置本地文件目标(null)} onChanged={同步文件操作} />}
         {书架备注悬浮窗 && createPortal(

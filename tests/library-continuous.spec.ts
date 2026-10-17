@@ -32,9 +32,12 @@ async function firstVisible(page: Page) {
 
 test('continuous directory scroll crosses row-aligned page landmarks without replacing visible cards', async ({ page }) => {
   await open(page);
-  await expect(page.getByText('实际 63 项', { exact: true })).toBeVisible();
-  await expect(page.locator('.pagination-bar')).toContainText('共 159 页');
-  await expect(page.locator('.resource-card')).toHaveCount(63);
+  await expect(page.locator('.page-size-effective')).toHaveCount(0);
+  await expect(page.locator('.pagination-bar')).toContainText('/ 159');
+  // Compact cards fit more rows; virtualization remains bounded and row aligned.
+  await expect.poll(() => page.locator('.resource-card').count()).toBeGreaterThanOrEqual(63);
+  expect(await page.locator('.resource-card').count()).toBeLessThanOrEqual(84);
+  expect((await page.locator('.resource-card').count()) % 7).toBe(0);
   await jump(page, 2);
   await expect.poll(async () => (await firstVisible(page))?.index).toBe(63);
   const mark = page.locator('[data-library-index="63"]');

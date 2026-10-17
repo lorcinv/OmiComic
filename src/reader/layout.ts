@@ -4,6 +4,7 @@ export interface PageSize { width: number; height: number }
 
 // Pair only when the chosen scale fits both pages in the usable viewport.
 export function canPairPages(first: PageSize | undefined, second: PageSize | undefined, viewport: PageSize, mode: 阅读器缩放模式): boolean {
+  if (mode === "fit-window") return true;
   if (!first || !second || viewport.width <= 0 || viewport.height <= 0) return true;
   if (mode === "original") return first.width + second.width <= viewport.width && Math.max(first.height, second.height) <= viewport.height;
   if (mode === "fit-width") return viewport.width / (first.width / first.height + second.width / second.height) <= viewport.height + 0.5;

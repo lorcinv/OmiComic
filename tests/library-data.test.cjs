@@ -32,6 +32,64 @@ function resource(dir, name, sourceType = 'archive') {
   const sourcePath = path.join(dir, name);
   return { resourceKey: `${sourceType}:${sourcePath}`, sourcePath, sourceType, title: name };
 }
+
+test('desktop language, information size and performance preferences survive restart without losing manual values',async t=>{
+  const f=await fixture(t,{settings:{readerMemoryCacheSizeMb:350,readerPreloadPages:7,readerImageLoadConcurrency:3}});
+  assert.equal((await f.service.读取应用数据()).settings.desktopPerformanceProfile,'custom');
+  for(const language of ['en','ja','zh-CN']) {
+    await f.service.更新设置({language,desktopInfoFontSize:18,desktopReaderAutoHide:true});
+    const saved=(await f.load().读取应用数据()).settings;
+    assert.equal(saved.language,language);assert.equal(saved.desktopInfoFontSize,18);assert.equal(saved.desktopReaderAutoHide,true);assert.equal(saved.readerMemoryCacheSizeMb,350);
+  }
+  await f.service.更新设置({desktopPerformanceProfile:'balanced'});
+  assert.equal((await f.load().读取应用数据()).settings.readerMemoryCacheSizeMb,256);
+  await f.service.更新设置({readerMemoryCacheSizeMb:2048,readerPreloadPages:40,readerImageLoadConcurrency:12});
+  const saved=(await f.load().读取应用数据()).settings;
+  assert.equal(saved.desktopPerformanceProfile,'custom');assert.equal(saved.readerPreloadPages,40);assert.equal(saved.readerImageLoadConcurrency,12);
+});
+
+test('desktop typography migrates the old standard and persists custom numeric sizes', async t => {
+  const f = await fixture(t, { settings: { desktopInfoFontSize: 14 } });
+  let settings = (await f.service.读取应用数据()).settings;
+  assert.equal(settings.desktopInfoFontSize, 12);
+  assert.equal(settings.desktopGlobalFontSize, 14);
+  await f.service.更新设置({ desktopInfoFontSize: 13, desktopGlobalFontSize: 17 });
+  settings = (await f.load().读取应用数据()).settings;
+  assert.equal(settings.desktopInfoFontSize, 13);
+  assert.equal(settings.desktopGlobalFontSize, 17);
+  // 14 remains a valid custom choice after the one-time migration.
+  await f.service.更新设置({ desktopInfoFontSize: 14 });
+  assert.equal((await f.load().读取应用数据()).settings.desktopInfoFontSize, 14);
+  await f.service.更新设置({ desktopInfoFontSize: -2, desktopGlobalFontSize: 100 });
+  settings = (await f.load().读取应用数据()).settings;
+  assert.equal(settings.desktopInfoFontSize, 10);
+  assert.equal(settings.desktopGlobalFontSize, 24);
+});
+
+test('desktop performance scales by RAM and CPU without phone limits',()=>{
+  const {desktopPerformance}=require('../dist-electron/shared/desktopPerformance.js');
+  assert.deepEqual(desktopPerformance('auto',32*1024**3,16),{readerMemoryCacheSizeMb:4096,readerPreloadPages:48,readerImageLoadConcurrency:12});
+  assert.deepEqual(desktopPerformance('high',32*1024**3,16),{readerMemoryCacheSizeMb:8192,readerPreloadPages:96,readerImageLoadConcurrency:16});
+  assert.deepEqual(desktopPerformance('auto',8*1024**3,4),{readerMemoryCacheSizeMb:1024,readerPreloadPages:20,readerImageLoadConcurrency:2});
+});
+
+test('old restrictive PC preset upgrades once, while future custom values remain intentional', async t => {
+  const f = await fixture(t, { settings: { desktopPerformanceProfile:'custom', readerMemoryCacheSizeMb:500, readerPreloadPages:5, readerImageLoadConcurrency:5 } });
+  assert.equal((await f.service.读取应用数据()).settings.desktopPerformanceProfile, 'auto');
+  await f.service.更新设置({ readerMemoryCacheSizeMb:500, readerPreloadPages:5, readerImageLoadConcurrency:5 });
+  const settings = (await f.load().读取应用数据()).settings;
+  assert.equal(settings.desktopPerformanceProfile, 'custom'); assert.equal(settings.readerMemoryCacheSizeMb, 500);
+  assert.equal(settings.desktopPerformanceRevision, 2);
+});
+
+test('partial tag and note updates preserve each other and favorite metadata',async t=>{
+  const f=await fixture(t),item=resource(f.dir,'partial.cbz');
+  await f.service.添加收藏(item);await f.service.更新资源整理信息({...item,tags:['原标签'],note:'原简介'});
+  await f.service.更新资源整理信息({...item,tags:['新标签']});await f.service.更新资源整理信息({...item,note:'新简介'});
+  const data=await f.load().读取应用数据();
+  assert.deepEqual(data.resourceMeta[item.resourceKey].tags,['新标签']);assert.equal(data.resourceMeta[item.resourceKey].note,'新简介');
+  assert.deepEqual(data.favorites[0].tags,['新标签']);assert.equal(data.favorites[0].note,'新简介');
+});
 function progress(item, currentPageIndex = 2) {
   return { ...item, currentPageIndex, totalPages: 10, percent: 30, completed: false,
     hasStartedReading: true, firstReadAt: 1000, updatedAt: 2000 };
@@ -40,6 +98,15 @@ function ordered(items, values, field = 'resourceKey') {
   assert.deepEqual(items.map(item => item[field]), values);
   assert.deepEqual(items.map(item => item.sortIndex), values.map((_, index) => index));
 }
+
+test('renaming a bookmark keeps its physical page, metadata and position after reload', async t => {
+  const f=await fixture(t),s=f.service,item=resource(f.dir,'book.cbz');
+  const {bookmark}=await s.切换书签({...item,pageIndex:2,totalPages:10,pageName:'000003.png',tags:['科幻'],note:'夜空'});
+  const second=await s.切换书签({...item,pageIndex:5,totalPages:10});
+  await s.更新书签整理信息(bookmark.id,{bookmarkTitle:'月光书签'});
+  const saved=await f.load().读取应用数据(),mark=saved.bookmarks.find(value=>value.id===bookmark.id);
+  assert.equal(mark.bookmarkTitle,'月光书签');assert.equal(mark.title,'book.cbz');assert.equal(mark.pageIndex,2);assert.equal(mark.pageName,'000003.png');assert.deepEqual(mark.tags,['科幻']);assert.equal(mark.note,'夜空');assert.equal(saved.bookmarks[0].id,second.bookmark.id);
+});
 
 test('per-book sorting atomically remaps physical bookmarks, resume, pairing anchor and settings across reloads', async t => {
   const { pageIdentity, sortReaderPages } = require('../dist-electron/shared/readerPreferences.js');
@@ -129,7 +196,8 @@ test('legacy JSON gains defaults while preserving old library, progress and fold
   assert.equal(data.settings.pageSize, 100);
   assert.equal(data.settings.readerDefaultFitMode, 'fit-window');
   assert.equal(data.settings.readerPageMode, 'single');
-  assert.equal(data.settings.readerMemoryCacheSizeMb, 200);
+  assert.equal(data.settings.desktopPerformanceProfile, 'auto');
+  assert.equal(data.settings.readerMemoryCacheSizeMb, require('../dist-electron/shared/desktopPerformance.js').desktopPerformance('auto',os.totalmem(),os.availableParallelism()).readerMemoryCacheSizeMb);
   assert.deepEqual(data.settings.confirmBeforeBatchDelete, { favorites: false, bookmarks: true, recent: true });
   assert.equal(data.readingProgress[item.resourceKey].hasStartedReading, true);
   assert.equal(data.readingProgress[item.resourceKey].firstReadAt, 1000);
@@ -152,7 +220,7 @@ test('invalid legacy values are bounded and malformed records do not erase valid
   });
   const data = await f.service.读取应用数据();
   assert.equal(data.settings.pageSize, 60);
-  assert.equal(data.settings.readerMemoryCacheSizeMb, 2048);
+  assert.equal(data.settings.readerMemoryCacheSizeMb, 16384);
   assert.equal(data.settings.readerPreloadPages, 0);
   assert.equal(data.settings.readerImageLoadConcurrency, 1);
   assert.equal(data.favorites.length, 1);

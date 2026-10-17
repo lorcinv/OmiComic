@@ -1,4 +1,12 @@
 export type NativeCall = <T>(method: string, args?: unknown) => Promise<T>;
+let connected: NativeCall | null = null;
+let notify: ((method:string,args:unknown)=>void) | null = null;
+export const hasAndroidRenderer = () => connected !== null;
+export function androidCall<T>(method:string,args?:unknown):Promise<T> {
+  if(!connected)return Promise.reject(new Error('Android 文件服务未连接。'));
+  return connected<T>(method,args);
+}
+export function androidNotify(method:string,args:unknown):void { notify?.(method,args); }
 
 /** The native port is transferred only to the trusted top-level origin. No JS interface is exposed to EPUB frames. */
 export function connectAndroid(): Promise<NativeCall> {
@@ -21,12 +29,21 @@ export function connectAndroid(): Promise<NativeCall> {
         else callback.resolve(message.data);
       };
       port.start();
-      resolve(<T>(method: string, args: unknown = {}) => new Promise<T>((resolveCall, rejectCall) => {
+      const call: NativeCall = <T>(method: string, args: unknown = {}) => new Promise<T>((resolveCall, rejectCall) => {
         const id = ++sequence;
         const timer = window.setTimeout(() => { pending.delete(id); rejectCall(new Error("操作超时，请重试。")); }, method.startsWith("choose") ? 600000 : 120000);
         pending.set(id, { resolve: value => resolveCall(value as T), reject: rejectCall, timer });
         port.postMessage(JSON.stringify({ id, method, args }));
-      }));
+      });
+      const syncTheme = () => {
+        const theme = document.documentElement.dataset.colorTheme;
+        if (theme) void call('setColorTheme', { theme }).catch(() => undefined);
+      };
+      connected=call;
+      notify=(method,args)=>port.postMessage(JSON.stringify({id:0,method,args}));
+      new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-theme'] });
+      syncTheme();
+      resolve(call);
     });
   });
 }

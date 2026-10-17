@@ -1,0 +1,21 @@
+/* Touch presses must not inherit the desktop hover/loading cover animation. */
+.omi-home.is-mobile-home .omi-home__book:hover,
+.omi-home.is-mobile-home .omi-home__book:hover .omi-home__cover > img { transform: none; }
+.omi-home.is-mobile-home .omi-home__book:disabled { opacity: 1; }
+.omi-home.is-mobile-home .omi-brand-icon { overflow:hidden; contain:layout paint; touch-action:manipulation; }
+.omi-home.is-mobile-home .omi-brand-icon__graphic { pointer-events:none; }
+.omi-home.is-mobile-home .omi-home__book.is-held .omi-home__cover-action {
+  opacity: 1;
+  transform: none;
+  backdrop-filter: none;
+}
+
+html[data-platform="android"] body,html[data-platform="android"] body * { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+html[data-platform="android"] #resource-detail-title,
+html[data-platform="android"] input,
+html[data-platform="android"] textarea,
+html[data-platform="android"] [contenteditable="true"],html[data-platform="android"] [contenteditable="true"] * { -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }
+@media (max-width:760px), (pointer:coarse) {
+  body { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #resource-detail-title,input,textarea,[contenteditable="true"] { -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }
+}

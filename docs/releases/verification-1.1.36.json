@@ -1,0 +1,111 @@
+{
+  "version": "1.1.36",
+  "date": "2026-10-17",
+  "assets": [
+    {
+      "name": "OmiComic-Portable-1.1.36-x64.zip",
+      "bytes": 140674918,
+      "sha256": "585b5b5d9a0f83f5a8db1b58e22d5087efd4686dd865aadcc154bde3ebe68320"
+    },
+    {
+      "name": "OmiComic-1.1.36-android.apk",
+      "bytes": 14479986,
+      "sha256": "75fd92a27e8cb8ea44d9c89411ed72ec2e056367596d0f5969729737e239b88a"
+    },
+    {
+      "name": "7z2604-src.tar.xz",
+      "bytes": 1560440,
+      "sha256": "9691944c0fe0d01bb49373a704fb983fd33bc98b1738695179dfbf99ac1734f6"
+    },
+    {
+      "name": "OmiComic-1.1.36-preview.png",
+      "bytes": 227163,
+      "sha256": "6fe079cca3b7c52503e9392cd35f0c92f446ccdc9bfc025039c477eef2334620"
+    }
+  ],
+  "checks": {
+    "typecheck": true,
+    "nodeTests": {
+      "passed": 93,
+      "skipped": 1,
+      "failed": 0
+    },
+    "domTests": {
+      "passed": 87,
+      "failed": 0
+    },
+    "browser": {
+      "casesCovered": 213,
+      "initialPassed": 208,
+      "correctedCasesRetested": 5,
+      "finalAboutAndLanguagePassed": 8
+    },
+    "windows": {
+      "version": "1.1.36",
+      "archive": "OmiComic-Portable-1.1.36-x64.zip",
+      "bytes": 140674918,
+      "sha256": "585b5b5d9a0f83f5a8db1b58e22d5087efd4686dd865aadcc154bde3ebe68320",
+      "zipEntries": 36,
+      "userDataFilesIncluded": false,
+      "matchedRendererFiles": 210,
+      "matchedMainFiles": 3,
+      "desktopAboutIntroduction": true,
+      "githubLinkOpensExternalBrowser": true,
+      "desktopEditButtonRemoved": true,
+      "labelAlignmentPx": 0,
+      "doubleClickEdits": true,
+      "outsideClickSaves": true,
+      "noteSurvivesRestart": true,
+      "selectedPageTextRemoved": true,
+      "singleClickDoesNotSelectOrOpen": true,
+      "doubleClickOpensCorrectPage": true,
+      "keyboardOpensCorrectPage": true,
+      "returnHasNoSelectedBorder": true
+    },
+    "android": {
+      "apk": "OmiComic-1.1.36-android.apk",
+      "version": "1.1.36",
+      "bytes": 14479986,
+      "sha256": "75fd92a27e8cb8ea44d9c89411ed72ec2e056367596d0f5969729737e239b88a",
+      "nativeAbis": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86_64",
+        "x86"
+      ],
+      "nativeLibrariesStoredAnd16KBAligned": true,
+      "pinnedNativeBytesMatch": true,
+      "thirdPartyLicenses": true,
+      "noSigningSecretsOrTestAssets": true,
+      "packagedRendererMatchesCurrentBuild": true,
+      "rendererFiles": 211,
+      "installedApkMatchesRelease": true,
+      "aboutIntroduction": true,
+      "externalBrowserIntent": {
+        "action": "android.intent.action.VIEW",
+        "url": "https://github.com/lorcinv/OmiComic"
+      },
+      "versionCode": 10136,
+      "signerSha256": "31d30425848de4b32a69e27873756562f400996ef647cba83443b6b20ad9db43"
+    }
+  },
+  "screenshots": {
+    "source": "browser UI with synthetic Omi symbol fixtures",
+    "realComicImages": false,
+    "files": [
+      "android-about.png",
+      "android-home.png",
+      "android-library.png",
+      "android-reader.png",
+      "overview.png",
+      "windows-about.png",
+      "windows-home.png",
+      "windows-library.png",
+      "windows-reader.png"
+    ]
+  },
+  "boundaries": [
+    "Android runtime checked on a dedicated Android 15 emulator; no physical-device claim.",
+    "Existing image-decoder and large-file performance tests were not rerun in this about-page release."
+  ]
+}

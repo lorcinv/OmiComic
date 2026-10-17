@@ -1,4 +1,4 @@
-param([string]$Serial = 'emulator-5580', [ValidateSet('smoke','restore','ui','archives','archive-restore','performance','interactions','storage')][string]$Mode = 'smoke', [string]$JavaHome = $env:JAVA_HOME, [string]$ExpectedVersion, [switch]$ColdCache)
+param([string]$Serial = 'emulator-5580', [ValidateSet('about','smoke','restore','ui','archives','archive-restore','performance','loading','loading-restore','interactions','storage','upgrade','reader-tools','reader-tools-restore','mobile-covers','mobile','mobile-restore','mobile-actions','mobile-polish','mobile-fixes','mobile-fixes-restore','interface-polish','theme-polish','system-bars','mobile-motion','mobile-transitions','native-reader','native-speed','native-codecs','zip-fast','mobile-preview-speed','mobile-interactions1113','native-stability','mobile1115-home','mobile1115-performance','mobile1115-features','mobile1116-seek','mobile1116-formats','mobile1116-large','mobile1117-bench','mobile1117-png','mobile1118-prefetch','mobile1119-ui','mobile1120-ui','mobile1120-launch','mobile1121-lifecycle','mobile1122-lifecycle','mobile1123-resume')][string]$Mode = 'smoke', [string]$JavaHome = $env:JAVA_HOME, [string]$ExpectedVersion, [string]$Fixture, [switch]$ColdCache)
 $ErrorActionPreference = 'Stop'
 if (!$Serial.StartsWith('emulator-')) { throw 'This test only runs on a dedicated emulator containing disposable fixtures.' }
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -10,6 +10,7 @@ $adb = Join-Path $sdk 'platform-tools\adb.exe'
 $build = Join-Path $projectRoot '.cache\android-test'
 New-Item -ItemType Directory -Force -Path $build,(Join-Path $build 'classes'),(Join-Path $build 'dex'),(Join-Path $build 'assets') | Out-Null
 Copy-Item -Path 'tests\android\*.js' -Destination (Join-Path $build 'assets')
+Copy-Item -LiteralPath 'tests/fixtures/android-antialias' -Destination (Join-Path $build 'assets') -Recurse -Force
 Copy-Item -LiteralPath 'tests/fixtures/android-archives/RAR5.cbr' -Destination (Join-Path $build 'assets/stream.cbr')
 $manifest = '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.lorcinv.omicomic.test"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/><application android:label="OmiComic test" android:testOnly="true"><provider android:name="io.github.lorcinv.omicomic.test.PipeProvider" android:authorities="io.github.lorcinv.omicomic.test.pipe" android:exported="true"/></application><instrumentation android:name="io.github.lorcinv.omicomic.test.SmokeTest" android:targetPackage="io.github.lorcinv.omicomic"/></manifest>'
 [IO.File]::WriteAllText((Join-Path $build 'AndroidManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
@@ -28,7 +29,8 @@ finally { Remove-Item Env:OMI_TEST_SIGNING_PASSWORD -ErrorAction SilentlyContinu
 Run $adb @('-s',$Serial,'install','-r','-t',$apk)
 if (!$ExpectedVersion) { $ExpectedVersion = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version }
 $cacheMode = if ($ColdCache) { 'cold' } else { 'keep' }
-$result = & $adb -s $Serial shell am instrument -w -e mode $Mode -e cache $cacheMode -e expectedVersion $expectedVersion io.github.lorcinv.omicomic.test/.SmokeTest
+$fixtureArgs = if ($Fixture) { @('-e','fixture',$Fixture) } else { @() }
+$result = & $adb -s $Serial shell am instrument -w -e mode $Mode -e cache $cacheMode -e expectedVersion $expectedVersion @fixtureArgs io.github.lorcinv.omicomic.test/.SmokeTest
 $result | Write-Output
 $jsonLine = $result | Where-Object { $_.StartsWith('INSTRUMENTATION_RESULT: result=') } | Select-Object -Last 1
 if (!$jsonLine) { throw 'Instrumentation did not return a result.' }

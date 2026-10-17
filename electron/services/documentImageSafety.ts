@@ -1,5 +1,5 @@
-/** Reject oversized raster surfaces before passing untrusted EPUB images to Chromium. */
-export function safeRasterImage(data: Buffer): boolean {
+/** Inspect dimensions before decoding. Documents retain the stricter default; bounded PC covers allow scans. */
+export function safeRasterImage(data: Buffer, maxPixels = 16_000_000): boolean {
   let width = 0; let height = 0;
   if (data.length >= 24 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     width = data.readUInt32BE(16); height = data.readUInt32BE(20);
@@ -28,5 +28,5 @@ export function safeRasterImage(data: Buffer): boolean {
       offset += size;
     }
   }
-  return width > 0 && height > 0 && width <= 16384 && height <= 16384 && width * height <= 16_000_000;
+  return width > 0 && height > 0 && width <= 16384 && height <= 16384 && width * height <= maxPixels;
 }

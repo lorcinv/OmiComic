@@ -1,4 +1,9 @@
 {
+  "pngj": {
+    "version": "2.1.0",
+    "url": "https://repo.maven.apache.org/maven2/ar/com/hjg/pngj/2.1.0/pngj-2.1.0.jar",
+    "sha256": "e6b762f15e4891178dddd74e4d57318f518ce278000129efa41f85410b132ccc"
+  },
   "libarchive": {
     "version": "1.1.7",
     "url": "https://repo.maven.apache.org/maven2/me/zhanghai/android/libarchive/library/1.1.7/library-1.1.7.aar",

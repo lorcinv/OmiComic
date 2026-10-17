@@ -124,7 +124,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 640 
     await expect(page.locator('.resource-detail-thumbnail').first()).toHaveAttribute('aria-label', /第 49 页/);
     await expectFirstRowClear(page);
     await page.locator('.resource-detail-thumbnail').first().click();
-    await expect(page.getByText('已选择第 49 页', { exact: true })).toBeVisible();
+    await expect(page.getByText(/已选择第 \d+ 页/)).toHaveCount(0);
+    await expect(page.locator('.resource-detail-thumbnail.is-selected')).toHaveCount(0);
+    await expect(page.locator('.resource-detail-thumbnail[aria-pressed]')).toHaveCount(0);
     await expect(page.locator('.reader-layout')).toHaveCount(0);
     await page.getByRole('button', { name: '上一组预览' }).click();
     await expectFirstRowClear(page);

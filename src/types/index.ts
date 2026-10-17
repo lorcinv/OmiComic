@@ -1,4 +1,4 @@
-import type { ReaderPreferences, PageSort } from "../../electron/shared/readerPreferences";
+import type { ReaderPreferences, PageSort, ImageAdjustments } from "../../electron/shared/readerPreferences";
 export type 页面名称 = "首页" | "资源库" | "阅读器";
 
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
@@ -31,7 +31,28 @@ export interface LibraryRoot {
   lastOpenedAt: number;
 }
 
+export type MobileDisplayScope = "directory" | "bookshelf" | "favorites" | "bookmarks" | "recent";
+export interface MobileDisplaySettings { layout: "grid" | "list"; columns: number; coverSize: number }
+
 export interface AppSettings {
+  desktopInfoFontSize?: number;
+  desktopGlobalFontSize?: number;
+  desktopReaderAutoHide?: boolean;
+  desktopPerformanceProfile?: 'auto' | 'balanced' | 'high' | 'custom';
+
+  language?: 'zh-CN' | 'en' | 'ja';
+  mobileViewDisplays?: Partial<Record<MobileDisplayScope, MobileDisplaySettings>>;
+  mobileLibraryLayout?: "grid" | "list";
+  mobileGridColumns?: number;
+  mobileListCoverSize?: number;
+  mobileImageAdjustments?: ImageAdjustments;
+  readerVolumeKeys?: boolean;
+  readerVolumeKeysReversed?: boolean;
+  readerVolumePanoramaPages?: number;
+  mobileReaderPreviews?: boolean;
+  mobileReaderAutoHide?: boolean;
+  mobilePreviewWidth?: number;
+  mobilePageSize?: 50 | 100 | 150 | 200 | 500;
   colorTheme: 主题配色;
   cardSize: 卡片尺寸;
   cardScale: number;
@@ -59,6 +80,8 @@ export interface AppSettings {
   readerHideFooterControls: boolean;
   readerHideImmersiveProgress: boolean;
   readerMemoryCacheSizeMb: number;
+  androidReaderDiskCacheSizeMb?: number;
+  androidThumbnailCacheSizeMb?: number;
   readerPreloadPages: number;
   readerImageLoadConcurrency: number;
   bookSwitchButtonOpacity: 图书切换按钮透明度;
@@ -120,6 +143,7 @@ export interface FavoriteItem {
 }
 
 export interface BookmarkItem {
+  bookmarkTitle?: string;
   id: string;
   resourceKey: string;
   sourcePath: string;
@@ -139,6 +163,7 @@ export interface BookmarkItem {
 }
 
 export interface 整理信息输入 {
+  bookmarkTitle?: string;
   note?: string;
   tags?: string[];
 }
@@ -286,6 +311,7 @@ export interface 阅读打开上下文 {
 }
 
 export interface 获取页面图片输入 {
+  prefetch?: boolean;
   preview?: boolean;
   sourcePath: string;
   virtualPath?: string;
@@ -318,9 +344,14 @@ export interface 缩略图输入 {
 }
 
 export interface 缩略图结果 {
+  byteSize?: number;
   itemCount?: number;
+  childFolderCount?: number;
+  folderSummary?: { folders: number; books: number; images: number; unsupported: number };
   pdfPath?: string;
   sourceVersion?: string;
+  retryable?: boolean;
+  pending?: boolean;
   url: string | null;
 }
 
@@ -346,7 +377,16 @@ export type 操作结果<T> =
   | { ok: true; data: T }
   | { ok: false; error: 操作错误 };
 
+export interface AndroidCacheInfo { readerBytes: number; readerLimit: number; thumbnailBytes: number; thumbnailLimit: number; }
+export type { HomeArtwork } from '../../electron/shared/homeArtwork';
+import type { HomeArtwork, SaveHomeArtwork } from '../../electron/shared/homeArtwork';
 export interface OmiComicApi {
+  getHomeArtwork?(): Promise<操作结果<HomeArtwork | null>>;
+  selectHomeArtwork?(): Promise<操作结果<HomeArtwork | null>>;
+  saveHomeArtwork?(input: SaveHomeArtwork): Promise<操作结果<HomeArtwork>>;
+  resetHomeArtwork?(): Promise<操作结果<null>>;
+  getAndroidCacheInfo?(): Promise<操作结果<AndroidCacheInfo>>;
+  clearAndroidReadCache?(): Promise<操作结果<AndroidCacheInfo>>;
   setReaderPageSort(input: { path: string; type: 阅读资源类型; mode: PageSort; currentPageId: string }): Promise<操作结果<{ resource: 阅读资源结果; progress: ReadingProgress }>>;
   changeLocalResource(input: { path: string; action: "rename" | "trash" | "index"; name?: string }): Promise<操作结果<{ appData: OmiComicAppData; newPath: string | null }>>;
   restoreResourceIndex(): Promise<操作结果<OmiComicAppData>>;
@@ -423,6 +463,7 @@ export interface OmiComicApi {
   getPageImage(input: 获取页面图片输入): Promise<操作结果<页面图片结果>>;
   getBookmarkPagePreview(input: 书签页预览输入): Promise<操作结果<书签页预览结果>>;
   getThumbnail(input: 缩略图输入): Promise<操作结果<缩略图结果>>;
+  refreshThumbnails?(): Promise<操作结果<null>>;
   getReadablePageCount(input: 可阅读页数输入): Promise<操作结果<number | null>>;
   checkResourcePath(input: { path: string; type: 资源类型 }): Promise<操作结果<资源路径状态>>;
   releaseReaderResource(path: string): Promise<操作结果<null>>;
@@ -431,5 +472,6 @@ export interface OmiComicApi {
   isWindowMaximized(): Promise<操作结果<boolean>>;
   closeWindow(): void;
   setFullscreen(enabled: boolean): Promise<操作结果<boolean>>;
+  setReaderVolumeKeys?(enabled: boolean): Promise<操作结果<boolean>>;
   isFullscreen(): Promise<操作结果<boolean>>;
 }

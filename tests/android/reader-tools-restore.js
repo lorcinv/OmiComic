@@ -1,0 +1,14 @@
+const api=window.omicomic;
+const data=(await api.getAppData()).data;
+const root=data.library.roots.find(r=>r.name==='OmiSmoke');if(!root)throw new Error('Grant lost');
+const resource=(await api.getResourcePages({path:root.path+'/Update112/Pages',type:'folder'})).data;
+const progress=data.readingProgress[resource.resourceKey];
+if(progress?.readerViewState?.pageSort!=='name-desc'||progress.readerViewState.adjustments?.gamma!==1.4||progress.readerViewState.autoRead?.intervalSeconds!==1)throw new Error('Per-book settings not retained');
+if(resource.pages[progress.currentPageIndex].pageId!==progress.currentPageId)throw new Error('Resume identity wrong');
+const mark=data.bookmarks.find(b=>b.resourceKey===resource.resourceKey);
+if(resource.pages[mark.pageIndex].pageId!==mark.pageId)throw new Error('Bookmark not retained');
+const wait=async fn=>{const end=Date.now()+25000;while(!fn()){if(Date.now()>end)throw new Error('Resume timeout');await new Promise(r=>setTimeout(r,100));}};
+document.querySelector('[aria-label="继续上次阅读"]').click();
+await wait(()=>document.querySelector('.reader-effects[data-processing="ready"]'));
+if(!document.querySelector('[aria-label="开始自动阅读"]'))throw new Error('Auto play started after restart');
+return {settingsRetained:true,bookmarkRetained:true,resumedPage:progress.currentPageIndex+1,processingRestored:true,autoPlayOff:true};

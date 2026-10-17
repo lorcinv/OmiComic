@@ -4,6 +4,57 @@
   initial-value: 0px;
 }
 
+/* Mobile navigation keeps the complete old frame underneath the incoming one.
+   Never fade both frames to the empty application background. */
+html[data-mobile-navigation] .app-content { view-transition-name: none; }
+html[data-mobile-navigation]::view-transition { pointer-events: none; }
+html[data-mobile-navigation]::view-transition-group(root) { animation-duration: 180ms; }
+html[data-mobile-navigation]::view-transition-old(root) { animation: none; opacity: 1; mix-blend-mode: normal; }
+html[data-mobile-navigation]::view-transition-new(root) { animation: mobile-scene-in 180ms cubic-bezier(.2,.7,.2,1) both; mix-blend-mode: normal; }
+html[data-mobile-navigation="back"]::view-transition-new(root) { animation: none; }
+html[data-mobile-navigation="back"]::view-transition-old(root) { z-index: 2; animation: mobile-scene-out 160ms cubic-bezier(.3,0,.7,1) both; }
+html[data-mobile-navigation="replace"]::view-transition-new(root) { animation: mobile-scene-replace 140ms ease-out both; }
+@keyframes mobile-scene-in { from { transform: translateX(12%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes mobile-scene-out { from { transform: none; opacity: 1; } to { transform: translateX(12%); opacity: 0; } }
+@keyframes mobile-scene-replace { from { opacity: 0; } to { opacity: 1; } }
+/* Mobile tabs share one horizontal track; their navigation stays in place. */
+html[data-mobile-navigation^="tab-"]::view-transition-old(root),
+html[data-mobile-navigation^="tab-"]::view-transition-new(root) { animation-duration:210ms; animation-timing-function:cubic-bezier(.2,.6,.3,1); animation-fill-mode:both; }
+html[data-mobile-navigation="tab-next"]::view-transition-old(root) { animation-name:mobile-tab-out-next; }
+html[data-mobile-navigation="tab-next"]::view-transition-new(root) { animation-name:mobile-tab-in-next; }
+html[data-mobile-navigation="tab-prev"]::view-transition-old(root) { animation-name:mobile-tab-out-prev; }
+html[data-mobile-navigation="tab-prev"]::view-transition-new(root) { animation-name:mobile-tab-in-prev; }
+@keyframes mobile-tab-out-next { to { transform:translateX(-100%); opacity:0; } }
+@keyframes mobile-tab-in-next { from { transform:translateX(100%); opacity:1; } to { transform:none; opacity:1; } }
+@keyframes mobile-tab-out-prev { to { transform:translateX(100%); opacity:0; } }
+@keyframes mobile-tab-in-prev { from { transform:translateX(-100%); opacity:1; } to { transform:none; opacity:1; } }
+html[data-mobile-navigation]::view-transition-group(mobile-primary-nav) { z-index:10; animation-duration:0s; }
+html[data-mobile-navigation]::view-transition-old(mobile-primary-nav) { display:none; }
+html[data-mobile-navigation]::view-transition-new(mobile-primary-nav) { animation:none; opacity:1; }
+/* Directories dissolve at the centre without sliding like a new reading page. */
+html[data-mobile-navigation="folder"]::view-transition-new(root) { transform-origin:center; animation:mobile-folder-in 180ms ease-out both; }
+html[data-mobile-navigation="folder"]::view-transition-old(root) { animation:mobile-folder-out 180ms ease-out both; }
+@keyframes mobile-folder-in { from { transform:scale(.978); opacity:0; } to { transform:none; opacity:1; } }
+@keyframes mobile-folder-out { to { transform:scale(1.012); opacity:.2; } }
+/* The cover retains its visual identity while its bounds change into details. */
+html[data-mobile-navigation^="detail"]::view-transition-group(mobile-detail-cover) { z-index:5; animation-duration:220ms; animation-timing-function:cubic-bezier(.2,.6,.3,1); }
+html[data-mobile-navigation^="detail"]::view-transition-old(mobile-detail-cover),
+html[data-mobile-navigation^="detail"]::view-transition-new(mobile-detail-cover) { height:100%; width:100%; object-fit:cover; mix-blend-mode:normal; animation-duration:220ms; }
+html[data-mobile-navigation="detail"]::view-transition-new(root) { animation:mobile-folder-in 200ms ease-out both; }
+html[data-mobile-navigation="detail"]::view-transition-old(root) { animation:mobile-detail-out 200ms ease-out both; }
+html[data-mobile-navigation="detail-back"]::view-transition-new(root) { animation:none; }
+html[data-mobile-navigation="detail-back"]::view-transition-old(root) { animation:mobile-detail-out 200ms ease-out both; }
+@keyframes mobile-detail-out { to { opacity:0; } }
+/* Phone home/library share the home Omi mark as their reveal origin. */
+html[data-mobile-navigation="home-expand"]::view-transition-old(root),
+html[data-mobile-navigation="home-collapse"]::view-transition-new(root) { animation:none; opacity:1; }
+html[data-mobile-navigation="home-expand"]::view-transition-new(root) { z-index:2; animation:mobile-home-expand 280ms cubic-bezier(.2,.55,.4,1) both; }
+html[data-mobile-navigation="home-collapse"]::view-transition-old(root) { z-index:2; animation:mobile-home-collapse 280ms cubic-bezier(.4,0,.6,1) both; }
+@keyframes mobile-home-expand { from { clip-path:circle(0 at var(--mobile-home-x) var(--mobile-home-y)); } to { clip-path:circle(var(--mobile-home-radius) at var(--mobile-home-x) var(--mobile-home-y)); } }
+@keyframes mobile-home-collapse { from { clip-path:circle(var(--mobile-home-radius) at var(--mobile-home-x) var(--mobile-home-y)); } to { clip-path:circle(0 at var(--mobile-home-x) var(--mobile-home-y)); } }
+.app-content:has(.mobile-reader-preparing) { position: relative; }
+.page-panel.mobile-reader-preparing { display: block; position: absolute; inset: 0; visibility: hidden; opacity: 0; pointer-events: none; z-index: -1; }
+
 html.is-home-library-transition .omi-page-brand {
   view-transition-name: omi-page-brand;
 }

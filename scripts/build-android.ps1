@@ -35,6 +35,7 @@ foreach ($packageName in @('react','react-dom','scheduler','pdfjs-dist')) {
 }
 $noticeLines += 'core-js 3.50.0 (bundled by PDF.js legacy) - MIT'
 $noticeLines += 'libarchive-android 1.1.7 - Apache-2.0; bundled libarchive and compression libraries: see libarchive-NOTICES.txt'
+$noticeLines += 'PNGJ 2.1.0 - Apache-2.0; streaming PNG reduction: see pngj-LICENSE.txt and pngj-NOTICE.txt'
 Copy-Item -Path 'android\licenses\*' -Destination $licenseTarget
 [IO.File]::WriteAllLines((Join-Path $assetTarget 'THIRD_PARTY_NOTICES.txt'), $noticeLines, [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath 'resources\icon.png' -Destination (Join-Path $build 'res\drawable\icon.png')
@@ -49,9 +50,10 @@ $manifest = $manifest -replace 'android:versionCode="[^"]+"', ('android:versionC
 [IO.File]::WriteAllText((Join-Path $build 'AndroidManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
 $sources = @(Get-ChildItem -LiteralPath 'android\src' -Recurse -Filter '*.java' | ForEach-Object FullName)
 $nativeJar = Join-Path $build 'native\classes.jar'
-Invoke-Checked (Join-Path $JavaHome 'bin\javac.exe') (@('--release','8','-encoding','UTF-8','-cp',($platform + ';' + $nativeJar),'-d',(Join-Path $build 'classes')) + $sources)
+$pngJar = Join-Path $build 'native\pngj.jar'
+Invoke-Checked (Join-Path $JavaHome 'bin\javac.exe') (@('--release','8','-encoding','UTF-8','-cp',($platform + ';' + $nativeJar + ';' + $pngJar),'-d',(Join-Path $build 'classes')) + $sources)
 Invoke-Checked (Join-Path $JavaHome 'bin\jar.exe') @('cf',(Join-Path $build 'classes.jar'),'-C',(Join-Path $build 'classes'),'.')
-Invoke-Checked (Join-Path $buildTools 'd8.bat') @('--release','--min-api','26','--lib',$platform,'--output',(Join-Path $build 'dex'),(Join-Path $build 'classes.jar'),$nativeJar)
+Invoke-Checked (Join-Path $buildTools 'd8.bat') @('--release','--min-api','26','--lib',$platform,'--output',(Join-Path $build 'dex'),(Join-Path $build 'classes.jar'),$nativeJar,$pngJar)
 $unsigned = Join-Path $build 'unsigned.apk'
 Invoke-Checked (Join-Path $buildTools 'aapt.exe') @('package','-f','-M',(Join-Path $build 'AndroidManifest.xml'),'-S',(Join-Path $build 'res'),'-A',(Join-Path $build 'assets'),'-I',$platform,'-F',$unsigned)
 Push-Location -LiteralPath (Join-Path $build 'dex')

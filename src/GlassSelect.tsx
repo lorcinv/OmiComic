@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { consumeDismissGesture } from "./hooks/consumeDismissGesture";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 export type GlassSelectValue = string | number;
@@ -124,6 +125,12 @@ export default function GlassSelect<T extends GlassSelectValue>({
     ));
   }
 
+  useEffect(() => {
+    const close = () => 设置已打开(false);
+    window.addEventListener("omi-close-select",close);
+    return () => window.removeEventListener("omi-close-select",close);
+  }, []);
+
   function 打开下拉(初始索引 = 选中索引): void {
     if (实际禁用) return;
     const 可用索引 = options[初始索引] && !options[初始索引].disabled
@@ -238,6 +245,7 @@ export default function GlassSelect<T extends GlassSelectValue>({
       const 目标 = 事件.target;
       if (!(目标 instanceof Node)) return;
       if (触发按钮.current?.contains(目标) || 下拉菜单.current?.contains(目标)) return;
+      consumeDismissGesture(事件);
       关闭下拉();
     }
 

@@ -1,0 +1,61 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { _electron, expect } = require('@playwright/test');
+const { Resvg } = require('@resvg/resvg-js');
+const { zip } = require('./helpers/documentFixtures.cjs');
+
+test('desktop image transport preserves bytes, authorizations, full resolution, caching and live effects', {timeout:90000}, async t => {
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'omicomic-image-transport-'));
+  const books=path.join(root,'Books # 中文'), profile=path.join(root,'profile');
+  await fs.mkdir(books); await fs.mkdir(profile);
+  const picture=new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="3600"><rect width="2400" height="3600" fill="#538db2"/><circle cx="1200" cy="1800" r="800" fill="#dab594"/></svg>').render().asPng();
+  const file=path.join(books,'01 # 图片.png'), archive=path.join(books,'漫画.cbz'), outside=path.join(root,'outside.png');
+  await fs.writeFile(file,picture); await fs.writeFile(path.join(books,'02.png'),picture); await fs.writeFile(outside,picture);
+  await fs.writeFile(archive,zip([['01 # page.png',picture],['02.png',picture]]));
+  await fs.writeFile(path.join(profile,'omicomic-data.json'),JSON.stringify({version:1,library:{roots:[{path:books,name:'Books',addedAt:1,lastOpenedAt:1}]},settings:{desktopPerformanceProfile:'auto',readerPageMode:'single'}}));
+  const env={...process.env,OMICOMIC_TEST_PROFILE:profile,OMICOMIC_TEST_HEADLESS:'1'}; delete env.ELECTRON_RUN_AS_NODE;delete env.VITE_DEV_SERVER_URL;
+  const executable=process.env.OMICOMIC_PACKAGED_EXE||require('electron');
+  let app;
+  t.after(async()=>{if(app)await app.close();assert.equal(path.dirname(root),path.resolve(os.tmpdir()));assert.ok(path.basename(root).startsWith('omicomic-image-transport-'));await fs.rm(root,{recursive:true,force:true});});
+  app=await _electron.launch({executablePath:executable,args:process.env.OMICOMIC_PACKAGED_EXE?[]:['.'],env});
+  const page=await app.firstWindow();await page.waitForFunction(()=>!!window.omicomic);
+  const result=await page.evaluate(async({file,archive,outside})=>{
+    const local={sourcePath:file,type:'folder-image'}, zipped={sourcePath:archive,type:'archive-image',archiveInnerPath:'01 # page.png'};
+    const reads=await Promise.all(Array.from({length:8},()=>window.omicomic.getPageImage(zipped)));
+    if(reads.some(r=>!r.ok))throw Error(JSON.stringify(reads));
+    const a=await window.omicomic.getPageImage(local),b=reads[0];
+    if(!a.ok)throw Error(JSON.stringify(a));
+    const hash=async url=>{const bytes=await (await fetch(url)).arrayBuffer();return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(n=>n.toString(16).padStart(2,'0')).join('');};
+    const image=new Image();image.crossOrigin='anonymous';image.src=a.data.url;await image.decode();
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=1;canvas.getContext('2d').drawImage(image,0,0,1,1);const pixel=[...canvas.getContext('2d').getImageData(0,0,1,1).data];
+    const rejected=await window.omicomic.getPageImage({sourcePath:outside,type:'folder-image'});
+    const unknown=await fetch('omicomic-image://page/not-a-token');
+    return {localUrl:a.data.url,archiveUrl:b.data.url,coalesced:reads.every(r=>r.data.url===b.data.url),hashes:[await hash(a.data.url),await hash(b.data.url)],size:[image.naturalWidth,image.naturalHeight],pixel,rejected:rejected.error?.code,unknownStatus:unknown.status};
+  },{file,archive,outside});
+  const hash=require('node:crypto').createHash('sha256').update(picture).digest('hex');
+  assert.deepEqual(result.hashes,[hash,hash]);assert.equal(result.coalesced,true);assert.deepEqual(result.size,[2400,3600]);
+  assert.equal(result.rejected,'PATH_NOT_ALLOWED');assert.equal(result.unknownStatus,404);assert.match(result.localUrl,/^omicomic-image:/);assert.ok(result.localUrl.length<100);
+  // Render the real reader and exercise canvas processing through the CORS-safe protocol.
+  await page.locator('.omi-home__library').click();
+  await page.locator('.resource-card').filter({hasText:'01 # 图片'}).dblclick();
+  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await page.getByRole('button',{name:'画面调整',exact:true}).click();
+  await expect(page.getByRole('checkbox',{name:'启用画面调整'})).toHaveCount(0);
+  await page.getByRole('slider',{name:'亮度',exact:true}).fill('125');
+  await expect(page.locator('.reader-effects').first()).toHaveCSS('filter',/brightness\(1.25\)/);
+  await page.getByRole('slider',{name:'锐化',exact:true}).fill('40');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready',{timeout:20000});
+  // A modified source must receive a new URL, and the old capability must not serve changed bytes.
+  const replacement=new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50"><rect width="40" height="50" fill="red"/></svg>').render().asPng();
+  await fs.writeFile(file,replacement);
+  const updated=await page.evaluate(async ({file,old})=>{const r=await window.omicomic.getPageImage({sourcePath:file,type:'folder-image'});return {response:r,oldStatus:(await fetch(old,{cache:'no-store'})).status};},{file,old:result.localUrl});
+  assert.equal(updated.response.ok,true);assert.notEqual(updated.response.data.url,result.localUrl);assert.equal(updated.oldStatus,410);
+  const session=await page.evaluate(async file=>{await window.omicomic.setReaderSession(10000);return window.omicomic.getPageImage({sourcePath:file,type:'folder-image',readerSessionId:9999});},file);
+  assert.equal(session.error.code,'STALE_READER_SESSION');
+  await fs.mkdir('test-results',{recursive:true});
+  await fs.writeFile('test-results/desktop-images-smoke.json',JSON.stringify({version:await app.evaluate(({app})=>app.getVersion()),executable,byteExact:true,coalesced:true,sourceSize:result.size,opaqueUrlLength:result.localUrl.length,pathAuthorizationPassed:true,cacheInvalidationPassed:true,staleSessionPassed:true,realtimeEffectsPassed:true,canvasProcessingPassed:true},null,2));
+});

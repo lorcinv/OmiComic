@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ImageAdjustments } from '../../electron/shared/readerPreferences';
 import { queueImageProcessing, processingPreviewSize } from '../reader/processingClient';
+import useMobileLayout from '../hooks/useMobileLayout';
 
 export function imageFilter(settings: ImageAdjustments, gammaId: string): string {
   if (!settings.enabled) return 'none';
@@ -14,9 +15,11 @@ export function GammaFilter({ id, gamma }: { id: string; gamma: number }) {
   </feComponentTransfer></filter></defs></svg>;
 }
 export default function ReaderImageEffects({ children, settings, gammaId, sourceKey, processable = true }: { children: ReactNode; settings: ImageAdjustments; gammaId: string; sourceKey: string; processable?: boolean }) {
+  const mobile = useMobileLayout();
   const host = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false), [sizeKey, setSizeKey] = useState('');
   const [processed, setProcessed] = useState<string | null>(null), [status, setStatus] = useState('');
+  const [decodedProcessed, setDecodedProcessed] = useState<string | null>(null);
   const processing = settings.enabled && processable && (settings.denoise > 0 || settings.sharpen > 0);
   useEffect(() => {
     const element = host.current;
@@ -50,9 +53,10 @@ export default function ReaderImageEffects({ children, settings, gammaId, source
     }, 100);
     return () => { cancelled = true; clearTimeout(delay); dispose(); if (url) URL.revokeObjectURL(url); };
   }, [sourceKey, processing, visible, settings.denoise, settings.sharpen, sizeKey]);
-  return <div ref={host} className={`reader-effects ${processed ? 'has-processed-image' : ''}`} style={{ filter: imageFilter(settings, gammaId) }} data-processing={status === '正在处理画面…' ? 'pending' : status ? 'error' : processed ? 'ready' : 'original'}>
+  const displayProcessed = processed && (!mobile || processed === decodedProcessed);
+  return <div ref={host} className={`reader-effects ${displayProcessed ? 'has-processed-image' : ''}`} style={{ filter: imageFilter(settings, gammaId) }} data-processing={status === '正在处理画面…' ? 'pending' : status ? 'error' : displayProcessed ? 'ready' : 'original'}>
     <div className="reader-effects-original">{children}</div>
-    {processed && <img className="reader-processed-image" src={processed} alt="" aria-hidden="true" draggable={false} />}
+    {processed && <img className="reader-processed-image" src={processed} style={displayProcessed ? undefined : {visibility:'hidden'}} alt="" aria-hidden="true" draggable={false} onLoad={async event => { if(!mobile)return;const img=event.currentTarget,url=processed;try{await img.decode();}catch{return;}if(img.isConnected)setDecodedProcessed(url); }} />}
     {status && <span className="reader-processing-status" role={status.includes('失败') || status.includes('无法') || status.includes('超时') ? 'alert' : 'status'}>{status}</span>}
   </div>;
 }

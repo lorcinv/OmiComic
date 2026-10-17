@@ -2,7 +2,9 @@ import { scanDirectory, listDirectoryImages } from "./services/directoryService"
 import { normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages, type PageSort } from "./shared/readerPreferences";
 import { 切换阅读页面顺序 } from "./services/appDataService";
 import { registerDocumentIpc } from "./services/documentService";
-import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu, protocol } from "electron";
+import { prepareDesktopImage, registerDesktopImageProtocol } from './services/desktopImageService';
+protocol.registerSchemesAsPrivileged([{ scheme: 'omicomic-image', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 import { changeLocalResource } from "./services/localFileService";
@@ -64,6 +66,7 @@ import {
   type ReadingProgress,
 } from "./services/appDataService";
 import { 获取缩略图 } from "./services/thumbnailService";
+import { getHomeArtwork, importHomeArtwork, resetHomeArtwork, saveHomeArtwork } from './services/homeArtworkService';
 
 const 开发服务地址 = process.env.VITE_DEV_SERVER_URL;
 app.setAppUserModelId("io.github.lorcinv.omicomic");
@@ -653,6 +656,44 @@ function 注册安全通道(): void {
       正在领取外部文件 = false;
     }
   });
+  ipcMain.handle('主界面:获取图案', async () => ({ ok: true, data: await getHomeArtwork() }));
+  ipcMain.handle('主界面:选择图案', async event => {
+    try {
+      const options = { title: '选择主界面图案', properties: ['openFile'] as Array<'openFile'>,
+        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }] };
+      const parent = BrowserWindow.fromWebContents(event.sender);
+      const selection = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+      if (selection.canceled || !selection.filePaths[0]) return { ok: true, data: null };
+      const artwork = await importHomeArtwork(selection.filePaths[0], url => event.sender.executeJavaScript(`new Promise((resolve, reject) => {
+        const image = new Image();
+        const timer = setTimeout(() => { image.src = ''; reject(new Error('IMAGE_TIMEOUT')); }, 15000);
+        image.onerror = () => { clearTimeout(timer); reject(new Error('INVALID_IMAGE')); };
+        image.onload = () => {
+          clearTimeout(timer);
+          try {
+            const scale = Math.min(1, 2400 / Math.max(image.naturalWidth, image.naturalHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (error) { reject(error); }
+        };
+        image.src = ${JSON.stringify(url)};
+      })`));
+      return { ok: true, data: artwork };
+    } catch (error) {
+      return { ok: false, error: { code: 'HOME_ARTWORK_IMPORT_FAILED', message: error instanceof Error && ['请选择 20 MB 以内的图片。', '图片无法读取或尺寸过大，请换一张图片。'].includes(error.message) ? error.message : '主界面图案保存失败，请重试。' } };
+    }
+  });
+  ipcMain.handle('主界面:恢复图案', async () => {
+    try { return { ok: true, data: await resetHomeArtwork() }; }
+    catch { return { ok: false, error: { code: 'HOME_ARTWORK_RESET_FAILED', message: '恢复默认图案失败，请重试。' } }; }
+  });
+  ipcMain.handle('主界面:保存图案', async (_event, input) => {
+    try { return { ok: true, data: await saveHomeArtwork(input) }; }
+    catch { return { ok: false, error: { code: 'HOME_ARTWORK_SAVE_FAILED', message: '图案保存失败，请检查裁剪范围后重试。' } }; }
+  });
   ipcMain.handle("外部文件:选择", async 事件 => {
     try {
       const 选项 = { title: "直接打开文件", properties: ["openFile", "multiSelections"] as Array<"openFile" | "multiSelections">,
@@ -796,7 +837,7 @@ function 注册安全通道(): void {
     ) {
       return {
         ok: false,
-        error: { code: "INVALID_ROOT", message: "根目录数据无效。" },
+        error: { code: "INVALID_ROOT", message: "资源库目录信息无效。" },
       };
     }
 
@@ -811,7 +852,7 @@ function 注册安全通道(): void {
     } catch {
       return {
         ok: false,
-        error: { code: "SAVE_ROOT_FAILED", message: "根目录保存失败。" },
+        error: { code: "SAVE_ROOT_FAILED", message: "资源库目录保存失败。" },
       };
     }
   });
@@ -820,7 +861,7 @@ function 注册安全通道(): void {
     if (typeof 根路径输入 !== "string" || 根路径输入.trim() === "") {
       return {
         ok: false,
-        error: { code: "INVALID_ROOT", message: "根目录路径无效。" },
+        error: { code: "INVALID_ROOT", message: "资源库目录路径无效。" },
       };
     }
 
@@ -832,7 +873,7 @@ function 注册安全通道(): void {
     } catch {
       return {
         ok: false,
-        error: { code: "REMOVE_ROOT_FAILED", message: "根目录移除失败，未删除任何真实漫画文件。" },
+        error: { code: "REMOVE_ROOT_FAILED", message: "资源库目录移除失败，未删除任何真实漫画文件。" },
       };
     }
   });
@@ -940,7 +981,7 @@ function 注册安全通道(): void {
     } catch {
       return {
         ok: false,
-        error: { code: "READ_RECENT_FAILED", message: "最近打开读取失败。" },
+        error: { code: "READ_RECENT_FAILED", message: "最近阅读记录读取失败。" },
       };
     }
   });
@@ -949,7 +990,7 @@ function 注册安全通道(): void {
     if (typeof resourceKey !== "string" || resourceKey.trim() === "") {
       return {
         ok: false,
-        error: { code: "INVALID_RECENT_KEY", message: "最近打开记录标识无效。" },
+        error: { code: "INVALID_RECENT_KEY", message: "最近阅读记录标识无效。" },
       };
     }
 
@@ -959,7 +1000,7 @@ function 注册安全通道(): void {
     } catch {
       return {
         ok: false,
-        error: { code: "REMOVE_RECENT_FAILED", message: "最近打开记录删除失败。" },
+        error: { code: "REMOVE_RECENT_FAILED", message: "最近阅读记录删除失败。" },
       };
     }
   });
@@ -1886,12 +1927,12 @@ function 注册安全通道(): void {
       const 所属窗口 = BrowserWindow.fromWebContents(事件.sender) ?? undefined;
       const 选择结果 = 所属窗口
         ? await dialog.showOpenDialog(所属窗口, {
-            title: "选择本地漫画根目录",
+            title: "选择资源库目录",
             buttonLabel: "添加此目录",
             properties: ["openDirectory"],
           })
         : await dialog.showOpenDialog({
-            title: "选择本地漫画根目录",
+            title: "选择资源库目录",
             buttonLabel: "添加此目录",
             properties: ["openDirectory"],
           });
@@ -2034,19 +2075,17 @@ function 注册安全通道(): void {
       }
 
       try {
-        const 图片数据 = await 读取压缩包单张图片(来源路径, 内部路径, "preview" in 输入 && 输入.preview === true ? 12 * 1024 * 1024 : undefined);
+        const 是预览 = "preview" in 输入 && 输入.preview === true;
+        if (!是预览) {
+          const data = await prepareDesktopImage(来源路径, 获取图片媒体类型(内部路径), 读取图片像素尺寸, {
+            innerPath: 内部路径, load: () => 读取压缩包单张图片(来源路径, 内部路径, undefined,
+              "prefetch" in 输入 && 输入.prefetch === true ? 'background' : 'foreground'),
+          });
+          return 会话已过期() ? 创建过期会话结果() : { ok: true, data };
+        }
+        const 图片数据 = await 读取压缩包单张图片(来源路径, 内部路径, 12 * 1024 * 1024);
         if (会话已过期()) return 创建过期会话结果();
-        if ("preview" in 输入 && 输入.preview === true) return { ok: true, data: 创建受限页面预览(图片数据) };
-        const 媒体类型 = 获取图片媒体类型(内部路径);
-        const 图片尺寸 = 读取图片像素尺寸(图片数据);
-        return {
-          ok: true,
-          data: {
-            url: `data:${媒体类型};base64,${图片数据.toString("base64")}`,
-            width: 图片尺寸?.width,
-            height: 图片尺寸?.height,
-          },
-        };
+        return { ok: true, data: 创建受限页面预览(图片数据) };
       } catch (错误) {
         const 错误代码 = 是压缩包服务错误(错误) ? 错误.code : "ARCHIVE_PAGE_READ_FAILED";
         const 错误信息 = 错误代码 === "ARCHIVE_ENCRYPTED"
@@ -2075,19 +2114,13 @@ function 注册安全通道(): void {
       const 文件状态 = await 文件系统.stat(来源路径);
       const 是预览 = "preview" in 输入 && 输入.preview === true;
       if (文件状态.size > (是预览 ? 12 : 256) * 1024 * 1024) throw new Error("IMAGE_TOO_LARGE");
+      if (!是预览) {
+        const data = await prepareDesktopImage(来源路径, 获取图片媒体类型(来源路径), 读取图片像素尺寸);
+        return 会话已过期() ? 创建过期会话结果() : { ok: true, data };
+      }
       const 图片数据 = await 文件系统.readFile(来源路径);
-      if (是预览) return { ok: true, data: 创建受限页面预览(图片数据) };
       if (会话已过期()) return 创建过期会话结果();
-      const 媒体类型 = 获取图片媒体类型(来源路径);
-      const 图片尺寸 = 读取图片像素尺寸(图片数据);
-      return {
-        ok: true,
-        data: {
-          url: `data:${媒体类型};base64,${图片数据.toString("base64")}`,
-          width: 图片尺寸?.width,
-          height: 图片尺寸?.height,
-        },
-      };
+      return { ok: true, data: 创建受限页面预览(图片数据) };
     } catch {
       return {
         ok: false,
@@ -2313,6 +2346,7 @@ else {
 app.on("second-instance", (_事件, 参数, 工作目录) => 接收启动参数(参数, 工作目录));
 app.on("open-file", (事件, 文件) => { 事件.preventDefault(); 接收外部文件([文件]); });
 app.whenReady().then(() => {
+  registerDesktopImageProtocol();
   Menu.setApplicationMenu(null);
   注册安全通道();
   registerDocumentIpc(查找所属根目录);

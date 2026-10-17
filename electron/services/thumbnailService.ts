@@ -14,7 +14,10 @@ import {
 const 图片扩展名 = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
 const 压缩包扩展名 = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 const 自然排序器 = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
-const 缩略图最大字节数 = 12 * 1024 * 1024;
+// A compressed scan can exceed 12 MiB without being an unsafe raster surface.
+// Decode one candidate at a time; native thumbnails remain <=360px.
+const 缩略图最大字节数 = 64 * 1024 * 1024;
+const 缩略图最大像素数 = 40_000_000;
 const 缩略图优先字节数 = 4 * 1024 * 1024;
 const 缩略图最大边长 = 360;
 const 缩略图缓存上限 = 240;
@@ -31,8 +34,11 @@ export interface 缩略图输入 {
 export interface 缩略图结果 {
   url: string | null;
   itemCount?: number;
+  childFolderCount?: number;
+  folderSummary?: { folders: number; books: number; images: number; unsupported: number };
   pdfPath?: string;
   sourceVersion?: string;
+  retryable?: boolean;
 }
 
 export type 缩略图错误代码 =
@@ -56,6 +62,7 @@ interface 缩略图缓存项 {
 }
 
 const 缩略图缓存 = new Map<string, 缩略图缓存项>();
+const 进行中缩略图 = new Map<string, { signature: string; task: Promise<缩略图结果> }>();
 
 function 写入缩略图缓存(key: string, value: 缩略图缓存项): void {
   if (缩略图缓存.has(key)) 缩略图缓存.delete(key);
@@ -69,7 +76,7 @@ function 写入缩略图缓存(key: string, value: 缩略图缓存项): void {
 
 async function 获取路径签名(目标路径: string): Promise<string> {
   const 状态 = await 文件系统.stat(目标路径);
-  return `${状态.mtimeMs}:${状态.size}:${状态.isDirectory() ? "d" : "f"}`;
+  return `${状态.mtimeMs}:${状态.ctimeMs}:${状态.size}:${状态.isDirectory() ? "d" : "f"}`;
 }
 
 async function 使用缩略图缓存(
@@ -77,20 +84,32 @@ async function 使用缩略图缓存(
   路径: string,
   loader: () => Promise<缩略图结果>,
 ): Promise<缩略图结果> {
+  let signature: string;
   try {
-    const signature = await 获取路径签名(路径);
-    const 已缓存 = 缩略图缓存.get(key);
-    if (已缓存?.signature === signature) {
-      缩略图缓存.delete(key);
-      缩略图缓存.set(key, 已缓存);
-      return 已缓存.result;
-    }
-
-    const result = await loader();
-    写入缩略图缓存(key, { signature, result });
-    return result;
+    signature = await 获取路径签名(路径);
   } catch {
     return loader();
+  }
+  const 已缓存 = 缩略图缓存.get(key);
+  if (已缓存?.signature === signature) {
+    缩略图缓存.delete(key);
+    缩略图缓存.set(key, 已缓存);
+    return 已缓存.result;
+  }
+  const 进行中 = 进行中缩略图.get(key);
+  if (进行中?.signature === signature) return 进行中.task;
+  const task = loader();
+  进行中缩略图.set(key, { signature, task });
+  try {
+    const result = await task;
+    // A transient read failure must not become a permanent empty cover. Also avoid
+    // caching a cover under the wrong version if the archive changed during a read.
+    if (result.url && await 获取路径签名(路径).catch(() => "") === signature) {
+      写入缩略图缓存(key, { signature, result });
+    }
+    return result;
+  } finally {
+    if (进行中缩略图.get(key)?.task === task) 进行中缩略图.delete(key);
   }
 }
 
@@ -100,24 +119,6 @@ function 是支持的图片(名称: string): boolean {
 
 function 是支持的压缩包(名称: string): boolean {
   return 压缩包扩展名.has(path.extname(名称).slice(1).toLowerCase());
-}
-
-function 获取图片媒体类型(名称: string): string {
-  const 扩展名 = path.extname(名称).slice(1).toLowerCase();
-  if (扩展名 === "jpg" || 扩展名 === "jpeg") return "image/jpeg";
-  if (扩展名 === "png") return "image/png";
-  if (扩展名 === "webp") return "image/webp";
-  if (扩展名 === "bmp") return "image/bmp";
-  if (扩展名 === "gif") return "image/gif";
-  return "application/octet-stream";
-}
-
-function 图片数据可能包含动画(图片数据: Buffer, 显示名称: string): boolean {
-  const 扩展名 = path.extname(显示名称).slice(1).toLowerCase();
-  if (扩展名 === "gif") return true;
-  if (扩展名 === "webp") return 图片数据.indexOf(Buffer.from("ANIM", "ascii")) >= 0;
-  if (扩展名 === "png") return 图片数据.indexOf(Buffer.from("acTL", "ascii")) >= 0;
-  return false;
 }
 
 interface GifStaticFrame {
@@ -410,9 +411,9 @@ function 生成压缩包封面候选(图片列表: 压缩包图片条目[]): 压
 }
 
 function 限制封面候选<T extends { size?: number }>(候选列表: T[]): T[] {
-  const 可用候选 = 候选列表.filter((项目) => 项目.size === undefined || 项目.size <= 缩略图最大字节数);
-  const 快速候选 = 可用候选.filter((项目) => 项目.size === undefined || 项目.size <= 缩略图优先字节数);
-  return (快速候选.length > 0 ? 快速候选 : 可用候选).slice(0, 缩略图候选最大数量);
+  // Keep the cover/first-page order: a smaller later image is not a better cover,
+  // and broken small images must not exclude readable high-resolution candidates.
+  return 候选列表.filter((项目) => 项目.size === undefined || 项目.size <= 缩略图最大字节数).slice(0, 缩略图候选最大数量);
 }
 
 async function 读取图片为DataUrl(图片路径: string, 显示名称 = 图片路径): Promise<string | null> {
@@ -426,7 +427,7 @@ async function 读取图片为DataUrl(图片路径: string, 显示名称 = 图�
 }
 
 function 图片数据转缩略图DataUrl(图片数据: Buffer, 显示名称: string): string | null {
-  if (图片数据.length > 缩略图最大字节数 || !safeRasterImage(图片数据)) return null;
+  if (图片数据.length > 缩略图最大字节数 || !safeRasterImage(图片数据, 缩略图最大像素数)) return null;
   let 原图 = nativeImage.createFromBuffer(图片数据);
   if (原图.isEmpty() && path.extname(显示名称).slice(1).toLowerCase() === "gif") {
     const 静态首帧 = decodeGifFirstFrame(图片数据);
@@ -446,9 +447,15 @@ function 图片数据转缩略图DataUrl(图片数据: Buffer, 显示名称: str
     return 输出图.toDataURL();
   }
 
-  if (图片数据可能包含动画(图片数据, 显示名称)) return null;
-  const 媒体类型 = 获取图片媒体类型(显示名称);
-  return `data:${媒体类型};base64,${图片数据.toString("base64")}`;
+  // Chromium can display BMP/static WebP variants that nativeImage cannot decode.
+  // Preserve that existing fallback within the old byte/pixel budget; never send
+  // a newly admitted large scan through IPC as its full-sized original.
+  const 扩展名 = path.extname(显示名称).slice(1).toLowerCase();
+  if (图片数据.length <= 12 * 1024 * 1024 && safeRasterImage(图片数据)
+    && (扩展名 === "bmp" || (扩展名 === "webp" && 图片数据.indexOf(Buffer.from("ANIM", "ascii")) < 0))) {
+    return `data:image/${扩展名};base64,${图片数据.toString("base64")}`;
+  }
+  return null;
 }
 
 export async function 获取图片缩略图(图片路径: string): Promise<缩略图结果> {
@@ -467,6 +474,9 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
     const 目录项 = await 文件系统.readdir(文件夹路径, { withFileTypes: true });
     const 子目录数 = 目录项.filter(item => item.isDirectory() && !item.isSymbolicLink()).length;
     const 独立漫画数 = 目录项.filter(item => item.isFile() && (是支持的压缩包(item.name) || /\.(pdf|epub)$/i.test(item.name))).length;
+    const 图片数 = 目录项.filter(item => item.isFile() && 是支持的图片(item.name)).length;
+    const folderSummary = { folders: 子目录数, books: 独立漫画数, images: 图片数,
+      unsupported: 目录项.filter(item => item.isFile()).length - 独立漫画数 - 图片数 };
     // Image pages belong to one comic, not separate books in a collection.
     const itemCount = 子目录数 > 0 || 独立漫画数 > 1 ? 子目录数 + 独立漫画数 : undefined;
     const 图片列表 = 目录项
@@ -485,7 +495,7 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
           continue;
         }
         const url = await 读取图片为DataUrl(封面.path, 封面.name);
-        if (url) return { url, itemCount };
+        if (url) return { url, itemCount, childFolderCount: 子目录数, folderSummary };
       } catch {
         continue;
       }
@@ -493,7 +503,7 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
     for (const 封面 of 备用候选列表.slice(0, 缩略图候选最大数量)) {
       try {
         const url = await 读取图片为DataUrl(封面.path, 封面.name);
-        if (url) return { url, itemCount };
+        if (url) return { url, itemCount, childFolderCount: 子目录数, folderSummary };
       } catch {
         continue;
       }
@@ -508,9 +518,9 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
       const cover = child.isDirectory()
         ? await 获取文件夹封面缩略图(filePath, budget, depth + 1)
         : (budget.remaining--, await 获取缩略图({ path: filePath, type: path.extname(child.name).toLowerCase() === ".pdf" ? "pdf" : path.extname(child.name).toLowerCase() === ".epub" ? "epub" : "archive" }));
-      if (cover.url || cover.pdfPath) return { ...cover, itemCount };
+      if (cover.url || cover.pdfPath) return { ...cover, itemCount, childFolderCount: 子目录数, folderSummary };
     }
-    return { url: null, itemCount };
+    return { url: null, itemCount, childFolderCount: 子目录数, folderSummary };
   } catch {
     return { url: null };
   }
@@ -521,6 +531,7 @@ export async function 获取压缩包封面缩略图(压缩包路径: string): P
 
   try {
     const 图片列表 = await 读取压缩包图片列表(压缩包路径);
+    let retryable = false;
     for (const 封面 of 限制封面候选(生成压缩包封面候选(图片列表))) {
       try {
         const 图片数据 = await 读取压缩包单张图片(
@@ -532,13 +543,13 @@ export async function 获取压缩包封面缩略图(压缩包路径: string): P
         if (缩略图) return { url: 缩略图 };
       } catch (错误) {
         if (是压缩包服务错误(错误) && 错误.code === "ARCHIVE_ENCRYPTED") return { url: null };
+        retryable ||= !是压缩包服务错误(错误) || 错误.code === "ARCHIVE_READ_FAILED";
         continue;
       }
     }
-    return { url: null };
+    return { url: null, retryable };
   } catch (错误) {
-    if (是压缩包服务错误(错误)) return { url: null };
-    return { url: null };
+    return { url: null, retryable: !是压缩包服务错误(错误) || 错误.code === "ARCHIVE_READ_FAILED" };
   }
 }
 

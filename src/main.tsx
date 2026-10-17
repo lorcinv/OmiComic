@@ -3,7 +3,9 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles/theme.css";
 import "./styles/global.css";
+import "./styles/desktopLibrary.css";
 import "./styles/mobile.css";
+import "./styles/desktopTheme.css";
 import { connectAndroid } from "./android/bridge";
 
 async function start() {

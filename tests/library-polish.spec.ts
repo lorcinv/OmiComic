@@ -50,9 +50,9 @@ test('detail footer actions align with back and the inline tag button remains us
     const back=await page.getByRole('button',{name:'返回资源列表'}).boundingBox();
     const rename=await page.getByRole('button',{name:'重命名本地文件',exact:true}).boundingBox();
     const remove=await page.getByRole('button',{name:'删除…',exact:true}).boundingBox();
-    expect(rename!.y).toBe(back!.y);expect(remove!.y).toBe(back!.y);expect(rename!.x+rename!.width).toBeLessThan(remove!.x);expect(remove!.x+remove!.width).toBeLessThan(back!.x);
+    expect(rename!.y).toBe(back!.y);expect(remove!.y).toBe(back!.y);expect(rename!.x+rename!.width).toBeLessThan(remove!.x);expect(back!.x+back!.width).toBeLessThan(rename!.x);
     const styles=await page.locator('.resource-detail-action').evaluateAll(buttons=>buttons.map(button=>{const css=getComputedStyle(button);return [css.backgroundColor,css.borderRadius,css.height,css.backdropFilter];}));expect(styles[0]).toEqual(styles[2]);expect(styles[1]).toEqual(styles[2]);
-    await expect(page.locator('.resource-detail-tag-editor > :last-child').getByRole('button',{name:'添加标签'})).toBeVisible();
+    await expect(page.locator('.resource-detail-tag-editor').getByRole('button',{name:'添加标签'})).toBeVisible();
     await page.getByRole('button',{name:'添加标签',exact:true}).click();await page.getByPlaceholder('输入标签，逗号分隔').fill('新增标签');await page.getByPlaceholder('输入标签，逗号分隔').press('Enter');
     await expect(page.getByRole('button',{name:'移除标签：新增标签',exact:true})).toBeVisible();
     await page.keyboard.press('Escape');
@@ -62,144 +62,63 @@ test('detail footer actions align with back and the inline tag button remains us
   }
 });
 
-test('cover tags fit all card sizes and retain hidden tags and independent actions', async ({ page }) => {
+test('compact cards keep details and favorite actions independent at every size', async ({ page }) => {
   await openLibrary(page);
   const book = page.locator('.resource-card').filter({ has: page.locator('.resource-details strong', { hasText: /^Book$/ }) });
   for (const width of [1440, 960]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const [scale, size] of [[40, 'small'], [55, 'small'], [75, 'medium'], [100, 'large']] as const) {
+    for (const scale of [40, 55, 75, 100]) {
       await page.locator('.view-options-menu > summary').click();
       await setCardScale(page.getByRole('slider', { name: '缩略图大小', exact: true }), scale);
       await page.locator('.view-options-menu > summary').click();
-      await expect(page.locator('.resource-list')).toHaveClass(new RegExp(`size-${size}`));
-      const row = book.locator('.preview-tag-row');
-      const more = row.getByRole('button', { name: /^显示其余/ });
-      await expect.poll(async () => {
-        return row.evaluate(element => {
-          const bounds = element.getBoundingClientRect();
-          const chips = Array.from(element.querySelectorAll<HTMLElement>(':scope > .preview-tag-chip'));
-          return chips.flatMap(chip => {
-            const box = chip.getBoundingClientRect();
-            const fits = box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
-            return fits ? [] : [{ text: chip.textContent, row: bounds.toJSON(), chip: box.toJSON() }];
-          });
-        });
-      }).toEqual([]);
-      const visible = await row.locator(':scope > .preview-tag-chip:not(.preview-tag-more)').count();
-      // 最密档在窄窗口可将全部标签收入浮层，但入口必须完整可见且可操作。
-      if (width === 1440 || scale === 100) expect(visible).toBeGreaterThan(0);
-      await expect(more).toHaveText(`+${8 - visible}`);
-      expect(await more.evaluate(element => element.scrollWidth <= element.clientWidth), 'hidden tag count stays readable').toBe(true);
-      const tagBounds = (await row.boundingBox())!;
-      const favoriteBounds = (await book.locator('.favorite-button').boundingBox())!;
-      expect(tagBounds.x + tagBounds.width).toBeLessThan(favoriteBounds.x);
-      const covers = await page.locator('.resource-card').filter({ has: page.locator('.preview-tag-row') }).evaluateAll(cards => cards.map(card => {
-        const cover = card.querySelector('.resource-preview')!.getBoundingClientRect();
-        const image = card.querySelector('.resource-preview img')!.getBoundingClientRect();
-        const tag = card.querySelector('.preview-tag-row > .preview-tag-chip')!.getBoundingClientRect();
-        const favorite = card.querySelector('.favorite-button')!.getBoundingClientRect();
-        const glass = Array.from(card.querySelectorAll('.preview-tag-row > .preview-tag-chip, .favorite-button, .resource-info-button')).map(element => {
-          const style = getComputedStyle(element);
-          return [style.backgroundColor, style.backgroundImage, style.borderColor, style.backdropFilter, style.opacity, style.boxShadow];
-        });
-        return { imageWidth: image.width, imageHeight: image.height, coverWidth: cover.width, coverHeight: cover.height, tagBottomGap: cover.bottom - tag.bottom, bottomDifference: tag.bottom - favorite.bottom, glass };
-      }));
-      for (const cover of covers) {
-        expect(cover.imageWidth).toBeCloseTo(cover.coverWidth, 1);
-        expect(cover.imageHeight).toBeCloseTo(cover.coverHeight, 1);
-        expect(cover.tagBottomGap).toBeCloseTo(covers[0].tagBottomGap, 1);
-        expect(cover.bottomDifference).toBeCloseTo(0, 1);
-        for (const surface of cover.glass) expect(surface).toEqual(cover.glass[0]);
-      }
-      await more.focus();
-      await page.keyboard.press('Space');
-      const popover = page.getByRole('dialog', { name: '隐藏标签列表' });
-      await expect(popover.locator('.preview-tag-popover-chip')).toHaveCount(8 - visible);
-      await expect(popover).toContainText('这是一个很长的标签名称需要在浮层中完整显示');
-      await popover.dispatchEvent('wheel', { deltaY: 20 });
-      await expect(popover).toBeVisible();
-      await page.keyboard.press('Escape');
-      await expect(popover).toHaveCount(0);
-      await more.dblclick();
-      await expect(popover).toBeVisible();
-      await expect(page.locator('.reader-layout')).toHaveCount(0);
-      await page.keyboard.press('Escape');
-      await more.evaluate(element => (element as HTMLElement).blur());
+      await expect(book.locator('.preview-tag-row,.recent-source,.resource-preview .resource-info-button')).toHaveCount(0);
+      const cover = (await book.locator('.resource-preview').boundingBox())!;
+      const card = (await book.boundingBox())!;
+      const info = (await book.getByRole('button', { name: '打开资源信息' }).boundingBox())!;
+      expect(info.y).toBeGreaterThan(cover.y + cover.height);
+      expect(info.x + info.width).toBeGreaterThan(card.x + card.width - 12);
+      expect(card.y + card.height - cover.y - cover.height).toBeLessThan(82);
+      await expect(book.locator('.favorite-button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(book.locator('.resource-card-page')).toHaveText('0/8 · 0%');
       await page.mouse.move(220, 45);
-      await page.screenshot({ path: `test-results/library-polish-${width}-${scale}.png` });
+      await page.screenshot({ path: 'test-results/pc-ui-compact-' + width + '-' + scale + '.png' });
     }
   }
-  const parent = page.locator('.resource-card').filter({ hasText: 'Parent' });
-  await expect(parent.locator('.preview-tag-row > .preview-tag-chip')).toHaveText('米神');
-  await expect(page.locator('.resource-card').filter({ hasText: 'page0.png' }).locator('.preview-tag-row')).toHaveCount(0);
   await book.getByRole('button', { name: '收藏', exact: true }).press('Space');
   await expect(book.getByRole('button', { name: '取消收藏', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await book.getByRole('button', { name: '取消收藏', exact: true }).press('Enter');
   await expect(book.getByRole('button', { name: '收藏', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await book.getByRole('button', { name: '打开资源信息', exact: true }).click();
+  await book.getByRole('button', { name: '打开资源信息', exact: true }).press('Enter');
   await expect(page.locator('.resource-detail-page')).toBeVisible();
+  await expect(page.locator('.resource-detail-direct-tags')).toContainText('作画参考');
   await expect(page.locator('.reader-layout')).toHaveCount(0);
 });
 
-test('simulated cover glass stays consistent over bright, dark and colored covers', async ({ page }) => {
-  await openLibrary(page);
-  await page.mouse.move(220, 45);
-  const preview = await page.locator('.resource-preview').evaluateAll(covers => {
-    const first = covers[0].getBoundingClientRect();
-    const second = covers[1].getBoundingClientRect();
-    return { x: first.left - 10, y: first.bottom - 160, width: second.right - first.left + 20, height: 206 };
+test('folder labels require subfolders and progress stays flush with the card bottom', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(installMock, { count: 8 });
+  await page.addInitScript(async () => {
+    const api = window.omicomic, data = (await api.getAppData() as any).data;
+    data.readingProgress['folder:/comics/Book'] = { resourceKey:'folder:/comics/Book',sourcePath:'/comics/Book',sourceType:'folder',title:'Book',currentPageIndex:3,totalPages:8,hasStartedReading:true,percent:50,updatedAt:1 };
+    const original = api.getThumbnail;
+    api.getThumbnail = async input => {
+      const result = await original(input);
+      if (result.ok) Object.assign(result.data, { itemCount:input.path.endsWith('/Parent')?2:undefined, childFolderCount:input.path.endsWith('/Parent')?1:0 });
+      return result;
+    };
   });
-  await page.screenshot({ path: 'test-results/simulated-glass-preview.png', clip: preview });
-  // 封面使用暖橙/冷蓝和纯白/纯黑区域，验证仿玻璃不会再受底图染色。
-  await page.locator('.resource-card').filter({ has: page.locator('.preview-tag-row') }).evaluateAll(cards => {
-    cards.forEach((card, index) => {
-      const cover = card.querySelector('.resource-preview')!.getBoundingClientRect();
-      const more = card.querySelector('.resource-info-button')!.getBoundingClientRect();
-      const favorite = card.querySelector('.favorite-button')!.getBoundingClientRect();
-      const split = (more.bottom + favorite.top) / 2 - cover.top;
-      const upper = index === 0 ? '#de7044' : '#ffffff';
-      const lower = index === 0 ? '#426eb4' : '#000000';
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${cover.width}" height="${cover.height}"><rect width="100%" height="100%" fill="${upper}"/><rect y="${split}" width="100%" height="${cover.height}" fill="${lower}"/></svg>`;
-      card.querySelector('img')!.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
-    });
-  });
-  await expect.poll(() => page.locator('.resource-preview img').evaluateAll(images => images.every(image => (image as HTMLImageElement).complete))).toBe(true);
-  const controls = page.locator('.resource-card').filter({ has: page.locator('.preview-tag-row') })
-    .locator('.preview-tag-row > .preview-tag-chip:first-child, .resource-info-button, .favorite-button');
-  const samples = await controls.evaluateAll(items => items.map(item => {
-    const bounds = item.getBoundingClientRect();
-    return { x: Math.round(bounds.left + 4), y: Math.round(bounds.top + bounds.height / 2) };
-  }));
+  await page.goto('/');
+  await page.getByRole('button', { name: '打开资源库', exact: true }).click();
+  const card = (title: string) => page.locator('.resource-card').filter({ has: page.locator('.resource-details strong', { hasText: new RegExp('^' + title + '$') }) });
+  await expect(card('Parent').locator('.resource-card-page')).toHaveText('1 文件夹');
+  await expect(card('Parent').locator('.favorite-button,.resource-info-button')).toHaveCount(0);
+  await expect(card('Book').locator('.resource-card-page')).toHaveText('4/8 · 50%');
+  const bounds = (await card('Book').boundingBox())!, bar = (await card('Book').locator('.resource-progress-track').boundingBox())!;
+  expect(Math.abs(bounds.y + bounds.height - bar.y - bar.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(bounds.x - bar.x)).toBeLessThanOrEqual(1);
   for (const theme of ['mist', 'nord', 'sand', 'night']) {
     await page.evaluate(theme => { document.documentElement.dataset.colorTheme = theme; }, theme);
-    const screenshot = await page.screenshot({ path: `test-results/simulated-glass-${theme}.png` });
-    // Sample the painted browser pixels rather than just equal CSS values.
-    const pixels = await page.evaluate(async ({ png, samples }) => {
-      const image = new Image();
-      image.src = 'data:image/png;base64,' + png;
-      await image.decode();
-      const canvas = new OffscreenCanvas(image.width, image.height);
-      const context = canvas.getContext('2d')!;
-      context.drawImage(image, 0, 0);
-      return samples.map(({ x, y }) => Array.from(context.getImageData(x, y, 1, 1).data).slice(0, 3));
-    }, { png: screenshot.toString('base64'), samples });
-    const range = [0, 1, 2].map(channel => Math.max(...pixels.map(pixel => pixel[channel])) - Math.min(...pixels.map(pixel => pixel[channel])));
-    expect(Math.max(...range), `${theme}: rendered colors ${JSON.stringify(pixels)}`).toBeLessThanOrEqual(6);
-    await test.info().attach(`simulated-glass-${theme}`, { body: JSON.stringify({ pixels, maxChannelDifference: Math.max(...range) }), contentType: 'application/json' });
-    for (const button of ['.favorite-button', '.resource-info-button', '.preview-tag-more']) {
-      const control = page.locator('.resource-card').filter({ has: page.locator('.preview-tag-row') }).locator(button).first();
-      const readMaterial = (element: Element) => {
-        const style = getComputedStyle(element);
-        return [style.backgroundColor, style.backgroundImage, style.borderColor];
-      };
-      const restingBackground = await control.evaluate(readMaterial);
-      await control.hover();
-      await expect.poll(() => control.evaluate(readMaterial)).toEqual(restingBackground);
-      await page.mouse.down();
-      expect(await control.evaluate(readMaterial)).toEqual(restingBackground);
-      await page.mouse.move(220, 45);
-      await page.mouse.up();
-    }
+    await page.screenshot({ path: 'test-results/pc-ui-progress-' + theme + '.png' });
   }
 });
 

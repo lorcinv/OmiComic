@@ -58,7 +58,7 @@ test('double pages include the cover and report the last visible pair as complet
   await page.getByRole('button', { name: '返回', exact: true }).click();
   const book = page.locator('.resource-card').filter({ hasText: 'Book' });
   await expect(book).toHaveClass(/progress-completed/);
-  await expect(book.locator('.resource-card-page')).toHaveText('10 / 10');
+  await expect(book.locator('.resource-card-page')).toHaveText('10/10 · 100%');
   await book.dblclick(); await pair(page, [9, 10]);
 });
 

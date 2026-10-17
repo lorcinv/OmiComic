@@ -35,14 +35,14 @@ test('themes preview globally, persist after reload and keep light and dark cont
   await page.getByRole('button', { name: '打开资源库', exact: true }).click();
   await expect(page.locator('.resource-card')).toHaveCount(10);
   await openThemeSettings(page);
-  await expect(page.getByRole('radio', { name: '经典雾灰', exact: true })).toBeChecked();
+  await expect(page.getByRole('radio', { name: '雾灰', exact: true })).toBeChecked();
   await expect(page.getByRole('radio')).toHaveCount(4);
 
   for (const [id, name, background] of [
-    ['nord', '北境雾蓝', 'rgb(236, 239, 244)'],
-    ['sand', '暖砂', 'rgb(242, 240, 231)'],
-    ['night', '暮夜灰', 'rgb(46, 52, 64)'],
-    ['mist', '经典雾灰', 'rgb(241, 243, 246)'],
+    ['nord', '北境', 'rgb(226, 232, 242)'],
+    ['sand', '暖沙', 'rgb(243, 239, 233)'],
+    ['night', '夜色', 'rgb(46, 52, 64)'],
+    ['mist', '雾灰', 'rgb(246, 247, 249)'],
   ]) {
     await page.locator('.theme-option').filter({ has: page.getByRole('radio', { name, exact: true }) }).click();
     await expect(page.getByRole('radio', { name, exact: true })).toBeChecked();
@@ -52,25 +52,20 @@ test('themes preview globally, persist after reload and keep light and dark cont
     await page.screenshot({ path: `test-results/theme-${id}-settings.png` });
     await page.getByRole('button', { name: '关闭设置', exact: true }).click();
     const cover = page.locator('.resource-card').filter({ has: page.locator('.resource-details strong', { hasText: /^Book$/ }) });
-    await expect(cover.locator('.preview-tag-chip').first()).toBeVisible();
-    const appearance = await cover.evaluate(card => {
-      const items = ['.preview-tag-chip', '.favorite-button', '.resource-info-button'].map(selector => card.querySelector(selector)!);
-      return items.map(element => {
-        const style = getComputedStyle(element);
-        return { background: style.backgroundColor, gradient: style.backgroundImage, border: style.borderColor, filter: style.backdropFilter, shadow: style.boxShadow, bottom: element.getBoundingClientRect().bottom };
-      });
-    });
-    expect(appearance[0]).toEqual(appearance[1]);
-    expect(appearance[2].background).toEqual(appearance[0].background);
-    expect(appearance[2].gradient).toEqual(appearance[0].gradient);
-    expect(appearance[2].shadow).toBe('none');
+    await expect(cover.locator('.preview-tag-chip,.recent-source')).toHaveCount(0);
+    await expect(cover.locator('.favorite-button')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+    await expect(cover.locator('.resource-info-button')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+    await expect(cover.locator('.resource-card-info .resource-info-button')).toBeVisible();
     await expect(page.locator('.add-library-button')).toHaveCSS('box-shadow', 'none');
     const addButton = await page.locator('.add-library-button').evaluate(element => {
       const style = getComputedStyle(element);
       return { background: style.backgroundColor, text: style.color, radius: style.borderRadius };
     });
-    const channels = addButton.background.match(/\d+/g)!.slice(0, 3).map(Number);
-    expect(channels.every(value => id === 'night' ? value >= 40 && value <= 90 : value >= 220)).toBe(true);
+    const accent = await page.locator('.add-library-button').evaluate(element => {
+      const sample = document.createElement('i'); sample.style.color = 'var(--强调色)';
+      element.append(sample); const color = getComputedStyle(sample).color; sample.remove(); return color;
+    });
+    expect(addButton.background).toBe(accent);
     expect(addButton.radius).toBe('9px');
     await page.screenshot({ path: `test-results/theme-${id}-library.png` });
     if (id === 'night') {
@@ -116,11 +111,11 @@ test('themes preview globally, persist after reload and keep light and dark cont
     await openThemeSettings(page);
   }
 
-  await page.getByRole('radio', { name: '经典雾灰', exact: true }).focus();
+  await page.getByRole('radio', { name: '雾灰', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('radio', { name: '北境雾蓝', exact: true })).toBeChecked();
+  await expect(page.getByRole('radio', { name: '北境', exact: true })).toBeChecked();
   await page.setViewportSize({ width: 960, height: 640 });
-  await page.getByRole('radio', { name: '暮夜灰', exact: true }).check();
+  await page.getByRole('radio', { name: '夜色', exact: true }).check();
   await expect(page.locator('.theme-option').last()).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: 'test-results/theme-settings-compact.png' });
   expect(await page.locator('.settings-window').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -128,5 +123,5 @@ test('themes preview globally, persist after reload and keep light and dark cont
   await expect(page.locator('html')).toHaveAttribute('data-color-theme', 'night');
   await page.getByRole('button', { name: '打开资源库', exact: true }).click();
   await openThemeSettings(page);
-  await expect(page.getByRole('radio', { name: '暮夜灰', exact: true })).toBeChecked();
+  await expect(page.getByRole('radio', { name: '夜色', exact: true })).toBeChecked();
 });

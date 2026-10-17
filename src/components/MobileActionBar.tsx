@@ -1,0 +1,8 @@
+import { t } from '../i18n';
+import MobileIcon, { type MobileIconName } from './MobileIcon';
+export interface MobileAction { label: string; icon: string; onClick: () => void; disabled?: boolean; active?: boolean }
+const iconFor = (label: string): MobileIconName => /打开路径/.test(label) ? 'open-folder' : /重命名/.test(label) ? 'rename' : /删除/.test(label) ? 'delete' : /信息/.test(label) ? 'info' : /重置/.test(label) ? 'reset' : /封面/.test(label) ? 'cover' : /选择|全选/.test(label) ? 'select' : /置顶/.test(label) ? 'pin' : /排序/.test(label) ? 'sort' : /移入/.test(label) ? 'move' : /移出/.test(label) ? 'remove' : 'shelf';
+export default function MobileActionBar({ actions, floating, selected, onDismiss }: { actions: MobileAction[]; floating?: MobileAction[]; selected?: number; onDismiss?: () => void }) {
+  return <>{onDismiss && <div className="mobile-action-backdrop" onClick={event => { event.preventDefault(); event.stopPropagation(); onDismiss(); }}/>}<nav className="mobile-action-bar" aria-label={t("资源操作")}>{actions.map(action => <button key={t(action.label)} disabled={action.disabled} className={action.active ? 'is-active' : ''} onClick={action.onClick}><MobileIcon name={iconFor(action.label)}/>{t(action.label)}{action.label === '选择' && selected !== undefined && <small>{selected}</small>}</button>)}</nav>
+    {!!floating?.length && <div className="mobile-floating-actions" aria-label={t("整理资源")}>{floating.map(action => <button key={t(action.label)} disabled={action.disabled} className={action.active ? 'is-active' : ''} onClick={action.onClick}><span>{t(action.label)}</span><i><MobileIcon name={iconFor(action.label)}/></i></button>)}</div>}</>;
+}

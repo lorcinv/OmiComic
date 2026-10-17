@@ -51,6 +51,8 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained();
   await page.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(page.locator('[data-reader-page-index="2"] img')).toBeVisible();
+  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained();
+  await fit('适应高度');
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1); await contained();
   await page.getByRole('button', { name: '当前双页，点击切换单页', exact: true }).click();
   for (const number of [5, 6]) { await jump(number); await fit('适应窗口'); await contained(); }
@@ -74,6 +76,13 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await expect(zoom).toBeDisabled(); await expect(zoom).toContainText('适应高度');
   await expect.poll(() => page.locator('.reader-stage').evaluate(stage => stage.scrollTop)).toBe(0);
+  const pageX = index => page.locator(`[data-reader-page-index="${index}"]`).evaluate(el => el.getBoundingClientRect().x);
+  await expect.poll(async () => await pageX(6) - await pageX(5)).toBeGreaterThan(0);
+  await page.getByRole('button', { name: '当前从左到右阅读，点击切换为从右到左', exact: true }).click();
+  await expect.poll(async () => await pageX(6) - await pageX(5)).toBeLessThan(0);
+  await expect(page.getByRole('slider', { name: '阅读进度' })).toHaveAttribute('aria-valuenow', '6');
+  await page.getByRole('button', { name: '当前从右到左阅读，点击切换为从左到右', exact: true }).click();
+  await expect.poll(async () => await pageX(6) - await pageX(5)).toBeGreaterThan(0);
   await page.getByRole('button', { name: '当前横向阅读，点击切换纵向阅读', exact: true }).click();
   await expect(zoom).toContainText('适应宽度'); await expect(zoom).toBeDisabled();
   await expect.poll(() => page.locator('[data-reader-page-index="5"] img').evaluate(img => {
@@ -91,5 +100,5 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   const data = (await page.evaluate(() => window.omicomic.getAppData())).data;
   assert.ok(Object.values(data.readingProgress).some(p => p.readerViewState?.fitMode === 'fit-window'));
   await fs.mkdir('test-results', { recursive: true });
-  await fs.writeFile('test-results/reader-layout-smoke.json', JSON.stringify({ executable, version: info.version, formats: 'real PNG', sizes, layoutPassed: true, zoomPersisted: true }, null, 2) + '\n');
+  await fs.writeFile('test-results/reader-layout-smoke.json', JSON.stringify({ executable, version: info.version, formats: 'real PNG', sizes, layoutPassed: true, panoramaDirection: true, zoomPersisted: true }, null, 2) + '\n');
 });

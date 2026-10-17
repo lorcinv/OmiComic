@@ -37,7 +37,7 @@ async function seedDocument(page: Page, fail = false, delay = false, colorTheme 
     api.setFullscreen = async (value: boolean) => { (window as any).__fullscreen.push(value); return { ok: true, data: value }; };
   }, { fail, delay, colorTheme });
   await page.goto('/');
-  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).click();
+  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
 }
 
 test('dark EPUB text follows the soft dark theme and retains shared reading controls', async ({ page }) => {
@@ -60,7 +60,7 @@ test('EPUB retains document order, supports display effects and explicitly disab
   await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.4');
   await page.getByRole('checkbox',{name:'反色',exact:true}).check();
   await expect(page.locator('.reader-effects').first()).toHaveCSS('filter', /invert\(1\)/);
-  await page.getByRole('button',{name:'关闭面板'}).click();
+  await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'开始自动阅读',exact:true}).click();
   await expect(page.getByRole('button',{name:'暂停自动阅读',exact:true})).toBeVisible();
   await page.frameLocator('.reader-chapter iframe').locator('body').click();
@@ -103,7 +103,7 @@ test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view stat
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__closedDocuments.length)).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'OmiComic', exact: true }).click();
-  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).click();
+  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
   await expect(jump).toHaveValue('20');
   await expect(page.locator('.reader-layout')).toHaveClass(/is-flow-vertical/);
   await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
@@ -120,7 +120,7 @@ test('failed documents and cancellation retain the normal return path and releas
   await page.evaluate(() => {
     (window as any).omicomic.openDocument = () => new Promise(resolve => setTimeout(() => resolve({ ok: true, data: { size: 10, chapters: [{ index: 0, name: '第 1 章' }] } }), 500));
   });
-  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).click();
+  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
   await expect(page.getByRole('status').filter({ hasText: '正在打开文档' })).toBeVisible();
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await expect(page.locator('.reader-layout')).toHaveCount(0);
@@ -138,7 +138,7 @@ test('panorama loads the visible chapter without waiting for a stalled prefetch 
     api.toggleBookmark = (input: any) => { (window as any).__lastBookmark = input; return bookmark(input); };
   });
   await page.getByRole('button', { name: 'OmiComic', exact: true }).click();
-  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).click();
+  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
   await expect(page.frameLocator('.reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await page.evaluate(async () => {

@@ -22,6 +22,18 @@ function alignedElf(bytes, abi) {
   }
 }
 async function main() {
+  const png = require('../android/dependencies.json').pngj;
+  const pngFile = path.join(root, '.cache', `pngj-${png.version}.jar`);
+  if (!fs.existsSync(pngFile)) {
+    const response = await fetch(png.url);
+    if (!response.ok) throw new Error(`PNG decoder download: ${response.status}`);
+    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(`${pngFile}.part`));
+    fs.renameSync(`${pngFile}.part`, pngFile);
+  }
+  if (crypto.createHash('sha256').update(fs.readFileSync(pngFile)).digest('hex') !== png.sha256)
+    throw new Error('PNGJ checksum mismatch.');
+  fs.mkdirSync(output, {recursive:true});
+  fs.copyFileSync(pngFile, path.join(output, 'pngj.jar'));
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (!fs.existsSync(file)) {
     const response = await fetch(dependency.url);

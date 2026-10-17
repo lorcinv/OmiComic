@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 
 interface OmiBrandIconProps {
   onActivate: (getOrigin: OmiBrandOriginGetter) => void | Promise<void>;
@@ -221,8 +221,14 @@ function OmiBrandIcon({
     };
   }, [disabled, startGazeAnimation]);
 
-  const handleActivate = (): void => {
+  const handleActivate = (event: MouseEvent<HTMLButtonElement>): void => {
     if (disabled || activatingRef.current) return;
+    // A painted SVG or WebView-adjusted touch target must not activate the
+    // shortcut outside its actual button. Keyboard activation has detail 0.
+    if (event.detail > 0) {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) return;
+    }
 
     activatingRef.current = true;
     setIsBlinking(true);

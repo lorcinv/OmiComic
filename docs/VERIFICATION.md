@@ -1,5 +1,29 @@
 # Windows 1.1.2 验证记录
 
+最新 Windows 与 Android 1.1.36 关于页、三语说明、Omi 占位配图及发布核验见 [1.1.36 记录](verification-1.1.36.md)。
+
+最新 Windows 1.1.35 的简介编辑与缩略预览交互验证见 [1.1.35 工作报告](verification-1.1.35-windows.md)。画面调整说明删除见 [1.1.34 工作报告](verification-1.1.34-windows.md)，面板简化见 [1.1.33 工作报告](verification-1.1.33-windows.md)，沉浸进度条透明未读区域见 [1.1.32 工作报告](verification-1.1.32-windows.md)，拖拽外围高亮描边见 [1.1.31 工作报告](verification-1.1.31-windows.md)，首页按钮同步、分类浅白横杠和详情页窗口拖动见 [1.1.30 工作报告](verification-1.1.30-windows.md)。首页裁剪与大图加载对比见 [1.1.28 工作报告](verification-1.1.28-windows.md)。下文保留历史验证记录。
+
+最新 Android 1.1.23 的长时间后台、锁屏恢复和跨后台切页动画修复见 [1.1.23 工作报告](verification-1.1.23.md)。
+
+Android 1.1.22 的开屏衔接、ComicScreen 对照及后续后台闪烁复现记录见 [1.1.22 工作报告](verification-1.1.22.md)。
+
+Android 1.1.19 的设置入口、统一遮罩、精简文案、中英日切换与旧功能回归见 [1.1.19 工作报告](verification-1.1.19.md)。
+
+Android 1.1.18 的方向性清晰预读、有效任务复用、延后底图保存及超大 PNG 对照见 [1.1.18 工作报告](verification-1.1.18.md)。
+
+Android 1.1.17 的 PNG 持续模糊修复、退出缓存清理、超大 PNG 性能与兼容性回归见 [1.1.17 工作报告](verification-1.1.17.md)。
+
+Android 1.1.16 的拖动预览空白修复、书架路径位置、超 1 GB 压缩包与全部支持格式测试见 [1.1.16 工作报告](verification-1.1.16.md)。
+
+Android 1.1.15 的首页误触防护、延后排序、独立显示设置、书架路径、预览提速、大图复开与文字选择见 [1.1.15 工作报告](verification-1.1.15.md)。本轮仅更新 Android，Windows 成品保持 1.1.10。
+
+Android 1.1.14 的大图碎裂闪动、抗摩尔纹、正文共用预览、可见封面调度、缓存与图标展开动画见 [1.1.14 工作报告](verification-1.1.14.md)。
+
+Android 1.1.11 的连续侧栏手势、短转场与解码缓存报告见 [1.1.11 记录](verification-1.1.11.md)。本轮只交付手机版，Windows 保持 1.1.10。
+
+Windows 与 Android 已于 2026-10-14 更新到 1.1.10，逐项修改、两端成品与手机原生触摸验证见 [1.1.10 记录](verification-1.1.10.md)。此前翻页与目录索引验证见 [1.1.6 记录](verification-1.1.6.md)。以下保留 2026-10-11 的 Windows 验证结果。
+
 日期：2026-10-11。交付 Windows x64 ZIP 免安装版，Android 保持 1.0.1。[1.1.1 验证记录](verification-1.1.1.md)和[阅读工具原始验证](verification-1.1.0.md)保留此前证据。
 
 ## 本轮改动

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import os from 'node:os';
 import { ARCHIVE_LIMITS, createEntryGuard, failLimit, isImage, 压缩包服务错误, type ArchiveEntry } from "./archiveSafety";
 
 declare const __OMICOMIC_BUNDLED__: boolean | undefined;
@@ -88,8 +89,9 @@ export async function readSevenZip(archivePath: string, entry: ArchiveEntry, max
   // Names beginning @ cannot safely be passed as literal 7z selectors; fail closed instead.
   if (entry.virtualPath.startsWith("@")) failLimit();
   // RAR5 rejects 7z's MemUse decoder option. RAR dictionaries are bounded at indexing above.
-  const decoderOptions = /\.(rar|cbr)$/i.test(archivePath) ? [] : ["-mmemuse=256m"];
-  const data = await run(["x", "-so", "-y", "-spd", "-mmt=1", ...decoderOptions, "-p", "--", path.resolve(archivePath), entry.virtualPath], maxBytes);
+  const decoderOptions = /\.(rar|cbr)$/i.test(archivePath) ? [] : ["-mmemuse=512m"];
+  const threads = Math.max(1, Math.min(8, Math.floor(os.availableParallelism() / 2)));
+  const data = await run(["x", "-so", "-y", "-spd", `-mmt=${threads}`, ...decoderOptions, "-p", "--", path.resolve(archivePath), entry.virtualPath], maxBytes);
   if (data.length !== entry.size) throw new Error("7z output size mismatch");
   return data;
 }

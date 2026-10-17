@@ -17,6 +17,11 @@ function ReaderChapter({ html, title, width, height, style }: Props) {
       onLoad={event => {
         const chapter = event.currentTarget.contentDocument;
         if (!chapter) return;
+        if (document.documentElement.dataset.omiLayout === 'desktop') {
+          const selectionStyle = chapter.createElement('style');
+          selectionStyle.textContent = '* { user-select: none !important; -webkit-user-select: none !important; }';
+          chapter.head.append(selectionStyle);
+        }
         for (const name of ['pointerdown', 'wheel', 'keydown']) chapter.addEventListener(name, () => window.dispatchEvent(new Event('omi-pause')), { passive: true });
         if (document.documentElement.dataset.colorTheme !== "night") return;
         const palette = getComputedStyle(document.documentElement);

@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { useEffect, useState } from "react";
 
 function WindowControls() {
@@ -38,12 +39,12 @@ function WindowControls() {
   if (全屏状态 || document.documentElement.dataset.platform === "android") return null;
 
   return (
-    <div className="window-controls" role="group" aria-label="窗口操作">
+    <div className="window-controls" role="group" aria-label={t("窗口操作")}>
       <button
         type="button"
         className="window-control-button"
-        aria-label="最小化窗口"
-        title="最小化"
+        aria-label={t("最小化窗口")}
+        title={t("最小化")}
         onClick={() => window.omicomic.minimizeWindow()}
       >
         <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -53,8 +54,8 @@ function WindowControls() {
       <button
         type="button"
         className="window-control-button"
-        aria-label={已最大化 ? "还原窗口" : "最大化窗口"}
-        title={已最大化 ? "还原" : "最大化"}
+        aria-label={已最大化 ? t("还原窗口") : t("最大化窗口")}
+        title={已最大化 ? t("还原") : t("最大化")}
         onClick={() => {
           void window.omicomic.toggleMaximizeWindow().then((结果) => {
             if (结果.ok) 设置已最大化(结果.data);
@@ -75,8 +76,8 @@ function WindowControls() {
       <button
         type="button"
         className="window-control-button window-control-close"
-        aria-label="关闭窗口"
-        title="关闭"
+        aria-label={t("关闭窗口")}
+        title={t("关闭")}
         onClick={() => window.omicomic.closeWindow()}
       >
         <svg viewBox="0 0 16 16" aria-hidden="true">

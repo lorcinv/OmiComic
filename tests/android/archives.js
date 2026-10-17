@@ -5,6 +5,7 @@ const api=window.omicomic;
 const value=async promise=>{const r=await promise;assert(r.ok,JSON.stringify(r));return r.data;};
 const data=await value(api.getAppData());
 const root=data.library.roots.find(r=>r.name==='OmiSmoke');assert(root,'Previous directory grant was lost during upgrade');
+await value(api.updateLibraryState({lastActiveRootPath:root.path,lastCurrentPath:root.path}));
 for(const name of ['Picture Book','Document.pdf','Story.epub'])assert(Object.values(data.readingProgress).some(p=>p.sourcePath.endsWith(name)&&p.currentPageIndex===1),'Upgrade lost progress: '+name);
 const names=['RAR4.rar','RAR5.cbr','Seven.7z','Solid.cb7'];
 const decoded=[];
@@ -34,11 +35,13 @@ await wait(()=>document.querySelector('.page-panel.is-visible .resource-card'),'
 for(const name of names) {
   const card=[...document.querySelectorAll('.page-panel.is-visible .resource-card')].find(c=>c.textContent.includes(name));assert(card,'Card absent: '+name);card.click();
   await wait(()=>document.querySelector('.reader-layout'),'reader '+name);
-  const input=()=>document.querySelector('.reader-footer input[aria-label]');
-  const loaded=()=>[...document.querySelectorAll('.reader-page-spread img')].some(i=>i.complete&&i.naturalWidth===800);
-  await wait(()=>input()?.value==='1'&&loaded(),'render first page '+name);
-  const next=[...document.querySelectorAll('.reader-layout button')].find(b=>b.getAttribute('aria-label')==='下一页'||b.textContent.trim()==='下一页');next.click();
-  await wait(()=>input()?.value==='2'&&loaded(),'render next page '+name);
+  const page=()=>Number(document.querySelector('.reader-progress-rail')?.getAttribute('aria-valuenow'));
+  const loaded=()=>Boolean(document.querySelector('.page-panel.is-visible .reader-page-frame:not([aria-hidden="true"]) .reader-native-image'))||[...document.querySelectorAll('.reader-page-spread img')].some(i=>i.complete&&i.naturalWidth===800);
+  await wait(()=>page()===1&&loaded(),'render first page '+name);
+  const rect=document.querySelector('.reader-stage').getBoundingClientRect();
+  window.__omiTap={x:rect.left+rect.width*.85,y:rect.top+rect.height/2,viewport:innerWidth};
+  await wait(()=>!window.__omiTap,'native next page tap');
+  await wait(()=>page()===2&&loaded(),'render next page '+name);
   await wait(async()=>Object.values((await value(api.getAppData())).readingProgress).some(p=>p.sourcePath.endsWith(name)&&p.currentPageIndex===1),'saved '+name);
   window.dispatchEvent(new Event('omi-back'));await wait(()=>!document.querySelector('.reader-layout'),'reader closed');
 }

@@ -1,5 +1,8 @@
+import { uiOptions } from '../i18n';
+import { t } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import GlassSelect from '../GlassSelect';
+import useMobileLayout from '../hooks/useMobileLayout';
 import type { ReadingProgress, 阅读资源结果 } from '../types';
 import { DEFAULT_AUTO_READ, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, PAGE_SORT_OPTIONS, type AutoReadOptions, type PageSort } from '../../electron/shared/readerPreferences';
 
@@ -8,6 +11,7 @@ export default function BookReaderSettings({ preferred, onSaved }: {
   preferred: Book | null;
   onSaved: (progress: ReadingProgress, resource?: 阅读资源结果) => void;
 }) {
+  const mobile=useMobileLayout();
   const [books, setBooks] = useState<Book[]>([]), [key, setKey] = useState('');
   const [resource, setResource] = useState<阅读资源结果 | null>(null);
   const [sort, setSort] = useState<PageSort>('name-asc'), [auto, setAuto] = useState({ ...DEFAULT_AUTO_READ });
@@ -19,7 +23,7 @@ export default function BookReaderSettings({ preferred, onSaved }: {
     void window.omicomic.getAppData().then(result => {
       if (!alive.current) return;
       if (!result.ok) { setError(result.error.message); setLoading(false); return; }
-      const recent = Object.values(result.data.readingProgress).sort((a,b) => b.updatedAt - a.updatedAt);
+      const recent = [...Object.values(result.data.readingProgress), ...(mobile ? result.data.recentOpened : [])].sort((a,b) => b.updatedAt - a.updatedAt);
       const list = [...new Map([...(preferred ? [preferred] : []), ...recent].map(book => [book.resourceKey, book])).values()];
       setBooks(list); setKey(preferred?.resourceKey ?? list[0]?.resourceKey ?? '');
       if (!list.length) setLoading(false);
@@ -72,19 +76,14 @@ export default function BookReaderSettings({ preferred, onSaved }: {
     }).catch(reason => { if (alive.current) setError(reason instanceof Error ? reason.message : '保存失败，请重试。'); }).finally(() => { if (alive.current) setPending(count => count - 1); });
   }
   const document = resource?.sourceType === 'pdf' || resource?.sourceType === 'epub';
-  const noTimes = window.document.documentElement.dataset.platform === 'android' && !resource?.pages.some(page => page.modifiedAt);
+  const noTimes = window.document.documentElement.dataset.platform === 'android' && !resource?.pages.some(page => typeof page.modifiedAt === 'number' && Number.isFinite(page.modifiedAt));
   return <div className="book-reader-settings" aria-busy={loading || pending > 0}>
-    <h4>每本漫画的阅读设置</h4>
-    {books.length > 0 && <div className="settings-row"><span>当前漫画</span><GlassSelect ariaLabel="当前漫画" value={key} options={books.map(book => ({ value: book.resourceKey, label: book.title }))} disabled={pending > 0} onChange={setKey} className="settings-glass-select" /></div>}
-    <p className="settings-help">仅影响所选漫画的页面和自动阅读，不改变资源库排序。</p>
-    {loading ? <p role="status">正在读取阅读设置…</p> : !books.length ? <p>打开漫画后，可在这里选择并设置。</p> : resource && <>
-      {document ? <p className="settings-help">PDF / EPUB 保持文档原有顺序。</p> : <div className="settings-row"><span>页面排序</span><GlassSelect ariaLabel="页面排序" value={sort} options={PAGE_SORT_OPTIONS.map(option => ({ ...option, disabled: noTimes && option.value.startsWith('time') }))} disabled={pending > 0 || !resource.pages.length} onChange={mode => save(mode)} className="settings-glass-select" /></div>}
-      {!document && <p className="settings-help">{noTimes ? '当前 Android 文件接口未提供页面修改时间，仅支持文件名排序。' : '时间缺失排在最后；时间相同按文件名自然升序。重排保留当前图片与书签。'}</p>}
+    {loading ? (mobile ? null : <p role="status">{t("正在读取阅读设置…")}</p>) : !books.length ? <p>{t("打开漫画后，可在这里设置。")}</p> : resource && <>
+      {document ? !mobile && <p className="settings-help">{t("PDF / EPUB 保持文档原有顺序。")}</p> : <div className="settings-row"><span>{t("页面排序")}</span><GlassSelect ariaLabel={t("页面排序")} value={sort} options={uiOptions(PAGE_SORT_OPTIONS.map(option => ({ ...option, disabled: noTimes && option.value.startsWith('time') })))} disabled={pending > 0 || !resource.pages.length} onChange={mode => save(mode)} className="settings-glass-select" /></div>}
       {(['intervalSeconds', 'scrollPixelsPerSecond'] as const).map(field => <label className="settings-row book-reader-slider" key={field}>
-        <span>{field === 'intervalSeconds' ? '翻页间隔' : '滚动速度'}</span><span><input type="range" aria-label={field === 'intervalSeconds' ? '翻页间隔' : '滚动速度'} min={field === 'intervalSeconds' ? 1 : 10} max={field === 'intervalSeconds' ? 60 : 400} step={field === 'intervalSeconds' ? 1 : 10} value={auto[field]} onChange={event => { const value = { ...auto, [field]: Number(event.target.value) }; setAuto(value); save(undefined, value); }} /><output>{auto[field]} {field === 'intervalSeconds' ? '秒' : '像素/秒'}</output></span>
+        <span>{field === 'intervalSeconds' ? t("翻页间隔") : mobile ? t("全景滚动速度") : t("滚动速度")}</span><span><input type="range" aria-label={field === 'intervalSeconds' ? t("翻页间隔") : mobile ? t("全景滚动速度") : t("滚动速度")} min={field === 'intervalSeconds' ? 1 : 10} max={field === 'intervalSeconds' ? 60 : 400} step={field === 'intervalSeconds' ? 1 : 10} value={auto[field]} onChange={event => { const value = { ...auto, [field]: Number(event.target.value) }; setAuto(value); save(undefined, value); }} /><output>{auto[field]} {field === 'intervalSeconds' ? t("秒") : t("像素/秒")}</output></span>
       </label>)}
-      <p className="settings-help">顶部播放按钮启动 / 暂停。普通阅读按间隔翻页，全景连续阅读平滑滚动。</p>
     </>}
-    {pending > 0 && <p role="status">正在保存…</p>}{error && <p role="alert">{error}</p>}
+    {!mobile && pending > 0 && <p role="status">{t("正在保存…")}</p>}{error && <p role="alert">{t(error ?? '')}</p>}
   </div>;
 }

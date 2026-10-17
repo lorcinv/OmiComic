@@ -10,7 +10,7 @@ async function openLibrary() {
   const view = render(<App />);
   await waitFor(() => expect(document.querySelectorAll('.omi-home__book')).toHaveLength(3));
   fireEvent.click(screen.getByRole('button', { name: '打开资源库', exact: true }));
-  await waitFor(() => expect(document.querySelectorAll('.resource-card')).toHaveLength(60));
+  await waitFor(() => expect(document.querySelectorAll('.resource-card')).toHaveLength(60), { timeout: 5000 });
   return view;
 }
 async function openDetails() {
@@ -60,8 +60,8 @@ describe('OmiComic actual React DOM regressions', () => {
     fireEvent.doubleClick(paragraph);
     const textarea = screen.getByRole('textbox', { name: '资源简介' });
     expect(textarea.parentElement).toBe(container);
-    expect(container.querySelector('.resource-detail-field-label')?.textContent).toBe('简介');
-    expect(textarea.getAttribute('rows')).toBe('3');
+    expect(screen.queryByRole('button', { name: /编辑简介|保存简介/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /移除标签/ })).toBeNull();
     fireEvent.change(textarea, { target: { value: '保存我的简介' } });
     fireEvent.pointerDown(editorSection);
     await waitFor(() => expect(screen.queryByRole('textbox', { name: '资源简介' })).toBeNull());

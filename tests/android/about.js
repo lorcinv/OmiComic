@@ -1,0 +1,16 @@
+const assert=(value,message)=>{if(!value)throw new Error(message);},pause=ms=>new Promise(r=>setTimeout(r,ms));
+const wait=async(fn,label)=>{const end=Date.now()+15000;while(!await fn()){if(Date.now()>end)throw new Error('Timeout '+label);await pause(40);}};
+const visible=e=>e&&e.getBoundingClientRect().width>0&&getComputedStyle(e).visibility!=='hidden';
+const button=label=>[...document.querySelectorAll('button')].find(e=>visible(e)&&(e.textContent.trim()===label||e.querySelector('strong')?.textContent===label));
+const tap=async e=>{assert(e,'Missing touch target');e.scrollIntoView({block:'nearest'});await pause(300);const r=e.getBoundingClientRect();window.__omiTap={x:r.x+r.width/2,y:r.y+Math.min(40,r.height/2),viewport:innerWidth};await wait(()=>!window.__omiTap,'touch');};
+await wait(()=>document.querySelector('.mobile-home-nav'),'home');
+await tap(button('设置'));await wait(()=>button('关于 OmiComic'),'settings');
+await tap(button('关于 OmiComic'));await wait(()=>document.querySelector('.omi-about'),'about');
+const about=document.querySelector('.omi-about'),link=about.querySelector('a');
+assert(about.textContent.includes('1.1.36'),'Wrong version');
+assert(about.textContent.includes('本地漫画阅读器'),'Introduction missing');
+assert(link.href==='https://github.com/lorcinv/OmiComic','Wrong GitHub URL');
+assert(!link.target,'Android must use main-frame link for external browser handoff');
+assert(about.scrollWidth<=about.clientWidth+1,'About content overflows');
+await tap(link);await pause(500);
+return {version:'1.1.36',introduction:true,githubUrl:link.href,linkTapped:true,noOverflow:true};

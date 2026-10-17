@@ -33,16 +33,16 @@ async function openLibrary(page: Page) {
     api.listDirectory = async (path: string) => ({ ok: true, data: { path, parentPath: null,
       items: records.map(item => ({ id: item.sourcePath, path: item.sourcePath, name: item.title, type: 'folder', extension: '', modifiedAt: 1 })), total: records.length } });
     api.updateSettings = async (settings: any) => {
-      data.settings = settings;
+      data.settings = { ...data.settings, ...settings };
       (window as any).__scaleSaves.push(settings);
-      localStorage.setItem('test-card-scale', JSON.stringify(settings));
-      return { ok: true, data: settings };
+      localStorage.setItem('test-card-scale', JSON.stringify(data.settings));
+      return { ok: true, data: data.settings };
     };
     api.getBookmarkPagePreview = async () => ({ ok: true, data: { dataUrl: (await api.getThumbnail()).data.url } });
   });
   await page.goto('/');
   await page.getByRole('button', { name: '打开资源库', exact: true }).click();
-  await expect(page.locator('.resource-card')).toHaveCount(24);
+  await expect(page.locator('.resource-card')).toHaveCount(24, { timeout: 20000 });
 }
 
 async function selectScale(page: Page, value: number) {

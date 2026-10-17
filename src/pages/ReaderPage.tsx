@@ -1,3 +1,6 @@
+import { uiOptions } from '../i18n';
+import useMobileReaderAutoHide from '../hooks/useMobileReaderAutoHide';
+import { tr, t } from '../i18n';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type {
@@ -12,6 +15,18 @@ import { clampPage as 限制索引, normalizeGroup as 规范化页组主索引, 
 import ReaderChapter from "../components/ReaderChapter";
 import ReaderCanvas from "../components/ReaderCanvas";
 import ReaderTools from "../components/ReaderTools";
+import { isAndroid } from "../platform";
+import { androidCall, androidNotify, hasAndroidRenderer } from '../android/bridge';
+import useNativeReaderSurface from '../android/useNativeReaderSurface';
+import { nativePreloadWindow, desktopPreloadWindow } from '../reader/preloadWindow';
+import useMobileLayout from "../hooks/useMobileLayout";
+import { mobileNavigationEpoch } from '../hooks/mobileNavigation';
+import useReaderVolumeKeys from "../hooks/useReaderVolumeKeys";
+import ReaderControlsSurface from "../components/ReaderControlsSurface";
+import ReaderProgressRail from "../components/ReaderProgressRail";
+import MobileReaderPreviews from "../components/MobileReaderPreviews";
+import { consumeDismissGesture } from "../hooks/consumeDismissGesture";
+import useReaderZoom from "../hooks/useReaderZoom";
 import ReaderImageEffects, { GammaFilter } from "../components/ReaderImageEffects";
 import { useAutoRead } from "../reader/useAutoRead";
 import { DEFAULT_ADJUSTMENTS, DEFAULT_AUTO_READ, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
@@ -33,12 +48,16 @@ interface ReaderPageProps {
   initialPageIndex: number;
   openContext: 阅读打开上下文 | null;
   isActive: boolean;
+  interactive?: boolean;
+  recordProgress?: boolean;
   onSwitchResource: (
     resource: 阅读资源结果,
     initialPageIndex: number,
     context: 阅读打开上下文,
+    motionEpoch?: number,
   ) => void;
   onBack: () => void;
+  onReady?: () => void;
   onProgressSaved: (progress: ReadingProgress) => void;
   onBookmarksChanged: () => void;
 }
@@ -56,7 +75,10 @@ interface 页面图片状态 {
   height?: number;
   html?: string;
   decodedBytes?: number;
+  decodedImage?: HTMLImageElement;
   canvas?: HTMLCanvasElement;
+  native?: boolean;
+  prefetchFailed?: boolean;
 }
 
 interface 页面原始尺寸 {
@@ -193,7 +215,16 @@ const 默认阅读器设置: Pick<
   | "smartDetectSpreadPage" | "wheelPageTurn" | "immersiveAutoHide" | "immersiveAutoHideDelay"
   | "readerHideFooterControls" | "readerHideImmersiveProgress" | "readerMemoryCacheSizeMb"
   | "readerPreloadPages" | "readerImageLoadConcurrency" | "bookSwitchButtonOpacity"
+  | "desktopReaderAutoHide" | "readerVolumeKeys" | "readerVolumeKeysReversed"
+  | "readerVolumePanoramaPages" | "mobileReaderPreviews" | "mobilePreviewWidth" | "mobileReaderAutoHide"
 > = {
+  desktopReaderAutoHide: false,
+  readerVolumePanoramaPages: 1,
+  mobileReaderPreviews: true,
+  mobileReaderAutoHide: true,
+  mobilePreviewWidth: 88,
+  readerVolumeKeys: false,
+  readerVolumeKeysReversed: false,
   readerDefaultFitMode: "fit-window",
   readerPageMode: "single",
   readerDefaultFlow: "horizontal",
@@ -229,15 +260,25 @@ function ReaderPage({
   initialPageIndex,
   openContext,
   isActive,
+  interactive = true,
+  recordProgress = true,
   onSwitchResource,
   onBack,
+  onReady,
   onProgressSaved,
   onBookmarksChanged,
 }: ReaderPageProps) {
+  const 手机布局 = useMobileLayout();
+  const [手机工具栏可见, 设置手机工具栏可见] = useState(false);
+  const [手机阅读设置打开, 设置手机阅读设置打开] = useState(false);
+  const [手机页面预览打开, 设置手机页面预览打开] = useState(false);
   const { resource, source: 文档源, loading: 文档加载中, error: 文档错误 } = useReaderDocument(输入资源);
+  const 原生图片核心 = isAndroid() && hasAndroidRenderer() && resource?.sourceType !== 'pdf' && resource?.sourceType !== 'epub';
   const [当前索引, 设置当前索引] = useState(0);
   const [页面图片状态表, 提交页面图片状态表] = useState<Record<number, 页面图片状态>>({});
   const [可显示页组, 设置可显示页组] = useState<可显示页组 | null>(null);
+  const [手机解码完成, 设置手机解码完成] = useState<Record<number,string>>({});
+  const 手机页面元素 = useRef(new Map<number,HTMLImageElement>());
   const [, 设置页组加载状态] = useState<页组加载状态>({
     status: "idle",
     requestId: 0,
@@ -262,6 +303,20 @@ function ReaderPage({
   const [双页配对起点, 设置双页配对起点] = useState(initialPageIndex);
   const [页面排序, 设置页面排序] = useState<PageSort>('name-asc');
   const [画面调整, 设置画面调整] = useState({ ...DEFAULT_ADJUSTMENTS });
+  const 全局调整待保存 = useRef<typeof DEFAULT_ADJUSTMENTS | null>(null);
+  const 全局调整保存计时 = useRef<ReturnType<typeof setTimeout>>();
+  function 保存全局调整(): void {
+    clearTimeout(全局调整保存计时.current);
+    const value = 全局调整待保存.current;
+    全局调整待保存.current = null;
+    if (value) void window.omicomic.updateSettings({mobileImageAdjustments:value}).then(result => {
+      if (!result.ok) 设置进度保存错误(result.error.message);
+    }).catch(() => 设置进度保存错误("画面设置保存失败，请重试。"));
+  }
+  useEffect(() => {
+    window.addEventListener('omi-pause',保存全局调整);
+    return () => { window.removeEventListener('omi-pause',保存全局调整); 保存全局调整(); };
+  }, []);
   const [自动阅读设置, 设置自动阅读设置] = useState({ ...DEFAULT_AUTO_READ });
   const 阅读面板打开 = useRef(false);
   const 伽马滤镜Id = `reader-gamma-${useId().replace(/:/g, '')}`;
@@ -279,6 +334,7 @@ function ReaderPage({
   const 上次滚轮时间 = useRef(0);
   const 相邻资源切换中 = useRef(false);
   const 阅读区域 = useRef<HTMLDivElement>(null);
+  const 自由缩放 = useReaderZoom(阅读区域, `${resource?.resourceKey}:${缩放模式}:${全景模式}:${阅读流向}`);
   const 全景页面流 = useRef<HTMLDivElement>(null);
   const 保存进度定时器 = useRef<number | null>(null);
   const 待保存进度 = useRef<ReadingProgress | null>(null);
@@ -286,7 +342,9 @@ function ReaderPage({
   const 顶部栏隐藏定时器 = useRef<number | null>(null);
   const 底部栏隐藏定时器 = useRef<number | null>(null);
   const 阅读器会话Id = useRef(下一个阅读器会话Id++);
+  useNativeReaderSurface(阅读区域,阅读器会话Id.current,原生图片核心,isActive&&interactive,阅读器设置,画面调整);
   const 进度拖动指针Id = useRef<number | null>(null);
+  const 进度手势 = useRef<{x:number; moved:boolean} | null>(null);
   const 进度跳转序号 = useRef(0);
   const 全景拖动 = useRef<全景拖动状态>({
     active: false,
@@ -389,7 +447,7 @@ function ReaderPage({
   }
 
   const 总页数 = resource?.total ?? 0;
-  const 阅读单位 = resource?.sourceType === "epub" ? "章" : "页";
+  const 阅读单位 = t(resource?.sourceType === "epub" ? "章" : "页");
   const 获取页面尺寸Key = (索引: number): string => `${resource?.resourceKey ?? "none"}:${索引}`;
   const 获取已知页面原始尺寸 = (索引: number): 页面原始尺寸 | undefined => {
     const 状态 = 页面图片状态引用.current[索引] ?? 页面图片状态表[索引];
@@ -453,7 +511,7 @@ function ReaderPage({
   const 当前页组Key = 当前页组索引.join("|");
   const 目标页组已准备 = 当前页组页面.length > 0 && 当前页组页面.every((页面) => {
     const 状态 = 页面图片状态引用.current[页面.index];
-    return Boolean(状态 && !状态.loading && (状态.url || 状态.error));
+    return Boolean(状态 && !状态.loading && (状态.error || 状态.canvas || 状态.html || 状态.native || 状态.url && (!手机布局 || 手机解码完成[页面.index] === 状态.url && 手机页面元素.current.get(页面.index)?.isConnected)));
   });
   const 显示页组 = 目标页组已准备
     ? { indices: 当前页组索引, visualIndices: 视觉页组索引, pages: 当前页组页面 }
@@ -487,9 +545,45 @@ function ReaderPage({
   const 页组间距 = 0;
   const 垂直阅读 = 阅读流向 === "vertical";
   const 模式2 = 全景模式;
-  const 预加载页数 = Math.min(Math.max(Math.round(阅读器设置.readerPreloadPages), 0), 20);
-  const 图片加载线程数 = Math.min(Math.max(Math.round(阅读器设置.readerImageLoadConcurrency), 1), 文档源 ? 2 : 8);
+  const 原生跳页代号 = useRef(0);
+  const 预加载页数 = Math.min(Math.max(Math.round(阅读器设置.readerPreloadPages), 0), isAndroid() ? 20 : 120);
+  const 图片加载线程数 = Math.min(Math.max(Math.round(阅读器设置.readerImageLoadConcurrency), 1), 文档源 ? (isAndroid() ? 2 : 4) : (isAndroid() ? 8 : 24));
   const 内存缓存上限字节 = Math.max(0, Math.round(阅读器设置.readerMemoryCacheSizeMb) * 1024 * 1024);
+  const 原生预读窗口 = useRef(new Set<number>());
+  const 原生阅读方向 = useRef({resourceKey:'',index:0,direction:1});
+  const 原生前次位置 = 原生阅读方向.current;
+  const 原生前进方向 = 原生前次位置.resourceKey === resource?.resourceKey
+    ? Math.sign(安全索引 - 原生前次位置.index) || 原生前次位置.direction : 1;
+  const 原生单页预算 = Math.min(4000000,Math.max(1000000,(可用区域.width||window.innerWidth)*devicePixelRatio*1.5*(可用区域.height||window.innerHeight)*devicePixelRatio))*4;
+  const 原生预读索引 = nativePreloadWindow(当前页组索引,resource?.total??0,原生前进方向,预加载页数,内存缓存上限字节,原生单页预算);
+  const 原生窗口索引 = [...当前页组索引,...原生预读索引];
+  const 原生窗口Key = JSON.stringify(原生窗口索引);
+  const 原生页面Key = (页面:阅读页面项) => JSON.stringify([页面.sourcePath,页面.archiveInnerPath??'',页面.type]);
+  useLayoutEffect(() => {
+    if (resource) 原生阅读方向.current = {resourceKey:resource.resourceKey,index:安全索引,direction:原生前进方向};
+    if (!原生图片核心 || 模式2 || !isActive || !resource) {原生预读窗口.current.clear();return;}
+    原生预读窗口.current = new Set(原生窗口索引);
+    原生跳页代号.current++;
+    androidNotify('readerSeek', {session:阅读器会话Id.current,seek:原生跳页代号.current,
+      keep:原生窗口索引.map(index=>resource.pages[index]).filter(Boolean).map(原生页面Key)});
+    // A page job belongs to the book/window, not to the render that requested it.
+    // Distant seeks still retire unrelated work before scheduling the new page.
+    保留页面图片加载调度(原生预读窗口.current);
+  }, [原生图片核心,模式2,isActive,interactive,resource?.resourceKey,当前页组Key,原生窗口Key]);
+  const 桌面预读窗口 = useRef(new Set<number>());
+  const 桌面预读任务 = useRef(new Map<string, Promise<unknown>>());
+  const 已知页面 = Object.values(页面图片状态表).filter(state => state.url);
+  const 桌面单页预算 = 已知页面.length ? Math.max(1, ...已知页面.map(估算页面图片缓存字节)) : 16 * 1024 * 1024;
+  const 桌面预读索引 = desktopPreloadWindow(当前页组索引,resource?.total??0,原生前进方向,预加载页数,内存缓存上限字节,桌面单页预算);
+  const 桌面窗口Key = JSON.stringify([...当前页组索引,...桌面预读索引]);
+  useLayoutEffect(() => {
+    if (isAndroid() || !isActive || !resource || 模式2) { 桌面预读窗口.current.clear(); return; }
+    桌面预读窗口.current = new Set([...当前页组索引,...桌面预读索引]);
+    保留页面图片加载调度(桌面预读窗口.current);
+  }, [isActive, resource?.resourceKey, 模式2, 桌面窗口Key]);
+  const 桌面自动隐藏 = !手机布局 && 阅读器设置.desktopReaderAutoHide === true;
+  const 可隐藏工具栏 = 沉浸模式 || 桌面自动隐藏;
+  const 桌面按住指针 = useRef(new Set<number>());
   const 模式2窗口半径 = Math.min(10, Math.max(6, Math.ceil(预加载页数 * 1.2)));
   const 模式2预热窗口半径 = 内存缓存上限字节 <= 0
     ? 模式2窗口半径
@@ -569,9 +663,26 @@ function ReaderPage({
     resourceKey: resource?.resourceKey ?? null,
     flow: 阅读流向,
   };
+  // Keep navigation in logical page order; only horizontal presentation is reversed.
+  const 全景横向符号 = !垂直阅读 && 从右到左阅读 ? -1 : 1;
+  // Keep a bounded set of real image elements decoded, not only their URLs.
+  // A warm neighbour becomes the visible page without remounting its image.
+  const 手机预解码页面: 阅读页面项[] = [];
+  if (手机布局 && !模式2 && resource && 内存缓存上限字节 > 0) {
+    let bytes = 当前页组页面.reduce((sum,page) => sum + 估算页面图片缓存字节(页面图片状态表[page.index] ?? {url:'',loading:true,error:null}),0);
+    for (let distance=1;distance<=Math.min(4,预加载页数);distance++) {
+      for (const index of [安全索引+distance,安全索引-distance]) {
+        const page=resource.pages[index],state=页面图片状态表[index];
+        if (!page || !state?.url || state.loading || state.canvas || state.html) continue;
+        const size=估算页面图片缓存字节(state);
+        if (bytes+size>内存缓存上限字节) continue;
+        bytes+=size;手机预解码页面.push(page);
+      }
+    }
+  }
   const 模式2显示页面 = 模式2 && resource
-    ? resource.pages.slice(模式2窗口起点, 模式2窗口终点 + 1)
-    : 显示页组页面;
+    ? (全景横向符号 === -1 ? resource.pages.slice(模式2窗口起点, 模式2窗口终点 + 1).reverse() : resource.pages.slice(模式2窗口起点, 模式2窗口终点 + 1))
+    : 手机布局 ? [...new Map([...显示页组页面,...当前页组页面,...手机预解码页面].map(page=>[page.index,page])).values()] : 显示页组页面;
   const 模式2当前锚点 = 模式2 ? 计算模式2页面锚点(安全索引) : 0;
   全景当前锚点引用.current = 模式2当前锚点;
   const 页面流样式 = 模式2
@@ -579,11 +690,25 @@ function ReaderPage({
         gap: "0px",
         "--reader-panorama-width": `${模式2可用宽度}px`,
         "--reader-panorama-height": `${模式2可用高度}px`,
-        "--reader-panorama-translate": `${全景偏移引用.current - 模式2当前锚点}px`,
+        "--reader-panorama-translate": `${全景偏移引用.current * 全景横向符号 - 模式2当前锚点}px`,
       } as CSSProperties)
     : ({ gap: `${页组间距}px` } as CSSProperties);
   const 进度百分比 = 总页数 > 1 ? (显示进度索引 / (总页数 - 1)) * 100 : 总页数 === 1 ? 100 : 0;
   const 显示进度百分比 = 进度拖动比例 === null ? 进度百分比 : 进度拖动比例 * 100;
+  const 进度预览索引 = 进度拖动比例 === null ? 显示进度索引 : Math.round(进度拖动比例 * Math.max(0, 总页数 - 1));
+  const 进度预览组 = 全景模式 ? [进度预览索引] : 计算页组索引(规范化页组主索引(进度预览索引, 总页数, 有效阅读器设置, 页面是跨页横图), 总页数, 有效阅读器设置, 页面是跨页横图);
+  const 手机进度文本 = `${总页数 ? (进度预览组[0] ?? 0) + 1 : 0}${进度预览组.length > 1 ? `~${进度预览组.at(-1)! + 1}` : ''}/${总页数}`;
+  const 电脑进度文本 = (从右到左阅读 ? [...进度预览组].reverse() : 进度预览组).map(index => String(index+1)).join(' | ');
+
+  function 调整画面(value: typeof 画面调整) {
+    const next = 手机布局 ? { ...value, enabled: true } : value;
+    设置画面调整(next);
+    if (手机布局) {
+      全局调整待保存.current = next;
+      clearTimeout(全局调整保存计时.current);
+      全局调整保存计时.current = setTimeout(保存全局调整,250);
+    }
+  }
 
   function 计算模式2页面尺寸(页面索引: number): { width: number; height: number } {
     return 模式2页面几何引用.current.页面尺寸[页面索引]
@@ -602,8 +727,11 @@ function ReaderPage({
   function 计算模式2页面锚点在窗口(页面索引: number, 窗口起点: number, 窗口终点: number): number {
     if (!resource || 窗口起点 > 窗口终点) return 0;
     const 目标索引 = 限制索引(页面索引, resource.total);
-    return (模式2页面几何引用.current.页面中心[目标索引] ?? 0)
-      - (模式2页面几何引用.current.页面前缀长度[窗口起点] ?? 0);
+    const 几何 = 模式2页面几何引用.current;
+    const 中心 = 几何.页面中心[目标索引] ?? 0;
+    return 全景横向符号 === -1
+      ? (几何.页面前缀长度[窗口终点 + 1] ?? 0) - 中心
+      : 中心 - (几何.页面前缀长度[窗口起点] ?? 0);
   }
 
   function 计算模式2页面锚点(页面索引: number): number {
@@ -780,7 +908,9 @@ function ReaderPage({
     };
   }
 
-  const 当前阅读进度快照 = resource
+  const 允许进度记录 = useRef(recordProgress);
+  允许进度记录.current = recordProgress;
+  const 当前阅读进度快照 = recordProgress && resource
     && 阅读视图已加载资源Key引用.current === resource.resourceKey
     ? 创建当前阅读进度()
     : null;
@@ -798,6 +928,7 @@ function ReaderPage({
   }
 
   function 立即保存待保存进度(允许根据当前状态创建 = true): void {
+    if (!允许进度记录.current) return;
     if (保存进度定时器.current !== null) {
       window.clearTimeout(保存进度定时器.current);
       保存进度定时器.current = null;
@@ -831,17 +962,34 @@ function ReaderPage({
 
   useEffect(() => {
     const pause = () => 立即保存待保存进度(false);
-    window.addEventListener("omi-reader-back", 返回资源库);
+    const back = () => {
+      if (document.querySelector('.mobile-sheet-overlay')) return;
+      if (阅读面板打开.current) window.dispatchEvent(new Event("omi-reader-close-panel"));
+      else if (手机页面预览打开) 设置手机页面预览打开(false);
+      else 返回资源库();
+    };
+    window.addEventListener("omi-reader-back", back);
     window.addEventListener("omi-pause", pause);
     window.addEventListener("pagehide", pause);
     return () => {
-      window.removeEventListener("omi-reader-back", 返回资源库);
+      window.removeEventListener("omi-reader-back", back);
       window.removeEventListener("omi-pause", pause);
       window.removeEventListener("pagehide", pause);
     };
   });
 
   const 手机触点 = useRef<{ id: number; x: number; y: number; time: number } | null>(null);
+  useMobileReaderAutoHide(手机布局 && isActive && interactive, 手机工具栏可见, 阅读器设置.mobileReaderAutoHide !== false,
+    手机阅读设置打开 || 手机页面预览打开 || 进度拖动比例 !== null || 阅读视图初始化中, () => 设置手机工具栏可见(false));
+  useEffect(() => {
+    if(!手机布局 || !手机页面预览打开)return;
+    const outside=(event:PointerEvent)=>{
+      if((event.target as Element)?.closest('.mobile-reader-previews,.reader-progress-rail,.mobile-sheet-overlay'))return;
+      consumeDismissGesture(event);手机触点.current=null;设置手机页面预览打开(false);
+    };
+    window.addEventListener('pointerdown',outside,true);return()=>window.removeEventListener('pointerdown',outside,true);
+  },[手机布局,手机页面预览打开]);
+  useEffect(()=>{设置手机解码完成({});},[resource?.resourceKey]);
   function 开始手机触控(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType !== "touch" || (event.target as HTMLElement).closest("button,input")) return;
     if (!event.isPrimary) { 手机触点.current = null; return; }
@@ -859,7 +1007,7 @@ function ReaderPage({
       if(!模式2&&(fraction<.25||fraction>.75)){
         const next=阅读器设置.doublePageDirection === "right-to-left"?fraction<.25:fraction>.75;
         if(next)下一页();else 上一页();
-      }else{显示顶部栏();显示底部栏();}
+      }else if(手机布局){设置手机工具栏可见(value => !value);}else{显示顶部栏();显示底部栏();}
     }
   }
 
@@ -978,7 +1126,7 @@ function ReaderPage({
     if (!页面流) return;
     页面流.style.setProperty(
       "--reader-panorama-translate",
-      `${偏移 - 全景当前锚点引用.current}px`,
+      `${偏移 * 全景横向符号 - 全景当前锚点引用.current}px`,
     );
   }
 
@@ -997,7 +1145,7 @@ function ReaderPage({
         ? (独立平移分量[1] ?? 0)
         : (独立平移分量[0] ?? 0);
       const 视觉平移 = (垂直阅读 ? 矩阵.m42 : 矩阵.m41) + 独立平移;
-      return 视觉平移 + 全景当前锚点引用.current;
+      return (视觉平移 + 全景当前锚点引用.current) * 全景横向符号;
     } catch {
       return null;
     }
@@ -1074,9 +1222,9 @@ function ReaderPage({
   function 应用全景拖动位置(拖动: 全景拖动状态): void {
     const 速度 = 计算全景采样速度(拖动.samples);
     const 增益 = 拖动.pointerType === "mouse" ? mouseDragGain(垂直阅读 ? 速度.y : 速度.x) : 1;
-    拖动.velocityX = 拖动.pointerType === "mouse" ? acceleratedMouseVelocity(速度.x) : 速度.x;
+    拖动.velocityX = (拖动.pointerType === "mouse" ? acceleratedMouseVelocity(速度.x) : 速度.x) * 全景横向符号;
     拖动.velocityY = 拖动.pointerType === "mouse" ? acceleratedMouseVelocity(速度.y) : 速度.y;
-    const 拖动距离 = (垂直阅读 ? 拖动.currentY - 拖动.lastY : 拖动.currentX - 拖动.lastX) * 增益;
+    const 拖动距离 = (垂直阅读 ? 拖动.currentY - 拖动.lastY : (拖动.currentX - 拖动.lastX) * 全景横向符号) * 增益;
     拖动.lastX = 拖动.currentX;
     拖动.lastY = 拖动.currentY;
     拖动.distance += 拖动距离;
@@ -1153,7 +1301,7 @@ function ReaderPage({
 
   function 安排顶部栏隐藏(): void {
     清理顶部栏隐藏定时器();
-    if (!沉浸模式 || 阅读面板打开.current) return;
+    if (!可隐藏工具栏 || 桌面按住指针.current.size || 阅读面板打开.current || document.activeElement?.matches(".reader-toolbar input,.reader-toolbar textarea")) return;
     顶部栏隐藏定时器.current = window.setTimeout(() => {
       设置顶部栏可见(false);
       顶部栏隐藏定时器.current = null;
@@ -1162,7 +1310,7 @@ function ReaderPage({
 
   function 安排底部栏隐藏(忽略输入聚焦 = false): void {
     清理底部栏隐藏定时器();
-    if (!沉浸模式 || (!忽略输入聚焦 && 页码输入聚焦)) return;
+    if (!可隐藏工具栏 || 桌面按住指针.current.size || 进度拖动比例 !== null || (!忽略输入聚焦 && 页码输入聚焦)) return;
     底部栏隐藏定时器.current = window.setTimeout(() => {
       设置底部栏可见(false);
       底部栏隐藏定时器.current = null;
@@ -1170,13 +1318,13 @@ function ReaderPage({
   }
 
   function 显示顶部栏(): void {
-    if (!沉浸模式) return;
+    if (!可隐藏工具栏) return;
     设置顶部栏可见(true);
     安排顶部栏隐藏();
   }
 
   function 显示底部栏(): void {
-    if (!沉浸模式) return;
+    if (!可隐藏工具栏) return;
     设置底部栏可见(true);
     安排底部栏隐藏();
   }
@@ -1223,19 +1371,44 @@ function ReaderPage({
     安排刷新阅读区可用尺寸();
   }
 
-  async function 读取页面图片状态(页面: 阅读页面项, signal?: AbortSignal): Promise<{ pageIndex: number; state: 页面图片状态 }> {
+  async function 读取页面图片状态(页面: 阅读页面项, signal?: AbortSignal, prefetch=false): Promise<{ pageIndex: number; state: 页面图片状态 }> {
     try {
       if (文档源) {
         const 内容 = await 文档源.readPage(页面.index, signal);
         return { pageIndex: 页面.index, state: { ...内容, error: null, loading: false } };
+      }
+      if(原生图片核心&&!/\.gif$/i.test(页面.name)){
+        const prepared=await androidCall<Pick<页面图片状态,'url'|'width'|'height'|'decodedBytes'|'native'>>('readerPrepare',{
+          sourcePath:页面.sourcePath,archiveInnerPath:页面.archiveInnerPath,type:页面.type,session:阅读器会话Id.current,prefetch,
+          workKey:原生页面Key(页面),
+          seek:模式2 ? undefined : 原生跳页代号.current,
+          width:Math.round((可用区域.width||window.innerWidth)*devicePixelRatio),height:Math.round((可用区域.height||window.innerHeight)*devicePixelRatio),
+        });
+        if(signal?.aborted)return 创建已取消页面图片结果(页面.index);
+        if(prepared.width&&prepared.height)写入页面原始尺寸(页面.index,prepared.width,prepared.height);
+        return {pageIndex:页面.index,state:{...prepared,error:null,loading:false}};
       }
       const 结果 = await window.omicomic.getPageImage({
         sourcePath: 页面.sourcePath,
         virtualPath: 页面.virtualPath,
         archiveInnerPath: 页面.archiveInnerPath,
         readerSessionId: 阅读器会话Id.current,
+        prefetch,
         type: 页面.type,
       });
+      if (signal?.aborted) return 创建已取消页面图片结果(页面.index);
+      let decodedImage: HTMLImageElement | undefined;
+      if (!isAndroid() && 结果.ok && 结果.data.url) {
+        // Keep a decoded image in the same byte-bounded state as its URL. Read-ahead
+        // now prepares pixels, rather than deferring the expensive decode to a turn.
+        const image = new Image(); image.decoding = 'async'; image.fetchPriority = prefetch ? 'low' : 'high';
+        if (结果.data.url.startsWith('omicomic-image:')) image.crossOrigin = 'anonymous';
+        const abort = () => { image.src = ''; };
+        signal?.addEventListener('abort', abort, { once: true });
+        try { image.src = 结果.data.url; await image.decode(); decodedImage = image; }
+        finally { signal?.removeEventListener('abort', abort); }
+        if (signal?.aborted) return 创建已取消页面图片结果(页面.index);
+      }
       return {
         pageIndex: 页面.index,
         state: 结果.ok
@@ -1243,8 +1416,9 @@ function ReaderPage({
               url: 结果.data.url,
               error: null,
               loading: false,
-              width: 结果.data.width,
-              height: 结果.data.height,
+              width: decodedImage?.naturalWidth || 结果.data.width,
+              height: decodedImage?.naturalHeight || 结果.data.height,
+              decodedImage,
             }
           : { url: "", error: 结果.error.message, loading: false },
       };
@@ -1286,7 +1460,7 @@ function ReaderPage({
   }
 
   function 推进页面图片加载队列(): void {
-    const 并发上限 = Math.min(Math.max(Math.round(页面图片并发上限.current), 1), 8);
+    const 并发上限 = Math.min(Math.max(Math.round(页面图片并发上限.current), 1), isAndroid() ? 8 : 24);
     while (页面图片加载队列.current.length > 0) {
       // Reserve a foreground lane; slow speculative reads must not block a jump.
       const 下一任务 = 页面图片加载队列.current[0];
@@ -1306,7 +1480,7 @@ function ReaderPage({
 
       页面图片运行任务数.current += 1;
       页面图片运行任务.current.set(任务.页面.index, 任务);
-      void 读取页面图片状态(任务.页面, 任务.controller.signal)
+      void 读取页面图片状态(任务.页面, 任务.controller.signal,任务.优先级!==0)
         .then((结果) => 完成页面图片调度任务(任务, 结果))
         .catch(() => 完成页面图片调度任务(任务, {
           pageIndex: 任务.页面.index,
@@ -1330,6 +1504,27 @@ function ReaderPage({
     for (const 任务 of 排队任务) {
       任务.完成(创建已取消页面图片结果(任务.页面.index));
     }
+  }
+
+  function 保留页面图片加载调度(保留:Set<number>): void {
+    for (const 任务 of 页面图片运行任务.current.values()) {
+      if (保留.has(任务.页面.index)) continue;
+      任务.controller.abort();
+      if (页面图片读取任务.current.get(任务.页面.index) === 任务.promise) {
+        页面图片读取任务.current.delete(任务.页面.index);
+        活动页面加载索引.current.delete(任务.页面.index);
+      }
+    }
+    页面图片加载队列.current = 页面图片加载队列.current.filter(任务 => {
+      if (保留.has(任务.页面.index)) return true;
+      页面图片排队任务.current.delete(任务.页面.index);
+      if (页面图片读取任务.current.get(任务.页面.index) === 任务.promise) {
+        页面图片读取任务.current.delete(任务.页面.index);
+        活动页面加载索引.current.delete(任务.页面.index);
+      }
+      任务.完成(创建已取消页面图片结果(任务.页面.index));
+      return false;
+    });
   }
 
   function 清除过期排队图片(): void {
@@ -1627,7 +1822,7 @@ function ReaderPage({
     if (!resource || resource.total <= 0) return;
     const 操作资源Key = resource.resourceKey;
     const 索引列表 = 获取模式2预热索引(请求.centerIndex, 请求.direction, 请求.intensity);
-    const 缓冲上限 = Math.min(32 * 1024 * 1024, 内存缓存上限字节 * 0.2);
+    const 缓冲上限 = Math.min((isAndroid() ? 32 : 192) * 1024 * 1024, 内存缓存上限字节 * 0.2);
     let 缓冲字节 = 0;
     let 已用字节 = 0;
     let 单页估计 = 4 * 1024 * 1024;
@@ -1678,7 +1873,7 @@ function ReaderPage({
             return;
           }
           模式2预热结果缓冲.current.set(结果.pageIndex, 结果.state);
-          trimPrefetchBuffer(模式2预热结果缓冲.current, 请求.centerIndex, Math.min(32 * 1024 * 1024, 内存缓存上限字节 * 0.2), 估算页面图片缓存字节);
+          trimPrefetchBuffer(模式2预热结果缓冲.current, 请求.centerIndex, Math.min((isAndroid() ? 32 : 1024) * 1024 * 1024, 内存缓存上限字节 * 0.25), 估算页面图片缓存字节);
           安排刷新模式2预热结果();
         },
         () => 资源Key引用.current !== 操作资源Key || 模式2预热代号.current !== 执行代号,
@@ -1819,6 +2014,7 @@ function ReaderPage({
 
     const 状态 = 页面图片状态引用.current[目标页];
     if (状态?.error) return true;
+    if (状态?.native) return true;
     if (状态?.html || 状态?.canvas) return true;
     if (!状态?.url) return false;
     const 已显示图片 = 阅读区域.current?.querySelector<HTMLImageElement>(
@@ -1836,6 +2032,7 @@ function ReaderPage({
 
     const 解码图片 = new Image();
     解码图片.decoding = "async";
+    if (状态.url.startsWith('omicomic-image:')) 解码图片.crossOrigin = 'anonymous';
     解码图片.src = 状态.url;
     全景导航解码图片.current = 解码图片;
     try {
@@ -2191,7 +2388,7 @@ function ReaderPage({
         );
     if (模式2) {
       const 来自进度跳页 = typeof 回退比例 === "number";
-      const 方式 = 来自进度跳页 || Math.abs(目标索引 - 安全索引) > 模式2窗口半径 ? "jump" : "slide";
+      const 方式 = 来自进度跳页 ? "jump" : "slide";
       return 切换模式2页面(目标索引, 方式);
     }
     设置当前索引(目标索引);
@@ -2217,7 +2414,26 @@ function ReaderPage({
 
   function 预览进度条拖动(事件: ReactPointerEvent<HTMLDivElement>): void {
     if (进度拖动指针Id.current !== 事件.pointerId) return;
-    设置进度拖动比例(读取进度条比例(事件));
+    if (!进度手势.current) return;
+    if (Math.abs(事件.clientX-进度手势.current.x)>3) 进度手势.current.moved=true;
+    if (!进度手势.current.moved) return;
+    const 比例 = 读取进度条比例(事件);
+    设置进度拖动比例(比例);
+    实时拖动阅读比例(比例);
+    if (手机布局 && 阅读器设置.mobileReaderPreviews !== false && resource?.sourceType !== 'epub' && resource?.sourceType !== 'pdf') 设置手机页面预览打开(true);
+  }
+
+  function 实时拖动阅读比例(比例: number): void {
+    if (!resource || 阅读视图初始化中) return;
+    const fraction=Math.min(1,Math.max(0,比例))*Math.max(0,resource.total-1);
+    if (!模式2) { void 跳转到页面索引(Math.round(fraction)); return; }
+    取消全景异步导航(true);
+    const centers=模式2页面几何引用.current.页面中心, low=Math.floor(fraction), high=Math.min(resource.total-1,low+1);
+    const target=(centers[low] ?? 0)+((centers[high] ?? 0)-(centers[low] ?? 0))*(fraction-low);
+    暂停全景动画();
+    设置全景偏移值((centers[安全索引引用.current] ?? 0)-target);
+    尝试重心化模式2窗口();
+    预热模式2窗口(Math.round(fraction),{强度:0.2});
   }
 
   function 开始进度条拖动(事件: ReactPointerEvent<HTMLDivElement>): void {
@@ -2227,7 +2443,10 @@ function ReaderPage({
     事件.currentTarget.setPointerCapture(事件.pointerId);
     进度跳转序号.current += 1;
     进度拖动指针Id.current = 事件.pointerId;
-    设置进度拖动比例(读取进度条比例(事件));
+    进度手势.current = {x:事件.clientX,moved:false};
+    const 比例 = 读取进度条比例(事件);
+    设置进度拖动比例(比例);
+    if (!模式2) 实时拖动阅读比例(比例);
   }
 
   function 延后清空进度拖动比例(跳转序号: number): void {
@@ -2247,7 +2466,16 @@ function ReaderPage({
     if (进度拖动指针Id.current !== 事件.pointerId) return;
     const 比例 = 读取进度条比例(事件);
     const 跳转序号 = 进度跳转序号.current;
+    const 拖动 = 进度手势.current?.moved;
+    进度手势.current = null;
     进度拖动指针Id.current = null;
+    if (事件.currentTarget.hasPointerCapture(事件.pointerId)) 事件.currentTarget.releasePointerCapture(事件.pointerId);
+    if (拖动) {
+      实时拖动阅读比例(比例);
+      if (模式2) 提交模式2自由位置();
+      延后清空进度拖动比例(跳转序号);
+      return;
+    }
     if (模式2) {
       设置进度拖动比例(比例);
       void 跳转到阅读比例(比例).finally(() => 延后清空进度拖动比例(跳转序号));
@@ -2261,6 +2489,8 @@ function ReaderPage({
     if (进度拖动指针Id.current !== 事件.pointerId) return;
     进度跳转序号.current += 1;
     进度拖动指针Id.current = null;
+    进度手势.current = null;
+    if (模式2) 提交模式2自由位置();
     设置进度拖动比例(null);
   }
 
@@ -2479,7 +2709,7 @@ function ReaderPage({
   function 滚动全景(事件: ReactWheelEvent<HTMLDivElement>): void {
     if (!resource || !模式2) return;
     const 原始增量 = Math.abs(事件.deltaX) > Math.abs(事件.deltaY)
-      ? 事件.deltaX
+      ? 事件.deltaX * 全景横向符号
       : 事件.deltaY;
     if (Math.abs(原始增量) < 0.01) return;
     事件.preventDefault();
@@ -2647,6 +2877,13 @@ function ReaderPage({
           readerPreloadPages: 应用设置.readerPreloadPages,
           readerImageLoadConcurrency: 应用设置.readerImageLoadConcurrency,
           bookSwitchButtonOpacity: 应用设置.bookSwitchButtonOpacity,
+          readerVolumeKeys: Boolean(应用设置.readerVolumeKeys),
+          readerVolumeKeysReversed: Boolean(应用设置.readerVolumeKeysReversed),
+          readerVolumePanoramaPages: 应用设置.readerVolumePanoramaPages ?? 1,
+          mobileReaderPreviews: 应用设置.mobileReaderPreviews !== false,
+          mobileReaderAutoHide: 应用设置.mobileReaderAutoHide !== false,
+          desktopReaderAutoHide: 应用设置.desktopReaderAutoHide === true,
+          mobilePreviewWidth: 应用设置.mobilePreviewWidth ?? 88,
         };
         const 恢复保存位置 = !resource.requestedPageId && 已保存进度?.currentPageIndex === initialPageIndex;
         const 待恢复索引 = resolvePageIndex(resource.pages,
@@ -2655,7 +2892,7 @@ function ReaderPage({
         const 配对起点 = 已保存进度?.currentPageIndex === 待恢复索引
           ? resolvePageIndex(resource.pages, 阅读视图.pairingAnchorId, undefined, 阅读视图.pairingAnchor ?? 待恢复索引) : 待恢复索引;
         设置页面排序(normalizePageSort(阅读视图.pageSort));
-        设置画面调整(normalizeAdjustments(阅读视图.adjustments));
+        设置画面调整(手机布局 ? { ...normalizeAdjustments(应用设置.mobileImageAdjustments), enabled: true } : normalizeAdjustments(阅读视图.adjustments));
         设置自动阅读设置(normalizeAutoRead(阅读视图.autoRead));
         设置双页配对起点(配对起点);
         // Keep the saved page until dimensions decide whether it can pair.
@@ -2663,7 +2900,8 @@ function ReaderPage({
         const 恢复索引 = 限制索引(待恢复索引, resource.total);
 
         设置阅读器设置(新阅读器设置);
-        设置缩放模式(阅读视图.fitMode);
+        设置缩放模式(手机布局 ? "fit-window" : 阅读视图.fitMode);
+        设置手机页面预览打开(false);
         设置阅读流向(阅读视图.flow);
         设置当前索引(恢复索引);
         设置页码输入(String(恢复索引 + 1));
@@ -2694,6 +2932,7 @@ function ReaderPage({
   useEffect(() => {
     if (
       !resource
+      || !recordProgress
       || 阅读视图已加载资源Key !== resource.resourceKey
       || 阅读视图已加载资源Key引用.current !== resource.resourceKey
     ) return;
@@ -2707,9 +2946,10 @@ function ReaderPage({
     保存进度定时器.current = window.setTimeout(() => {
       保存进度定时器.current = null;
       const 待写入 = 待保存进度.current;
-      if (待写入) void 写入阅读进度(待写入);
+      if (待写入 && 允许进度记录.current) void 写入阅读进度(待写入);
     }, 600);
   }, [
+    recordProgress,
     resource,
     安全索引,
     当前页面,
@@ -2757,6 +2997,7 @@ function ReaderPage({
       设置底部栏可见(true);
       清理顶部栏隐藏定时器();
       清理底部栏隐藏定时器();
+      if (桌面自动隐藏) { 安排顶部栏隐藏(); 安排底部栏隐藏(); }
       return;
     }
 
@@ -2771,7 +3012,22 @@ function ReaderPage({
   }, [
     沉浸模式,
     阅读器设置.immersiveAutoHideDelay,
+    桌面自动隐藏,
   ]);
+
+  useEffect(() => {
+    if (!桌面自动隐藏 || !isActive) return;
+    const down = (event:PointerEvent) => {
+      if (!(event.target as Element)?.closest('.reader-layout')) return;
+      桌面按住指针.current.add(event.pointerId);清理顶部栏隐藏定时器();清理底部栏隐藏定时器();
+    };
+    const up = (event:PointerEvent) => {
+      if (!桌面按住指针.current.delete(event.pointerId)) return;
+      安排顶部栏隐藏();安排底部栏隐藏();
+    };
+    document.addEventListener('pointerdown',down,true);document.addEventListener('pointerup',up,true);document.addEventListener('pointercancel',up,true);
+    return () => {document.removeEventListener('pointerdown',down,true);document.removeEventListener('pointerup',up,true);document.removeEventListener('pointercancel',up,true);桌面按住指针.current.clear();清理顶部栏隐藏定时器();清理底部栏隐藏定时器();};
+  },[桌面自动隐藏,isActive,进度拖动比例,页码输入聚焦]);
 
   useEffect(() => { 设置跨本提示(null); }, [resource?.resourceKey, 当前页组Key, 全景模式, 从右到左阅读]);
 
@@ -2981,6 +3237,40 @@ function ReaderPage({
 
     const 操作资源Key = resource.resourceKey;
     const 本次预加载代号 = 普通预加载代号.current;
+    if (原生图片核心) {
+      if (!目标页组已准备) return;
+      for (const index of 原生预读索引) {
+        const 页面 = resource.pages[index],状态 = 页面图片状态引用.current[index];
+        if (!页面 || 状态?.url || 状态?.error) continue;
+        const 已取消 = () => 资源Key引用.current !== 操作资源Key || 全景模式引用.current || !原生预读窗口.current.has(index);
+        void 读取页面图片状态任务(页面,1,已取消).then(结果 => {
+          if (已取消()) return;
+          // A speculative failure must allow thumbnail fallback without making
+          // the next foreground request permanently inherit a prefetch error.
+          const state = 结果.state.url ? 结果.state : {...结果.state,error:null,prefetchFailed:true};
+          设置页面图片状态表(原表 => ({...原表,[index]:state}));
+        });
+      }
+      清除过期排队图片();
+      return;
+    }
+    if (!isAndroid()) {
+      if (!目标页组已准备) return;
+      for (const index of 桌面预读索引) {
+        const 页面 = resource.pages[index], state = 页面图片状态引用.current[index];
+        const key = JSON.stringify([操作资源Key, index]);
+        if (!页面 || state?.url || state?.prefetchFailed || 桌面预读任务.current.has(key)) continue;
+        const cancelled = () => 资源Key引用.current !== 操作资源Key || 全景模式引用.current || !桌面预读窗口.current.has(index);
+        const job = 读取页面图片状态任务(页面,1,cancelled).then(result => {
+          if (cancelled()) return;
+          const next = result.state.url ? result.state : {...result.state,error:null,prefetchFailed:true};
+          设置页面图片状态表(previous => ({...previous,[index]:next}));
+        }).finally(() => { if (桌面预读任务.current.get(key) === job) 桌面预读任务.current.delete(key); });
+        桌面预读任务.current.set(key,job);
+      }
+      清除过期排队图片();
+      return;
+    }
     const 索引列表: number[] = [];
     const 页组起点 = 当前页组索引.length > 0 ? Math.min(...当前页组索引) : 安全索引;
     const 页组终点 = 当前页组索引.length > 0 ? Math.max(...当前页组索引) : 安全索引;
@@ -3036,6 +3326,10 @@ function ReaderPage({
     图片加载线程数,
     内存缓存上限字节,
     阅读视图初始化中,
+    原生图片核心,
+    原生窗口Key,
+    目标页组已准备,
+    桌面窗口Key,
   ]);
 
   useEffect(() => {
@@ -3116,7 +3410,7 @@ function ReaderPage({
     });
   }, [isActive, resource, 页面图片状态表, 可显示页组, 安全索引, 当前页组Key, 模式2, 模式2窗口起点, 模式2窗口终点, 内存缓存上限字节]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!resource || 当前页组页面.length === 0 || !目标页组已准备) return;
     设置可显示页组({
       indices: 当前页组索引,
@@ -3131,9 +3425,19 @@ function ReaderPage({
   }, [resource, 当前页组Key, 目标页组已准备]);
 
   useEffect(() => {
+    if (!手机布局 || !onReady || 阅读视图初始化中 || 文档加载中 || (!目标页组已准备 && !文档错误)) return;
+    let frame=0;
+    // Layout and the decoded image get a paint opportunity before App reveals
+    // this same reader surface over the still-visible library.
+    frame=requestAnimationFrame(()=>{frame=requestAnimationFrame(()=>onReady());});
+    return()=>cancelAnimationFrame(frame);
+  }, [手机布局,onReady,阅读视图初始化中,文档加载中,目标页组已准备,文档错误]);
+
+  useEffect(() => {
     if (!isActive || 阅读视图初始化中) return;
 
     function 处理快捷键(事件: KeyboardEvent): void {
+      if (!interactive) return;
       const 目标元素 = 事件.target as HTMLElement | null;
       if (事件.defaultPrevented || (事件.key !== "Escape" && 目标元素?.closest('[role="combobox"], [role="listbox"]'))) return;
       if (
@@ -3191,6 +3495,7 @@ function ReaderPage({
     return () => window.removeEventListener("keydown", 处理快捷键);
   }, [
     isActive,
+    interactive,
     onBack,
     openContext,
     onSwitchResource,
@@ -3239,6 +3544,7 @@ function ReaderPage({
   }
 
   async function 切换相邻资源(方向: "previous" | "next"): Promise<void> {
+    const motion = mobileNavigationEpoch();
     const 目标资源 = directionToTarget(方向);
     if (!目标资源 || !openContext || 相邻资源切换中.current) return;
 
@@ -3266,7 +3572,8 @@ function ReaderPage({
         结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub"
           ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1),
       );
-      onSwitchResource(结果.data, 起始页, 新上下文);
+      if (手机布局) onSwitchResource(结果.data, 起始页, 新上下文, motion);
+      else onSwitchResource(结果.data, 起始页, 新上下文);
     } finally {
       相邻资源切换中.current = false;
     }
@@ -3390,7 +3697,8 @@ function ReaderPage({
   }
 
   const 自动阅读 = useAutoRead({
-    active: isActive && !阅读视图初始化中,
+    keepPlayingOnInteraction: 手机布局,
+    active: isActive && interactive && !阅读视图初始化中,
     modeKey: `${resource?.resourceKey}:${阅读流向}:${全景模式}:${有效页模式}:${从右到左阅读}:${缩放模式}:${页面排序}`,
     pageKey: 当前页组Key,
     ready: 全景模式 ? Boolean(页面图片状态表[显示阅读索引]?.url && !页面图片状态表[显示阅读索引]?.loading) : 目标页组已准备,
@@ -3441,32 +3749,53 @@ function ReaderPage({
           className={`reader-bookmark-button ${当前页已书签 ? "is-active" : ""}`}
           disabled={!resource || !当前页面 || 书签处理中}
           aria-pressed={当前页已书签}
-          aria-label={当前页已书签 ? `取消当前${阅读单位}书签` : `添加当前${阅读单位}书签`}
-          title={当前页已书签 ? `取消当前${阅读单位}书签` : `添加当前${阅读单位}书签`}
+          aria-label={当前页已书签 ? tr`取消当前${t(阅读单位)}书签` : tr`添加当前${t(阅读单位)}书签`}
+          title={当前页已书签 ? tr`取消当前${t(阅读单位)}书签` : tr`添加当前${t(阅读单位)}书签`}
           onClick={() => void 切换当前页书签()}
         >
           <svg className="reader-bookmark-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6.5 4.5h11v15l-5.5-3.6-5.5 3.6z" />
           </svg>
         </button>
-        {书签错误 && <em className="reader-bookmark-error" title={书签错误}>{书签错误}</em>}
+        {书签错误 && <em className="reader-bookmark-error" title={t(书签错误 ?? '')}>{t(书签错误 ?? '')}</em>}
       </div>
     );
   }
 
+  function 音量翻页(direction: 1 | -1) {
+    if (!全景模式) { direction === 1 ? 下一页() : 上一页(); return; }
+    const fraction=(阅读器设置.readerVolumePanoramaPages ?? 1)*direction;
+    const centers=模式2页面几何引用.current.页面中心;
+    const position=(centers[安全索引引用.current] ?? 0)-全景偏移引用.current;
+    let low=0,high=Math.max(0,总页数-1);
+    while(low<high){const mid=Math.ceil((low+high)/2);if((centers[mid]??0)<=position)low=mid;else high=mid-1;}
+    const distance=(centers[low+1]??centers[low])-(centers[low]??0);
+    const current=low+(distance>0?Math.max(0,(position-(centers[low]??0))/distance):0);
+    const next=Math.min(Math.max(0,current+fraction),总页数-1);
+    if (Number.isInteger(next)) void 切换模式2页面(next,'slide');
+    else { 实时拖动阅读比例(next/Math.max(1,总页数-1)); 提交模式2自由位置(); }
+  }
+  useReaderVolumeKeys(Boolean(isActive && interactive && 阅读器设置.readerVolumeKeys && !阅读视图初始化中 && !手机阅读设置打开), Boolean(阅读器设置.readerVolumeKeysReversed), () => 音量翻页(-1), () => 音量翻页(1));
+
+  async function 保存音量键设置(patch: Pick<Partial<AppSettings>, 'readerVolumeKeys' | 'readerVolumeKeysReversed' | 'readerVolumePanoramaPages' | 'mobileReaderPreviews' | 'mobilePreviewWidth'>) {
+    const result = await window.omicomic.updateSettings(patch);
+    if (result.ok) 设置阅读器设置(previous => ({ ...previous, ...patch }));
+    else 设置进度保存错误(result.error.message);
+  }
+
   return (
     <section
-      className={`reader-layout ${沉浸模式 ? "is-immersive" : ""} ${
-        沉浸模式 && !顶部栏可见 ? "is-top-ui-hidden" : ""
-      } ${沉浸模式 && !底部栏可见 ? "is-bottom-ui-hidden" : ""} ${
+      className={`reader-layout ${手机布局 ? `is-mobile-reader ${手机工具栏可见 ? "is-mobile-chrome-visible" : ""}` : ""} ${沉浸模式 ? "is-immersive" : 桌面自动隐藏 ? "is-auto-hide" : ""} ${
+        !手机布局 && 可隐藏工具栏 && !顶部栏可见 ? "is-top-ui-hidden" : ""
+      } ${!手机布局 && 可隐藏工具栏 && !底部栏可见 ? "is-bottom-ui-hidden" : ""} ${
         全景模式 ? "is-panorama" : ""
       } is-flow-${阅读流向}`}
       aria-labelledby="reader-title"
       aria-busy={!文档错误 && 阅读视图初始化中}
     >
       <GammaFilter id={伽马滤镜Id} gamma={画面调整.gamma} />
-      {进度保存错误 && <div className="document-save-error" role="alert">{进度保存错误}<button aria-label="关闭进度提示" onClick={() => 设置进度保存错误(null)}>×</button></div>}
-      {沉浸模式 && (
+      {进度保存错误 && <div className="document-save-error" role="alert">{t(进度保存错误 ?? '')}<button aria-label={t("关闭进度提示")} onClick={() => 设置进度保存错误(null)}>×</button></div>}
+      {可隐藏工具栏 && !手机布局 && (
         <>
           <div
             className="reader-hot-zone reader-hot-zone-top"
@@ -3489,20 +3818,23 @@ function ReaderPage({
         onMouseLeave={安排顶部栏隐藏}
       >
         <div className="reader-toolbar-leading">
-          <button className="reader-back" onClick={返回资源库}>
+          {!手机布局 && <button className="reader-back" onClick={返回资源库}>
             <ArrowIcon direction="left" />
-            <span>返回</span>
-          </button>
+            <span>{t("返回")}</span>
+          </button>}
           {渲染书签按钮("is-toolbar-bookmark")}
         </div>
-        <div className="reader-actions" aria-label="阅读器控制">
-          <div className="reader-reading-actions" aria-label="阅读模式与方向">
+        {手机布局 && <><strong className="mobile-reader-title">{resource?.title ?? ""}</strong><button className="mobile-reader-more" aria-label={t("阅读设置")} aria-haspopup="dialog" onClick={() => { 设置手机阅读设置打开(true); }}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></>}
+        <ReaderControlsSurface mobile={手机布局} open={手机阅读设置打开} onClose={() => 设置手机阅读设置打开(false)}>
+        <div className="reader-actions" aria-label={t("阅读器控制")}>
+          {手机布局 && <p className="mobile-reader-help">{t("轻点画面中央显示或收起工具栏，左右滑动翻页。")}</p>}
+          <div className="reader-reading-actions" aria-label={t("阅读模式与方向")}>
             <button
               className={`reader-flow-toggle is-${阅读流向}`}
               onClick={切换阅读流向}
               disabled={阅读视图初始化中}
-              title={垂直阅读 ? "当前纵向阅读，点击切换横向阅读" : "当前横向阅读，点击切换纵向阅读"}
-              aria-label={垂直阅读 ? "当前纵向阅读，点击切换横向阅读" : "当前横向阅读，点击切换纵向阅读"}
+              title={垂直阅读 ? t("当前纵向阅读，点击切换横向阅读") : t("当前横向阅读，点击切换纵向阅读")}
+              aria-label={垂直阅读 ? t("当前纵向阅读，点击切换横向阅读") : t("当前横向阅读，点击切换纵向阅读")}
               aria-pressed={垂直阅读}
             >
               <svg
@@ -3513,24 +3845,25 @@ function ReaderPage({
               >
                 <path d="M3 5.5c4.6 1.55 9.4 1.55 14 0v9c-4.6-1.55-9.4-1.55-14 0v-9Z" />
               </svg>
+              {手机布局 && <span className="mobile-mode-label">{垂直阅读 ? t("纵向") : t("横向")}</span>}
             </button>
             <button
               className="reader-page-count-toggle is-active"
               onClick={切换单双页模式}
               disabled={阅读视图初始化中 || 全景竖向强制单页}
               title={全景竖向强制单页
-                ? "全景纵向阅读固定为单页，退出后恢复原单双页设置"
+                ? t("全景纵向阅读固定为单页，退出后恢复原单双页设置")
                 : 有效阅读器设置.readerPageMode === "double"
-                  ? "当前双页，点击切换单页"
-                  : "当前单页，点击切换双页"}
+                  ? t("当前双页，点击切换单页")
+                  : t("当前单页，点击切换双页")}
               aria-label={全景竖向强制单页
-                ? "全景纵向阅读固定为单页，退出后恢复原单双页设置"
+                ? t("全景纵向阅读固定为单页，退出后恢复原单双页设置")
                 : 有效阅读器设置.readerPageMode === "double"
-                  ? "当前双页，点击切换单页"
-                  : "当前单页，点击切换双页"}
+                  ? t("当前双页，点击切换单页")
+                  : t("当前单页，点击切换双页")}
               aria-pressed={有效阅读器设置.readerPageMode === "double"}
             >
-              {页模式按钮文本}
+              {手机布局 ? 有效阅读器设置.readerPageMode === "double" ? t("双页") : t("单页") : 页模式按钮文本}
             </button>
             <button
               className={`reader-direction-toggle ${
@@ -3539,11 +3872,11 @@ function ReaderPage({
               onClick={切换双页阅读方向}
               disabled={阅读视图初始化中}
               title={阅读器设置.doublePageDirection === "left-to-right"
-                ? "当前从左到右阅读，点击切换为从右到左"
-                : "当前从右到左阅读，点击切换为从左到右"}
+                ? t("当前从左到右阅读，点击切换为从右到左")
+                : t("当前从右到左阅读，点击切换为从左到右")}
               aria-label={阅读器设置.doublePageDirection === "left-to-right"
-                ? "当前从左到右阅读，点击切换为从右到左"
-                : "当前从右到左阅读，点击切换为从左到右"}
+                ? t("当前从左到右阅读，点击切换为从右到左")
+                : t("当前从右到左阅读，点击切换为从左到右")}
               aria-pressed={阅读器设置.doublePageDirection === "right-to-left"}
             >
               <svg
@@ -3561,15 +3894,16 @@ function ReaderPage({
                   d="M10 17h8m0 0-4-4M18 17l-4 4"
                 />
               </svg>
+              {手机布局 && <span className="mobile-mode-label">{从右到左阅读 ? t("从右到左") : t("从左到右")}</span>}
             </button>
           </div>
-          <div className="reader-zoom-actions" aria-label="缩放模式">
+          <div className="reader-zoom-actions" aria-label={t("缩放模式")}>
             <button
               className={`reader-panorama-toggle ${全景模式 ? "is-active" : ""}`}
               onClick={切换全景模式}
               disabled={阅读视图初始化中}
-              title={全景模式 ? "关闭全景连环画" : "开启全景连环画"}
-              aria-label={全景模式 ? "关闭全景连环画" : "开启全景连环画"}
+              title={全景模式 ? t("关闭全景连环画") : t("开启全景连环画")}
+              aria-label={全景模式 ? t("关闭全景连环画") : t("开启全景连环画")}
               aria-pressed={全景模式}
             >
               <svg
@@ -3582,18 +3916,19 @@ function ReaderPage({
                 <path d="m8 15 3.2-3 2.4 2.2 1.6-1.6 2.8 2.4" />
                 <path d="M8.4 9.2h.1" />
               </svg>
+              {手机布局 && <span className="mobile-mode-label">{t("连续")}</span>}
             </button>
             <GlassSelect<阅读器缩放模式>
               className="reader-fit-select"
               value={全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式}
-              options={[
+              options={uiOptions([
                 { value: "fit-window", label: "适应窗口" },
                 { value: "fit-width", label: "适应宽度" },
                 { value: "fit-height", label: "适应高度" },
                 { value: "original", label: "原始尺寸" },
-              ]}
-              ariaLabel="缩放方式"
-              title={全景模式 ? `全景${垂直阅读 ? "纵向自动适应宽度" : "横向自动适应高度"}` : "普通阅读缩放方式"}
+              ])}
+              ariaLabel={t("缩放方式")}
+              title={全景模式 ? tr`全景${t(垂直阅读 ? "纵向自动适应宽度" : "横向自动适应高度")}` : t("普通阅读缩放方式")}
               disabled={阅读视图初始化中 || 全景模式}
               onChange={选择缩放模式}
             />
@@ -3604,14 +3939,23 @@ function ReaderPage({
               }}
               disabled={阅读视图初始化中}
               aria-pressed={沉浸模式}
-            >
-              沉浸
-            </button>
+            >{t("沉浸")}</button>
           </div>
-          <ReaderTools disabled={阅读视图初始化中} epub={resource?.sourceType === 'epub'} adjustments={画面调整} onAdjustments={设置画面调整} running={自动阅读.running}
-            onPlay={() => { 取消全景异步导航(true); 自动阅读.toggle(); }}
-            onPanel={open => { 阅读面板打开.current = open; if (open) { 自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
+          <ReaderTools mobile={手机布局} disabled={阅读视图初始化中} epub={resource?.sourceType === 'epub'} adjustments={画面调整} onAdjustments={调整画面} running={自动阅读.running}
+            onPlay={() => {
+              取消全景异步导航(true);
+              if (手机布局) { 设置手机阅读设置打开(false); 设置手机工具栏可见(false); }
+              自动阅读.toggle();
+            }}
+            onPanel={open => { 阅读面板打开.current = open; if (open) { if(!手机布局)自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
+          {isAndroid() && <div className="mobile-volume-settings">
+            <label className="settings-toggle"><input type="checkbox" checked={Boolean(阅读器设置.readerVolumeKeys)} onChange={event => void 保存音量键设置({ readerVolumeKeys: event.target.checked })}/><span>{t("音量键翻页")}</span></label>
+            <label className="settings-toggle"><input type="checkbox" checked={Boolean(阅读器设置.readerVolumeKeysReversed)} disabled={!阅读器设置.readerVolumeKeys} onChange={event => void 保存音量键设置({ readerVolumeKeysReversed: event.target.checked })}/><span>{t("反转音量键翻页方向")}</span></label>
+            <label className="mobile-option-row"><span>{t("全景音量键翻页间隔 ")}<b>{阅读器设置.readerVolumePanoramaPages ?? 1}{t(" 页")}</b></span><input aria-label={t("全景音量键翻页间隔")} type="range" min="0.25" max="2" step="0.25" value={阅读器设置.readerVolumePanoramaPages ?? 1} onChange={event => void 保存音量键设置({readerVolumePanoramaPages:Number(event.target.value)})}/></label>
+          </div>}
+          {手机布局 && <label className="settings-toggle"><input type="checkbox" checked={阅读器设置.mobileReaderPreviews !== false} onChange={event => { void 保存音量键设置({mobileReaderPreviews:event.target.checked}); if(!event.target.checked) 设置手机页面预览打开(false); }}/><span>{t("拖动进度时显示页面预览")}</span></label>}
         </div>
+        </ReaderControlsSurface>
       </header>
       <div
         id="reader-title"
@@ -3631,15 +3975,17 @@ function ReaderPage({
         } ${全景拖动中 ? "is-panorama-dragging" : ""} ${
           全景动画启用 ? "is-panorama-animated" : "is-panorama-static"
         }`}
-        onPointerDown={(event) => { 开始手机触控(event); 开始全景拖动(event); }}
-        onPointerMove={拖动全景}
-        onPointerUp={(event) => { 结束全景指针(event); 结束手机触控(event); }}
-        onPointerCancel={(event) => { 手机触点.current=null; 取消全景指针(event); }}
-        onLostPointerCapture={取消全景指针}
+        onPointerDown={(event) => { if(自由缩放.down(event)){手机触点.current=null;return;} 开始手机触控(event); 开始全景拖动(event); }}
+        onPointerMove={event => { if(自由缩放.move(event)){手机触点.current=null;取消全景指针(event);return;} 拖动全景(event); }}
+        onPointerUp={(event) => { if(自由缩放.up(event)){手机触点.current=null;取消全景指针(event);return;} 结束全景指针(event); 结束手机触控(event); }}
+        onPointerCancel={(event) => { 自由缩放.cancel(event); 手机触点.current=null; 取消全景指针(event); }}
+        onDoubleClick={event => { if(自由缩放.active){event.preventDefault();自由缩放.reset();} }}
+        onLostPointerCapture={event => { 自由缩放.cancel(event); 取消全景指针(event); }}
         onPointerLeave={(事件) => {
           if (事件.buttons === 0) 结束全景指针(事件);
         }}
         onWheel={(事件) => {
+          if (事件.ctrlKey || 自由缩放.active) return;
           if (!resource) return;
           if (模式2) {
             滚动全景(事件);
@@ -3669,8 +4015,8 @@ function ReaderPage({
             type="button"
             className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "right" : "left"}`}
             style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
-            title={`上一本：${上一本资源.title}（↑）`}
-            aria-label={`上一本：${上一本资源.title}`}
+            title={tr`上一本：${上一本资源.title}（↑）`}
+            aria-label={tr`上一本：${上一本资源.title}`}
             onClick={() => void 切换相邻资源("previous")}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d={从右到左阅读 ? "M8 5L18 12L8 19Z" : "M16 5L6 12L16 19Z"} /></svg>
@@ -3681,30 +4027,30 @@ function ReaderPage({
             type="button"
             className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "left" : "right"}`}
             style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
-            title={`下一本：${下一本资源.title}（↓）`}
-            aria-label={`下一本：${下一本资源.title}`}
+            title={tr`下一本：${下一本资源.title}（↓）`}
+            aria-label={tr`下一本：${下一本资源.title}`}
             onClick={() => void 切换相邻资源("next")}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d={从右到左阅读 ? "M16 5L6 12L16 19Z" : "M8 5L18 12L8 19Z"} /></svg>
           </button>
         )}
         {文档错误 ? (
-          <div className="reader-error" role="alert"><span aria-hidden="true">!</span><h3>文档打开失败</h3><p>{文档错误}</p></div>
+          <div className="reader-error" role="alert"><span aria-hidden="true">!</span><h3>{t("文档打开失败")}</h3><p>{t(文档错误 ?? '')}</p></div>
         ) : 文档加载中 ? (
-          <div className="reader-placeholder" role="status"><h3>正在打开文档…</h3></div>
+          手机布局 ? null : <div className="reader-placeholder" role="status"><h3>{t("正在打开文档…")}</h3></div>
         ) : !resource ? (
           <div className="reader-placeholder">
-            <span aria-hidden="true">阅</span>
-            <h3>尚未打开图片</h3>
-            <p>请从资源库双击图片或包含图片的文件夹。</p>
+            <span aria-hidden="true">{t("阅")}</span>
+            <h3>{t("尚未打开图片")}</h3>
+            <p>{t("请从资源库双击图片或包含图片的文件夹。")}</p>
           </div>
         ) : (
           <>
             {错误信息 && 显示页组页面.length === 0 ? (
               <div className="reader-error" role="alert">
                 <span aria-hidden="true">!</span>
-                <h3>无法显示当前页</h3>
-                <p>{错误信息}</p>
+                <h3>{t("无法显示当前页")}</h3>
+                <p>{t(错误信息 ?? '')}</p>
               </div>
             ) : (
               <div
@@ -3714,7 +4060,7 @@ function ReaderPage({
                     ? `is-comic-strip is-${阅读流向}-strip is-panorama-strip`
                     : 当前显示跨页横图 ? "is-spread-single" : 显示页组页面.length === 1 ? "is-single-page" : "is-double-page"
                 }`}
-                style={页面流样式}
+                style={{...页面流样式, ...自由缩放.style}}
               >
                 {模式2显示页面.map((页面) => {
                   const 状态 = 页面图片状态引用.current[页面.index] ?? {
@@ -3737,22 +4083,27 @@ function ReaderPage({
                       className={`reader-page-frame ${模式2位置类名}`}
                       data-reader-page-index={页面.index}
                       key={页面.index}
-                      style={计算模式2页面框架样式(页面.index)}
+                      aria-hidden={手机布局 && !模式2 && !显示页组索引.includes(页面.index) ? true : undefined}
+                      style={手机布局 && !模式2 && !显示页组索引.includes(页面.index) ? {position:'absolute',visibility:'hidden',pointerEvents:'none'} : 计算模式2页面框架样式(页面.index)}
                     >
-                      <ReaderImageEffects settings={画面调整} gammaId={伽马滤镜Id} processable={页面.type !== 'epub-chapter' && Boolean(状态.url)} sourceKey={`${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
+                      <ReaderImageEffects settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sourceKey={`${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
                       {状态.error ? (
                         <div className="reader-page-error" role="alert">
-                          <span>第 {页面.index + 1} {阅读单位}加载失败</span>
-                          <em>{状态.error}</em>
+                          <span>{t("第 ")}{页面.index + 1} {阅读单位}{t("加载失败")}</span>
+                          <em>{t(状态.error ?? '')}</em>
                         </div>
                       ) : 状态.canvas ? (
                         <ReaderCanvas canvas={状态.canvas} title={页面.name} style={计算页面图片样式(页面.index)} />
                       ) : 状态.html && 状态.width && 状态.height ? (
                         <ReaderChapter html={状态.html} title={页面.name} width={状态.width} height={状态.height} style={计算页面图片样式(页面.index)} />
+                      ) : 状态.native ? (
+                        <span className="reader-image reader-native-image" data-native-image={状态.url} role="img" aria-label={页面.name} style={计算页面图片样式(页面.index)} />
                       ) : 状态.url ? (
                         <img
+                          ref={element=>{if(element)手机页面元素.current.set(页面.index,element);else 手机页面元素.current.delete(页面.index);}}
                           className={`reader-image zoom-${全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式}`}
                           src={状态.url}
+                          crossOrigin={状态.url.startsWith('omicomic-image:') ? 'anonymous' : undefined}
                           alt={页面.name}
                           style={计算页面图片样式(页面.index)}
                           draggable={false}
@@ -3773,11 +4124,22 @@ function ReaderPage({
                               },
                             }));
                           }}
-                          onLoad={(事件) => 记录页面原始尺寸(页面.index, 事件.currentTarget)}
+                          onLoad={async (事件) => {
+                            const img=事件.currentTarget,url=状态.url;
+                            记录页面原始尺寸(页面.index,img);
+                            if(!手机布局)return;
+                            try { await img.decode(); } catch { if(!img.complete||!img.naturalWidth)return; }
+                            if(!img.isConnected || 页面图片状态引用.current[页面.index]?.url!==url)return;
+                            // Keep the old DOM/page until this exact image is decoded.
+                            requestAnimationFrame(()=>requestAnimationFrame(()=>{
+                              if(!img.isConnected || 页面图片状态引用.current[页面.index]?.url!==url)return;
+                              设置手机解码完成(old=>old[页面.index]===url?old:({...Object.fromEntries(Object.entries(old).filter(([key])=>手机页面元素.current.has(Number(key)))),[页面.index]:url}));
+                            }));
+                          }}
                         />
                       ) : (
                         <div className="reader-page-loading">
-                          第 {页面.index + 1} {阅读单位}{状态.loading ? "加载中…" : "等待加载…"}
+                          {!手机布局 && <>{t("第 ")}{页面.index + 1} {阅读单位}{状态.loading ? t("加载中…") : t("等待加载…")}</>}
                         </div>
                       )}
                       </ReaderImageEffects>
@@ -3790,46 +4152,41 @@ function ReaderPage({
         )}
       </div>
 
+      {!手机布局 && 自由缩放.active && <button className="reader-reset-zoom" onClick={自由缩放.reset}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></svg>{t("重置大小")}</button>}
+      {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews pages={resource.pages} current={进度预览索引} width={阅读器设置.mobilePreviewWidth ?? 88}
+        nativeImage={原生图片核心 && !/\.gif$/i.test(resource.pages[进度预览索引]?.name ?? '') ? 页面图片状态表[进度预览索引]?.url || null : undefined}
+        nativeImages={页面图片状态表} nativePages={原生图片核心&&!模式2?原生窗口索引:undefined} nativeRadius={!模式2 && 内存缓存上限字节 > 0 ? Math.min(2,预加载页数) : 0}
+        onPage={index => { 实时拖动阅读比例(index/Math.max(1,总页数-1)); if(模式2) 提交模式2自由位置(); }}/>}
       <footer
-        className={`reader-footer ${阅读器设置.readerHideFooterControls ? "is-controls-hidden" : ""} ${
+        className={`reader-footer ${手机布局 && 从右到左阅读 ? "is-rtl" : ""} ${阅读器设置.readerHideFooterControls ? "is-controls-hidden" : ""} ${
           沉浸模式 && 阅读器设置.readerHideImmersiveProgress ? "is-progress-hidden" : ""
         }`}
         onMouseEnter={显示底部栏}
         onMouseMove={显示底部栏}
         onMouseLeave={() => 安排底部栏隐藏()}
       >
-        <div
-          className={`reader-progress-rail ${从右到左阅读 ? "is-rtl" : ""} ${
-            进度拖动比例 !== null ? "is-dragging" : ""
-          }`}
-          style={{ "--reader-progress": `${显示进度百分比}%` } as CSSProperties}
-          role="slider"
-          aria-label="阅读进度"
-          aria-valuemin={1}
-          aria-valuemax={Math.max(1, 总页数)}
-          aria-valuenow={Math.min(Math.max(显示进度索引 + 1, 1), Math.max(1, 总页数))}
-          onPointerDown={开始进度条拖动}
-          onPointerMove={预览进度条拖动}
-          onPointerUp={完成进度条拖动}
-          onPointerCancel={取消进度条拖动}
-          onLostPointerCapture={取消进度条拖动}
-        >
-          <span className="reader-progress-fill" aria-hidden="true" />
-          <span className="reader-progress-thumb" aria-hidden="true" />
-        </div>
+        {手机布局 && <output className="mobile-reader-current">{手机进度文本.split('/')[0]}</output>}
+        <ReaderProgressRail mobile={手机布局} percent={显示进度百分比} current={进度预览索引+1} total={总页数}
+          label={手机布局 ? 手机进度文本 : 电脑进度文本} rtl={从右到左阅读} dragging={进度拖动比例 !== null}
+          onStart={开始进度条拖动} onMove={预览进度条拖动} onEnd={完成进度条拖动} onCancel={取消进度条拖动} onJump={index => void 跳转到页面索引(index)} />
+        {手机布局 && <output className="mobile-reader-total">{总页数}</output>}
+        {手机布局 && <button className="mobile-reader-play" data-reader-auto-play aria-label={自动阅读.running ? t("暂停自动阅读") : t("开始自动阅读")} aria-pressed={自动阅读.running} onClick={() => { 取消全景异步导航(true); 自动阅读.toggle(); }} disabled={阅读视图初始化中}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">{自动阅读.running ? <path d="M7 5h3v14H7zM14 5h3v14h-3z"/> : <path d="m8 5 11 7-11 7Z"/>}</svg>
+        </button>}
+        {!手机布局 && <>
         {阅读器设置.readerHideFooterControls && (
           <span className="reader-progress-count">{总页数 > 0 ? 显示进度索引 + 1 : 0} / {总页数}</span>
         )}
         <div className="reader-footer-controls previous-controls" aria-hidden={阅读器设置.readerHideFooterControls}>
           {从右到左阅读 ? (
             <>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={跳到尾页}>尾页</button>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={下一页}>下一页</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={跳到尾页}>{t("尾页")}</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={下一页}>{t("下一页")}</button>
             </>
           ) : (
             <>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={跳到首页}>首页</button>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={上一页}>上一页</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={跳到首页}>{t("首页")}</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={上一页}>{t("上一页")}</button>
             </>
           )}
         </div>
@@ -3837,7 +4194,7 @@ function ReaderPage({
           <label className="reader-page-jump">
             <input
               inputMode="numeric"
-              aria-label={resource?.sourceType === "epub" ? "跳转到章节" : "跳转到页码"}
+              aria-label={resource?.sourceType === "epub" ? t("跳转到章节") : t("跳转到页码")}
               disabled={阅读视图初始化中 || !resource}
               value={resource ? (页码输入聚焦 ? 页码输入 : String(显示进度索引 + 1)) : "0"}
               onChange={(事件) => 设置页码输入(事件.target.value)}
@@ -3875,16 +4232,17 @@ function ReaderPage({
         <div className="reader-footer-controls next-controls" aria-hidden={阅读器设置.readerHideFooterControls}>
           {从右到左阅读 ? (
             <>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={上一页}>上一页</button>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={跳到首页}>首页</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={上一页}>{t("上一页")}</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含首页} onClick={跳到首页}>{t("首页")}</button>
             </>
           ) : (
             <>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={下一页}>下一页</button>
-              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={跳到尾页}>尾页</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={下一页}>{t("下一页")}</button>
+              <button disabled={阅读视图初始化中 || !resource || 当前页组包含尾页} onClick={跳到尾页}>{t("尾页")}</button>
             </>
           )}
         </div>
+        </>}
       </footer>
     </section>
   );

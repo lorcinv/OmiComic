@@ -26,7 +26,7 @@ test('10,000-page details remain bounded, paging and editor are stable',async({p
  await summary.dblclick();await expect(page.getByRole('textbox',{name:'资源简介'})).toBeVisible();
  const after=await page.getByRole('textbox',{name:'资源简介'}).boundingBox();expect(after?.height).toBe(before?.height);expect(after?.y).toBe(before?.y);
  await page.getByRole('textbox',{name:'资源简介'}).fill('保存我的简介');
- await page.locator('.resource-detail-direct-editor').click({position:{x:100,y:180}});
+ await page.locator('#resource-detail-title').click();
  await expect(page.getByRole('textbox',{name:'资源简介'})).toHaveCount(0);
  await page.getByRole('button',{name:'下一组预览'}).click();
  await expect(page.locator('.resource-detail-thumbnail').first()).toHaveAttribute('aria-label',/第 49 页/);
@@ -55,7 +55,7 @@ test('real PDF worker renders, changes page and releases its session',async({pag
    (window as any).__closedDocuments=[];
    api.closeDocument=async(id:string)=>{(window as any).__closedDocuments.push(id);return {ok:true,data:null};};
  },{bytes});
- await page.goto('/');await page.getByRole('button',{name:/继续阅读 Small PDF/}).click();
+ await page.goto('/');await page.getByRole('button',{name:/继续阅读 Small PDF/}).dblclick();
  const current=()=>page.locator('.reader-page-frame canvas').first();await expect(current()).toBeVisible({timeout:20000});
  await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('2');
  await expect(page.locator('.document-reader')).toHaveCount(0);

@@ -1,0 +1,319 @@
+/* Desktop palette, including the live theme preview. Keep saved theme IDs stable. */
+:root[data-omi-layout="desktop"][data-color-theme="mist"],
+[data-omi-layout="desktop"] .theme-option-preview[data-color-theme="mist"] {
+  --背景色: #f6f7f9;
+  --面板色: #fcfdfe;
+  --深色面板: #eceef2;
+  --主文字: #2e3542;
+  --次文字: #707887;
+  --边框色: #dfe3e9;
+  --强调色: #4c73ad;
+  --强调浅色: #e9eef7;
+  --阅读背景: #eef0f3;
+  --控件背景: #f0f3f7;
+  --控件悬停: #e5eaf1;
+  --控件边框: #d8dfe8;
+  --控件文字: #56657b;
+  --玻璃基色: #f5f7fa;
+  --玻璃边缘: #d8dfe8;
+  --进度强调色: #9aadca;
+}
+
+[data-omi-layout="desktop"] {
+  --desktop-subtle-surface: color-mix(in srgb, var(--背景色) 55%, var(--深色面板));
+  --desktop-shelf-spine: color-mix(in srgb, var(--背景色) 50%, var(--边框色));
+  --desktop-focus-halo: color-mix(in srgb, var(--强调色) 18%, transparent);
+}
+
+[data-omi-layout="desktop"] :is(button, summary, [role="button"]):not(.resource-card, .bookshelf-folder-card, .theme-option, .local-file-option) {
+  border-color: transparent;
+}
+
+[data-omi-layout="desktop"] .omi-home button.omi-home__library {
+  color: var(--控件文字);
+  background: var(--控件背景);
+  border-color: transparent;
+  backdrop-filter: none;
+}
+[data-omi-layout="desktop"] .omi-home button.omi-home__library:hover {
+  background: var(--控件悬停);
+}
+
+/* :is keeps nested controls (including Select) above older component rules. */
+[data-omi-layout="desktop"] :is(.library-controls, .reader-tool-panel, .view-options-popover, .pagination-bar, .reader-toolbar, .reader-footer, .resource-detail-toolbar, .resource-detail-footer, .resource-detail-preview-controls, .directory-navigation, .settings-window, .root-delete-dialog, .virtual-folder-dialog, .local-file-dialog) :is(button, summary, .glass-select-trigger),
+[data-omi-layout="desktop"] :is(.secondary-action, .add-library-button, .root-library-picker > summary) {
+  border-color: transparent;
+  color: var(--控件文字);
+  background: var(--控件背景);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+[data-omi-layout="desktop"] :is(.library-controls, .reader-tool-panel, .view-options-popover, .pagination-bar, .reader-toolbar, .reader-footer, .resource-detail-toolbar, .resource-detail-footer, .resource-detail-preview-controls, .directory-navigation, .settings-window, .root-delete-dialog, .virtual-folder-dialog, .local-file-dialog) :is(button, summary, .glass-select-trigger):hover:not(:disabled, .primary-action, .resource-detail-read-button, .danger-action, .local-file-danger, .is-active, [aria-pressed="true"], [aria-selected="true"]),
+[data-omi-layout="desktop"] :is(.secondary-action, .add-library-button, .root-library-picker > summary):hover:not(:disabled) {
+  background: var(--控件悬停);
+}
+
+[data-omi-layout="desktop"] .library-controls .selection-toolbar button { color: var(--控件文字); }
+
+[data-omi-layout="desktop"] :is(.library-controls, .reader-toolbar, .reader-footer) :is(button, summary, .glass-select-trigger):is(.is-active, [aria-pressed="true"], [aria-selected="true"]):not(:disabled),
+[data-omi-layout="desktop"] button:is(.primary-action, .resource-detail-read-button):not(:disabled) {
+  border-color: transparent;
+  color: var(--强调文字);
+  background: var(--强调色);
+}
+
+[data-omi-layout="desktop"] button:is(.primary-action, .resource-detail-read-button):not(:disabled):hover {
+  background: color-mix(in srgb, var(--强调色) 90%, black);
+}
+
+[data-omi-layout="desktop"] :is(.library-controls, .reader-tool-panel, .view-options-popover, .pagination-bar, .reader-toolbar, .reader-footer, .resource-detail-toolbar, .resource-detail-footer, .directory-navigation, .settings-window, .root-delete-dialog, .virtual-folder-dialog, .local-file-dialog) :is(button, summary):disabled {
+  opacity: .45;
+  color: var(--控件文字);
+  background: var(--控件背景);
+}
+
+[data-omi-layout="desktop"] :is(button, summary):is(.danger-action, .local-file-danger):not(:disabled) {
+  color: var(--危险色);
+  background: var(--危险浅色);
+}
+
+[data-omi-layout="desktop"] .window-controls button {
+  color: var(--次文字);
+  background: transparent;
+}
+
+/* Toolbar and filename form one surface, separated by an opaque, fading rule. */
+[data-omi-layout="desktop"] .reader-layout :is(.reader-toolbar, .reader-filename-strip, .reader-footer) {
+  color: var(--主文字);
+  background: var(--背景色);
+  border: 0;
+  box-shadow: none;
+}
+
+[data-omi-layout="desktop"] .reader-toolbar::after {
+  content: "";
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--边框色) 55%, var(--背景色)),
+    var(--控件边框) 50%,
+    color-mix(in srgb, var(--边框色) 55%, var(--背景色)));
+}
+[data-omi-layout="desktop"] .reader-layout .reader-filename-strip { border-bottom: 1px solid var(--边框色); }
+[data-omi-layout="desktop"] .reader-layout .reader-footer { border-top: 1px solid var(--边框色); }
+[data-omi-layout="desktop"] .reader-tool-panel { background: var(--背景色); }
+[data-omi-layout="desktop"] .reader-tool-panel > .reader-tool-section:first-child { border-top: 0; padding-top: 0; }
+
+/* Immersive progress only paints the completed portion, even with chrome hidden. */
+[data-omi-layout="desktop"] .reader-layout:is(.is-immersive,.is-auto-hide) .reader-progress-rail::before {
+  content: none;
+}
+
+[data-omi-layout="desktop"] :is(.resource-progress-fill, .progress-completed .resource-progress-fill, .resource-detail-progress-fill, .omi-home__progress-track > span) {
+  background: var(--进度强调色);
+}
+[data-omi-layout="desktop"] :is(.omi-home__book-progress, .reader-page-info, .reader-page-jump input, .reader-progress-label, .reader-progress-count, .bookshelf-folder-info > span, .resource-detail-progress-copy, .resource-detail-progress-percent) {
+  font-size: calc(var(--desktop-info-size, 12px) * var(--desktop-font-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+[data-omi-layout="desktop"] .reader-filename-strip { font-size: calc(12px * var(--desktop-font-scale, 1)); }
+[data-omi-layout="desktop"] .reader-page-jump input { min-width: 3.8em; }
+[data-omi-layout="desktop"] .app-svg-icon { width: 18px; height: 18px; flex-shrink: 0; vertical-align: middle; }
+[data-omi-layout="desktop"] .bookshelf-folder-empty-mark .app-svg-icon { width: 44px; height: 44px; stroke-width: 1.1; }
+[data-omi-layout="desktop"] .empty-illustration .app-svg-icon { width: 32px; height: 32px; }
+
+/* Keep the neutral spine inside the card surface. */
+[data-omi-layout="desktop"] .bookshelf-folder-card {
+  background: linear-gradient(to right, var(--desktop-shelf-spine) var(--bookshelf-spine-width), var(--面板色) var(--bookshelf-spine-width));
+}
+[data-omi-layout="desktop"] .bookshelf-folder-card::before { content: none; }
+
+/* A crisp highlight follows the drop target without spreading beyond its edge. */
+[data-omi-layout="desktop"] :is(.resource-card, .bookshelf-folder-card):is(.is-card-middle-drop-before, .is-card-middle-drop-after) {
+  z-index: 2;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--强调色) 55%, white);
+}
+[data-omi-layout="desktop"] :is(.resource-card, .bookshelf-folder-card):is(.is-card-middle-drop-before, .is-card-middle-drop-after)::before,
+[data-omi-layout="desktop"] :is(.resource-card, .bookshelf-folder-card):is(.is-card-middle-drop-before, .is-card-middle-drop-after)::after {
+  content: none;
+}
+
+/* The focus stays on the fixed first slot while category labels slide through it. */
+[data-omi-layout="desktop"] .bookshelf-category-list .bookshelf-category-tab.is-active {
+  color: var(--控件文字);
+  background: transparent;
+  box-shadow: none;
+}
+[data-omi-layout="desktop"] .bookshelf-category-tab.is-active::before,
+[data-omi-layout="desktop"] .bookshelf-category-tab.is-active::after { content: none; }
+[data-omi-layout="desktop"] .bookshelf-category-slot-marker::before,
+[data-omi-layout="desktop"] .bookshelf-category-slot-marker::after {
+  content: "";
+  left: 5px; right: 5px;
+  height: 3px;
+  border-radius: 999px;
+  background: #fff;
+}
+[data-omi-layout="desktop"] .bookshelf-category-slot-marker::before {
+  top: 1px;
+  box-shadow: 0 1px 1px var(--desktop-focus-halo), 0 4px 7px var(--desktop-focus-halo);
+}
+[data-omi-layout="desktop"] .bookshelf-category-slot-marker::after {
+  bottom: 1px;
+  box-shadow: 0 -1px 1px var(--desktop-focus-halo), 0 -4px 7px var(--desktop-focus-halo);
+}
+
+/* Details replace the library toolbar but keep its blank title-bar drag area. */
+[data-omi-layout="desktop"] .resource-detail-window-drag {
+  position: absolute;
+  left: 0; right: 140px; top: 0;
+  height: var(--window-controls-height);
+  z-index: 90;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+[data-omi-layout="desktop"] .desktop-detail-metadata {
+  background: var(--desktop-subtle-surface);
+  border-color: var(--边框色);
+}
+[data-omi-layout="desktop"] .desktop-detail-metadata .tag-chip {
+  color: var(--控件文字);
+  background: color-mix(in srgb, var(--深色面板) 75%, var(--控件背景));
+  box-shadow: none;
+}
+[data-omi-layout="desktop"] .desktop-detail-metadata .tag-chip:hover { background: var(--控件悬停); }
+[data-omi-layout="desktop"] .resource-detail-preview-title { display: flex; align-items: baseline; gap: 12px; }
+[data-omi-layout="desktop"] .resource-detail-preview-title p { margin: 0; }
+
+[data-omi-layout="desktop"] .settings-window {
+  background: var(--背景色);
+  border-color: var(--边框色);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-omi-layout="desktop"] .settings-window-content { background: var(--面板色); }
+[data-omi-layout="desktop"] .settings-category-nav { background: var(--desktop-subtle-surface); border-color: var(--边框色); }
+[data-omi-layout="desktop"] .settings-window .settings-category-button { background: transparent; color: var(--次文字); }
+[data-omi-layout="desktop"] .settings-window .settings-category-button:hover { background: var(--控件背景); }
+[data-omi-layout="desktop"] .settings-window .settings-category-button[aria-selected="true"] { background: var(--控件悬停); color: var(--主文字); }
+[data-omi-layout="desktop"] .settings-category-button[aria-selected="true"] small { color: var(--次文字); }
+
+[data-omi-layout="desktop"] .pagination-bar,
+[data-omi-layout="desktop"] .pagination-bar :is(button, input, span, .glass-select-trigger) { font-size: calc(var(--desktop-info-size, 12px) * var(--desktop-font-scale, 1)); }
+[data-omi-layout="desktop"] :is(.resource-list-scroll, .bookshelf-root-view) { overflow-anchor: none; }
+[data-omi-layout="desktop"] .settings-help { font-size: calc(13px * var(--desktop-font-scale, 1)); line-height: 1.5; }
+[data-omi-layout="desktop"] .resource-card-page { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-omi-layout="desktop"] .navigation-actions { border-color: transparent; }
+[data-omi-layout="desktop"] .navigation-divider { background: color-mix(in srgb, var(--次文字) 20%, transparent); }
+
+/* Reading controls remain distinct from chrome in every palette. */
+[data-omi-layout="desktop"] :is(.reader-toolbar, .reader-footer, .reader-tool-panel) :is(button, .glass-select-trigger):not(:disabled, .is-active, [aria-pressed="true"], [aria-selected="true"]) {
+  background: color-mix(in srgb, var(--控件边框) 78%, var(--面板色));
+  border: 1px solid var(--控件边框);
+  color: var(--控件文字);
+}
+[data-omi-layout="desktop"] :is(.reader-toolbar, .reader-footer, .reader-tool-panel) :is(button, .glass-select-trigger):hover:not(:disabled, .is-active, [aria-pressed="true"], [aria-selected="true"]) {
+  background: color-mix(in srgb, var(--控件边框) 82%, var(--控件文字));
+}
+
+/* Flat detail surfaces: no shaded backdrop or ornamental action borders. */
+[data-omi-layout="desktop"] :is(.library-main.is-resource-detail, .resource-detail-page) { background: var(--背景色); background-image: none; }
+[data-omi-layout="desktop"] :is(.resource-detail-cover, .resource-detail-lower, .resource-detail-preview-panel, .resource-detail-reading-launch, .resource-detail-compact-bar, .resource-detail-section-heading) { box-shadow: none; }
+[data-omi-layout="desktop"] .resource-detail-footer .resource-detail-action,
+[data-omi-layout="desktop"] .resource-detail-footer .resource-detail-action:hover {
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  background-image: none;
+}
+
+[data-omi-layout="desktop"] .tag-manage-section .danger-soft-action:disabled {
+  color: var(--次文字);
+  background: var(--控件背景);
+  border-color: transparent;
+  box-shadow: none;
+  opacity: .55;
+}
+[data-omi-layout="desktop"] .tag-manage-section .danger-soft-action:not(:disabled) {
+  color: #fff;
+  background: #bb3e70;
+  border-color: transparent;
+  box-shadow: none;
+}
+[data-omi-layout="desktop"] .tag-manage-section .danger-soft-action:not(:disabled):hover { background: #a92f61; }
+[data-omi-layout="desktop"] .tag-all-section .tag-filter-chip.is-delete-selected { color: #a92f61; background: color-mix(in srgb, #bb3e70 15%, var(--面板色)); }
+[data-omi-layout="desktop"][data-color-theme="night"] .tag-all-section .tag-filter-chip.is-delete-selected { color: #f7afcc; }
+
+:root[data-omi-layout="desktop"] {
+  --desktop-font-scale: var(--desktop-font-factor, 1);
+  font-size: calc(16px * var(--desktop-font-scale));
+}
+.font-size-control { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 3px; }
+.font-size-control input {
+  width: 60px; height: 32px; padding: 0 4px; border: 0; border-radius: 7px;
+  background: var(--控件背景); color: var(--主文字); text-align: center; font: inherit;
+  font-variant-numeric: tabular-nums; appearance: textfield;
+}
+.font-size-control input::-webkit-inner-spin-button,
+.font-size-control input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.font-size-control button { min-width: 32px; height: 32px; padding: 0 6px; font: inherit; }
+[data-omi-layout="desktop"] .settings-row { gap: 16px; }
+[data-omi-layout="desktop"] .settings-row > span { min-width: 0; }
+
+[data-omi-layout="desktop"] :is(.resource-detail-kicker, .resource-detail-thumbnail-caption strong, .resource-detail-preview-title p, .resource-detail-preview-status, .resource-detail-preview-selection) {
+  font-size: calc(var(--desktop-info-size, 12px) * var(--desktop-font-scale, 1));
+}
+
+[data-omi-layout="desktop"] .tag-all-section .tag-filter-chip.is-delete-selected { animation: none; opacity: 1; }
+[data-omi-layout="desktop"] .settings-window .font-size-control input { width: 60px; min-width: 60px; }
+[data-omi-layout="desktop"] .settings-window .font-size-control button { border-radius: 7px; }
+
+/* Numeric fields grow with the selected size instead of clipping their text. */
+[data-omi-layout="desktop"] .reader-page-jump input { height: max(32px, 1.55em); }
+[data-omi-layout="desktop"] .reader-footer:not(.is-controls-hidden) { min-height: max(48px, calc(var(--desktop-info-size, 12px) * var(--desktop-font-scale, 1) * 1.55 + 12px)); }
+
+[data-omi-layout="desktop"] :is(.reader-page-info, .resource-card-info, .omi-home__book-progress) :is(strong, span, time) { font-size: inherit; }
+
+.home-artwork-setting { margin: 24px 0; }
+.home-artwork-setting__content { display: flex; align-items: center; gap: 18px; }
+.home-artwork-setting__content > img { width: 136px; height: 94px; object-fit: contain; border-radius: 10px; background: var(--控件背景); }
+.home-artwork-setting__controls { flex: 1; min-width: 0; }
+.home-artwork-setting__name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--次文字); margin-bottom: 12px; font-size: calc(13px * var(--desktop-font-scale, 1)); }
+.home-artwork-setting__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.home-artwork-setting__actions button { min-height: 32px; padding: 7px 14px; border: 0; border-radius: 9px; font-size: calc(12px * var(--desktop-font-scale, 1)); }
+.home-artwork-setting__error { color: var(--危险色); margin: 10px 0 0; }
+
+/* Desktop chrome is not document text; titles and edit fields remain copyable. */
+[data-omi-layout="desktop"] body,
+[data-omi-layout="desktop"] body * { user-select: none; -webkit-user-select: none; }
+[data-omi-layout="desktop"] :is(input, textarea, [contenteditable="true"], [contenteditable="true"] *, #resource-detail-title, .reader-filename-strip, .reader-filename-strip *) {
+  user-select: text; -webkit-user-select: text;
+}
+
+.home-artwork-crop-overlay { position: fixed; inset: 0; z-index: 2500; display: grid; place-items: center; padding: 24px; background: #17233355; }
+.home-artwork-crop { width: min(900px, 100%); max-height: calc(100dvh - 48px); overflow: auto; padding: 22px; color: var(--主文字); background: var(--面板色); border: 1px solid var(--边框色); border-radius: 18px; box-shadow: 0 18px 60px #14223b30; outline: none; }
+.home-artwork-crop header, .home-artwork-crop footer { display: flex; align-items: center; gap: 12px; }
+.home-artwork-crop header { justify-content: space-between; margin-bottom: 18px; }
+.home-artwork-crop :is(h3, h4) { margin: 0; }
+.home-artwork-crop h4 { font-size: 13px; margin-bottom: 12px; color: var(--次文字); }
+.home-artwork-crop button { border: 0; border-radius: 8px; padding: 9px 16px; color: var(--控件文字); background: var(--控件背景); }
+.home-artwork-crop button:is(.is-primary, [aria-pressed="true"]) { color: var(--强调文字); background: var(--强调色); }
+.home-artwork-crop__columns { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.home-artwork-crop__columns section { min-width: 0; }
+.home-artwork-crop__stage, .home-artwork-crop__preview-stage { height: 280px; display: grid; place-items: center; padding: 10px; border-radius: 12px; background: var(--背景色); }
+.home-artwork-crop__frame, .home-artwork-crop__preview { position: relative; overflow: hidden; width: 100%; max-height: 260px; }
+.home-artwork-crop__frame { outline: 1px solid var(--强调色); cursor: grab; touch-action: none; }
+.home-artwork-crop__frame:active { cursor: grabbing; }
+.home-artwork-crop__frame img, .home-artwork-crop__preview img { position: absolute; display: block; max-width: none; pointer-events: none; }
+.home-artwork-crop__preview { mask-image: linear-gradient(to right, transparent, #000 48%, #000 94%, transparent), linear-gradient(to bottom, transparent, #000 10%, #000 86%, transparent); mask-composite: intersect; }
+.home-artwork-crop__grid { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to right, transparent 33%, #fff5 33%, #fff5 calc(33% + 1px), transparent calc(33% + 1px), transparent 66%, #fff5 66%, #fff5 calc(66% + 1px), transparent calc(66% + 1px)), linear-gradient(to bottom, transparent 33%, #fff5 33%, #fff5 calc(33% + 1px), transparent calc(33% + 1px), transparent 66%, #fff5 66%, #fff5 calc(66% + 1px), transparent calc(66% + 1px)); }
+.home-artwork-crop__ratios { display: flex; gap: 8px; margin: 20px 0 16px; }
+.home-artwork-crop__sizes { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.home-artwork-crop__sizes label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.home-artwork-crop__sizes input[type="number"] { width: 74px; padding: 8px; border: 1px solid var(--边框色); border-radius: 8px; color: var(--主文字); background: var(--背景色); }
+.home-artwork-crop__zoom { flex: 1; min-width: 220px; }
+.home-artwork-crop__zoom input { flex: 1; min-width: 60px; accent-color: var(--强调色); }
+.home-artwork-crop__zoom output { min-width: 42px; text-align: right; }
+.home-artwork-crop footer { justify-content: flex-end; margin-top: 24px; }
+.home-artwork-crop p[role="alert"] { color: var(--危险色); }

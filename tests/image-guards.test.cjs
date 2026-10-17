@@ -75,7 +75,7 @@ test('12-megapixel portrait requests 270×360 preview; invalid native image is r
   assert.throws(() => invalid.preview(fixture('pixel.png')), /PREVIEW_INVALID/);
 });
 
-test('library cover thumbnails also reject oversized raster headers before native decoding', async () => {
+test('library covers reject surfaces above their 40 MP scan limit before native decoding', async t => {
   const Module = require('node:module'); const original = Module._load;
   let calls = 0;
   Module._load = function(id, ...args) {
@@ -85,9 +85,12 @@ test('library cover thumbnails also reject oversized raster headers before nativ
   let service;
   try { const file = require.resolve('../dist-electron/services/thumbnailService.js'); delete require.cache[file]; service = require(file); }
   finally { Module._load = original; }
-  for (const name of ['oversized-8192x4096.png', 'oversized-8192x4096.jpg']) {
-    const result = await service.获取图片缩略图(path.join(fixtures, name));
-    assert.equal(result.url, null);
-  }
+  const fs = require('node:fs/promises'), os = require('node:os');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omicomic-cover-guard-'));
+  t.after(async () => { assert.equal(path.dirname(root), path.resolve(os.tmpdir())); assert.ok(path.basename(root).startsWith('omicomic-cover-guard-')); await fs.rm(root,{recursive:true,force:true}); });
+  const png = Buffer.from(fixture('oversized-8192x4096.png'));
+  png.writeUInt32BE(8192,20);
+  const file = path.join(root,'over-40mp.png'); await fs.writeFile(file,png);
+  assert.equal((await service.获取图片缩略图(file)).url,null);
   assert.equal(calls, 0);
 });
