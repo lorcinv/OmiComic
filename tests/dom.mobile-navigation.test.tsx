@@ -46,6 +46,28 @@ afterEach(() => {
 });
 
 describe('mobile transition interruption and cover identity', () => {
+  it.each(['home-expand','home-collapse'] as const)('prepares %s before the native reveal even when web transitions are available',async direction=>{
+    native.available=true;native.call.mockResolvedValue(undefined);
+    let release!:()=>void;
+    const ready=new Promise<void>(resolve=>{release=resolve;}),update=vi.fn();
+    const navigation=mobileNavigate(update,direction,()=>ready);
+    await Promise.resolve();
+    expect(update).toHaveBeenCalledOnce();
+    expect(native.call.mock.calls.map(call=>call[0])).toEqual(['beginScene']);
+    expect(captures).toHaveLength(0);
+    release();await navigation;
+    expect(native.call.mock.calls.map(call=>call[0])).toEqual(['beginScene','commitScene']);
+    expect(native.call).toHaveBeenLastCalledWith('commitScene',expect.objectContaining({direction}));
+    expect(document.documentElement.dataset.mobileNavigation).toBeUndefined();
+  });
+
+  it('keeps reduced-motion home navigation immediate without a native screenshot',async()=>{
+    native.available=true;native.call.mockResolvedValue(undefined);
+    vi.mocked(window.matchMedia).mockReturnValue({matches:true} as MediaQueryList);
+    const update=vi.fn();await mobileNavigate(update,'home-expand');
+    expect(update).toHaveBeenCalledOnce();expect(captures).toHaveLength(0);expect(native.call).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])('settles data requested before backgrounding and animates new input afterwards (native=%s)', async available => {
     native.available = available; native.call.mockResolvedValue(undefined);
     stopLifecycle = observeMobileNavigationLifecycle();

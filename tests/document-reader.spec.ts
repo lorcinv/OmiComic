@@ -40,6 +40,17 @@ async function seedDocument(page: Page, fail = false, delay = false, colorTheme 
   await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
 }
 
+test('EPUB opens and turns chapters even when the PDF runtime is unavailable', async ({ page }) => {
+  const pdfRequests: string[] = [];
+  await page.route(/pdfjs|pdfRuntime/, route => { pdfRequests.push(route.request().url()); return route.abort(); });
+  await seedDocument(page);
+  const chapter = page.frameLocator('.reader-chapter iframe');
+  await expect(chapter.getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(chapter.getByRole('heading', { name: '章节 3', exact: true })).toBeVisible();
+  expect(pdfRequests).toEqual([]);
+});
+
 test('dark EPUB text follows the soft dark theme and retains shared reading controls', async ({ page }) => {
   await seedDocument(page, false, false, 'night');
   const chapter = page.frameLocator('.reader-chapter iframe');

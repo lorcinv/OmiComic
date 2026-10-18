@@ -12,8 +12,8 @@ OmiComic 是一款 Windows 和 Android 本地漫画阅读器。打开文件夹�
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.36 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/OmiComic-Portable-1.1.36-x64.zip) |
-| Android 8.0+ | [OmiComic 1.1.36 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.36/OmiComic-1.1.36-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.37 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.38/OmiComic-1.1.37-PC-Windows-x64.zip) |
+| Android 8.0+ | [OmiComic 1.1.38 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.38/OmiComic-1.1.38-Android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 

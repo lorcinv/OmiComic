@@ -16,11 +16,23 @@ import me.zhanghai.android.libarchive.ArchiveException;
 final class NativeArchives implements Closeable {
   private static final long MAX_IMAGE=64L*1024*1024, MAX_TOTAL=8L*1024*1024*1024;
   private static final int MAX_ENTRIES=30000, CACHE_BYTES=24*1024*1024;
+  /** Bound retained metadata too: entry count and decoded image bytes alone do not bound names. */
+  static final class MetadataBudget {
+    private int bytes;
+    void add(String name)throws IOException {
+      if(name==null)return;
+      if(name.length()>4096)throw new IOException("压缩包文件路径过长。");
+      int size=name.getBytes(StandardCharsets.UTF_8).length;
+      if(size>8*1024*1024-bytes)throw new IOException("压缩包文件目录超过安全读取上限。");
+      bytes+=size;
+    }
+  }
   private static final class PageEntry {
     final int ordinal; final Long modifiedAt;
     PageEntry(int ordinal,Long modifiedAt){this.ordinal=ordinal;this.modifiedAt=modifiedAt;}
   }
   private final Map<String,LinkedHashMap<String,PageEntry>> indexes=new LinkedHashMap<>(4,.75f,true);
+  private final Map<String,Integer> indexNameBytes=new HashMap<>();
   private final Map<String,byte[]> pages=new LinkedHashMap<>(8,.75f,true);
   private final Map<String,ZipArchive> zipIndexes=new HashMap<>();
   private int cachedBytes;
@@ -99,7 +111,7 @@ final class NativeArchives implements Closeable {
       closeReader();
       indexBuilds++;
       index=new LinkedHashMap<>();
-      Handle handle=open(source);long total=0;
+      Handle handle=open(source);long total=0;MetadataBudget names=new MetadataBudget();
       try {
         long entry;int ordinal=0;
         while((entry=Archive.readNextHeader(handle.archive))!=0) {
@@ -109,6 +121,7 @@ final class NativeArchives implements Closeable {
           if(size<0||size>MAX_TOTAL-total)throw new IOException("压缩包展开内容超过手机端读取上限。");
           total+=size;
           String name=name(entry);
+          names.add(name);
           if(ArchiveEntry.filetype(entry)==ArchiveEntry.AE_IFREG&&image(name)&&size<=MAX_IMAGE) {
             Long modifiedAt=null;
             if(ArchiveEntry.mtimeIsSet(entry)) {
@@ -124,8 +137,10 @@ final class NativeArchives implements Closeable {
       saveIndex(key,index);
     }
     indexes.put(key,index);
+    if(!indexNameBytes.containsKey(key)){int size=0;for(String name:index.keySet())size+=name.getBytes(StandardCharsets.UTF_8).length;indexNameBytes.put(key,size);}
     int entries=0;for(Map<String,PageEntry> value:indexes.values())entries+=value.size();
-    while(indexes.size()>1&&(indexes.size()>32||entries>60000)){String oldest=indexes.keySet().iterator().next();entries-=indexes.remove(oldest).size();zipIndexes.remove(oldest);}
+    int names=0;for(int size:indexNameBytes.values())names+=size;
+    while(indexes.size()>1&&(indexes.size()>32||entries>60000||names>16*1024*1024)){String oldest=indexes.keySet().iterator().next();entries-=indexes.remove(oldest).size();names-=indexNameBytes.remove(oldest);zipIndexes.remove(oldest);}
     List<String> result=new ArrayList<>(index.keySet());result.sort(LocalLibrary::natural);return result;
   }
   synchronized Long modifiedAt(String key,String name) {
@@ -185,11 +200,13 @@ final class NativeArchives implements Closeable {
       JSONArray rows=new JSONArray(new String(cached,StandardCharsets.UTF_8));
       if(rows.length()>MAX_ENTRIES)return null;
       LinkedHashMap<String,PageEntry> result=new LinkedHashMap<>();
+      MetadataBudget names=new MetadataBudget();
       for(int i=0;i<rows.length();i++){
         JSONArray row=rows.getJSONArray(i);String name=row.getString(0);int ordinal=row.getInt(1);
         // Older indexes omit timestamps; rebuild them once after upgrading.
         if(row.length()!=3)return null;
         Long modifiedAt=row.isNull(2)?null:row.getLong(2);
+        names.add(name);
         if(!image(name)||ordinal<0||ordinal>=MAX_ENTRIES||result.put(name,new PageEntry(ordinal,modifiedAt))!=null)return null;
       }
       return result;
@@ -251,6 +268,7 @@ final class NativeArchives implements Closeable {
   synchronized void forget(String path) {
     if(currentKey!=null&&matches(currentKey,path))closeReader();
     indexes.keySet().removeIf(key->matches(key,path));
+    indexNameBytes.keySet().retainAll(indexes.keySet());
     zipIndexes.keySet().retainAll(indexes.keySet());
     Iterator<Map.Entry<String,byte[]>> it=pages.entrySet().iterator();
     while(it.hasNext()){Map.Entry<String,byte[]> entry=it.next();if(matches(entry.getKey(),path)){cachedBytes-=entry.getValue().length;it.remove();}}
@@ -261,5 +279,5 @@ final class NativeArchives implements Closeable {
     if(reader!=null){try{reader.close();}catch(IOException ignored){}reader=null;}
     currentKey=null;nextOrdinal=0;
   }
-  @Override public synchronized void close(){closeReader();indexes.clear();zipIndexes.clear();pages.clear();cachedBytes=0;}
+  @Override public synchronized void close(){closeReader();indexes.clear();indexNameBytes.clear();zipIndexes.clear();pages.clear();cachedBytes=0;}
 }

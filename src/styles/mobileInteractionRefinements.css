@@ -4,6 +4,9 @@
 .omi-home.is-mobile-home .omi-home__book:disabled { opacity: 1; }
 .omi-home.is-mobile-home .omi-brand-icon { overflow:hidden; contain:layout paint; touch-action:manipulation; }
 .omi-home.is-mobile-home .omi-brand-icon__graphic { pointer-events:none; }
+/* The inner bevel becomes a bright hairline at phone sizes. Keep the matte
+   shell and recessed white insert, without outlining the centre opening. */
+html[data-omi-layout="mobile"] .omi-brand-icon__inner-rim { display:none; }
 .omi-home.is-mobile-home .omi-home__book.is-held .omi-home__cover-action {
   opacity: 1;
   transform: none;

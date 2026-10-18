@@ -1,0 +1,308 @@
+{
+  "version": "1.1.38",
+  "versionCode": 10138,
+  "date": "2026-10-18",
+  "platform": "Android",
+  "delivery": "local",
+  "publishedToGitHub": false,
+  "sourceBase": "78347c58ed74d17538aa74c6fdc493cfa0006813",
+  "sourceSha256": {
+    "src/hooks/mobileNavigation.ts": "a502eb939f0b806412a48bdf3b460f12db6147f27eb98d0e163d5b743840bba5",
+    "src/OmiBrandIcon.tsx": "2b1f4594399b6c3fd7730562fb65095bdbdbc794af9540bf5773afb13ba41e05",
+    "src/styles/mobileInteractionRefinements.css": "77f021156cbea10b69de0a706a9f04084134e06b5fd7c14fcba9a42c2bd5c9df",
+    "android/src/io/github/lorcinv/omicomic/SceneTransition.java": "0ec5f04de1ff891c6a1be7419e06a9fe1d8a7d9759496c95076573ce8d051ec7",
+    "package.json": "4761fe7d59163a780cc6a332db7972f27787c4905cc03ff07c40f2e8f594b2d4",
+    "package-lock.json": "76a9219bfe419f0b0c13bdc0c38812d8cf5ad79d6ed3500b845ac1ac48ce7e52",
+    "android/AndroidManifest.xml": "daa39e57172720b164750d34ea38ad21a0bdeea41f5c9dee223e7a3807abff1a"
+  },
+  "backup": ".cache/mobile1138-baseline-20261018-151418",
+  "artifact": {
+    "apk": "OmiComic-1.1.38-android.apk",
+    "version": "1.1.38",
+    "bytes": 14480072,
+    "sha256": "1dfa51a919023765d6b5d07e88024890d60d041a2811d93ec29389a74029f153",
+    "nativeAbis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86_64",
+      "x86"
+    ],
+    "nativeLibrariesStoredAnd16KBAligned": true,
+    "pinnedNativeBytesMatch": true,
+    "thirdPartyLicenses": true,
+    "noSigningSecretsOrTestAssets": true,
+    "packagedRendererMatchesCurrentBuild": true,
+    "rendererFiles": 212
+  },
+  "installed": {
+    "package": "io.github.lorcinv.omicomic",
+    "version": "1.1.38",
+    "serial": "emulator-5580",
+    "installedSha256": "1dfa51a919023765d6b5d07e88024890d60d041a2811d93ec29389a74029f153",
+    "deliverySha256": "1dfa51a919023765d6b5d07e88024890d60d041a2811d93ec29389a74029f153",
+    "match": true
+  },
+  "parity": {
+    "version": "1.1.38",
+    "versionCode": 10138,
+    "versionConsistent": true,
+    "packagedDexMatchesCurrentBuild": true,
+    "dexSha256": "de223dc78a57786573e664f76412cf81248843c80080d14d24b8e9556471f26d"
+  },
+  "changes": [
+    "Android home/library circular reveal starts after the first composited frame and bounded temporary texture preparation; original 280 ms easing remains",
+    "Mobile Omi brand centre bevel strokes are hidden; desktop artwork remains unchanged"
+  ],
+  "animation": {
+    "durationMs": 280,
+    "temporaryLayerPixelLimit": 4000000,
+    "layerRestoredOnCompletionCancelAndPause": true,
+    "baselineColdWebReadyToFinishedMs": 1630.6000000014901,
+    "baselineSampledAnimationTimes": [
+      0,
+      0,
+      16.70000000000016,
+      33.40000000000032,
+      100.00000000000054,
+      116.7000000000007,
+      150.00000000000034,
+      280
+    ],
+    "light": {
+      "routes": [
+        {
+          "route": "cold-enter",
+          "nativeCommits": 1,
+          "webTransitions": 0,
+          "durationMs": [
+            280
+          ],
+          "sampledAnimationFrames": 7,
+          "sampledSpanMs": 234,
+          "distinctPixelMeans": 4,
+          "uniformBlankFrames": 0,
+          "layerTypeAfter": 0,
+          "snapshotRetained": false,
+          "revealRetained": false
+        },
+        {
+          "route": "return-home",
+          "nativeCommits": 1,
+          "webTransitions": 0,
+          "durationMs": [
+            280
+          ],
+          "sampledAnimationFrames": 7,
+          "sampledSpanMs": 238,
+          "distinctPixelMeans": 6,
+          "uniformBlankFrames": 0,
+          "layerTypeAfter": 0,
+          "snapshotRetained": false,
+          "revealRetained": false
+        },
+        {
+          "route": "warm-enter",
+          "nativeCommits": 1,
+          "webTransitions": 0,
+          "durationMs": [
+            280
+          ],
+          "sampledAnimationFrames": 11,
+          "sampledSpanMs": 232,
+          "distinctPixelMeans": 8,
+          "uniformBlankFrames": 0,
+          "layerTypeAfter": 0,
+          "snapshotRetained": false,
+          "revealRetained": false
+        }
+      ],
+      "cancellation": {
+        "cancelDuringPreparationReleased": true,
+        "pauseDuringRevealReleased": true,
+        "originalLayerRestored": true,
+        "staleFrameCallbacksIgnored": true
+      }
+    },
+    "night": {
+      "routes": [
+        {
+          "route": "cold-enter",
+          "nativeCommits": 1,
+          "webTransitions": 0,
+          "durationMs": [
+            280
+          ],
+          "sampledAnimationFrames": 10,
+          "sampledSpanMs": 233,
+          "distinctPixelMeans": 6,
+          "uniformBlankFrames": 0,
+          "layerTypeAfter": 0,
+          "snapshotRetained": false,
+          "revealRetained": false
+        },
+        {
+          "route": "return-home",
+          "nativeCommits": 1,
+          "webTransitions": 0,
+          "durationMs": [
+            280
+          ],
+          "sampledAnimationFrames": 6,
+          "sampledSpanMs": 253,
+          "distinctPixelMeans": 6,
+          "uniformBlankFrames": 0,
+          "layerTypeAfter": 0,
+          "snapshotRetained": false,
+          "revealRetained": false
+        },
+        {
+          "route": "warm-enter",
+          "nativeCommits": 1,
+          "webTransitions": 0,
+          "durationMs": [
+            280
+          ],
+          "sampledAnimationFrames": 15,
+          "sampledSpanMs": 255,
+          "distinctPixelMeans": 10,
+          "uniformBlankFrames": 0,
+          "layerTypeAfter": 0,
+          "snapshotRetained": false,
+          "revealRetained": false
+        }
+      ],
+      "cancellation": {
+        "cancelDuringPreparationReleased": true,
+        "pauseDuringRevealReleased": true,
+        "originalLayerRestored": true,
+        "staleFrameCallbacksIgnored": true
+      }
+    }
+  },
+  "checks": {
+    "typecheck": true,
+    "androidProductionBuild": true,
+    "dom": {
+      "passed": 94,
+      "failed": 0
+    },
+    "browser": {
+      "passed": 41,
+      "failed": 0,
+      "flaky": 0
+    },
+    "nativeReader": {
+      "passed": true,
+      "automaticPaging": true,
+      "panoramaAutoplay": true,
+      "rtlDoublePage": true,
+      "rapidReopen": true,
+      "layeredBack": true,
+      "bitmapBytesAfterExit": 0,
+      "tileBytesAfterExit": 0
+    },
+    "homeResume": {
+      "scope": "home",
+      "interactionAfterResume": true,
+      "routes": [
+        {
+          "route": "icon-15000",
+          "sameActivityAndPage": true,
+          "screenWasAsleep": false,
+          "uniformBlankFrames": 0,
+          "resumeSnapshotReleased": true
+        },
+        {
+          "route": "lock-15000",
+          "sameActivityAndPage": true,
+          "screenWasAsleep": true,
+          "uniformBlankFrames": 0,
+          "resumeSnapshotReleased": true
+        },
+        {
+          "route": "trim-15000",
+          "sameActivityAndPage": true,
+          "screenWasAsleep": false,
+          "uniformBlankFrames": 0,
+          "resumeSnapshotReleased": true
+        }
+      ],
+      "resumeDrawGate": {
+        "captureBytes": 7477920,
+        "heldDisplayMeanRgbDifference": 0,
+        "restoredDisplayMeanRgbDifference": 0,
+        "releaseMs": 325,
+        "drawingAllowedUnderCover": true,
+        "staleCompletionIgnored": true,
+        "timeoutReleased": true,
+        "cancelledCaptureReleased": true
+      }
+    },
+    "readerResume": {
+      "scope": "reader",
+      "interactionAfterResume": true,
+      "routes": [
+        {
+          "route": "icon-15000",
+          "sameActivityAndPage": true,
+          "screenWasAsleep": false,
+          "uniformBlankFrames": 0,
+          "resumeSnapshotReleased": true
+        },
+        {
+          "route": "lock-15000",
+          "sameActivityAndPage": true,
+          "screenWasAsleep": true,
+          "uniformBlankFrames": 0,
+          "resumeSnapshotReleased": true
+        },
+        {
+          "route": "trim-15000",
+          "sameActivityAndPage": true,
+          "screenWasAsleep": false,
+          "uniformBlankFrames": 0,
+          "resumeSnapshotReleased": true
+        }
+      ],
+      "resumeDrawGate": {
+        "captureBytes": 7477920,
+        "heldDisplayMeanRgbDifference": 0,
+        "restoredDisplayMeanRgbDifference": 0,
+        "releaseMs": 328,
+        "drawingAllowedUnderCover": true,
+        "staleCompletionIgnored": true,
+        "timeoutReleased": true,
+        "cancelledCaptureReleased": true
+      }
+    },
+    "prior1137FixSourceHashesUnchanged": true
+  },
+  "signature": {
+    "schemes": [
+      "v2",
+      "v3"
+    ],
+    "certificateSha256": "31d30425848de4b32a69e27873756562f400996ef647cba83443b6b20ad9db43"
+  },
+  "boundaries": {
+    "device": "Dedicated Android 15 emulator, emulator-5580",
+    "physicalDeviceTested": false,
+    "windowsInstalledVersion": "1.1.37",
+    "windowsDeploymentRecord": "test-results/software-deployment-1.1.37.json"
+  },
+  "evidenceSha256": {
+    "test-results/mobile1138-android-build.log": "06935a4becc26f4cc41700b9f3a8ae6689382330af631177c6fda71093e2f7e7",
+    "test-results/mobile1138-android-build-prime.log": "b4603134219b4e3093762e7918bf0124a93621643264a33fd6c8d94d6b1355b2",
+    "test-results/mobile1138-dom.log": "423b87d7ffdc2b5d33268115ce18abd7e4d0d5cee01e1ef4cc8f5151a9f8f9b5",
+    "test-results/mobile1138-browser.json": "cbc8596664cb0c24b11ea283897df7cc5cc3ed0e0662db4814860e62d2e4cc56",
+    "test-results/mobile1138-entry-before.json": "186014c2065a296d092fc3c845d125ae99c2855d76d3486d9210f5d31f7b1933",
+    "test-results/mobile1138-artifact.json": "29ea6fab6a0506bb3811a5e469a115d1595315892e9a1274cf95378db363ce9b",
+    "test-results/mobile1138-code-parity.json": "cbca1c4dec47de4569c79ae2a687b0f6186136d83094c0ab13555bdb1556ef8c",
+    "test-results/mobile1138-installed.json": "d11ce3b5d4e95459c41ad8f244754699c6ba1279a6981a7a9de2f4ce711c0b8c",
+    "test-results/mobile1138-entry-final.json": "7de5763f12074701faa9ccec4b1d6843c8a22ad930c3aee4f2d786e55eafd7ee",
+    "test-results/mobile1138-entry-night.json": "1042cd623ffc17ad6b4663601bd8b5bc8ca80618e337f8fa2ad43326e55f05c2",
+    "test-results/mobile1138-native-reader.json": "137640b0d8d266938df687598d1adec79834dcf9120e25c1ddaeb58c23ae8f23",
+    "test-results/mobile1138-resume-home.json": "91b37f2d808ea329dc4dc710bd24e2b105b29854cbe73bbbee139c865b1efe68",
+    "test-results/mobile1138-resume-reader.json": "9d9fc837b3cbdc720307a1cae918396f9b11d7e777fbc49ada509e68ec0eb8c3"
+  }
+}

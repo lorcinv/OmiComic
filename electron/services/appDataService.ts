@@ -305,14 +305,19 @@ const 默认设置: AppSettings = {
 let 数据缓存: OmiComicAppData | null = null;
 let 数据读取任务: Promise<OmiComicAppData> | null = null;
 let 数据变更队列: Promise<void> = Promise.resolve();
-const 数据变更上下文 = new AsyncLocalStorage<boolean>();
+const 数据变更上下文 = new AsyncLocalStorage<{ data: OmiComicAppData }>();
 
 function 正在数据变更事务中(): boolean {
-  return 数据变更上下文.getStore() === true;
+  return 数据变更上下文.getStore() !== undefined;
 }
 
 function 排队执行数据变更<T>(操作: () => Promise<T>): Promise<T> {
-  const 当前任务 = 数据变更队列.then(() => 数据变更上下文.run(true, 操作));
+  const 当前任务 = 数据变更队列.then(async () => {
+    // Keep edits private until the atomic disk write succeeds. Concurrent readers
+    // continue using the committed snapshot, including after a failed save.
+    const data = structuredClone(await 读取应用数据());
+    return 数据变更上下文.run({ data }, 操作);
+  });
   数据变更队列 = 当前任务.then(
     () => undefined,
     () => undefined,
@@ -1065,6 +1070,8 @@ async function 直接保存应用数据(数据: OmiComicAppData): Promise<void> 
   const 新数据 = 修正应用数据(数据);
   await 安全写入JSON(获取数据文件路径(), 新数据);
   数据缓存 = 新数据;
+  const 事务 = 数据变更上下文.getStore();
+  if (事务) 事务.data = 新数据;
 }
 
 export async function 执行资源文件事务<T>(操作: (数据: OmiComicAppData, 保存: (数据: OmiComicAppData) => Promise<void>) => Promise<T>): Promise<T> {
@@ -1104,6 +1111,8 @@ async function 从磁盘读取应用数据(): Promise<OmiComicAppData> {
 }
 
 export async function 读取应用数据(): Promise<OmiComicAppData> {
+  const 事务 = 数据变更上下文.getStore();
+  if (事务) return 事务.data;
   if (数据读取任务) return 数据读取任务;
   if (数据缓存) return 数据缓存;
 

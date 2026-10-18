@@ -11,4 +11,11 @@ for(const [name,count] of [['Stored.cbz',12],['Deflate.cbz',12],['Zip64.cbz',1],
 }
 for(const name of ['Encrypted.cbz','Truncated.cbz'])assert(!(await api.getResourcePages({path:base+'/'+name})).ok,'bad archive accepted '+name);
 const bad=await value(api.getResourcePages({path:base+'/BadCRC.cbz'})),{url}=await value(api.getPageImage(bad.pages[0]));assert(!(await fetch(url)).ok,'CRC corruption not rejected');
-return {decoded,encryptedRejected:true,truncatedRejected:true,crcChecked:true};
+const metadata=[];
+for(const name of ['LongName.cbz','LongName.zip','NameBudget.cbz','NameBudget.zip','UnicodeBudget.cbz']){
+  const result=await api.getResourcePages({path:root.path+'/Metadata/'+name});
+  assert(!result.ok&&/路径过长|目录超过安全读取上限/.test(result.error.message),'Unbounded archive metadata: '+name+' '+JSON.stringify(result.ok?{pages:result.data.total}:result));
+  metadata.push({name,rejected:true,error:result.error.message});
+}
+for(let i=0;i<2;i++){const allowed=await value(api.getResourcePages({path:root.path+'/Metadata/LongAllowed.cbz'}));assert(allowed.total===1&&allowed.pages[0].name.length===4096,'Valid name boundary or cached index changed');}
+return {decoded,encryptedRejected:true,truncatedRejected:true,crcChecked:true,metadata,validNameBoundaryAndCache:true};

@@ -94,6 +94,51 @@ function progress(item, currentPageIndex = 2) {
   return { ...item, currentPageIndex, totalPages: 10, percent: 30, completed: false,
     hasStartedReading: true, firstReadAt: 1000, updatedAt: 2000 };
 }
+
+test('failed persistence leaves committed progress unchanged and cannot leak into the next save', async t => {
+  const f = await fixture(t), s = f.service, book = resource(f.dir, 'failed-save.cbz');
+  await s.保存阅读进度(progress(book, 1));
+  const committed = structuredClone(await s.读取应用数据());
+  const committedDisk = await fs.readFile(f.dataPath, 'utf8');
+  const originalRename = fs.rename;
+  const rename = t.mock.method(fs, 'rename', async (source, target) => {
+    if (target === f.dataPath) throw Object.assign(new Error('Disk full'), { code: 'ENOSPC' });
+    return originalRename(source, target);
+  });
+  await assert.rejects(s.保存阅读进度(progress(book, 7)), { code: 'ENOSPC' });
+  assert.deepEqual(await s.读取应用数据(), committed);
+  assert.equal(await fs.readFile(f.dataPath, 'utf8'), committedDisk);
+  rename.mock.restore();
+  await s.更新设置({ language: 'en' });
+  const restored = await f.load().读取应用数据();
+  assert.equal(restored.settings.language, 'en');
+  assert.equal(restored.readingProgress[book.resourceKey].currentPageIndex, 1);
+});
+
+test('reads see committed settings during a slow save while queued edits commit in order', async t => {
+  const f = await fixture(t), s = f.service;
+  await s.更新设置({ colorTheme: 'mist', language: 'zh-CN' });
+  let release, reached;
+  const held = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { reached = resolve; });
+  const originalRename = fs.rename;
+  t.mock.method(fs, 'rename', async (source, target) => {
+    if (target === f.dataPath) { reached(); await held; }
+    return originalRename(source, target);
+  });
+  const first = s.更新设置({ colorTheme: 'night' });
+  const second = s.更新设置({ language: 'ja' });
+  try {
+    await entered;
+    const during = await s.读取应用数据();
+    assert.equal(during.settings.colorTheme, 'mist');
+    assert.equal(during.settings.language, 'zh-CN');
+  } finally { release(); await Promise.all([first, second]); }
+  const restored = await f.load().读取应用数据();
+  assert.equal(restored.settings.colorTheme, 'night');
+  assert.equal(restored.settings.language, 'ja');
+});
+
 function ordered(items, values, field = 'resourceKey') {
   assert.deepEqual(items.map(item => item[field]), values);
   assert.deepEqual(items.map(item => item.sortIndex), values.map((_, index) => index));

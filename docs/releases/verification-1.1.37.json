@@ -1,0 +1,309 @@
+{
+  "version": "1.1.37",
+  "date": "2026-10-18",
+  "delivery": "local",
+  "publishedToGitHub": false,
+  "sourceBase": "78347c58ed74d17538aa74c6fdc493cfa0006813",
+  "sourceSha256": {
+    "src/components/AppIcon.tsx": "4825333a8ab66b5ecb16369082417982fc54cbf79f086683c5b311eee308dbdb",
+    "src/reader/documentSource.ts": "c705be45d3f92648e008a25d2f05bc6c84f0ab629f7742a3abf0821573f1c00d",
+    "src/reader/pdfRuntime.ts": "d5f21b85075c905d3fe270db8746ab917702853b6b6daf68077d8ee90678d35b",
+    "electron/services/appDataService.ts": "87aae5d9a04b777508ed9c5c3f04b43f97ca9e16cc90507099212883d34817b5",
+    "android/src/io/github/lorcinv/omicomic/NativeArchives.java": "9181b5f51cb8432bf5183699059c4eab88f35ebfc8f4b967489c7c52875972e6",
+    "android/src/io/github/lorcinv/omicomic/ZipArchive.java": "f119aab2786ba2174a58d28f2082e3139ac91177c70764d10a77feccd0a2d55d"
+  },
+  "assets": [
+    {
+      "name": "OmiComic-Portable-1.1.37-x64.zip",
+      "bytes": 140674290,
+      "sha256": "4bd31534c3bffd4ba9d5285fc3dd626811690b5f5f60866c32c2818c185b8534"
+    },
+    {
+      "name": "OmiComic-1.1.37-android.apk",
+      "bytes": 14480072,
+      "sha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2"
+    }
+  ],
+  "fixes": [
+    "Shared recent-reading icon is a plain clock without an arrow",
+    "Desktop failed persistence cannot leak draft state to readers or the next save",
+    "Cancelled late native document opens release the resulting session",
+    "Android archive names have per-path, per-index and retained-cache limits"
+  ],
+  "checks": {
+    "typecheck": true,
+    "windowsBuild": true,
+    "androidBuild": true,
+    "nodeTests": {
+      "passed": 95,
+      "skipped": 1,
+      "failed": 0,
+      "skipReason": "A Windows-incompatible literal wildcard filename fixture"
+    },
+    "domTests": {
+      "passed": 91,
+      "failed": 0
+    },
+    "browser": {
+      "passed": 214,
+      "skipped": 0,
+      "failed": 0,
+      "flaky": 0
+    },
+    "finalDocumentBrowserRetest": {
+      "passed": 8,
+      "failed": 0
+    },
+    "windows": {
+      "version": "1.1.37",
+      "archive": "D:\\Ai Smart Core\\AAA.Project\\OmiComic\\release\\OmiComic-Portable-1.1.37-x64.zip",
+      "size": 140674290,
+      "sha256": "4bd31534c3bffd4ba9d5285fc3dd626811690b5f5f60866c32c2818c185b8534",
+      "zipEntries": 36,
+      "userDataFilesIncluded": false,
+      "uninstallerIncluded": false,
+      "extractedRuntimePassed": true
+    },
+    "packageParity": {
+      "version": "1.1.37",
+      "matchedRendererFiles": 211,
+      "matchedMainFiles": 3,
+      "zipRuntimeFilesMatch": [
+        "resources/7zip/7z.dll",
+        "resources/7zip/7z.exe",
+        "resources/7zip/License.txt",
+        "resources/7zip/readme.txt",
+        "resources/app.asar",
+        "resources/app.asar.unpacked/dist-electron/epubWorker.js",
+        "resources/default_app.asar",
+        "resources/icon.ico"
+      ],
+      "buildOnlyAdvisoryPackagesAbsentFromBundle": true,
+      "chunks": {
+        "windows": {
+          "documentSource": {
+            "file": "documentSource-9PA1cGoO.js",
+            "bytes": 5502
+          },
+          "pdfRuntime": {
+            "file": "pdfRuntime--YnN9BmK.js",
+            "bytes": 482617
+          }
+        },
+        "android": {
+          "documentSource": {
+            "file": "documentSource-ohAIWTFb.js",
+            "bytes": 5502
+          },
+          "pdfRuntime": {
+            "file": "pdfRuntime-C3JCgtyB.js",
+            "bytes": 540755
+          }
+        }
+      }
+    },
+    "android": {
+      "groups": {
+        "zip-fast": {
+          "passed": true,
+          "testedApkSha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+          "evidence": "test-results/review-android-zip-fast.json"
+        },
+        "about": {
+          "passed": true,
+          "testedApkSha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+          "evidence": "test-results/review-android-about.json"
+        },
+        "formats": {
+          "passed": true,
+          "testedApkSha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+          "evidence": "test-results/review-android-formats.json"
+        },
+        "storage": {
+          "passed": true,
+          "testedApkSha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+          "evidence": "test-results/review-android-storage.json"
+        },
+        "native-reader": {
+          "passed": true,
+          "testedApkSha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+          "evidence": "test-results/review-android-native-reader.json"
+        },
+        "resume-home": {
+          "passed": true,
+          "testedApkSha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+          "evidence": "test-results/review-android-resume-home.json"
+        },
+        "resume-reader": {
+          "passed": true,
+          "testedApkSha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+          "evidence": "test-results/review-android-resume-reader.json"
+        }
+      },
+      "artifact": {
+        "apk": "OmiComic-1.1.37-android.apk",
+        "version": "1.1.37",
+        "bytes": 14480072,
+        "sha256": "4f470dddc42dc8d4bf87c22946e4612fa9e8c9a9af53570a272d51a2da38b4d2",
+        "nativeAbis": [
+          "arm64-v8a",
+          "armeabi-v7a",
+          "x86_64",
+          "x86"
+        ],
+        "nativeLibrariesStoredAnd16KBAligned": true,
+        "pinnedNativeBytesMatch": true,
+        "thirdPartyLicenses": true,
+        "noSigningSecretsOrTestAssets": true,
+        "packagedRendererMatchesCurrentBuild": true,
+        "rendererFiles": 212
+      },
+      "installedApkMatchesRelease": true,
+      "versionCode": 10137,
+      "signerSha256": "31d30425848de4b32a69e27873756562f400996ef647cba83443b6b20ad9db43",
+      "metadataCases": [
+        {
+          "name": "LongName.cbz",
+          "rejected": true,
+          "error": "压缩包文件路径过长。"
+        },
+        {
+          "name": "LongName.zip",
+          "rejected": true,
+          "error": "压缩包文件路径过长。"
+        },
+        {
+          "name": "NameBudget.cbz",
+          "rejected": true,
+          "error": "压缩包文件目录超过安全读取上限。"
+        },
+        {
+          "name": "NameBudget.zip",
+          "rejected": true,
+          "error": "压缩包文件目录超过安全读取上限。"
+        },
+        {
+          "name": "UnicodeBudget.cbz",
+          "rejected": true,
+          "error": "压缩包文件目录超过安全读取上限。"
+        }
+      ],
+      "validNameBoundaryAndCachedIndex": true
+    }
+  },
+  "performance": {
+    "chunks": {
+      "windows": {
+        "documentSource": {
+          "file": "documentSource-9PA1cGoO.js",
+          "bytes": 5502
+        },
+        "pdfRuntime": {
+          "file": "pdfRuntime--YnN9BmK.js",
+          "bytes": 482617
+        }
+      },
+      "android": {
+        "documentSource": {
+          "file": "documentSource-ohAIWTFb.js",
+          "bytes": 5502
+        },
+        "pdfRuntime": {
+          "file": "pdfRuntime-C3JCgtyB.js",
+          "bytes": 540755
+        }
+      }
+    },
+    "paired": {
+      "profile": "Interleaved original HEAD and final source; five isolated hidden Electron profiles each; same dependencies and warm filesystem, no emulator or parallel tests",
+      "baselineHead": "78347c58ed74d17538aa74c6fdc493cfa0006813",
+      "samples": {
+        "before": [
+          {
+            "homeReadyMs": 536.8240000000005,
+            "documentModuleMs": 21.100000023841858
+          },
+          {
+            "homeReadyMs": 468.8662000000004,
+            "documentModuleMs": 22.5
+          },
+          {
+            "homeReadyMs": 454.3701000000001,
+            "documentModuleMs": 21.600000023841858
+          },
+          {
+            "homeReadyMs": 469.3227999999999,
+            "documentModuleMs": 20.5
+          },
+          {
+            "homeReadyMs": 454.03979999999865,
+            "documentModuleMs": 22.299999952316284
+          }
+        ],
+        "after": [
+          {
+            "homeReadyMs": 544.3993,
+            "documentModuleMs": 1.2999999523162842
+          },
+          {
+            "homeReadyMs": 462.8885,
+            "documentModuleMs": 1.2999999523162842
+          },
+          {
+            "homeReadyMs": 443.45889999999963,
+            "documentModuleMs": 1.2999999523162842
+          },
+          {
+            "homeReadyMs": 444.85859999999957,
+            "documentModuleMs": 1.199999988079071
+          },
+          {
+            "homeReadyMs": 441.4958000000006,
+            "documentModuleMs": 1.699999988079071
+          }
+        ]
+      },
+      "medians": {
+        "before": {
+          "homeReadyMs": 468.8662000000004,
+          "documentModuleMs": 21.600000023841858
+        },
+        "after": {
+          "homeReadyMs": 444.85859999999957,
+          "documentModuleMs": 1.2999999523162842
+        }
+      }
+    },
+    "scope": "EPUB avoids PDF runtime. Module-import timings and empty-home startup are not full-book cold-open or physical-device benchmarks."
+  },
+  "audit": {
+    "production": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "allDependencies": {
+      "info": 0,
+      "low": 0,
+      "moderate": 8,
+      "high": 0,
+      "critical": 0,
+      "total": 8
+    },
+    "uniqueAdvisory": "https://github.com/advisories/GHSA-hp3w-g68c-fv3c",
+    "affectedPackage": "sprintf-js <= 1.1.3",
+    "buildOnly": true,
+    "relatedPackagesAbsentFromRuntimeBundles": true,
+    "patchedVersionAvailable": false,
+    "decision": "Keep existing packaging tool; do not apply the suggested electron-builder downgrade to 26.5.0."
+  },
+  "boundaries": [
+    "Android runtime tested on dedicated Android 15 emulator; no physical-device or ColorOS claim.",
+    "This is a source review, dependency audit and regression run, not proof that every possible vulnerability is absent.",
+    "No GitHub upload or new Git commit was made.",
+    "Early separate timing runs had different host load; only the interleaved paired run is used for comparisons."
+  ]
+}

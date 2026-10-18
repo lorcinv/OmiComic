@@ -45,7 +45,7 @@ final class ZipArchive {
       count=u64(z,32);centralSize=u64(z,40);central=u64(z,48);endOffset=record;
     }
     if(count>MAX_ENTRIES)throw new IOException("压缩包条目过多。");
-    check(central,centralSize,endOffset);long cursor=central,total=0;ZipArchive index=new ZipArchive();DirectoryReader directory=new DirectoryReader(source,central+centralSize);
+    check(central,centralSize,endOffset);long cursor=central,total=0;ZipArchive index=new ZipArchive();DirectoryReader directory=new DirectoryReader(source,central+centralSize);NativeArchives.MetadataBudget names=new NativeArchives.MetadataBudget();
     for(int n=0;n<count;n++){
       check(cursor,46,central+centralSize);byte[] header=directory.read(cursor,46);
       if(u32(header,0)!=0x02014b50L)throw new IOException("ZIP 目录损坏。");
@@ -68,6 +68,7 @@ final class ZipArchive {
         else if(kind==0x5455&&len>=5&&(bytes[p]&1)!=0)modified=u32(bytes,p+1)*1000;
         p+=len;
       }
+      names.add(name);
       if(size<0||size>MAX_TOTAL-total)throw new IOException("压缩包展开内容超过手机端读取上限。");total+=size;
       check(offset,30,central);
       // Other ZIP methods retain the libarchive compatibility path for the entire book.
@@ -101,8 +102,9 @@ final class ZipArchive {
     return rows.toString().getBytes(StandardCharsets.UTF_8);
   }
   static ZipArchive restore(byte[] bytes,long length){
-    if(bytes==null)return null;try{JSONArray rows=new JSONArray(new String(bytes,StandardCharsets.UTF_8));if(rows.length()>MAX_ENTRIES)return null;ZipArchive zip=new ZipArchive();
+    if(bytes==null)return null;try{JSONArray rows=new JSONArray(new String(bytes,StandardCharsets.UTF_8));if(rows.length()>MAX_ENTRIES)return null;ZipArchive zip=new ZipArchive();NativeArchives.MetadataBudget names=new NativeArchives.MetadataBudget();
       for(int i=0;i<rows.length();i++){JSONArray r=rows.getJSONArray(i);Entry e=new Entry(r.getString(0),r.getLong(1),r.getLong(2),r.getLong(3),r.getLong(4),r.getInt(5),r.getInt(6),r.isNull(7)?null:r.getLong(7));
+        names.add(e.name);
         check(e.offset,30,length);if(!NativeArchives.image(e.name)||e.packed<0||e.packed>length||e.size<0||e.size>MAX_IMAGE||(e.method!=0&&e.method!=8)||(e.flags&1)!=0||zip.entries.put(e.name,e)!=null)return null;}
       return zip;
     }catch(Exception invalid){return null;}

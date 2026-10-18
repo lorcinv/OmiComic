@@ -13,7 +13,7 @@ const paths: Record<Exclude<AppIconName, 'more' | 'dots'>, string> = {
   'open-folder': 'M4 5h6l2 3h8v12H4zM15 14a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
   cover: 'M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4M14 8h.01', reset: 'M4 4v6h6M4 10a8 8 0 1 1 1 7', refresh: 'M20 4v6h-6M4 20v-6h6M4 10a8 8 0 0 1 14-5l2 5M4 14l2 5a8 8 0 0 0 14-5',
   settings: 'M5 4v16M12 4v16M19 4v16M2 9h6M9 15h6M16 7h6', library: 'M3 5h7l2 2 2-2h7v15h-7l-2 1-2-1H3zM12 7v14',
-  heart: 'M12 20 4 12a5 5 0 0 1 8-6 5 5 0 0 1 8 6z', bookmark: 'M6 4h12v17l-6-4-6 4z', history: 'M4 4v6h6M4 10a8 8 0 1 1 1 7M12 7v5l3 2',
+  heart: 'M12 20 4 12a5 5 0 0 1 8-6 5 5 0 0 1 8 6z', bookmark: 'M6 4h12v17l-6-4-6 4z', history: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M12 7v5l3 2',
 };
 export default function AppIcon({ name, style, className = "" }: { name: AppIconName; style?: CSSProperties; className?: string }) {
   return <svg className={`mobile-svg-icon app-svg-icon ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={name === 'shelf' ? 1.8 : 1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}>

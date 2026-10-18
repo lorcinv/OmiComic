@@ -4,10 +4,11 @@
 
 旧版下载与更新记录。
 
-[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.36)
+[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.38)
 
 | 版本 | 平台 | 发行页 |
 | --- | --- | --- |
+| v1.1.38 | PC · Windows x64 1.1.37 / Android 1.1.38 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.38) |
 | v1.1.36 | PC · Windows x64 / Android | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.36) |
 | v1.1.2 | PC · Windows x64 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.2) |
 | v1.1.1 | PC · Windows x64 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.1) |

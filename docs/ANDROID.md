@@ -2,7 +2,7 @@
 
 Android 版本复用 Omi 的阅读规则和主题，并单独设计手机布局；Java 原生层负责系统目录授权、文件读取、静态漫画图片解码与 Canvas 显示、音量按键、文件重命名及删除。React/TypeScript 保留 Omi 界面和交互，原生图片与界面之间只传布局坐标和状态。
 
-当前发布版本为 **1.1.36（2026-10-17）**。关于页统一 Omi 介绍、版本和 GitHub 项目链接；保留 1.1.23 的后台恢复等修复。使用原发布证书覆盖安装。[下载](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.36) · [验证](verification-1.1.36.md)。
+当前发布版本为 **1.1.38（2026-10-18）**。修复首次从首页进入资源库的动画闪跳，移除手机 Omi 图标中心白色细描边；包含 1.1.37 的时钟图标、安全修复和加载优化。使用原发布证书覆盖安装。[下载](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.38) · [验证](verification-1.1.38.md)。
 
 1.1.22：后台返回等待网页首帧就绪后再绘制；窗口完全退到后台后暂停网页。开屏接续系统原有启动画面，由原生渲染线程完成中央展开，避免清空后重绘。开屏临时底图最多 8 MiB，过渡结束释放引用；后台返回不新增截图缓存。
 
@@ -160,6 +160,9 @@ node tests/android/native-fixtures.cjs
 # 需要 Pillow；生成 EXIF 八种方向的中性测试图：
 python tests/android/native-exif-fixtures.py
 .cache/android-tools/platform-tools/adb.exe -s emulator-5580 push .cache/android-native-fixtures/Native112 /sdcard/Download/OmiSmoke/
+# zip-fast 同时检查超长路径和文件名总量限制；只向专用模拟器投放测试样本：
+python tests/android/metadata-fixtures.py
+.cache/android-tools/platform-tools/adb.exe -s emulator-5580 push .cache/android-metadata-fixtures/Metadata /sdcard/Download/OmiSmoke/
 ./scripts/test-android.ps1 -Mode native-reader
 ./scripts/test-android.ps1 -Mode native-speed -ColdCache
 ./scripts/test-android.ps1 -Mode zip-fast -ColdCache
@@ -174,3 +177,14 @@ node scripts/verify-android.cjs
 1.1.13 补充验证：`mobile-preview-speed` 使用真实 Android 触摸，在 2500 页压缩包中远距离拖动，比较正文与选中预览完成时间；`mobile-interactions1113` 验证首页点击、栏目方向、详情返回和打开路径。运行方法同上，替换 `-Mode`。
 
 1.1.14 补充验证：运行 native-stability 检查 8000×10000 大图静止、12 类抗摩尔纹样本和磁盘副本；同一模式再次启动验证重启复用。mobile-preview-speed 现在验证选中预览实际绘制的原生图像身份，与正文一致。浏览器视觉检查见 tests/mobile1114.spec.ts。
+
+1.1.38 首页进入资源库的首次转场验证（使用上述专用模拟器和 OmiSmoke 目录）：
+
+```powershell
+./scripts/test-android.ps1 -Mode mobile1138-entry -ExpectedVersion 1.1.38
+./scripts/test-android.ps1 -Mode mobile1138-entry -ExpectedVersion 1.1.38 -Fixture night
+./scripts/test-android.ps1 -Mode mobile1123-resume -ExpectedVersion 1.1.38 -Fixture home-short
+./scripts/test-android.ps1 -Mode mobile1123-resume -ExpectedVersion 1.1.38 -Fixture reader-short
+```
+
+`mobile1138-entry` 在独立进程中依次测试首次进入、返回首页、再次进入，用实际窗口像素检查连续过渡和空白帧，并确认动画保持 280 ms、临时图层释放。另检查准备时取消、播放时暂停及迟到回调，保存首页图标截图并确认手机中心描边隐藏。`night` 通过实际设置界面切换夜色主题；`observe` 只采集旧包的对照数据，不执行新版断言。测试工具中的采样等待不属于产品动画时长。

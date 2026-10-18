@@ -1,8 +1,5 @@
-import { getDocument, GlobalWorkerOptions, PDFDataRangeTransport, type PDFDocumentProxy, type RenderTask } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import type { PDFDocumentLoadingTask, PDFDataRangeTransport, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { 阅读资源结果 } from "../types";
-
-GlobalWorkerOptions.workerSrc = workerUrl;
 
 export interface DocumentPage {
   url: string;
@@ -17,7 +14,7 @@ export interface DocumentPage {
 export class DocumentSource {
   private readonly id = crypto.randomUUID();
   private readonly abortController = new AbortController();
-  private loading?: ReturnType<typeof getDocument>;
+  private loading?: PDFDocumentLoadingTask;
   private pdf?: PDFDocumentProxy;
   private transport?: PDFDataRangeTransport;
   private renders = new Set<RenderTask>();
@@ -34,11 +31,24 @@ export class DocumentSource {
   async open(): Promise<阅读资源结果> {
     const type = this.resource.sourceType;
     if (type !== "pdf" && type !== "epub") throw new Error("文档格式无效。");
-    const opened = await window.omicomic.openDocument({ path: this.resource.sourcePath, type, id: this.id, purpose: this.purpose });
+    this.assertOpen();
+    // EPUB needs only the native chapter service. Load the PDF runtime alongside
+    // the native file open, so PDF reads gain no extra serial loading step.
+    const [opened, pdfRuntime] = await Promise.all([
+      window.omicomic.openDocument({ path: this.resource.sourcePath, type, id: this.id, purpose: this.purpose }).then(opened => {
+        // A slow native open can finish after dispose already sent close. Close
+        // again on completion so Android cannot retain that cancelled session.
+        if (this.closed) void window.omicomic.closeDocument(this.id).catch(() => undefined);
+        this.assertOpen();
+        return opened;
+      }),
+      type === "pdf" ? import("./pdfRuntime") : undefined,
+    ]);
     this.assertOpen();
     if (!opened.ok) throw new Error(opened.error.message);
     let chapters = opened.data.chapters;
     if (type === "pdf") {
+      const { getDocument, PDFDataRangeTransport } = pdfRuntime!;
       const source = this;
       class Ranges extends PDFDataRangeTransport {
         private queue = Promise.resolve();

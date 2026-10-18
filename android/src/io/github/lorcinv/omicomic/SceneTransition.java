@@ -15,6 +15,8 @@ final class SceneTransition {
   private int generation;
   private boolean suspended;
   private android.animation.Animator reveal;
+  private View revealLayer;
+  private int previousLayerType;
   SceneTransition(Window window,FrameLayout root,FrameLayout content){this.window=window;this.root=root;this.content=content;}
   void begin(long request,Runnable ready){
     boolean interrupted=snapshot!=null;
@@ -55,12 +57,15 @@ final class SceneTransition {
     // Slide opaque scenes. Alpha on the WebView group creates a full-screen
     // intermediate render target and can stall the first composited frame.
     if(direction.startsWith("home-")){
-      boolean opening=direction.equals("home-expand");View target=opening?content:old;
-      if(opening)content.bringToFront();else old.bringToFront();
-      float radius=(float)Math.hypot(Math.max(x,content.getWidth()-x),Math.max(y,content.getHeight()-y))+2;
-      reveal=ViewAnimationUtils.createCircularReveal(target,Math.round(x),Math.round(y),opening?0:radius,opening?radius:0);
-      reveal.setDuration(280);reveal.setInterpolator(new android.view.animation.PathInterpolator(.2f,.55f,.4f,1));
-      reveal.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator animator){if(id==request&&snapshot==old){reveal=null;cancel();}}});reveal.start();
+      boolean opening=direction.equals("home-expand");
+      if(opening&&content.isHardwareAccelerated()&&(long)content.getWidth()*content.getHeight()<=4_000_000){
+        // Prepare the first WebView texture while the old page still covers it.
+        // Starting the clock before this work makes a cold reveal jump to its end.
+        revealLayer=content;previousLayerType=content.getLayerType();
+        try{content.setLayerType(View.LAYER_TYPE_HARDWARE,null);content.buildLayer();}
+        catch(IllegalStateException|OutOfMemoryError ignored){restoreRevealLayer();}
+        FrameCommit.after(content,()->startHomeReveal(request,old,opening,x,y));
+      }else startHomeReveal(request,old,opening,x,y);
     }else if(direction.startsWith("tab-")){
       float sign=direction.equals("tab-next")?1:-1;
       content.bringToFront();content.setTranslationX(content.getWidth()*sign);
@@ -77,10 +82,23 @@ final class SceneTransition {
       content.animate().translationX(0).setDuration(duration).setInterpolator(new LinearInterpolator()).withEndAction(()->{if(id==request&&snapshot==old)cancel();}).start();
     }
   }
+  private void startHomeReveal(long request,ImageView old,boolean opening,float x,float y){
+    if(suspended||request!=id||snapshot!=old)return;
+    View target=opening?content:old;
+    if(opening)content.bringToFront();else old.bringToFront();
+    float radius=(float)Math.hypot(Math.max(x,content.getWidth()-x),Math.max(y,content.getHeight()-y))+2;
+    reveal=ViewAnimationUtils.createCircularReveal(target,Math.round(x),Math.round(y),opening?0:radius,opening?radius:0);
+    reveal.setDuration(280);reveal.setInterpolator(new android.view.animation.PathInterpolator(.2f,.55f,.4f,1));
+    reveal.addListener(new android.animation.AnimatorListenerAdapter(){@Override public void onAnimationEnd(android.animation.Animator animator){if(id==request&&snapshot==old){reveal=null;cancel();}}});reveal.start();
+  }
+  private void restoreRevealLayer(){
+    if(revealLayer!=null){revealLayer.setLayerType(previousLayerType,null);revealLayer=null;}
+  }
   void cancel(){
     generation++;
     id=-1;
     if(reveal!=null){android.animation.Animator running=reveal;reveal=null;running.removeAllListeners();running.cancel();}
+    restoreRevealLayer();
     content.animate().cancel();content.setTranslationX(0);content.setAlpha(1);content.setScaleX(1);content.setScaleY(1);
     if(snapshot!=null){snapshot.animate().cancel();root.removeView(snapshot);snapshot.setImageDrawable(null);snapshot=null;}
     // RenderThread may still hold the old display list; release by reachability.

@@ -104,10 +104,11 @@ export async function mobileNavigate(update: () => void, direction: Direction = 
     delete root.dataset.mobileNavigation;
     for(const name of ['--mobile-home-x','--mobile-home-y','--mobile-home-radius'])root.style.removeProperty(name);
   };
-  // Library scenes contain web UI only: named snapshots can keep the bottom
-  // navigation stationary and carry the cover between card and details. Reader
-  // scenes must capture the composed Android layer as well as the WebView.
-  const webLibraryScene=Boolean(document.startViewTransition)&&!root.dataset.nativeReader&&['tab-next','tab-prev','folder','detail','detail-back','home-expand','home-collapse'].includes(direction);
+  // Keep named web snapshots for tabs/details. A cold, full-screen WebView
+  // reveal can spend its animation time preparing the first composited frame.
+  // Android's home reveal starts on RenderThread after that frame is committed.
+  const nativeHomeScene=hasAndroidRenderer()&&radial&&!matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const webLibraryScene=!nativeHomeScene&&Boolean(document.startViewTransition)&&!root.dataset.nativeReader&&['tab-next','tab-prev','folder','detail','detail-back','home-expand','home-collapse'].includes(direction);
   // A previous native PixelCopy may still be pending. Invalidate its generation
   // before starting a web-only transition, so its late screenshot cannot cover
   // the new UI. A newer native beginScene performs this cleanup itself.

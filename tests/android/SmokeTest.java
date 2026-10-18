@@ -40,6 +40,39 @@ public final class SmokeTest extends Instrumentation {
     long deadline=SystemClock.uptimeMillis()+4000;
     while(true){boolean[] moving={false};runOnMainSync(()->{try{moving[0]=field(field(activity,"sceneTransition"),"snapshot")!=null;}catch(NoSuchFieldException legacy){}catch(Exception error){throw new RuntimeException(error);}});if(!moving[0])return;if(SystemClock.uptimeMillis()>deadline)throw new IOException("Native navigation did not settle");SystemClock.sleep(20);}
   }
+  private JSONObject homeRevealCancellationTest(Activity activity)throws Exception {
+    awaitSceneSettled(activity);
+    Object scene=field(activity,"sceneTransition");View content=(View)field(scene,"content");Class<?> type=scene.getClass();
+    java.lang.reflect.Method begin=type.getDeclaredMethod("begin",long.class,Runnable.class),commit=type.getDeclaredMethod("commit",long.class,String.class),cancel=type.getDeclaredMethod("cancel"),pause=type.getDeclaredMethod("pause"),resume=type.getDeclaredMethod("resume");
+    for(java.lang.reflect.Method method:new java.lang.reflect.Method[]{begin,commit,cancel,pause,resume})method.setAccessible(true);
+    JSONObject result=new JSONObject();int originalLayer=content.getLayerType();
+    try{
+      for(boolean duringReveal:new boolean[]{false,true}){
+        long request=duringReveal?Long.MAX_VALUE-1:Long.MAX_VALUE;CountDownLatch captured=new CountDownLatch(1);boolean[] stopped={false};
+        runOnMainSync(()->{try{begin.invoke(scene,request,(Runnable)captured::countDown);}catch(Exception error){throw new RuntimeException(error);}});
+        if(!captured.await(5,TimeUnit.SECONDS))throw new IOException("Home cancellation capture timed out");
+        runOnMainSync(()->{try{
+          commit.invoke(scene,request,"home-expand");
+          if(content.getLayerType()!=View.LAYER_TYPE_HARDWARE||field(scene,"revealLayer")!=content)throw new AssertionError("Home texture was not prepared");
+          if(!duringReveal){cancel.invoke(scene);stopped[0]=true;}
+        }catch(Exception error){throw new RuntimeException(error);}});
+        long deadline=SystemClock.uptimeMillis()+4000;
+        while(!stopped[0]){
+          runOnMainSync(()->{try{if(field(scene,"reveal")!=null){pause.invoke(scene);stopped[0]=true;}}catch(Exception error){throw new RuntimeException(error);}});
+          if(SystemClock.uptimeMillis()>deadline)throw new IOException("Did not reach active home reveal");
+          if(!stopped[0])SystemClock.sleep(10);
+        }
+        // Let queued frame-commit/animation callbacks run after cancellation.
+        SystemClock.sleep(400);
+        runOnMainSync(()->{try{
+          if(content.getLayerType()!=originalLayer||field(scene,"revealLayer")!=null||field(scene,"reveal")!=null||field(scene,"snapshot")!=null||field(scene,"bitmap")!=null)throw new AssertionError("Cancelled home reveal retained resources");
+          resume.invoke(scene);
+        }catch(Exception error){throw new RuntimeException(error);}});
+        result.put(duringReveal?"pauseDuringRevealReleased":"cancelDuringPreparationReleased",true);
+      }
+      return result.put("originalLayerRestored",true).put("staleFrameCallbacksIgnored",true);
+    }finally{runOnMainSync(()->{try{cancel.invoke(scene);resume.invoke(scene);}catch(Exception error){throw new RuntimeException(error);}});}
+  }
   private JSONObject resumeGateTest(Activity activity)throws Exception {
     awaitSceneSettled(activity);
     long settledDeadline=SystemClock.uptimeMillis()+6000;
@@ -162,11 +195,15 @@ public final class SmokeTest extends Instrumentation {
         int[] origin=new int[2];frame.getLocationInWindow(origin);origin[0]+=frame.getPaddingLeft();origin[1]+=frame.getPaddingTop();
         android.graphics.Rect area=new android.graphics.Rect(origin[0],origin[1],origin[0]+web.getWidth(),origin[1]+web.getHeight());
         android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(72,120,android.graphics.Bitmap.Config.ARGB_8888);
+        boolean homeProbe=args.getString("mode","").equals("mobile1138-entry");
+        android.animation.Animator sceneReveal;
+        try{sceneReveal=homeProbe?(android.animation.Animator)field(field(activity,"sceneTransition"),"reveal"):null;}catch(Exception error){throw new RuntimeException(error);}
+        final boolean revealing=sceneReveal!=null&&sceneReveal.isRunning();final long revealDuration=sceneReveal==null?0:sceneReveal.getDuration();
         try{PixelCopy.request(activity.getWindow(),area,image,result->{
           if(result==PixelCopy.SUCCESS){
             java.util.Set<Integer> colors=new java.util.HashSet<>();long brightness=0;
             for(int y=0;y<image.getHeight();y++)for(int x=0;x<image.getWidth();x++){int pixel=image.getPixel(x,y);colors.add(pixel&0x00f8f8f8);brightness+=(pixel>>>16&255)+(pixel>>>8&255)+(pixel&255);}
-            try{frames.put(new JSONObject().put("ms",SystemClock.uptimeMillis()-start).put("colors",colors.size()).put("meanRgb",(double)brightness/(image.getWidth()*image.getHeight()*3)));}catch(Exception error){throw new RuntimeException(error);}
+            try{JSONObject sample=new JSONObject().put("ms",SystemClock.uptimeMillis()-start).put("colors",colors.size()).put("meanRgb",(double)brightness/(image.getWidth()*image.getHeight()*3));if(homeProbe)sample.put("nativeReveal",revealing).put("revealDuration",revealDuration);frames.put(sample);}catch(Exception error){throw new RuntimeException(error);}
           }
           image.recycle();inFlight=false;
         },web.getHandler());}catch(IllegalArgumentException error){image.recycle();inFlight=false;}
@@ -176,7 +213,9 @@ public final class SmokeTest extends Instrumentation {
     JSONObject result()throws Exception {
       stopped=true;int blanks=0,min=Integer.MAX_VALUE;
       for(int i=0;i<frames.length();i++){int colors=frames.getJSONObject(i).getInt("colors");min=Math.min(min,colors);if(colors<=3)blanks++;}
-      return new JSONObject().put("frames",frames).put("count",frames.length()).put("uniformBlankFrames",blanks).put("minColors",min);
+      JSONObject result=new JSONObject().put("frames",frames).put("count",frames.length()).put("uniformBlankFrames",blanks).put("minColors",min);
+      if(args.getString("mode","").equals("mobile1138-entry")){Object scene=field(activity,"sceneTransition");result.put("contentLayerType",((View)field(scene,"content")).getLayerType()).put("snapshotRetained",field(scene,"snapshot")!=null).put("revealRetained",field(scene,"reveal")!=null);}
+      return result;
     }
   }
   private JSONObject pngBench(Object library,String url)throws Exception {
@@ -443,9 +482,9 @@ public final class SmokeTest extends Instrumentation {
       SceneFrames[] sceneFrames={null};
       while("null".equals(result=eval("JSON.stringify(window.__omiResult)"))||"\"null\"".equals(result)){
         if(System.currentTimeMillis()>deadline)throw new IOException("Smoke timed out: "+eval("document.body.innerText"));
-        if((mode.startsWith("mobile1121-")||mode.startsWith("mobile1122-")||mode.startsWith("mobile1123-"))){
+        if((mode.startsWith("mobile1121-")||mode.startsWith("mobile1122-")||mode.startsWith("mobile1123-")||mode.equals("mobile1138-entry"))){
         if("true".equals(eval("window.__omiFrameProbe===true"))){runOnMainSync(()->{sceneFrames[0]=new SceneFrames(activity);Choreographer.getInstance().postFrameCallback(sceneFrames[0]);});eval("window.__omiFrameProbe=false");}
-        if("true".equals(eval("window.__omiFrameProbeStop===true"))){JSONObject[] captured={null};runOnMainSync(()->{try{captured[0]=sceneFrames[0].result();}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiFrameProbeResult="+captured[0]+";window.__omiFrameProbeStop=false");}
+        if("true".equals(eval("window.__omiFrameProbeStop===true"))){if(mode.equals("mobile1138-entry"))awaitSceneSettled(activity);JSONObject[] captured={null};runOnMainSync(()->{try{captured[0]=sceneFrames[0].result();}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiFrameProbeResult="+captured[0]+";window.__omiFrameProbeStop=false");}
         String lifecycleRoute=(String)new JSONTokener(eval("JSON.stringify(window.__omiLifecycle||null)")).nextValue();
         if(lifecycleRoute!=null&&!"null".equals(lifecycleRoute)){String route=(String)new JSONTokener(lifecycleRoute).nextValue();JSONObject resumed=lifecycle(activity,route);eval("window.__omiLifecycleResult="+resumed+";window.__omiLifecycle=null");}
         }
@@ -605,6 +644,7 @@ public final class SmokeTest extends Instrumentation {
       }
       String json=(String)new JSONTokener(result).nextValue();
       JSONObject resultObject=new JSONObject(json);
+      if(mode.equals("mobile1138-entry")){String trace=(String)new JSONTokener(eval("JSON.stringify(window.__omiEntryTrace||[])")).nextValue();resultObject.put("entryTrace",new JSONArray(trace));}
       if(!resultObject.optBoolean("ok")){String snapshot=(String)new JSONTokener(eval("JSON.stringify(window.__omiNativeStats||null)")).nextValue();if(snapshot!=null&&!snapshot.equals("null"))resultObject.put("lastReaderStats",new JSONObject(snapshot));}
       if(mode.equals("about")){
         removeMonitor(externalMonitor);
@@ -642,6 +682,7 @@ public final class SmokeTest extends Instrumentation {
         if(Build.VERSION.SDK_INT>=30&&(activity.getWindow().getInsetsController().getSystemBarsAppearance()&24)!=0)throw new IOException("Night system bar icons are not light");
       }
       resultObject.put("native",appearance);
+      if(mode.equals("mobile1138-entry")&&resultObject.optBoolean("ok")&&!args.getString("fixture","").equals("observe"))resultObject.put("homeRevealCancellation",homeRevealCancellationTest(activity));
       if(mode.startsWith("mobile1123-")){Bundle progress=new Bundle();progress.putString("runtimeResult",resultObject.toString());sendStatus(0,progress);}
       if(mode.startsWith("mobile1122-")||mode.startsWith("mobile1123-"))resultObject.put("resumeDrawGate",resumeGateTest(activity));
       if(mode.startsWith("mobile1120-")||(mode.startsWith("mobile1121-")||mode.startsWith("mobile1122-"))){

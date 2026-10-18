@@ -287,7 +287,7 @@ function OmiBrandIcon({
               strokeWidth="8.2"
             />
             <circle cx="32" cy="32" r="28.25" fill="none" stroke="#d4d9de" strokeWidth="0.7" />
-            <circle cx="32" cy="32" r="17.75" fill="none" stroke="#c8cfd5" strokeWidth="0.7" />
+            <circle className="omi-brand-icon__inner-rim" cx="32" cy="32" r="17.75" fill="none" stroke="#c8cfd5" strokeWidth="0.7" />
           </g>
 
           {/* A deliberately asymmetric C-shell makes rotation legible. It is flat, matte and
@@ -304,6 +304,7 @@ function OmiBrandIcon({
               strokeWidth="0.8"
             />
             <path
+              className="omi-brand-icon__inner-rim"
               d="M44.02 19.98A17 17 0 1 0 44.02 44.02"
               stroke="#aab2ba"
               strokeWidth="0.8"
