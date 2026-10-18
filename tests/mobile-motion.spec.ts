@@ -2,7 +2,7 @@ import {test,expect,type Page} from '@playwright/test';
 import {writeFileSync} from 'node:fs';
 import {installMock} from './mock';
 
-test.use({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+test.use({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Hong_Kong'});
 async function setup(page:Page){
   await page.addInitScript(installMock,{count:12});
   await page.addInitScript(async()=>{
