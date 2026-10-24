@@ -5321,13 +5321,13 @@ a,
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2.2;
-  opacity: 0.54;
+  opacity: 0.3;
   transition: opacity 120ms ease, stroke 120ms ease;
 }
 
 .reader-direction-toggle.is-ltr .direction-right,
 .reader-direction-toggle.is-rtl .direction-left {
-  stroke: var(--次文字);
+  stroke: var(--强调色);
   opacity: 1;
 }
 

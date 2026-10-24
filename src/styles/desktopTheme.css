@@ -56,7 +56,7 @@
 
 [data-omi-layout="desktop"] .library-controls .selection-toolbar button { color: var(--控件文字); }
 
-[data-omi-layout="desktop"] :is(.library-controls, .reader-toolbar, .reader-footer) :is(button, summary, .glass-select-trigger):is(.is-active, [aria-pressed="true"], [aria-selected="true"]):not(:disabled),
+[data-omi-layout="desktop"] :is(.library-controls, .reader-toolbar, .reader-footer) :is(button, summary, .glass-select-trigger):is(.is-active, [aria-pressed="true"], [aria-selected="true"]):not(:disabled, .reader-direction-toggle),
 [data-omi-layout="desktop"] button:is(.primary-action, .resource-detail-read-button):not(:disabled) {
   border-color: transparent;
   color: var(--强调文字);
@@ -207,13 +207,15 @@
 [data-omi-layout="desktop"] .navigation-actions { border-color: transparent; }
 [data-omi-layout="desktop"] .navigation-divider { background: color-mix(in srgb, var(--次文字) 20%, transparent); }
 
-/* Reading controls remain distinct from chrome in every palette. */
-[data-omi-layout="desktop"] :is(.reader-toolbar, .reader-footer, .reader-tool-panel) :is(button, .glass-select-trigger):not(:disabled, .is-active, [aria-pressed="true"], [aria-selected="true"]) {
+/* Reading controls remain distinct from chrome in every palette. Direction state colors only its arrow. */
+[data-omi-layout="desktop"] :is(.reader-toolbar, .reader-footer, .reader-tool-panel) :is(button, .glass-select-trigger):not(:disabled, .is-active, [aria-pressed="true"], [aria-selected="true"]),
+[data-omi-layout="desktop"] .reader-toolbar button.reader-direction-toggle:not(:disabled) {
   background: color-mix(in srgb, var(--控件边框) 78%, var(--面板色));
   border: 1px solid var(--控件边框);
   color: var(--控件文字);
 }
-[data-omi-layout="desktop"] :is(.reader-toolbar, .reader-footer, .reader-tool-panel) :is(button, .glass-select-trigger):hover:not(:disabled, .is-active, [aria-pressed="true"], [aria-selected="true"]) {
+[data-omi-layout="desktop"] :is(.reader-toolbar, .reader-footer, .reader-tool-panel) :is(button, .glass-select-trigger):hover:not(:disabled, .is-active, [aria-pressed="true"], [aria-selected="true"]),
+[data-omi-layout="desktop"] .reader-toolbar button.reader-direction-toggle:hover:not(:disabled) {
   background: color-mix(in srgb, var(--控件边框) 82%, var(--控件文字));
 }
 
