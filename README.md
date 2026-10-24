@@ -6,14 +6,14 @@
 
 **整理你的漫画，接着上次阅读。**
 
-OmiComic 是一款 Windows 和 Android 本地漫画阅读器。打开文件夹、压缩包或电子书，用书架和标签整理收藏，再从上次的位置接着读。
+OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android 双端漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF 和 EPUB 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
 
 ## 下载
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.38 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.38/OmiComic-1.1.38-PC-Windows-x64.zip) |
-| Android 8.0+ | [OmiComic 1.1.38 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.38/OmiComic-1.1.38-Android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.39 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.39-PC-Windows-x64.zip) |
+| Android 8.0+ | [OmiComic 1.1.38 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.38-Android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 

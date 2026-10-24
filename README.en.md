@@ -6,14 +6,14 @@
 
 **Organize your comics. Pick up where you left off.**
 
-OmiComic is a local comic reader for Windows and Android. Open folders, archives or ebooks, organize your collection with bookshelves and tags, and continue from your last page.
+OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB, with bookshelves, categories, tags and favorites to organize your local collection.
 
 ## Download
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.38 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.38/OmiComic-1.1.38-PC-Windows-x64.zip) |
-| Android 8.0+ | [OmiComic 1.1.38 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.38/OmiComic-1.1.38-Android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.39 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.39-PC-Windows-x64.zip) |
+| Android 8.0+ | [OmiComic 1.1.38 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.38-Android.apk) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
