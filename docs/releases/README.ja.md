@@ -8,7 +8,7 @@
 
 | バージョン | 対応環境 | リリース |
 | --- | --- | --- |
-| v1.1.38 | PC · Windows x64 1.1.37 / Android 1.1.38 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.38) |
+| v1.1.38 | PC · Windows x64 1.1.38 / Android 1.1.38 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.38) |
 | v1.1.36 | PC · Windows x64 / Android | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.36) |
 | v1.1.2 | PC · Windows x64 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.2) |
 | v1.1.1 | PC · Windows x64 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.1) |
