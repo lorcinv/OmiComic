@@ -8,6 +8,12 @@
 
 OmiComic は、ローカルでの高速起動とすっきりした読書体験を重視した、Windows・Android 両対応の漫画リーダーです。画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB に対応し、本棚、カテゴリー、タグ、お気に入りでローカルの漫画を整理できます。
 
+## 紹介動画
+
+[![OmiComic 紹介動画](docs/images/bilibili-demo.jpg)](https://www.bilibili.com/video/BV17QnU6sE2L/)
+
+[▶ Bilibili で紹介動画を見る（中国語）](https://www.bilibili.com/video/BV17QnU6sE2L/)
+
 ## ダウンロード
 
 | 対応環境 | パッケージ |

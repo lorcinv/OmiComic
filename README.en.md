@@ -8,6 +8,12 @@
 
 OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB, with bookshelves, categories, tags and favorites to organize your local collection.
 
+## Video demo
+
+[![OmiComic video demo](docs/images/bilibili-demo.jpg)](https://www.bilibili.com/video/BV17QnU6sE2L/)
+
+[▶ Watch the demo on Bilibili (Chinese)](https://www.bilibili.com/video/BV17QnU6sE2L/)
+
 ## Download
 
 | Platform | Package |

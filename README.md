@@ -8,6 +8,12 @@
 
 OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android 双端漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF 和 EPUB 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
 
+## 视频演示
+
+[![OmiComic 视频演示](docs/images/bilibili-demo.jpg)](https://www.bilibili.com/video/BV17QnU6sE2L/)
+
+[▶ 在 B 站观看演示](https://www.bilibili.com/video/BV17QnU6sE2L/)
+
 ## 下载
 
 | 平台 | 安装包 |
