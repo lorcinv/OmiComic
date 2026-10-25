@@ -10,7 +10,7 @@ OmiComic is a local comic reader for Windows and Android, focused on fast startu
 
 ## Video demo
 
-[![OmiComic video demo](docs/images/bilibili-demo.jpg)](https://www.bilibili.com/video/BV17QnU6sE2L/)
+https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 [▶ Watch the demo on Bilibili (Chinese)](https://www.bilibili.com/video/BV17QnU6sE2L/)
 

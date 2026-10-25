@@ -10,7 +10,7 @@ OmiComic は、ローカルでの高速起動とすっきりした読書体験�
 
 ## 紹介動画
 
-[![OmiComic 紹介動画](docs/images/bilibili-demo.jpg)](https://www.bilibili.com/video/BV17QnU6sE2L/)
+https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 [▶ Bilibili で紹介動画を見る（中国語）](https://www.bilibili.com/video/BV17QnU6sE2L/)
 

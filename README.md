@@ -10,7 +10,7 @@ OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android �
 
 ## 视频演示
 
-[![OmiComic 视频演示](docs/images/bilibili-demo.jpg)](https://www.bilibili.com/video/BV17QnU6sE2L/)
+https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 [▶ 在 B 站观看演示](https://www.bilibili.com/video/BV17QnU6sE2L/)
 
