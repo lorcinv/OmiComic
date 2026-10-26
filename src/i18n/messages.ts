@@ -1,5 +1,14 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "操作说明": ["User guide", "操作ガイド"],
+  "版本、介绍与操作说明": ["Version, introduction and user guide", "バージョン・紹介・操作ガイド"],
+  "按钮功能、快捷键与手机手势": ["Controls, shortcuts and touch gestures", "ボタン・ショートカット・タッチ操作"],
+  "主页看板娘": ["Home mascot", "ホーム画面の看板娘"],
+  "裁剪主页看板娘": ["Crop home mascot", "ホーム画面の看板娘をトリミング"],
+  "主页看板娘预览": ["Home mascot preview", "ホーム画面の看板娘プレビュー"],
+  "默认看板娘": ["Default mascot", "既定の看板娘"],
+  "主页看板娘保存失败，请重试。": ["Could not save the home mascot. Please try again.", "ホーム画面の看板娘を保存できませんでした。もう一度お試しください。"],
+  "Omi 抱着小 Omi 坐在漫画书上": ["Omi holding a little Omi, sitting on comic books", "小さな Omi を抱いて漫画本に座る Omi"],
   "版本、介绍与项目主页": ["Version, introduction and project", "バージョン・紹介・プロジェクト"],
   "项目主页 · GitHub": ["Project · GitHub", "プロジェクト · GitHub"],
   "OmiComic（Omi）是一款面向 Windows 和 Android 的本地漫画阅读器，让收藏、整理和阅读回到简单、专注的体验。": ["OmiComic (Omi) is a local comic reader for Windows and Android, designed to make collecting, organizing and reading simple and focused.", "OmiComic（Omi）は Windows と Android 向けのローカル漫画リーダーです。コレクションの整理から読書まで、シンプルで集中できる使い心地を目指しています。"],
@@ -778,9 +787,9 @@ export const messages: Record<string, readonly [string, string]> = {
     "Blue-gray manga illustration",
     "青灰色の漫画イラスト"
   ],
-  "镜像后的漫画少女与教室桌面，背景向左渐隐": [
-    "Mirrored manga girl and classroom desk, fading left",
-    "少女と教室の机を左右反転したイラスト、背景は左に向かって薄くなります"
+  "正在阅读的少女插画": [
+    "Illustration of a girl reading",
+    "本を読む少女のイラスト"
   ],
   "首页导航": [
     "Home navigation",

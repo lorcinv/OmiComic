@@ -1,4 +1,6 @@
 .omi-home {
+  --omi-source-unit: calc(1440px / 2480);
+  --omi-art-pad: calc(2 * var(--omi-source-unit));
   position: relative;
   display: flex;
   flex-direction: column;
@@ -33,6 +35,8 @@
 
 /* Keep the same 16px sidebar inset and 22px top inset as the library. */
 .omi-home__header {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: flex-start;
   gap: 24px;
@@ -69,10 +73,29 @@
   gap: clamp(28px, 4vw, 76px);
   flex: 1;
   width: 100%;
-  max-width: 1510px;
   margin: auto;
   padding: 18px clamp(40px, 5vw, 88px) 36px;
 }
+
+/* Calibrated to the artist's 2480 × 1653 reference, using a 1440px-wide canvas. */
+.omi-home:not(.is-mobile-home) .omi-home__stage {
+  position: absolute;
+  inset: 0;
+}
+.omi-home:not(.is-mobile-home) .omi-home__body {
+  --omi-home-type-scale: max(1, calc(1 / var(--omi-home-scale, 1)));
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1440px;
+  height: calc(1653 / 2480 * 1440px);
+  max-width: none;
+  margin: 0;
+  display: block;
+  padding: 0;
+  transform: translate(-50%, -50%) scale(var(--omi-home-scale, 1));
+}
+.is-mobile-home > .omi-home__stage { display: contents; }
 
 .omi-home__content {
   position: relative;
@@ -87,7 +110,13 @@
 }
 
 .omi-home__reading-column { min-width: 0; position: relative; z-index: 1; }
+.omi-home__recent-shell { position: relative; isolation: isolate; z-index: 1; }
+.omi-home:not(.is-mobile-home) .omi-home__reading-column { position: absolute; left: 71.4px; top: 243.9px; width: 660px; }
+.omi-home:not(.is-mobile-home) .omi-home__content { min-height: 423.8px; padding: 37.8px 36px 32.3px; border-radius: 28px; }
+.omi-home:not(.is-mobile-home) .omi-home__books { gap: 20px; }
 .omi-home__signature {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: clamp(12px, 1.6vw, 24px);
@@ -97,6 +126,14 @@
   user-select: none;
 }
 .omi-home__signature-mark { width: clamp(64px, 6vw, 86px); flex: 0 0 auto; }
+.omi-home__signature-emblem { position: relative; display: flex; flex: 0 0 auto; isolation: isolate; }
+.omi-home__signature-emblem > .omi-home__signature-mark { position: relative; z-index: 1; }
+.omi-home__signature-emblem.has-mascot > .omi-home__signature-mark { color: var(--首页插画墨色); transform: translate(-4.2px, .4px); }
+.omi-home__signature-emblem > .omi-home__mascot { z-index: 0; }
+.omi-home__signature-emblem > .omi-home__mascot-decor { z-index: 0; }
+.omi-home:not(.is-mobile-home) .omi-home__signature { gap: 18.6px; min-height: 130px; padding: 25px 30px 0 35px; }
+.omi-home:not(.is-mobile-home) .omi-home__signature-mark { width: 86px; }
+.omi-home:not(.is-mobile-home) .omi-home__signature-word { font-size: calc(68px * var(--desktop-font-scale, 1)); }
 .omi-home__signature-word {
   white-space: nowrap;
   font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
@@ -107,9 +144,12 @@
 }
 .omi-home__signature-word > span { font-style: italic; font-weight: 400; }
 .omi-home__signature-word > i { color: var(--次文字); font-style: normal; }
+[data-color-theme="night"] .omi-home__signature { color: var(--首页插画纸色); }
+[data-color-theme="night"] .omi-home__signature-word > i { color: inherit; }
 .omi-home__signature-rule { flex: 1; height: 1px; margin-left: 12px; background: currentColor; opacity: .3; }
 
 .omi-home__section-label {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -119,14 +159,14 @@
 .omi-home__section-label h2 {
   margin: 0;
   color: var(--主文字);
-  font-size: calc(15px * var(--desktop-font-scale, 1));
+  font-size: calc(15px * var(--desktop-font-scale, 1) * var(--omi-home-type-scale, 1));
   font-weight: 600;
   letter-spacing: 1px;
 }
 
 .omi-home__section-label > span:not(.omi-home__section-line) {
   color: var(--次文字);
-  font-size: calc(8px * var(--desktop-font-scale, 1));
+  font-size: calc(8px * var(--desktop-font-scale, 1) * var(--omi-home-type-scale, 1));
   letter-spacing: 1.5px;
   opacity: .8;
 }
@@ -239,7 +279,7 @@
   display: block;
   overflow: hidden;
   margin-top: 9px;
-  font-size: calc(12px * var(--desktop-font-scale, 1));
+  font-size: calc(12px * var(--desktop-font-scale, 1) * var(--omi-home-type-scale, 1));
   line-height: 1.7;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -250,7 +290,7 @@
   gap: 5px;
   margin-top: 4px;
   color: var(--次文字);
-  font-size: calc(9px * var(--desktop-font-scale, 1));
+  font-size: calc(9px * var(--desktop-font-scale, 1) * var(--omi-home-type-scale, 1));
   line-height: 1.8;
 }
 .omi-home__book-progress > span { color: var(--强调色); }
@@ -264,17 +304,62 @@
 }
 .omi-home__art > img {
   display: block;
-  width: calc(100% + 160px);
+  width: 100%;
+  height: 760px;
   max-width: none;
-  max-height: min(680px, calc(100vh - 180px));
+  max-height: none;
   object-fit: contain;
-  filter: var(--首页插画滤镜);
-  transform: translateX(-80px);
+  filter: url(#omi-home-palette);
   user-select: none;
   -webkit-user-drag: none;
-  mask-image: linear-gradient(to right, transparent, #000 48%, #000 94%, transparent),
-    linear-gradient(to bottom, transparent, #000 10%, #000 86%, transparent);
+  mask-image: linear-gradient(to bottom, #000 82%, rgb(0 0 0 / .97) 86%, rgb(0 0 0 / .80) 90%, rgb(0 0 0 / .40) 93%, rgb(0 0 0 / .08) 95%, rgb(0 0 0 / .01) 96%, transparent 97%, transparent 100%); /* taste-skill-ignore: requested artwork alpha fade */
   mask-composite: intersect;
+}
+
+.omi-home:not(.is-mobile-home) .omi-home__art { position: absolute; left: 754.84px; top: 44.71px; width: 670.65px; height: 907.55px; }
+.omi-home:not(.is-mobile-home) .omi-home__art > img {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  transform: none;
+}
+.omi-home:not(.is-mobile-home) .omi-home__art:not(.is-custom) > img {
+  position: absolute;
+  left: calc(-1 * var(--omi-art-pad));
+  top: calc(-1 * var(--omi-art-pad));
+  width: calc(100% + 2 * var(--omi-art-pad));
+  height: calc(100% + 2 * var(--omi-art-pad));
+  object-fit: fill;
+}
+
+.omi-home__mascot,
+.omi-home__mascot-front,
+.omi-home__mascot-decor {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  max-width: none;
+  height: auto;
+  filter: url(#omi-home-palette);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.omi-home__mascot-decor { filter: url(#omi-home-palette-decor); }
+.omi-home__mascot--peek, .omi-home__mascot-decor--peek {
+  width: calc(153.3px + 2 * var(--omi-art-pad));
+  left: calc(250px - var(--omi-art-pad));
+  bottom: calc(-1 * var(--omi-art-pad));
+}
+.omi-home__mascot--side {
+  width: calc(191 * var(--omi-source-unit));
+  right: calc(-138 * var(--omi-source-unit));
+  bottom: calc(-61 * var(--omi-source-unit));
+}
+.omi-home__mascot--signature, .omi-home__mascot-decor--signature {
+  width: calc(173.6px + 2 * var(--omi-art-pad));
+  left: calc(-48.4px - var(--omi-art-pad));
+  top: calc(-71px - var(--omi-art-pad));
 }
 
 .omi-home__art.is-custom > img {
@@ -283,6 +368,11 @@
   transform: none;
   filter: none;
   border-radius: 0;
+}
+.omi-home:not(.is-mobile-home) .omi-home__art.is-custom > img {
+  filter: none;
+  mask-image: linear-gradient(to right, transparent, #000 12%, #000 94%, transparent), /* taste-skill-ignore: custom artwork edge mask */
+    linear-gradient(to bottom, transparent, #000 10%, #000 86%, transparent); /* taste-skill-ignore: custom artwork edge mask */
 }
 
 .omi-home__footer {
@@ -351,7 +441,7 @@
 @media (max-width: 1100px) {
   .omi-home__body { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 28px; padding-right: 32px; padding-left: 32px; }
   .omi-home__content { padding: 24px; border-radius: 22px; }
-  .omi-home__section-label > span:not(.omi-home__section-line) { font-size: calc(7px * var(--desktop-font-scale, 1)); letter-spacing: 1px; }
+  .omi-home__section-label > span:not(.omi-home__section-line) { font-size: calc(8px * var(--desktop-font-scale, 1) * var(--omi-home-type-scale, 1)); letter-spacing: 1px; }
 }
 
 @media (max-height: 720px) {

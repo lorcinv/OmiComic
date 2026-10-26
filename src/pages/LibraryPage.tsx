@@ -130,7 +130,7 @@ const 设置分类选项: Array<{ id: 设置分类; label: string; description: 
   { id: "reader-default", label: "默认阅读", description: "新书首次打开时的阅读方式" },
   { id: "reader", label: "阅读器", description: "页面排序、自动阅读、沉浸与缓存" },
   { id: "safety", label: "安全与确认", description: "删除软件记录前的确认选项" },
-  { id: "about", label: "关于 OmiComic", description: "版本、介绍与项目主页" },
+  { id: "about", label: "关于 OmiComic", description: "版本、介绍与操作说明" },
 ];
 
 type 资源信息目标 =
@@ -9576,7 +9576,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   </div>
                 </section>
                 <section id="settings-section-about" className="settings-section" role="tabpanel" data-settings-category="about" aria-labelledby="settings-category-about" hidden={当前设置分类 !== "about"}>
-                  <AboutOmiComic />
+                  <AboutOmiComic active={当前设置分类 === "about"} />
                 </section>
               </div>
               </div>

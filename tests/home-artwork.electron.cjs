@@ -11,7 +11,7 @@ test('packaged home artwork imports local images, survives source moves and rest
   const profile = path.join(root, 'profile');
   await fs.mkdir(profile);
   const original = path.join(root, '自选插画.png'), moved = path.join(root, '原图已移动.png'), invalid = path.join(root, '损坏图片.png');
-  await fs.copyFile('src/assets/home-scene.webp', path.join(root, '插画.webp'));
+  await fs.copyFile('tests/fixtures/omi-icon.webp', path.join(root, '插画.webp'));
   const { Resvg } = require('@resvg/resvg-js');
   await fs.writeFile(original, new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#91b5cf"/><circle cx="300" cy="200" r="140" fill="#e7bda0"/></svg>').render().asPng());
   await fs.writeFile(invalid, 'not an image');
@@ -61,10 +61,10 @@ test('packaged home artwork imports local images, survives source moves and rest
   assert.match(await page.locator('.omi-home__art img').evaluate(image=>getComputedStyle(image).maskImage),/linear-gradient/);
   await page.locator('.omi-home__library').click();
   await page.locator('.sidebar-settings-button').click(); await page.locator('#settings-category-appearance').click();
-  const group = page.getByRole('region', { name: '主界面图案', exact: true });
+  const group = page.getByRole('region', { name: '主页看板娘', exact: true });
   await expect(group).toContainText('自选插画.png');
   await group.getByRole('button', {name:'调整裁剪',exact:true}).click();
-  const cropDialog=page.getByRole('dialog',{name:'裁剪主界面图案',exact:true});
+  const cropDialog=page.getByRole('dialog',{name:'裁剪主页看板娘',exact:true});
   await expect(cropDialog.getByRole('spinbutton',{name:'裁剪宽度'})).toHaveValue('300');
   await cropDialog.getByRole('spinbutton',{name:'裁剪宽度'}).fill('240');
   await cropDialog.getByRole('button',{name:'取消',exact:true}).click();
@@ -76,7 +76,7 @@ test('packaged home artwork imports local images, survives source moves and rest
   await expect(cropDialog).toHaveCount(0);
   assert.equal((await page.evaluate(() => window.omicomic.getHomeArtwork())).data.url,selected.data.url);
   await group.getByRole('button', { name: '恢复默认', exact: true }).click();
-  await expect(group).toContainText('默认图案');
+  await expect(group).toContainText('默认看板娘');
   await assert.rejects(fs.access(path.join(profile, 'home-artwork.json')));
   await fs.access(moved);
   await electron.close(); electron = null;

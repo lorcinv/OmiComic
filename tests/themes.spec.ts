@@ -30,7 +30,7 @@ test('themes preview globally, persist after reload and keep light and dark cont
       return { ok: true, data: settings };
     };
     api.getThumbnail = async () => ({ ok: true, data: { url: cover } });
-  }, { cover: 'data:image/webp;base64,' + readFileSync('src/assets/home-scene.webp').toString('base64') });
+  }, { cover: 'data:image/webp;base64,' + readFileSync('tests/fixtures/omi-icon.webp').toString('base64') });
   await page.goto('/');
   await page.getByRole('button', { name: '打开资源库', exact: true }).click();
   await expect(page.locator('.resource-card')).toHaveCount(10);

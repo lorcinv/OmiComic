@@ -1,0 +1,141 @@
+{
+  "ui": {
+    "title": ["操作说明", "User guide", "操作ガイド"],
+    "subtitle": ["按钮功能、快捷键与手机手势", "Controls, shortcuts and touch gestures", "ボタン・ショートカット・タッチ操作"],
+    "back": ["返回关于", "Back to About", "バージョン情報に戻る"],
+    "search": ["搜索操作说明", "Search the guide", "操作ガイドを検索"],
+    "placeholder": ["搜索翻页、书签、删除…", "Search pages, bookmarks, deletion…", "ページ送り・しおり・削除などを検索"],
+    "clear": ["清空搜索", "Clear search", "検索をクリア"],
+    "platform": ["查看平台", "Platform", "プラットフォーム"],
+    "contents": ["说明目录", "Guide contents", "目次"],
+    "empty": ["没有找到相关操作，试试“翻页”“书签”或“删除”。", "No matching instructions. Try pages, bookmarks or deletion.", "見つかりません。「ページ送り」「しおり」「削除」などをお試しください。"]
+  },
+  "sections": [
+    {
+      "id": "start",
+      "title": ["开始使用", "Getting started", "はじめに"],
+      "topics": [
+        { "id": "open", "title": ["怎样添加漫画？", "How do I open comics?", "漫画を追加するには？"],
+          "pc": ["我的资源库 → 左下角“添加目录” → 选择漫画文件夹，双击漫画阅读。只打开一本，可使用“打开文件”。", "Open My library → Add folder at the bottom left, select your comic folder, then double-click a comic. Use Open file for a single file.", "ライブラリ → 左下の「フォルダーを追加」で漫画フォルダーを選び、漫画をダブルクリックします。単独のファイルは「ファイルを開く」から開けます。"],
+          "android": ["进入资源库 → 左上角三横杠 → 添加目录，在系统窗口选择文件夹并授权，再点击漫画阅读。", "Open the library → top-left menu → Add folder. Choose a folder in the system picker, grant access, then tap a comic.", "ライブラリ → 左上メニュー → フォルダーを追加。システム画面でフォルダーへのアクセスを許可し、漫画をタップします。"] },
+        { "id": "resume", "title": ["怎样继续上次阅读？", "How do I resume reading?", "続きから読むには？"],
+          "pc": ["首页双击最近阅读封面，或点击悬停时出现的“继续阅读”。左上角 Omi 图标也可续读。", "Double-click a recent cover on Home, click Continue reading on hover, or use the Omi icon at the top left.", "ホームの最近読んだ表紙をダブルクリックするか、ホバーで表示される「続きを読む」を押します。左上の Omi アイコンからも再開できます。"],
+          "android": ["首页轻点最近阅读封面即可续读，进度自动保存。", "Tap a recent cover on Home. Reading progress is saved automatically.", "ホームの最近読んだ表紙をタップします。読書位置は自動保存されます。"] },
+        { "id": "formats", "title": ["支持哪些文件？", "Which files are supported?", "対応ファイルは？"],
+          "body": ["图片文件夹、JPG／PNG／WebP／BMP／GIF、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB。压缩包无需手动解压；EPUB 的进度按章节计算。", "Image folders, JPG/PNG/WebP/BMP/GIF, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB. Archives open without manual extraction; EPUB progress counts chapters.", "画像フォルダー、JPG／PNG／WebP／BMP／GIF、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB。圧縮ファイルはそのまま開けます。EPUB の進捗は章単位です。"] }
+      ]
+    },
+    {
+      "id": "library",
+      "title": ["资源管理", "Library", "ライブラリ"],
+      "topics": [
+        { "id": "cards", "title": ["卡片上的按钮做什么？", "What do the card controls do?", "カードのボタンの役割は？"],
+          "body": ["爱心切换收藏，三个点打开详情；目录箭头展开层级，目录名称切换位置。详情中可查看路径、标签、简介和页面预览。", "The heart toggles favorites; the three dots open details. Folder arrows expand the tree; folder names navigate. Details show paths, tags, notes and page previews.", "ハートはお気に入り、三点ボタンは詳細です。フォルダーの矢印で階層を展開し、名前で移動します。詳細ではパス・タグ・説明・ページプレビューを確認できます。"],
+          "pc": ["双击预览缩略图，从该页阅读；双击简介编辑，点击编辑区外保存。", "Double-click a page preview to read from there. Double-click the description to edit; click outside to save.", "プレビューをダブルクリックすると、そのページから読めます。説明はダブルクリックで編集し、外側をクリックして保存します。"],
+          "android": ["网格点击卡片阅读；列表点击封面进详情、点击文字阅读。长按卡片显示整理操作。", "In a grid, tap a comic to read. In a list, tap its cover for details or its text to read. Long-press for actions.", "グリッドではカードをタップして読みます。リストでは表紙で詳細、文字で読書を開きます。長押しで操作を表示します。"] },
+        { "id": "search", "title": ["怎样搜索和筛选？", "How do I search and filter?", "検索・絞り込みの方法は？"],
+          "body": ["搜索作用于当前栏目。标签筛选可点选标签；模糊模式满足任一条件，精准模式要求全部满足。", "Search applies to the current view. Select tags to filter: fuzzy mode matches any condition; exact mode requires all conditions.", "検索範囲は現在の画面です。タグを選んで絞り込めます。あいまい検索はどれか一つ、完全一致モードはすべての条件を満たす項目を表示します。"],
+          "pc": ["Ctrl＋K 聚焦搜索。直接输入名称或简介关键词；多个标签用逗号分隔，如“校园,日常”。", "Ctrl+K focuses search. Enter a name or description keyword; separate tag conditions with commas, such as school,daily.", "Ctrl＋K で検索欄へ移動。名前や説明の語句を入力し、複数タグは「学校,日常」のようにカンマで区切ります。"],
+          "android": ["空格同时匹配，| 表示任选，-词语表示排除。tag:校园 查标签，name:第一卷 查名称，note:待看 查简介；tag:校园$ 完整匹配标签。", "Spaces mean AND, | means OR, and -word excludes. Use tag:school, name:volume or note:later to choose a field; tag:school$ matches a full tag.", "空白は AND、| は OR、-語句は除外です。tag:学校、name:第1巻、note:あとで のように検索対象を指定できます。tag:学校$ はタグ全体に一致します。"] },
+        { "id": "collections", "title": ["书架、收藏、书签有什么区别？", "Shelves, favorites or bookmarks?", "本棚・お気に入り・しおりの違いは？"],
+          "body": ["书架按系列或计划分组，收藏保存常读漫画，书签定位某一页，最近阅读用于续读。它们保存引用，不搬动原文件。", "Shelves group comics by series or plan, favorites keep frequent reads, bookmarks point to a page, and recent reads resume progress. These store references without moving files.", "本棚はシリーズや計画で分類、お気に入りはよく読む作品、しおりは特定ページ、最近読んだ本は続きから読むための機能です。元ファイルは移動しません。"],
+          "pc": ["在支持手动排序的位置，用中键拖动卡片调整顺序。直接打开的文件可在“临时存放”中找到。", "Middle-drag cards where manual ordering is supported. Files opened directly are listed in Temporary files.", "手動並べ替えに対応する場所では、中ボタンでカードをドラッグします。直接開いたファイルは一時保管から見つけられます。"],
+          "android": ["长按进入选择或排序，再拖动卡片调整顺序。", "Long-press to enter selection or ordering, then drag cards to reorder.", "長押しで選択・並べ替えに入り、カードをドラッグします。"] },
+        { "id": "delete", "title": ["移除记录会删除漫画吗？", "Does removing a record delete the comic?", "記録の削除で漫画も消えますか？"],
+          "body": ["取消收藏、移除书签、历史或书架引用，只处理对应记录。“仅移除索引”保留原文件，但清理关联记录；恢复文件索引不会找回已清理的进度。", "Removing favorites, bookmarks, history or shelf entries affects those records. Remove index only keeps the file but clears related records; restoring the index does not restore cleared progress.", "お気に入り・しおり・履歴・本棚からの削除は各記録が対象です。「インデックスのみ削除」はファイルを残しますが関連記録を消去します。インデックスの復元では消去した進捗は戻りません。"],
+          "pc": ["明确选择“同时删除本地文件”才会移入回收站。重命名本地文件会同步更新关联引用。", "Only explicitly choosing to delete the local file sends it to the Recycle Bin. Renaming a local file updates related references.", "「ローカルファイルも削除」を選んだ場合だけ、ごみ箱へ移動します。アプリ内での名前変更は関連する参照も更新します。"],
+          "android": ["“删除本地文件”是永久删除；删除文件夹会包含其中全部内容，确认前核对路径。", "Delete local file is permanent. Deleting a folder includes its contents; check the path before confirming.", "ローカルファイルの削除は完全削除です。フォルダーは内容ごと削除されるため、確定前にパスを確認してください。"] }
+      ]
+    },
+    {
+      "id": "reading",
+      "title": ["阅读操作", "Reading", "読書操作"],
+      "topics": [
+        { "id": "controls", "title": ["阅读按钮怎么用？", "What do the reading controls do?", "読書ボタンの使い方は？"],
+          "rows": [
+            { "label": ["单页／双页", "Single / double", "単ページ／見開き"], "text": ["切换一次显示的页数；窗口不足时逐页显示。", "Choose pages shown together; narrow windows show one page at a time.", "同時表示するページ数を変更。幅が足りない場合は一枚ずつ表示します。"] },
+            { "label": ["阅读方向", "Reading direction", "読書方向"], "text": ["切换从左到右／从右到左。", "Switch left-to-right / right-to-left.", "左から右／右から左を切り替えます。"] },
+            { "label": ["横向／纵向", "Horizontal / vertical", "横／縦"], "text": ["切换页面排列方向。", "Change how pages are arranged.", "ページの並ぶ方向を変更します。"] },
+            { "label": ["全景", "Panorama", "パノラマ"], "text": ["连续浏览；横向适应高度，纵向适应宽度。", "Read continuously; horizontal fits height, vertical fits width.", "連続表示。横は高さ、縦は幅に合わせます。"] },
+            { "label": ["进度条／页码", "Progress / page number", "進捗／ページ番号"], "text": ["点击、拖动或输入页码跳转。", "Click, drag or enter a page number to jump.", "クリック・ドラッグ・ページ番号入力で移動します。"] },
+            { "label": ["书签／播放", "Bookmark / play", "しおり／再生"], "text": ["保存当前页／开启或暂停自动阅读。", "Save the current page / start or pause auto-reading.", "現在のページを記録／自動読書を開始・停止します。"] }
+          ] },
+        { "id": "zoom", "title": ["怎样缩放和移动画面？", "How do I zoom and pan?", "拡大・移動するには？"],
+          "body": ["普通阅读可选适应窗口、适应宽度、适应高度或原始尺寸。全景期间由阅读方向决定适应方式。", "Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow.", "通常はウィンドウ・幅・高さに合わせる、原寸から選べます。パノラマ中は表示方向に応じて自動調整されます。"],
+          "pc": ["Ctrl＋滚轮放大，左键拖动查看局部，双击退出自由放大。F 切换沉浸，鼠标移到顶部或底部显示工具。", "Ctrl+wheel zooms, left-drag pans, and double-click resets free zoom. F toggles immersive reading; move to the top or bottom for tools.", "Ctrl＋ホイールで拡大、左ドラッグで移動、ダブルクリックで解除します。F で没入表示。上下端にマウスを動かすとツールが出ます。"],
+          "android": ["双指缩放，拖动查看局部，双击恢复默认。每次打开漫画默认适应窗口。", "Pinch to zoom, drag to pan, and double-tap to reset. Comics open fitted to the window.", "ピンチで拡大縮小、ドラッグで移動、ダブルタップで元に戻ります。開くときは画面に合わせます。"] },
+        { "id": "autoplay", "title": ["怎样自动翻页或滚动？", "How do I enable auto-reading?", "自動でページ送り・スクロールするには？"],
+          "body": ["点击播放启动，再点暂停。普通阅读按间隔翻页，全景连续滚动；离开阅读或读到末尾时停止。", "Press play to start and pause to stop. Normal mode advances at intervals; panorama scrolls continuously. Leaving the reader or reaching the end stops it.", "再生で開始、もう一度押すと停止。通常は一定間隔でページ送り、パノラマは連続スクロールします。読書を終了するか末尾に達すると停止します。"],
+          "pc": ["从漫画详情打开“设置 → 阅读器”调整间隔和速度，手动操作会停止播放。", "Open Settings → Reader from the comic details to set interval and speed. Manual actions stop playback.", "漫画の詳細から「設定 → リーダー」で間隔と速度を変更します。手動操作で停止します。"],
+          "android": ["播放在进度条最右侧，速度在“漫画阅读设置”中调整；手动操作时临时停留，完成后继续。", "Play is at the right end of the progress bar. Set speed in Comic reading settings; manual actions pause temporarily, then resume.", "再生は進捗バー右端です。漫画の読書設定で速度を変更。手動操作中は一時停止し、完了後に再開します。"] },
+        { "id": "adjust", "title": ["画面调整会改原图吗？", "Do image adjustments change my files?", "画面調整は元画像を変更しますか？"],
+          "body": ["不会。亮度、对比度、伽马和颜色效果直接用于显示，“恢复默认”还原。锐化与降噪不适用于 EPUB；觉得画面变软可将两项归零。", "No. Brightness, contrast, gamma and color effects change display only; Reset restores the original view. Sharpening and denoising do not apply to EPUB; set both to zero if details look soft.", "変更しません。明るさ・コントラスト・ガンマ・色は表示だけに適用し、初期値に戻せます。EPUB はシャープ化とノイズ除去の対象外です。ぼやける場合は両方をゼロにします。"],
+          "pc": ["调整参数按漫画保存。", "Adjustments are saved per comic.", "調整は漫画ごとに保存されます。"],
+          "android": ["调整参数为全局设置。", "Adjustments apply globally.", "調整は全作品に共通です。"] }
+      ]
+    },
+    {
+      "id": "shortcuts",
+      "title": ["快捷操作", "Shortcuts", "ショートカット"],
+      "topics": [
+        { "id": "reader-keys", "platform": "pc", "title": ["阅读快捷键", "Reading keys", "読書のキー操作"],
+          "rows": [
+            { "label": ["← / →", "← / →", "← / →"], "text": ["按阅读方向翻页。", "Turn pages in the selected reading direction.", "選択した読書方向にページ送りします。"] },
+            { "label": ["PageUp / Backspace", "PageUp / Backspace", "PageUp / Backspace"], "text": ["上一页或上一组双页。", "Previous page or spread.", "前のページ・見開きへ。"] },
+            { "label": ["PageDown / Space", "PageDown / Space", "PageDown / Space"], "text": ["下一页或下一组双页。", "Next page or spread.", "次のページ・見開きへ。"] },
+            { "label": ["Home / End", "Home / End", "Home / End"], "text": ["首页／尾页。", "First / last page.", "最初／最後のページへ。"] },
+            { "label": ["↑ / ↓", "↑ / ↓", "↑ / ↓"], "text": ["有相邻资源时，切换上一本／下一本。", "Previous / next comic when available.", "前後の作品がある場合に切り替えます。"] },
+            { "label": ["F / Esc", "F / Esc", "F / Esc"], "text": ["切换沉浸／先关闭浮层、退出沉浸，再返回。", "Toggle immersive mode / dismiss overlays, leave immersive mode, then go back.", "没入表示／ポップアップ・没入表示を閉じてから戻ります。"] }
+          ] },
+        { "id": "library-keys", "platform": "pc", "title": ["资源库快捷键与鼠标", "Library keys and mouse", "ライブラリのキー・マウス操作"],
+          "rows": [
+            { "label": ["Ctrl＋K", "Ctrl+K", "Ctrl＋K"], "text": ["聚焦搜索。", "Focus search.", "検索欄へ。"] },
+            { "label": ["Ctrl＋滚轮", "Ctrl+wheel", "Ctrl＋ホイール"], "text": ["调整卡片／预览大小；阅读中缩放画面。", "Resize cards / previews; zoom the reading image.", "カード・プレビューの大きさ変更。読書中は画面の拡大縮小。"] },
+            { "label": ["中键拖动", "Middle-drag", "中ボタンドラッグ"], "text": ["在支持手动排序的位置调整顺序。", "Reorder where manual sorting is supported.", "手動並べ替えに対応する場所で順序を変更。"] },
+            { "label": ["Ctrl＋A / Delete", "Ctrl+A / Delete", "Ctrl＋A / Delete"], "text": ["选择模式中全选／执行当前栏目的移除操作。", "Select all / remove entries in selection mode.", "選択モードで全選択／現在の一覧から削除。"] },
+            { "label": ["PageUp / PageDown", "PageUp / PageDown", "PageUp / PageDown"], "text": ["列表显示分页时，跳到上一组／下一组。", "Jump to the previous / next list group when pagination is shown.", "ページ区切りのある一覧で前後のグループへ。"] },
+            { "label": ["Esc", "Esc", "Esc"], "text": ["先退出菜单或选择；子目录中返回上一级。", "Dismiss menus or selection first; go up in subfolders.", "メニュー・選択を解除。サブフォルダーでは一つ上へ。"] }
+          ] },
+        { "id": "touch", "platform": "android", "title": ["手机手势与音量键", "Touch and volume keys", "タッチ・音量キー操作"],
+          "rows": [
+            { "label": ["点击中央", "Tap center", "中央をタップ"], "text": ["显示／收起工具栏。", "Show / hide the toolbar.", "ツールバーを表示・非表示。"] },
+            { "label": ["滑动／双指", "Swipe / pinch", "スワイプ／ピンチ"], "text": ["翻页或连续浏览／缩放画面。", "Turn pages or scroll / zoom.", "ページ送り・スクロール／拡大縮小。"] },
+            { "label": ["长按卡片", "Long-press card", "カードを長押し"], "text": ["打开整理操作，可进入多选或排序。", "Open actions, selection or ordering.", "操作・複数選択・並べ替えを開きます。"] },
+            { "label": ["拖动进度条", "Drag progress", "進捗バーをドラッグ"], "text": ["实时跳页，点击缩略预览可精调。", "Jump live; tap preview thumbnails to refine.", "即座にページ移動。サムネイルで微調整。"] },
+            { "label": ["音量＋／－", "Volume + / −", "音量＋／−"], "text": ["默认阅读中开启音量键翻页后，上一页／下一页；可反转。", "Enable volume-key paging in Default reading for previous / next page; direction can be reversed.", "既定の読書設定で有効にすると、前／次のページへ。方向は反転できます。"] },
+            { "label": ["返回键／手势", "Back key / gesture", "戻るキー・ジェスチャー"], "text": ["先关闭最上层操作，再返回。", "Dismiss the topmost surface before going back.", "一番上の操作を閉じてから戻ります。"] }
+          ] }
+      ]
+    },
+    {
+      "id": "appearance",
+      "title": ["外观设置", "Appearance", "外観設定"],
+      "topics": [
+        { "id": "theme", "title": ["怎样更换主题和显示大小？", "How do I change theme and display size?", "テーマ・表示サイズの変更は？"],
+          "pc": ["设置 → 外观与主题：切换主题、语言，调整全局字号和页码字号。资源卡片大小在“视图”中调整。", "Settings → Appearance: choose theme and language, and adjust global and page-number text sizes. Change card size in View.", "設定 → 外観でテーマ・言語・全体とページ番号の文字サイズを変更します。カードサイズは表示メニューから変更します。"],
+          "android": ["设置 → 外观与主题：选择主题、语言及要调整的栏目，再设网格列数或列表封面尺寸；各栏目分别保存布局。", "Settings → Appearance: choose theme, language and the view to customize, then set grid columns or cover size. Each view keeps its own layout.", "設定 → 外観でテーマ・言語・対象一覧を選び、列数や表紙サイズを変更します。各一覧のレイアウトは個別に保存されます。"] },
+        { "id": "mascot", "platform": "pc", "title": ["怎样更换主页看板娘？", "How do I change the home mascot?", "ホームの看板娘を変更するには？"],
+          "body": ["设置 → 外观与主题 → 主页看板娘：选择图片，调整裁剪后保存。支持 PNG／JPG／WebP／BMP，最大 20 MB。自选图片会隐藏默认大、小 Omi；“恢复默认”一起恢复。", "Settings → Appearance → Home mascot: choose an image, crop and save. PNG/JPG/WebP/BMP up to 20 MB. Custom art hides all default Omi mascots; Restore default brings them back.", "設定 → 外観 → ホーム画面の看板娘で画像を選び、切り抜いて保存。PNG／JPG／WebP／BMP、最大 20 MB。独自画像では大小の Omi が隠れ、既定に戻すとすべて復元されます。"] },
+        { "id": "defaults", "title": ["默认阅读与单本设置怎么区分？", "Defaults or per-comic settings?", "既定と作品別設定の違いは？"],
+          "body": ["“默认阅读”设起始阅读习惯；页面排序、自动阅读速度等可按漫画保存。要调整某一本，先打开它的详情再进入阅读设置。PDF／EPUB 保持原文档顺序。", "Default reading sets initial preferences. Page order and auto-reading speed can be saved per comic; open that comic's details before changing reading settings. PDF/EPUB retain document order.", "既定の読書設定は読み始めの設定です。ページ順や自動読書速度は作品別に保存できます。対象の詳細から読書設定を開いてください。PDF／EPUB は文書の順序を保ちます。"] }
+      ]
+    },
+    {
+      "id": "help",
+      "title": ["常见问题", "Troubleshooting", "よくある質問"],
+      "topics": [
+        { "id": "missing", "title": ["漫画在磁盘上，为什么找不到？", "Why is a comic missing from the list?", "ファイルがあるのに見つからない？"],
+          "body": ["先清空搜索与标签筛选，确认所在目录，再刷新。使用过“仅移除索引”的资源，可恢复文件索引；原文件移动或手机目录权限失效时，需要检查路径和授权。", "Clear search and tag filters, check the current folder, then refresh. Restore the index for hidden files. If files moved or Android access expired, check paths and permissions.", "検索・タグの絞り込みを解除し、フォルダーを確認して更新します。非表示にしたファイルはインデックスを復元。移動済みのファイルや Android の権限切れはパスと許可を確認してください。"] },
+        { "id": "hidden-tools", "title": ["工具栏消失或双页没并排？", "Missing tools or no double-page spread?", "ツールバー・見開きが表示されない？"],
+          "pc": ["鼠标移至顶部或底部显示工具，也可调整自动隐藏设置。双页未并排时，检查窗口宽度、独立跨页识别及是否开启纵向全景。", "Move the mouse to the top or bottom to reveal tools, or adjust auto-hide. For double pages, check window width, spread detection and vertical panorama.", "上下端にマウスを移動するとツールが出ます。自動非表示設定も確認してください。見開きはウィンドウ幅・横長ページ検出・縦パノラマを確認します。"],
+          "android": ["点击画面中央显示工具。双页未并排时，检查屏幕宽度、独立跨页识别及是否开启纵向全景。", "Tap the center for tools. For double pages, check screen width, spread detection and vertical panorama.", "中央をタップするとツールが出ます。見開きは画面幅・横長ページ検出・縦パノラマを確認します。"] },
+        { "id": "cache", "title": ["清缓存会丢进度吗？", "Does clearing cache remove progress?", "キャッシュ削除で進捗は消えますか？"],
+          "body": ["不会。缓存只用于加快加载，清理不删除漫画或阅读记录；再次打开时可能重新生成。默认性能设置可先直接使用，预加载设为 0 可关闭。", "No. Cache speeds up loading; clearing it does not remove comics or progress and may trigger regeneration. Start with default performance settings; set preload to 0 to disable it.", "消えません。キャッシュは読み込みを速めるためのものです。削除後は再生成される場合があります。まず既定の性能設定を使い、先読みを止める場合は 0 にします。"] },
+        { "id": "backup", "title": ["怎样更新和备份？", "How do I update and back up?", "更新・バックアップするには？"],
+          "body": ["漫画原文件与软件记录分开备份。当前没有漫画下载或跨设备云同步。", "Back up comic files separately from app records. Comic downloading and cross-device cloud sync are not built in.", "漫画ファイルとアプリの記録は別々にバックアップします。漫画のダウンロードや端末間クラウド同期はありません。"],
+          "pc": ["关闭软件后备份 %APPDATA%\\OmiComic。免安装版更新时完整解压新版 ZIP，再运行 EXE，本机记录会保留。", "Close the app and back up %APPDATA%\\OmiComic. For portable updates, fully extract the new ZIP and run its EXE; local records are retained.", "終了後、%APPDATA%\\OmiComic をバックアップします。ポータブル版は新しい ZIP をすべて展開して起動すれば、本機の記録を引き継げます。"],
+          "android": ["使用原签名的新 APK 覆盖安装以保留数据，不要先卸载。", "Install the new APK with the original signing key over the existing app to retain data; do not uninstall first.", "同じ署名の新 APK を上書きインストールしてデータを保ちます。先にアンインストールしないでください。"] }
+      ]
+    }
+  ]
+}

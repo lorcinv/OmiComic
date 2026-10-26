@@ -40,7 +40,7 @@ export default function HomeArtworkCrop({ artwork, onClose, onSave }: {
   const frameStyle = { aspectRatio: frameAspect, width: `min(100%, ${260 * frameAspect}px)` };
   const move = (x: number, y: number, from = crop) => setCrop({ ...from, x: Math.max(0, Math.min(1 - from.width, x)), y: Math.max(0, Math.min(1 - from.height, y)) });
   return createPortal(<div className="home-artwork-crop-overlay" onPointerDown={e => e.stopPropagation()}>
-    <div ref={dialog} className="home-artwork-crop" role="dialog" aria-modal="true" aria-label={t('裁剪主界面图案')} tabIndex={-1}
+    <div ref={dialog} className="home-artwork-crop" role="dialog" aria-modal="true" aria-label={t('裁剪主页看板娘')} tabIndex={-1}
       onKeyDown={e => e.stopPropagation()}
       onKeyDownCapture={e => {
         if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); if (!busy) onClose(); }
@@ -51,7 +51,7 @@ export default function HomeArtworkCrop({ artwork, onClose, onSave }: {
           e.preventDefault(); next?.focus();
         }
       }}>
-      <header><h3>{t('裁剪主界面图案')}</h3><button type="button" aria-label={t('关闭裁剪')} disabled={busy} onClick={onClose}>×</button></header>
+      <header><h3>{t('裁剪主页看板娘')}</h3><button type="button" aria-label={t('关闭裁剪')} disabled={busy} onClick={onClose}>×</button></header>
       <div className="home-artwork-crop__columns">
         <section><h4>{t('裁剪区域')}</h4><div className="home-artwork-crop__stage">
           <div className="home-artwork-crop__frame" style={frameStyle} role="group" tabIndex={0} aria-label={t('拖动图片调整位置')}

@@ -18,7 +18,7 @@ const categories: Array<{id:string;title:string;note:string;icon:MobileIconName}
   {id:'book',title:'漫画阅读设置',note:'页面排序与自动阅读速度',icon:'shelf'},
   {id:'performance',title:'性能与缓存',note:'图片缓存、预加载与并发',icon:'settings'},
   {id:'safety',title:'安全与确认',note:'收藏、书签和历史删除确认',icon:'select'},
-  {id:'about',title:'关于 OmiComic',note:'版本与本地阅读',icon:'info'},
+  {id:'about',title:'关于 OmiComic',note:'版本、介绍与操作说明',icon:'info'},
 ];
 export default function MobileSettings({ settings, onSaved, onClose, bookSettings, displayScope = 'directory' }: { settings:AppSettings; onSaved:(s:AppSettings)=>void; onClose:()=>void; bookSettings:ReactNode; displayScope?:MobileDisplayScope }) {
   useMobileScrim();
@@ -29,7 +29,10 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
   useEffect(() => { let cancelled=false; if(category==='performance')void queue.current.then(()=>window.omicomic.getAndroidCacheInfo?.()).then(r=>{if(!cancelled&&r?.ok)setCacheInfo(r.data);}).catch(()=>{});return()=>{cancelled=true;}; },[category,value.androidReaderDiskCacheSizeMb,value.androidThumbnailCacheSizeMb]);
   const queue=useRef(Promise.resolve()), mounted=useRef(true);
   useEffect(() => {mounted.current=true;return () => {mounted.current=false;};},[]);
-  const back=() => category ? void mobileNavigate(()=>setCategory(''),'back') : onClose();
+  const back=() => {
+    if (!window.dispatchEvent(new Event('omi-guide-back', { cancelable: true }))) return;
+    return category ? void mobileNavigate(()=>setCategory(''),'back') : onClose();
+  };
   useEffect(() => { const listener=(event:Event) => {if(document.querySelector('[role="listbox"]')) return;event.preventDefault();event.stopImmediatePropagation();back();};const key=(event:KeyboardEvent) => {if(event.key==='Escape')listener(event);};window.addEventListener('omi-library-back',listener,true);window.addEventListener('keydown',key,true);return () => {window.removeEventListener('omi-library-back',listener,true);window.removeEventListener('keydown',key,true);};});
   function save(patch:Partial<AppSettings>) { setValue(old => ({...old,...patch})); queue.current=queue.current.then(async () => {const result=await window.omicomic.updateSettings(patch);if(result.ok){setUiLanguage(result.data.language);onSaved(result.data);}else if(mounted.current)setError(result.error.message);}).catch(() => {if(mounted.current)setError('设置保存失败，请重试。');}); }
   function select<K extends keyof AppSettings>(key:K,label:string,options:Array<{value:string|number;label:string}>,fallback?:string|number) {return <div className="settings-row"><span>{label}</span><GlassSelect ariaLabel={label} value={(value[key] as string|number) ?? fallback ?? ''} options={uiOptions(options)} onChange={v => save({[key]:v} as Partial<AppSettings>)}/></div>;}

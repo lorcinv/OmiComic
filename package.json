@@ -1,6 +1,6 @@
 {
   "name": "omicomic",
-  "version": "1.1.39",
+  "version": "1.1.40",
   "private": true,
   "description": "OmiComic Windows 与 Android 本地漫画阅读器",
   "main": "dist-electron/main.js",
@@ -14,6 +14,7 @@
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.electron.json",
+    "docs:guide": "node scripts/export-user-guide.cjs",
     "test": "npm run build:electron && node --test --test-concurrency=1 tests/*.test.cjs src/reader/*.test.cjs electron/services/*.test.cjs",
     "test:dom": "vitest run --config tests/dom.config.ts",
     "test:ui": "playwright test",

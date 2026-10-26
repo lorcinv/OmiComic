@@ -9,7 +9,12 @@
   "compression": "maximum",
   "asar": true,
   "asarUnpack": ["dist-electron/epubWorker.js"],
-  "files": ["dist/**/*", "dist-electron/**/*", "licenses/**/*", "THIRD_PARTY_NOTICES.txt", "package.json", "!node_modules{,/**/*}"],
+  "files": ["dist/**/*", "dist-electron/**/*", "licenses/**/*", "LICENSE", "ASSET_CREDITS.md", "SOURCE_CODE.txt", "THIRD_PARTY_NOTICES.txt", "package.json", "!node_modules{,/**/*}"],
+  "extraFiles": [
+    { "from": ".packaged-app/LICENSE", "to": "LICENSE" },
+    { "from": ".packaged-app/ASSET_CREDITS.md", "to": "ASSET_CREDITS.md" },
+    { "from": ".packaged-app/SOURCE_CODE.txt", "to": "SOURCE_CODE.txt" }
+  ],
   "extraResources": [
     { "from": "resources/icon.ico", "to": "icon.ico" },
     { "from": "node_modules/7zip-bin-full/win/${arch}", "to": "7zip", "filter": ["7z.exe", "7z.dll", "License.txt", "readme.txt"] }
@@ -24,6 +29,7 @@
   },
   "nsis": {
     "include": "resources/installer.nsh",
+    "license": "resources/license.txt",
     "oneClick": false,
     "perMachine": false,
     "allowElevation": false,
