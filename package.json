@@ -55,7 +55,7 @@
     "wait-on": "^8.0.1"
   },
   "author": "Lorcin",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-only",
   "homepage": "https://github.com/lorcinv/OmiComic",
   "repository": {
     "type": "git",
