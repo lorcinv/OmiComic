@@ -35,7 +35,7 @@ async function openLibrary(page: Page) {
       }
       return listDirectory(path);
     };
-  }, { cover: 'data:image/webp;base64,' + readFileSync('src/assets/home-scene.webp').toString('base64') });
+  }, { cover: 'data:image/webp;base64,' + readFileSync('tests/fixtures/omi-icon.webp').toString('base64') });
   await page.goto('/');
   await page.getByRole('button', { name: '打开资源库', exact: true }).click();
   await expect(page.locator('.resource-card')).toHaveCount(10);

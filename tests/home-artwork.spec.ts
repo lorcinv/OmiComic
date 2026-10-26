@@ -12,7 +12,7 @@ test('home artwork can be selected, cancelled, restored and retains natural colo
     api.selectHomeArtwork = async () => {
       if ((window as any).__artworkCancel) return ok(null);
       if ((window as any).__artworkError) return { ok: false, error: { message: '图片无法读取或尺寸过大，请换一张图片。' } };
-      const image=new Image();image.src='/src/assets/home-scene.webp';await image.decode();
+      const image=new Image();image.src='/src/assets/reading-girl.svg';await image.decode();
       const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=Math.round(1200*image.naturalHeight/image.naturalWidth);
       canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);
       return ok({ name: '自选图案.png', url: canvas.toDataURL('image/png') });

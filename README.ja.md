@@ -18,8 +18,8 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.39 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.39-PC-Windows-x64.zip) |
-| Android 8.0+ | [OmiComic 1.1.38 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.38-Android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.40 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.40/OmiComic-Portable-1.1.40-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.40/OmiComic-Setup-1.1.40-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.40 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.40/OmiComic-1.1.40-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
@@ -40,7 +40,7 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 <td width="50%" valign="top">
 <h3>ホーム</h3>
 <p>最近読んだ作品の表紙、ページ番号、進捗を表示。表紙をダブルクリックするか、ホバー時の「続きを読む」で再開できます。</p>
-<a href="docs/images/v1.1.36/windows-home.png"><img src="docs/images/v1.1.36/windows-home.png" width="100%" alt="ホーム"></a>
+<a href="docs/images/v1.1.40/windows-home.png"><img src="docs/images/v1.1.40/windows-home.png" width="100%" alt="ホーム"></a>
 </td>
 <td width="50%" valign="top">
 <h3>ライブラリ</h3>
@@ -81,7 +81,7 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 <td width="50%" valign="top">
 <h3>OmiComic について</h3>
 <p>アプリの紹介、現在のバージョン、GitHub のプロジェクトを確認できます。</p>
-<a href="docs/images/v1.1.36/windows-about.png"><img src="docs/images/v1.1.36/windows-about.png" width="100%" alt="OmiComic について"></a>
+<a href="docs/images/v1.1.40/windows-about.png"><img src="docs/images/v1.1.40/windows-about.png" width="100%" alt="OmiComic について"></a>
 </td>
 </tr>
 </table>
@@ -144,3 +144,7 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 ## 関連リンク
 
 [使い方](docs/USER_GUIDE.ja.md) · [更新履歴](CHANGELOG.md) · [不具合の報告](https://github.com/lorcinv/OmiComic/issues) · [過去のリリース](docs/releases/README.ja.md)
+
+## ライセンス
+
+OmiComic 独自のプログラムコードは **GNU General Public License バージョン 3 のみ（GPL-3.0-only）** で公開されています。詳細は [LICENSE](LICENSE) をご覧ください。第三者のコンポーネントはそれぞれのライセンスに従います。旧版ホーム画面イラストの出典と未確認の権利は [素材の出典](ASSET_CREDITS.md) に記載しています。1.1.40 から旧画像は含まれません。

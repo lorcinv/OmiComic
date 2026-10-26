@@ -31,12 +31,12 @@ export default function AboutOmiComic({ active = true }: { active?: boolean }) {
       <p>{t('打开设备中的图片文件夹、ZIP／RAR／7z 压缩包、PDF 或 EPUB，离线阅读自己的收藏。用书架、收藏和标签整理资源，用书签和阅读进度接着上次的位置读下去。')}</p>
       <p>{t('单页、双页、全景、沉浸和自动阅读适应不同的阅读习惯。配色、字号和阅读方式可以自行调整，界面支持简体中文、English 和日本語。')}</p>
     </div>
-    <a className="omi-about__github" href={OMI_GITHUB_URL} target={isAndroid() ? undefined : '_blank'} rel="noopener noreferrer">
+    <a className="omi-about__action omi-about__github" href={OMI_GITHUB_URL} target={isAndroid() ? undefined : '_blank'} rel="noopener noreferrer">
       <strong>{t('项目主页 · GitHub')}</strong>
       <span>github.com/lorcinv/OmiComic</span>
       <span aria-hidden="true">↗</span>
     </a>
-    <button type="button" ref={guideButton} className="omi-about__github omi-about__guide" onClick={() => {
+    <button type="button" ref={guideButton} className="omi-about__action omi-about__guide" onClick={() => {
       scrollContainer.current = guideButton.current?.closest('.settings-window-content, .mobile-settings-body') ?? null;
       scrollPosition.current = scrollContainer.current?.scrollTop ?? 0;
       setGuideOpen(true);

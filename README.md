@@ -18,8 +18,8 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.39 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.39-PC-Windows-x64.zip) |
-| Android 8.0+ | [OmiComic 1.1.38 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.39/OmiComic-1.1.38-Android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.40 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.40/OmiComic-Portable-1.1.40-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.40/OmiComic-Setup-1.1.40-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.40 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.40/OmiComic-1.1.40-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
@@ -40,7 +40,7 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 <td width="50%" valign="top">
 <h3>首页</h3>
 <p>最近阅读集中展示封面、页码和进度。双击封面，或点击悬停时出现的“继续阅读”，回到上次读到的位置。</p>
-<a href="docs/images/v1.1.36/windows-home.png"><img src="docs/images/v1.1.36/windows-home.png" width="100%" alt="首页"></a>
+<a href="docs/images/v1.1.40/windows-home.png"><img src="docs/images/v1.1.40/windows-home.png" width="100%" alt="首页"></a>
 </td>
 <td width="50%" valign="top">
 <h3>资源库</h3>
@@ -81,7 +81,7 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 <td width="50%" valign="top">
 <h3>关于 OmiComic</h3>
 <p>查看版本与项目主页，打开内置操作说明。按分类折叠、目录跳转或离线搜索，快速查找按钮、快捷键和手机手势。</p>
-<a href="docs/images/v1.1.36/windows-about.png"><img src="docs/images/v1.1.36/windows-about.png" width="100%" alt="关于 OmiComic"></a>
+<a href="docs/images/v1.1.40/windows-about.png"><img src="docs/images/v1.1.40/windows-about.png" width="100%" alt="关于 OmiComic"></a>
 </td>
 </tr>
 </table>
@@ -144,3 +144,7 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 ## 更多
 
 [使用方法](README_使用方法.md) · [版本更新](CHANGELOG.md) · [反馈问题](https://github.com/lorcinv/OmiComic/issues) · [历史版本](docs/releases/README.md)
+
+## 开源许可证
+
+OmiComic 的自有程序代码采用 **GNU 通用公共许可证第 3 版（GPL-3.0-only）** 授权，详见 [LICENSE](LICENSE)。第三方组件保留各自许可；旧版首页插画的来源与未核实授权状态单独列于 [素材来源](ASSET_CREDITS.md)，1.1.40 起不再收录该图。

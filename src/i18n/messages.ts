@@ -787,9 +787,9 @@ export const messages: Record<string, readonly [string, string]> = {
     "Blue-gray manga illustration",
     "青灰色の漫画イラスト"
   ],
-  "镜像后的漫画少女与教室桌面，背景向左渐隐": [
-    "Mirrored manga girl and classroom desk, fading left",
-    "少女と教室の机を左右反転したイラスト、背景は左に向かって薄くなります"
+  "正在阅读的少女插画": [
+    "Illustration of a girl reading",
+    "本を読む少女のイラスト"
   ],
   "首页导航": [
     "Home navigation",
