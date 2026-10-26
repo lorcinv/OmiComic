@@ -26,6 +26,33 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
+  package-windows:
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run package:prepare
+      - run: npx electron-builder --config electron-builder.portable.json --win zip --x64 --publish never
+      - run: npx electron-builder --win nsis --x64 --publish never
+      - shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $zip = "release/OmiComic-Portable-$version-x64.zip"
+          if (!(Test-Path "release/OmiComic-Setup-$version-x64.exe")) { throw 'Missing installer' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          try {
+            foreach ($name in @('LICENSE', 'SOURCE_CODE.txt')) {
+              if (!($archive.Entries | Where-Object { $_.FullName -eq $name -or $_.FullName.EndsWith("/$name") })) { throw "Missing $name" }
+            }
+          } finally { $archive.Dispose() }
+
   release-windows-android:
     if: >-
       github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: ')
