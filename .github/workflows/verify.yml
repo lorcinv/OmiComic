@@ -49,7 +49,7 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
           try {
-            foreach ($name in @('LICENSE', 'SOURCE_CODE.txt')) {
+            foreach ($name in @('LICENSE', 'SOURCE_CODE.txt', 'ASSET_CREDITS.md')) {
               if (!($archive.Entries | Where-Object { $_.FullName -eq $name -or $_.FullName.EndsWith("/$name") })) { throw "Missing $name" }
             }
           } finally { $archive.Dispose() }
@@ -64,6 +64,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Check default artwork rights
+        shell: pwsh
+        run: |
+          if (Test-Path 'src/assets/home-scene.webp') {
+            throw 'The original rights of home-scene.webp are unverified. Replace it or document permission before publishing.'
+          }
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -114,7 +120,7 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
           try {
-            foreach ($name in @('LICENSE', 'SOURCE_CODE.txt')) {
+            foreach ($name in @('LICENSE', 'SOURCE_CODE.txt', 'ASSET_CREDITS.md')) {
               if (!($archive.Entries | Where-Object { $_.FullName -eq $name -or $_.FullName.EndsWith("/$name") })) {
                 throw "Missing $name in Windows ZIP"
               }
@@ -122,7 +128,7 @@ jobs:
           } finally { $archive.Dispose() }
           $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $apk))
           try {
-            foreach ($name in @('assets/LICENSE', 'assets/SOURCE_CODE.txt')) {
+            foreach ($name in @('assets/LICENSE', 'assets/SOURCE_CODE.txt', 'assets/ASSET_CREDITS.md')) {
               if (!$archive.GetEntry($name)) { throw "Missing $name in Android APK" }
             }
           } finally { $archive.Dispose() }

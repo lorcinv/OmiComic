@@ -25,6 +25,7 @@ if (!$assetTarget.StartsWith([IO.Path]::GetFullPath($build) + [IO.Path]::Directo
 Get-ChildItem -LiteralPath $assetTarget -Force | Remove-Item -Recurse -Force
 Copy-Item -Path 'dist-android\*' -Destination $assetTarget -Recurse
 Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $build 'assets\LICENSE')
+Copy-Item -LiteralPath 'ASSET_CREDITS.md' -Destination (Join-Path $build 'assets\ASSET_CREDITS.md')
 $version = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version
 [IO.File]::WriteAllText((Join-Path $build 'assets\SOURCE_CODE.txt'), ('OmiComic ' + $version + " source code (GPL-3.0-only)`n" + 'https://github.com/lorcinv/OmiComic/releases/tag/v' + $version + "`nDownload the Source code (zip) or Source code (tar.gz) archive on that page.`n"), [Text.UTF8Encoding]::new($false))
 $licenseTarget = Join-Path $assetTarget 'licenses'

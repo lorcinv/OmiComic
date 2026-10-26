@@ -147,4 +147,4 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 
 ## ライセンス
 
-OmiComic は **GNU General Public License バージョン 3 のみ（GPL-3.0-only）** の下で公開されています。詳細は [LICENSE](LICENSE) をご覧ください。
+OmiComic 独自のプログラムコードは **GNU General Public License バージョン 3 のみ（GPL-3.0-only）** で公開されています。詳細は [LICENSE](LICENSE) をご覧ください。第三者のコンポーネントはそれぞれのライセンスに従います。ホーム画面イラストの出典と未確認の権利については [素材の出典](ASSET_CREDITS.md) に記載しています。

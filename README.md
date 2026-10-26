@@ -147,4 +147,4 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 
 ## 开源许可证
 
-OmiComic 采用 **GNU 通用公共许可证第 3 版（GPL-3.0-only）** 授权，详见 [LICENSE](LICENSE)。
+OmiComic 的自有程序代码采用 **GNU 通用公共许可证第 3 版（GPL-3.0-only）** 授权，详见 [LICENSE](LICENSE)。第三方组件保留各自许可；首页插画来源与尚未核实的授权状态单独列于 [素材来源](ASSET_CREDITS.md)。

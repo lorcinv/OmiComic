@@ -147,4 +147,4 @@ Touch-focused browsing and full-screen reading, with essential navigation close 
 
 ## License
 
-OmiComic is licensed under the **GNU General Public License version 3 only (GPL-3.0-only)**. See [LICENSE](LICENSE) for details.
+OmiComic's original program code is licensed under the **GNU General Public License version 3 only (GPL-3.0-only)**. See [LICENSE](LICENSE). Third-party components retain their own licenses. The home illustration's source and unverified rights are recorded separately in [Asset credits](ASSET_CREDITS.md).

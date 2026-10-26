@@ -15,6 +15,7 @@ async function main() {
     homepage: manifest.homepage, license: manifest.license, dependencies: {},
   }, null, 2));
   await fs.copyFile(path.join(root, 'LICENSE'), path.join(stage, 'LICENSE'));
+  await fs.copyFile(path.join(root, 'ASSET_CREDITS.md'), path.join(stage, 'ASSET_CREDITS.md'));
   await fs.writeFile(path.join(stage, 'SOURCE_CODE.txt'),
     `OmiComic ${manifest.version} source code (GPL-3.0-only)\n` +
     `https://github.com/lorcinv/OmiComic/releases/tag/v${manifest.version}\n` +

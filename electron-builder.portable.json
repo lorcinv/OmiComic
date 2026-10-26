@@ -7,6 +7,7 @@
   },
   "extraFiles": [
     { "from": ".packaged-app/LICENSE", "to": "LICENSE" },
+    { "from": ".packaged-app/ASSET_CREDITS.md", "to": "ASSET_CREDITS.md" },
     { "from": ".packaged-app/SOURCE_CODE.txt", "to": "SOURCE_CODE.txt" },
     { "from": "resources/portable-readme.txt", "to": "使用说明.txt" }
   ]
