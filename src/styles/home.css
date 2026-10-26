@@ -264,17 +264,13 @@
 }
 .omi-home__art > img {
   display: block;
-  width: calc(100% + 160px);
-  max-width: none;
+  width: 100%;
+  max-width: 600px;
   max-height: min(680px, calc(100vh - 180px));
   object-fit: contain;
   filter: var(--首页插画滤镜);
-  transform: translateX(-80px);
   user-select: none;
   -webkit-user-drag: none;
-  mask-image: linear-gradient(to right, transparent, #000 48%, #000 94%, transparent),
-    linear-gradient(to bottom, transparent, #000 10%, #000 86%, transparent);
-  mask-composite: intersect;
 }
 
 .omi-home__art.is-custom > img {
@@ -283,6 +279,9 @@
   transform: none;
   filter: none;
   border-radius: 0;
+  mask-image: linear-gradient(to right, transparent, #000 48%, #000 94%, transparent),
+    linear-gradient(to bottom, transparent, #000 10%, #000 86%, transparent);
+  mask-composite: intersect;
 }
 
 .omi-home__footer {

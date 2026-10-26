@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { HomeArtwork } from '../types';
 
-export const defaultHomeArtwork = new URL('../assets/home-scene.webp', import.meta.url).href;
+export const defaultHomeArtwork = new URL('../assets/reading-girl.svg', import.meta.url).href;
 const changed = 'omicomic-home-artwork-changed';
 
 export function publishHomeArtwork(artwork: HomeArtwork | null) {

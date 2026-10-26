@@ -9,6 +9,8 @@ async function main() {
   await fs.rm(stage, { recursive: true, force: true });
   await fs.mkdir(stage, { recursive: true });
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+  if ((await fs.readdir(path.join(root, 'dist', 'assets'))).some(name => name.startsWith('home-scene-')))
+    throw new Error('Old, unverified home illustration remains in renderer output. Clean dist and rebuild.');
   await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({
     name: manifest.name, version: manifest.version, productName: 'OmiComic',
     description: manifest.description, main: 'dist-electron/main.js', author: manifest.author,

@@ -190,7 +190,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
         {!mobile && <OmiSignature />}
         </div>
         {!mobile && <aside className={`omi-home__art${artwork && !artworkFailed ? ' is-custom' : ''}`} aria-label={t('主界面图案')}>
-          <img src={artwork && !artworkFailed ? artwork.url : defaultHomeArtwork} alt={artwork && !artworkFailed ? artwork.name : t("镜像后的漫画少女与教室桌面，背景向左渐隐")} draggable={false} onError={() => setArtworkFailed(true)} />
+          <img src={artwork && !artworkFailed ? artwork.url : defaultHomeArtwork} alt={artwork && !artworkFailed ? artwork.name : t("正在阅读的少女插画")} draggable={false} onError={() => setArtworkFailed(true)} />
         </aside>}
       </div>
       {mobile ? <nav className="mobile-home-nav" aria-label={t("首页导航")}><button aria-label={t("打开资源库")} onClick={browse}><MobileIcon name="library"/>{t("进入资源库")}</button><button onClick={() => setRetry(value => value + 1)} disabled={loading}><MobileIcon name="refresh"/>{t("刷新")}</button><button onClick={onSettings}><MobileIcon name="settings"/>{t("设置")}</button></nav> : null}

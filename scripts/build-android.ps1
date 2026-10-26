@@ -23,6 +23,7 @@ New-Item -ItemType Directory -Force -Path $build,$release,$signing,(Join-Path $b
 $assetTarget = [IO.Path]::GetFullPath((Join-Path $build 'assets\web'))
 if (!$assetTarget.StartsWith([IO.Path]::GetFullPath($build) + [IO.Path]::DirectorySeparatorChar)) { throw 'Invalid asset directory' }
 Get-ChildItem -LiteralPath $assetTarget -Force | Remove-Item -Recurse -Force
+if (Get-ChildItem -Path 'dist-android\assets\home-scene-*' -ErrorAction SilentlyContinue) { throw 'Old, unverified home illustration remains in Android renderer output.' }
 Copy-Item -Path 'dist-android\*' -Destination $assetTarget -Recurse
 Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $build 'assets\LICENSE')
 Copy-Item -LiteralPath 'ASSET_CREDITS.md' -Destination (Join-Path $build 'assets\ASSET_CREDITS.md')
