@@ -1,0 +1,49 @@
+.omi-guide { max-width: 680px; color: var(--主文字); outline: none; }
+.omi-guide__back { border: 0; padding: 4px 0; background: transparent; color: var(--次文字); font: inherit; cursor: pointer; }
+.omi-guide__heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 18px 0; }
+.omi-guide__heading h3 { margin: 0; font-size: calc(22px * var(--desktop-font-scale, 1)); }
+.omi-guide__tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.omi-guide__platform { display: flex; flex: none; gap: 3px; padding: 3px; border-radius: 8px; background: var(--控件背景); }
+.omi-guide__platform button { min-height: 32px; padding: 5px 11px; border: 0; border-radius: 6px; background: transparent; color: var(--次文字); font: inherit; font-size: calc(12px * var(--desktop-font-scale, 1)); cursor: pointer; }
+.omi-guide__platform button[aria-pressed="true"] { background: var(--面板色); color: var(--主文字); }
+.omi-guide__search { position: relative; flex: 1; min-width: 180px; }
+.omi-guide__search input { box-sizing: border-box; width: 100%; min-height: 38px; padding: 8px 34px 8px 12px; border: 1px solid var(--边框色); border-radius: 8px; background: var(--面板色); color: var(--主文字); font: inherit; font-size: calc(13px * var(--desktop-font-scale, 1)); }
+.omi-guide__search input::placeholder { color: var(--次文字); }
+.omi-guide__search input::-webkit-search-cancel-button { display: none; }
+.omi-guide__search > button { position: absolute; right: 4px; top: 3px; width: 30px; height: 32px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--次文字); font-size: 20px; cursor: pointer; }
+.omi-guide__contents { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 17px 0 20px; }
+.omi-guide__contents button { min-height: 30px; padding: 3px 0; border: 0; background: transparent; color: var(--控件文字); font: inherit; font-size: calc(12px * var(--desktop-font-scale, 1)); cursor: pointer; text-align: left; }
+.omi-guide__group { margin: 0; border-top: 1px solid var(--边框色); scroll-margin-top: 16px; }
+.omi-guide summary { list-style: none; cursor: pointer; overflow-wrap: anywhere; }
+.omi-guide summary::-webkit-details-marker { display: none; }
+.omi-guide summary::after { content: ''; flex: none; box-sizing: border-box; width: 7px; height: 7px; margin: 0 5px; border-right: 1.5px solid var(--次文字); border-bottom: 1.5px solid var(--次文字); transform: rotate(-45deg); }
+.omi-guide details[open] > summary::after { transform: rotate(45deg); }
+.omi-guide__group > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; font-size: calc(14px * var(--desktop-font-scale, 1)); font-weight: 600; }
+.omi-guide__topics { padding: 0 0 12px 14px; }
+.omi-guide__topic > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; font-size: calc(13px * var(--desktop-font-scale, 1)); font-weight: 400; }
+.omi-guide__answer { padding: 0 20px 12px 0; color: var(--次文字); font-size: calc(13px * var(--desktop-font-scale, 1)); line-height: 1.8; overflow-wrap: anywhere; }
+.omi-guide__answer p { margin: 0 0 8px; }
+.omi-guide__answer p:last-child { margin-bottom: 0; }
+.omi-guide__answer dl { margin: 0; }
+.omi-guide__answer dl > div { display: grid; grid-template-columns: minmax(100px, 34%) minmax(0, 1fr); gap: 12px; padding: 6px 0; }
+.omi-guide__answer dt { color: var(--主文字); }
+.omi-guide__answer dd { margin: 0; }
+.omi-guide__empty { padding: 22px 0; color: var(--次文字); font-size: calc(13px * var(--desktop-font-scale, 1)); line-height: 1.8; }
+.omi-guide :is(button, input, summary):focus-visible { outline: 2px solid var(--强调色); outline-offset: 3px; }
+.omi-guide :is(button, summary):hover { color: var(--主文字); }
+[data-omi-layout="desktop"] .settings-window .omi-guide :is(button, summary) { background: transparent; }
+[data-omi-layout="desktop"] .settings-window .omi-guide :is(button, summary):hover { background: transparent; color: var(--主文字); }
+[data-omi-layout="desktop"] .settings-window .omi-guide__platform button[aria-pressed="true"] { background: var(--面板色); color: var(--主文字); }
+.settings-window-content .omi-guide__heading h3 { margin: 0; font-size: calc(20px * var(--desktop-font-scale, 1)); }
+@media (max-width: 600px) {
+  .omi-guide__tools { gap: 12px; }
+  .omi-guide__search { flex-basis: 100%; }
+  .omi-guide__platform button { min-height: 38px; }
+  .omi-guide__contents { gap: 4px 18px; }
+  .omi-guide__contents button { min-height: 36px; }
+  .omi-guide__group > summary { min-height: 52px; }
+  .omi-guide__topic > summary { min-height: 46px; }
+  .omi-guide__topics { padding-left: 10px; }
+  .omi-guide__answer { padding-right: 4px; }
+  .omi-guide__answer dl > div { grid-template-columns: minmax(92px, 38%) minmax(0, 1fr); gap: 10px; }
+}

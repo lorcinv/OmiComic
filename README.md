@@ -80,7 +80,7 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 </td>
 <td width="50%" valign="top">
 <h3>关于 OmiComic</h3>
-<p>查看应用介绍与当前版本，打开 GitHub 项目主页。</p>
+<p>查看版本与项目主页，打开内置操作说明。按分类折叠、目录跳转或离线搜索，快速查找按钮、快捷键和手机手势。</p>
 <a href="docs/images/v1.1.36/windows-about.png"><img src="docs/images/v1.1.36/windows-about.png" width="100%" alt="关于 OmiComic"></a>
 </td>
 </tr>

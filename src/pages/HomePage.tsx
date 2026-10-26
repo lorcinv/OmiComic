@@ -3,11 +3,12 @@ import MobileIcon from "../components/MobileIcon";
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail } from "../reader/thumbnailClient";
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { RecentOpenedItem, 阅读资源结果, 阅读打开上下文 } from "../types";
 import type { OmiBrandOriginGetter } from "../OmiBrandIcon";
 import OmiPageBrand from "../components/OmiPageBrand";
 import OmiSignature from "../components/OmiSignature";
+import { HomeArtworkPalette, HomeMascot } from '../components/HomeArtworkDecor';
 import useMobileLayout from "../hooks/useMobileLayout";
 import { defaultHomeArtwork, useHomeArtwork } from '../hooks/useHomeArtwork';
 import { mobileNavigationEpoch } from '../hooks/mobileNavigation';
@@ -33,6 +34,18 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
   const artwork = useHomeArtwork(!mobile);
   const [artworkFailed, setArtworkFailed] = useState(false);
   useEffect(() => setArtworkFailed(false), [artwork?.url]);
+  const customArtwork = artwork && !artworkFailed;
+  const stage = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = stage.current;
+    if (mobile || !element) return;
+    // Fit the entire desktop composition, including the signature and mascots, as one unit.
+    const fit = () => element.style.setProperty('--omi-home-scale', String(Math.min(element.clientWidth / 1440, element.clientHeight / (1653 / 2480 * 1440))));
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [mobile]);
   const [books, setBooks] = useState<RecentBook[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,15 +160,20 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
 
   return (
     <div className={`omi-home${mobile ? ' is-mobile-home' : ''}`}>
+      {!mobile && <HomeArtworkPalette id="omi-home-palette" />}
       <header className="omi-home__header">
         <OmiPageBrand onActivate={browse} onRead={origin => resume(books[0], origin)} readDisabled={loading || books.length === 0 || opening !== null} />
         {!mobile && <button type="button" className="omi-home__library" aria-label={t("打开资源库")} onClick={browse}>{t("我的资源库 ")}<Arrow diagonal /></button>}
       </header>
+      <div className="omi-home__stage" ref={stage}>
       <div className="omi-home__body">
         <div className="omi-home__reading-column">
+        <div className="omi-home__recent-shell">
         <section className="omi-home__content" aria-label={t("最近阅读与阅读状态")}>
           <section className="omi-home__recent" aria-labelledby="omi-home-recent">
-            <div className="omi-home__section-label"><h2 id="omi-home-recent">{t("最近阅读")}</h2><span>CONTINUE READING</span><span className="omi-home__section-line" /></div>
+            <div className="omi-home__section-label"><h2 id="omi-home-recent">{t("最近阅读")}</h2><span>CONTINUE READING</span><span className="omi-home__section-line" />
+              {!mobile && !customArtwork && <HomeMascot name="peek" />}
+            </div>
             {loading && (!mobile || !books.length) ? (mobile ? null : <div className="omi-home__loading" role="status">{t("正在整理你的阅读记录…")}</div>) : books.length > 0 ? (
               <div className="omi-home__books">
                 {books.map((book, index) => {
@@ -177,7 +195,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
                       {book.thumbnail ? <img src={book.thumbnail} alt="" onError={() => setBooks(items => items.map(item => item.resourceKey === book.resourceKey ? { ...item, thumbnail: null } : item))} /> : <div className="omi-home__cover-placeholder" aria-hidden="true"><ResourcePlaceholder type={book.sourceType} /></div>}
                       {(!mobile || heldBook === book.resourceKey) && <span className="omi-home__cover-action">{!mobile && opening === book.resourceKey ? t("正在打开…") : t("继续阅读")}<Arrow /></span>}
                     </div>
-                    <span className="omi-home__progress-track" aria-hidden="true"><span style={{ width: `${progress}%`, minWidth: progress > 0 ? 2 : 0 }} /></span>
+                    <span className="omi-home__progress-track" aria-hidden="true"><span style={{ width: `${progress}%`, minWidth: progress > 0 ? 'max(2px, calc(2.05px / var(--omi-home-scale, 1)))' : 0 }} /></span>
                     <span className="omi-home__book-title" title={mobile ? undefined : book.title}>{book.title}</span>
                     <span className="omi-home__book-progress">{total ? `${page} / ${total}${unit === '页' ? '' : ` ${t(unit)}`}` : t("打开阅读")}<span>{total ? `${percent}%` : ""}</span></span>
                   </button>;
@@ -187,11 +205,14 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
           </section>
           {error && <div className="omi-home__error" role="alert">{t(error ?? '')}<button type="button" onClick={() => setError(null)} aria-label={t("关闭错误提示")}>×</button></div>}
         </section>
-        {!mobile && <OmiSignature />}
+        {!mobile && !customArtwork && <HomeMascot name="side" />}
         </div>
-        {!mobile && <aside className={`omi-home__art${artwork && !artworkFailed ? ' is-custom' : ''}`} aria-label={t('主界面图案')}>
-          <img src={artwork && !artworkFailed ? artwork.url : defaultHomeArtwork} alt={artwork && !artworkFailed ? artwork.name : t("镜像后的漫画少女与教室桌面，背景向左渐隐")} draggable={false} onError={() => setArtworkFailed(true)} />
+        {!mobile && <OmiSignature showMascot={!customArtwork} />}
+        </div>
+        {!mobile && <aside className={`omi-home__art${customArtwork ? ' is-custom' : ''}`} aria-label={t('主页看板娘')}>
+          <img src={customArtwork ? artwork.url : defaultHomeArtwork} alt={customArtwork ? artwork.name : t('Omi 抱着小 Omi 坐在漫画书上')} draggable={false} onError={() => setArtworkFailed(true)} />
         </aside>}
+      </div>
       </div>
       {mobile ? <nav className="mobile-home-nav" aria-label={t("首页导航")}><button aria-label={t("打开资源库")} onClick={browse}><MobileIcon name="library"/>{t("进入资源库")}</button><button onClick={() => setRetry(value => value + 1)} disabled={loading}><MobileIcon name="refresh"/>{t("刷新")}</button><button onClick={onSettings}><MobileIcon name="settings"/>{t("设置")}</button></nav> : null}
     </div>

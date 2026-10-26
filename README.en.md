@@ -143,4 +143,4 @@ Touch-focused browsing and full-screen reading, with essential navigation close 
 
 ## More
 
-[User guide](README_使用方法.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/lorcinv/OmiComic/issues) · [Previous releases](docs/releases/README.en.md)
+[User guide](docs/USER_GUIDE.en.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/lorcinv/OmiComic/issues) · [Previous releases](docs/releases/README.en.md)

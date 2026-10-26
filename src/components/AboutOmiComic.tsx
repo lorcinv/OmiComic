@@ -1,12 +1,26 @@
 import { version } from '../../package.json';
+import { useRef, useState } from 'react';
 import { t } from '../i18n';
 import { isAndroid } from '../platform';
 import omiIcon from '../../resources/icon.svg';
 import '../styles/about.css';
+import UserGuide from './UserGuide';
 
 export const OMI_GITHUB_URL = 'https://github.com/lorcinv/OmiComic';
 
-export default function AboutOmiComic() {
+export default function AboutOmiComic({ active = true }: { active?: boolean }) {
+  const [guideOpen, setGuideOpen] = useState(false);
+  const guideButton = useRef<HTMLButtonElement>(null);
+  const scrollPosition = useRef(0);
+  const scrollContainer = useRef<Element | null>(null);
+  const closeGuide = () => {
+    setGuideOpen(false);
+    requestAnimationFrame(() => {
+      if (scrollContainer.current) scrollContainer.current.scrollTop = scrollPosition.current;
+      guideButton.current?.focus({ preventScroll: true });
+    });
+  };
+  if (guideOpen && active) return <UserGuide onBack={closeGuide} />;
   return <div className="omi-about">
     <header className="omi-about__brand">
       <img src={omiIcon} alt="" width="72" height="72" draggable={false} />
@@ -22,5 +36,14 @@ export default function AboutOmiComic() {
       <span>github.com/lorcinv/OmiComic</span>
       <span aria-hidden="true">↗</span>
     </a>
+    <button type="button" ref={guideButton} className="omi-about__github omi-about__guide" onClick={() => {
+      scrollContainer.current = guideButton.current?.closest('.settings-window-content, .mobile-settings-body') ?? null;
+      scrollPosition.current = scrollContainer.current?.scrollTop ?? 0;
+      setGuideOpen(true);
+    }}>
+      <strong>{t('操作说明')}</strong>
+      <span>{t('按钮功能、快捷键与手机手势')}</span>
+      <span aria-hidden="true">›</span>
+    </button>
   </div>;
 }

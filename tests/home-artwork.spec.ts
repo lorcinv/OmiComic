@@ -28,6 +28,7 @@ test('home artwork can be selected, cancelled, restored and retains natural colo
   await page.goto('/');
   const artwork = page.locator('.omi-home__art img');
   await expect(artwork).toBeVisible();
+  await expect(page.locator('.omi-home__mascot')).toHaveCount(3);
   const original = await artwork.getAttribute('src');
   async function settings() {
     await page.getByRole('button', { name: '打开资源库', exact: true }).click();
@@ -39,10 +40,10 @@ test('home artwork can be selected, cancelled, restored and retains natural colo
     await page.getByRole('button', { name: 'OmiComic', exact: true }).click();
   }
   await settings();
-  const group = page.getByRole('region', { name: '主界面图案', exact: true });
+  const group = page.getByRole('region', { name: '主页看板娘', exact: true });
   await expect(group.getByRole('button', { name: '恢复默认', exact: true })).toBeDisabled();
   await group.getByRole('button', { name: '选择图片', exact: true }).click();
-  const crop = page.getByRole('dialog', { name: '裁剪主界面图案', exact: true });
+  const crop = page.getByRole('dialog', { name: '裁剪主页看板娘', exact: true });
   await expect(crop).toBeVisible();
   await crop.getByRole('button', { name: '16:9', exact: true }).click();
   await crop.getByRole('slider', { name: '图片缩放', exact: true }).fill('150');
@@ -68,15 +69,18 @@ test('home artwork can be selected, cancelled, restored and retains natural colo
   await expect(group.getByRole('alert')).toContainText('图片无法读取');
   await home();
   await expect(artwork).toHaveAttribute('alt', '自选图案.png');
+  await expect(page.locator('.omi-home__mascot')).toHaveCount(0);
   await expect(artwork).toHaveCSS('filter', 'none'); await expect(artwork).toHaveCSS('object-fit', 'contain');
   expect(await artwork.evaluate(el => getComputedStyle(el).maskImage)).toContain('linear-gradient');
   await page.screenshot({path:'test-results/pc-1.1.28-custom-home.png'});
   await page.reload(); await expect(artwork).toHaveAttribute('alt', '自选图案.png');
+  await expect(page.locator('.omi-home__mascot')).toHaveCount(0);
   await settings();
   await group.getByRole('button', { name: '恢复默认', exact: true }).click();
-  await expect(group).toContainText('默认图案');
+  await expect(group).toContainText('默认看板娘');
   await home(); await expect(artwork).toHaveAttribute('src', original!);
   await page.reload(); await expect(artwork).toHaveAttribute('src', original!);
+  await expect(page.locator('.omi-home__mascot')).toHaveCount(3);
 });
 
 test('safety settings retain all confirmation switches without explanatory copy', async ({ page }) => {
