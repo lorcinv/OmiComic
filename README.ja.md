@@ -144,3 +144,7 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 ## 関連リンク
 
 [使い方](README_使用方法.md) · [更新履歴](CHANGELOG.md) · [不具合の報告](https://github.com/lorcinv/OmiComic/issues) · [過去のリリース](docs/releases/README.ja.md)
+
+## ライセンス
+
+OmiComic は **GNU General Public License バージョン 3 のみ（GPL-3.0-only）** の下で公開されています。詳細は [LICENSE](LICENSE) をご覧ください。
