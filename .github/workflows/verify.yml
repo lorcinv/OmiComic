@@ -37,6 +37,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: node node_modules/electron/install.js
       - run: npm run package:prepare
       - run: npx electron-builder --config electron-builder.portable.json --win zip --x64 --publish never
       - run: npx electron-builder --win nsis --x64 --publish never
@@ -72,6 +73,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - run: npm ci
+      - run: node node_modules/electron/install.js
       - run: npm run package:prepare
       - run: npx electron-builder --config electron-builder.portable.json --win zip --x64 --publish never
       - run: npx electron-builder --win nsis --x64 --publish never
