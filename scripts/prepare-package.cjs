@@ -14,6 +14,11 @@ async function main() {
     description: manifest.description, main: 'dist-electron/main.js', author: manifest.author,
     homepage: manifest.homepage, license: manifest.license, dependencies: {},
   }, null, 2));
+  await fs.copyFile(path.join(root, 'LICENSE'), path.join(stage, 'LICENSE'));
+  await fs.writeFile(path.join(stage, 'SOURCE_CODE.txt'),
+    `OmiComic ${manifest.version} source code (GPL-3.0-only)\n` +
+    `https://github.com/lorcinv/OmiComic/releases/tag/v${manifest.version}\n` +
+    'Download the Source code (zip) or Source code (tar.gz) archive on that page.\n');
   await fs.cp(path.join(root, 'dist'), path.join(stage, 'dist'), { recursive: true });
   const result = await build({
     absWorkingDir: root,

@@ -25,3 +25,84 @@ jobs:
           name: browser-regression-results
           path: test-results/
           if-no-files-found: ignore
+
+  release-windows-android:
+    if: github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release: ')
+    needs: regression
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - run: npm run package:prepare
+      - run: npx electron-builder --config electron-builder.portable.json --win zip --x64 --publish never
+      - run: npx electron-builder --win nsis --x64 --publish never
+      - name: Restore original Android signing key and SDK
+        env:
+          OMI_KEYSTORE_BASE64: ${{ secrets.OMI_KEYSTORE_BASE64 }}
+          OMI_SIGNING_PASSWORD: ${{ secrets.OMI_SIGNING_PASSWORD }}
+        shell: pwsh
+        run: |
+          if (!$env:OMI_KEYSTORE_BASE64 -or !$env:OMI_SIGNING_PASSWORD) { throw 'Original Android signing key secrets are required.' }
+          New-Item -ItemType Directory -Force -Path '.android-signing' | Out-Null
+          [IO.File]::WriteAllBytes('.android-signing/omicomic-release.jks', [Convert]::FromBase64String($env:OMI_KEYSTORE_BASE64))
+          [IO.File]::WriteAllText('.android-signing/password.txt', $env:OMI_SIGNING_PASSWORD)
+          $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+          & "$env:ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager.bat" 'platforms;android-35' 'build-tools;35.0.0'
+          if ($LASTEXITCODE -ne 0) { throw 'Android SDK installation failed.' }
+      - name: Build Android APK
+        shell: pwsh
+        run: |
+          $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+          npm run dist:android
+          if ($LASTEXITCODE -ne 0) { throw 'Android build failed.' }
+      - name: Inspect and publish both packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $zip = "release/OmiComic-Portable-$version-x64.zip"
+          $setup = "release/OmiComic-Setup-$version-x64.exe"
+          $apk = "release/OmiComic-$version-android.apk"
+          $notes = "docs/releases/$tag.md"
+          foreach ($file in @($zip, $setup, $apk, $notes)) {
+            if (!(Test-Path -LiteralPath $file)) { throw "Missing release file: $file" }
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          try {
+            foreach ($name in @('LICENSE', 'SOURCE_CODE.txt')) {
+              if (!($archive.Entries | Where-Object { $_.FullName -eq $name -or $_.FullName.EndsWith("/$name") })) {
+                throw "Missing $name in Windows ZIP"
+              }
+            }
+          } finally { $archive.Dispose() }
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $apk))
+          try {
+            foreach ($name in @('assets/LICENSE', 'assets/SOURCE_CODE.txt')) {
+              if (!$archive.GetEntry($name)) { throw "Missing $name in Android APK" }
+            }
+          } finally { $archive.Dispose() }
+          gh release download v1.1.38 --repo $env:GITHUB_REPOSITORY --pattern 'OmiComic-1.1.38-Android.apk' --dir release/reference
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify original Android signing certificate.' }
+          $apksigner = "$env:ANDROID_HOME/build-tools/35.0.0/apksigner.bat"
+          $old = (& $apksigner verify --print-certs 'release/reference/OmiComic-1.1.38-Android.apk' | Select-String 'Signer #1 certificate SHA-256 digest: (.+)').Matches.Groups[1].Value
+          $new = (& $apksigner verify --print-certs $apk | Select-String 'Signer #1 certificate SHA-256 digest: (.+)').Matches.Groups[1].Value
+          if (!$old -or $old -ne $new) { throw 'Android signing certificate differs from published v1.1.38.' }
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw "Release $tag already exists; refusing to replace it" }
+          gh release create $tag $zip $setup $apk --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OmiComic $version · PC / Android" --notes-file $notes --latest
+          if ($LASTEXITCODE -ne 0) { throw "Release creation failed: $tag" }

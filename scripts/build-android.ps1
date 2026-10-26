@@ -24,6 +24,9 @@ $assetTarget = [IO.Path]::GetFullPath((Join-Path $build 'assets\web'))
 if (!$assetTarget.StartsWith([IO.Path]::GetFullPath($build) + [IO.Path]::DirectorySeparatorChar)) { throw 'Invalid asset directory' }
 Get-ChildItem -LiteralPath $assetTarget -Force | Remove-Item -Recurse -Force
 Copy-Item -Path 'dist-android\*' -Destination $assetTarget -Recurse
+Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $build 'assets\LICENSE')
+$version = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version
+[IO.File]::WriteAllText((Join-Path $build 'assets\SOURCE_CODE.txt'), ('OmiComic ' + $version + " source code (GPL-3.0-only)`n" + 'https://github.com/lorcinv/OmiComic/releases/tag/v' + $version + "`nDownload the Source code (zip) or Source code (tar.gz) archive on that page.`n"), [Text.UTF8Encoding]::new($false))
 $licenseTarget = Join-Path $assetTarget 'licenses'
 New-Item -ItemType Directory -Force -Path $licenseTarget | Out-Null
 $noticeLines = @('OmiComic Android third-party notices', 'Android System WebView is provided by the device.', '')
@@ -40,7 +43,6 @@ Copy-Item -Path 'android\licenses\*' -Destination $licenseTarget
 [IO.File]::WriteAllLines((Join-Path $assetTarget 'THIRD_PARTY_NOTICES.txt'), $noticeLines, [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath 'resources\icon.png' -Destination (Join-Path $build 'res\drawable\icon.png')
 Copy-Item -Path 'android\res\*' -Destination (Join-Path $build 'res') -Recurse -Force
-$version = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath 'android\AndroidManifest.xml'
 $parts = $version.Split('.')
 if ($parts.Length -ne 3) { throw 'Android version must contain major.minor.patch.' }
