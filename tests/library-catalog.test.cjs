@@ -10,7 +10,8 @@ test('native catalog recurses once, identifies image books, and refreshes cached
   t.after(async () => { assert.equal(path.dirname(root),path.resolve(os.tmpdir()));assert.ok(path.basename(root).startsWith('omi-catalog-'));await fs.rm(root, { recursive:true,force:true }); });
   const deep = path.join(root, ...Array.from({ length: 12 }, (_, n) => `长目录-${n}-abcdefghijklmnop`));
   await fs.mkdir(deep, { recursive: true });
-  const title = '[作者] 番外：特别篇 ' + '长标题'.repeat(30) + '.cbz';
+  const title = '[作者] 番外：特别篇 ' + '长标题'.repeat(20) + '.cbz';
+  assert.ok(Buffer.byteLength(title, 'utf8') <= 255, 'keep each filename within Linux limits while testing a path longer than 260 characters');
   await fs.writeFile(path.join(deep, title), 'fixture');
   await fs.writeFile(path.join(deep, '1.png'), 'fixture');
   await fs.writeFile(path.join(deep, 'ignore.txt'), 'fixture');
