@@ -71,12 +71,12 @@ test('bookshelf containers support direct multiselect, sorting and confirmed bat
 });
 test('reader chrome hides after idle, stays during a panel and previews, and can be disabled persistently',async({page})=>{
   test.setTimeout(60000);await start(page);
-  await page.locator('.mobile-home-nav').getByRole('button',{name:'设置',exact:true}).tap();await page.getByRole('button',{name:/默认阅读/}).tap();
+  await page.locator('.mobile-home-nav').getByRole('button',{name:'设置',exact:true}).tap();await page.getByRole('button',{name:/漫画阅读设置/}).tap();
   const toggle=page.getByRole('checkbox',{name:'阅读工具栏 3 秒自动隐藏'});await expect(toggle).toBeChecked();await back(page);await back(page);
   await page.getByRole('button',{name:'打开资源库',exact:true}).tap();await page.locator('.mobile-resource-card').filter({has:page.getByText('Book',{exact:true})}).tap();
   const stage=page.locator('.reader-stage'),bar=page.locator('.reader-toolbar');await stage.tap();await expect(bar).toBeVisible();await page.waitForTimeout(2200);await expect(bar).toBeVisible();await expect(bar).toBeHidden({timeout:2000});
   await stage.tap();await page.getByRole('button',{name:'阅读设置',exact:true}).tap();await page.waitForTimeout(3300);await expect(bar).toBeVisible();await back(page);await expect(bar).toBeHidden({timeout:4000});
   await stage.tap();const rail=page.getByRole('slider',{name:'阅读进度'}),r=(await rail.boundingBox())!;await page.mouse.move(r.x+30,r.y+18);await page.mouse.down();await page.mouse.move(r.x+120,r.y+18,{steps:10});await page.mouse.up();await expect(page.locator('.mobile-reader-previews')).toBeVisible();await page.waitForTimeout(3300);await expect(bar).toBeVisible();await expect(page.locator('.mobile-reader-previews')).toBeVisible();
-  await back(page);await back(page);await page.getByRole('button',{name:'显示选项',exact:true}).tap();await page.getByRole('button',{name:'应用设置',exact:true}).tap();await page.getByRole('button',{name:/默认阅读/}).tap();await toggle.uncheck();await back(page);await back(page);
+  await back(page);await back(page);await page.getByRole('button',{name:'显示选项',exact:true}).tap();await page.getByRole('button',{name:'应用设置',exact:true}).tap();await page.getByRole('button',{name:/漫画阅读设置/}).tap();await toggle.uncheck();await back(page);await back(page);
   await page.reload();await page.getByRole('button',{name:'打开资源库',exact:true}).tap();await page.locator('.mobile-resource-card').filter({has:page.getByText('Book',{exact:true})}).tap();await stage.tap();await page.waitForTimeout(3500);await expect(bar).toBeVisible();
 });

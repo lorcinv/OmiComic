@@ -532,7 +532,7 @@ function ReaderPage({
     ? `${resource.title}${显示阅读页面?.name ? ` / ${显示阅读页面.name}` : ""}`
     : 输入资源?.title ?? "阅读器";
   const 上下文当前位置 = resource && openContext
-    ? openContext.items.findIndex((项目) => 项目.key === resource.resourceKey)
+    ? openContext.items.findIndex((项目) => 项目.key === openContext.currentKey)
     : -1;
   const 上一本资源 = openContext && 上下文当前位置 > 0
     ? openContext.items[上下文当前位置 - 1]
@@ -3563,15 +3563,15 @@ function ReaderPage({
 
       const 新上下文: 阅读打开上下文 = {
         ...openContext,
-        currentKey: 结果.data.resourceKey,
+        currentKey: 目标资源.key,
       };
       const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
       const 进度 = 进度结果.ok ? 进度结果.data : null;
-      const 起始页 = Math.min(
-        Math.max(进度?.currentPageIndex ?? 0, 0),
-        结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub"
-          ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1),
-      );
+      const 文档页面 = 结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub";
+      const 目标页码 = openContext.source === "bookmarks"
+        ? 文档页面 ? 目标资源.pageIndex ?? 0 : resolvePageIndex(结果.data.pages, 目标资源.pageId, 目标资源.pageName, 目标资源.pageIndex ?? 0)
+        : 进度?.currentPageIndex ?? 0;
+      const 起始页 = Math.min(Math.max(目标页码, 0), 文档页面 ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1));
       if (手机布局) onSwitchResource(结果.data, 起始页, 新上下文, motion);
       else onSwitchResource(结果.data, 起始页, 新上下文);
     } finally {

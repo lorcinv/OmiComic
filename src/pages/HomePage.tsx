@@ -4,7 +4,7 @@ import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPref
 import { getResourceThumbnail } from "../reader/thumbnailClient";
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
-import type { RecentOpenedItem, 阅读资源结果, 阅读打开上下文 } from "../types";
+import type { OmiComicAppData, RecentOpenedItem, 阅读资源结果, 阅读打开上下文 } from "../types";
 import type { OmiBrandOriginGetter } from "../OmiBrandIcon";
 import OmiPageBrand from "../components/OmiPageBrand";
 import OmiSignature from "../components/OmiSignature";
@@ -17,6 +17,7 @@ import "../styles/home.css";
 import "../styles/mobileInteractionRefinements.css";
 
 interface HomePageProps {
+  initialData?: OmiComicAppData;
   onBrowse: () => void;
   onSettings: () => void;
   onOpenReader: (resource: 阅读资源结果, initialPageIndex: number, context?: 阅读打开上下文, origin?: OmiBrandOriginGetter, motionEpoch?: number) => void | Promise<void>;
@@ -29,7 +30,9 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
   return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d={diagonal ? "M6 18 18 6M6 6h12v12" : "M4 12h15m-6-6 6 6-6 6"} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshToken }: HomePageProps) {
+export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshToken, initialData }: HomePageProps) {
+  const initialSnapshot = useRef(initialData);
+  const initialRefresh = useRef(refreshToken);
   const mobile = useMobileLayout();
   const artwork = useHomeArtwork(!mobile);
   const [artworkFailed, setArtworkFailed] = useState(false);
@@ -86,7 +89,9 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
     setError(null);
     const load = async () => {
       try {
-        const result = await window.omicomic.getAppData();
+        const result = initialSnapshot.current && refreshToken === initialRefresh.current && retry === 0
+          ? await Promise.resolve({ ok: true as const, data: initialSnapshot.current })
+          : await window.omicomic.getAppData();
         if (generation.current !== current) return;
         if (!result.ok) throw new Error(result.error.message);
         应用主题配色(result.data.settings.colorTheme);

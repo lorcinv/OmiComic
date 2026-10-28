@@ -34,7 +34,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
     return category ? void mobileNavigate(()=>setCategory(''),'back') : onClose();
   };
   useEffect(() => { const listener=(event:Event) => {if(document.querySelector('[role="listbox"]')) return;event.preventDefault();event.stopImmediatePropagation();back();};const key=(event:KeyboardEvent) => {if(event.key==='Escape')listener(event);};window.addEventListener('omi-library-back',listener,true);window.addEventListener('keydown',key,true);return () => {window.removeEventListener('omi-library-back',listener,true);window.removeEventListener('keydown',key,true);};});
-  function save(patch:Partial<AppSettings>) { setValue(old => ({...old,...patch})); queue.current=queue.current.then(async () => {const result=await window.omicomic.updateSettings(patch);if(result.ok){setUiLanguage(result.data.language);onSaved(result.data);}else if(mounted.current)setError(result.error.message);}).catch(() => {if(mounted.current)setError('设置保存失败，请重试。');}); }
+  function save(patch:Partial<AppSettings>) { setValue(old => ({...old,...patch})); queue.current=queue.current.then(async () => {const result=await window.omicomic.updateSettings(patch);if(result.ok){setUiLanguage(result.data.language);if(patch.showHomePage!==undefined)window.dispatchEvent(new CustomEvent('omi-home-visibility-changed',{detail:result.data.showHomePage!==false}));onSaved(result.data);}else if(mounted.current)setError(result.error.message);}).catch(() => {if(mounted.current)setError('设置保存失败，请重试。');}); }
   function select<K extends keyof AppSettings>(key:K,label:string,options:Array<{value:string|number;label:string}>,fallback?:string|number) {return <div className="settings-row"><span>{label}</span><GlassSelect ariaLabel={label} value={(value[key] as string|number) ?? fallback ?? ''} options={uiOptions(options)} onChange={v => save({[key]:v} as Partial<AppSettings>)}/></div>;}
   function toggle<K extends keyof AppSettings>(key:K,label:string) {return <label className="settings-toggle"><span>{label}</span><input type="checkbox" checked={Boolean(value[key])} onChange={event => save({[key]:event.target.checked})}/></label>;}
   function range<K extends keyof AppSettings>(key:K,label:string,min:number,max:number,step:number,fallback:number,unit='') {const shown=Math.min(max,Math.max(min,Number(value[key] ?? fallback)));return <label className="mobile-option-row"><span>{label}<output>{shown}{t(unit)}</output></span><input type="range" aria-label={label} min={min} max={max} step={step} value={shown} onChange={event => save({[key]:Number(event.target.value)})}/></label>;}
@@ -42,6 +42,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
     <header><button className="mobile-icon-button" aria-label={category?t("返回设置"):t("关闭设置")} onClick={back}><MobileIcon name="back"/></button><h2>{categories.find(item=>item.id===category)?.title ? t(categories.find(item=>item.id===category)!.title) : t("设置")}</h2></header>
     <div className="mobile-settings-body">{!category ? <nav aria-label={t("设置分类")}>{categories.map(item => <button key={item.id} className="mobile-setting-category" onClick={() => void mobileNavigate(() => setCategory(item.id))}><MobileIcon name={item.icon}/><span><strong>{t(item.title)}</strong><small>{t(item.note)}</small></span><MobileIcon name="chevron"/></button>)}</nav> : <>
       {category==='appearance' && <>
+        <label className="settings-toggle"><span>{t("显示主界面")}</span><input type="checkbox" checked={value.showHomePage !== false} onChange={event => save({showHomePage:event.target.checked})}/></label>
         <div className="settings-row"><span>{t('语言 / Language')}</span><GlassSelect ariaLabel="语言 / Language" value={normalizeLanguage(value.language)} options={[{value:'zh-CN',label:'简体中文'},{value:'en',label:'English'},{value:'ja',label:'日本語'}]} onChange={language=>save({language:normalizeLanguage(language)})}/></div>
         {select('colorTheme',t("界面主题"),[{value:'mist',label:'雾蓝'},{value:'nord',label:'北境'},{value:'sand',label:'暖沙'},{value:'night',label:'夜色'}])}
         <div className="settings-row"><span>{t("显示设置页面")}</span><GlassSelect ariaLabel={t("显示设置页面")} value={displayPage} options={uiOptions(Object.entries(mobileDisplayLabels).map(([key,label])=>({value:key as MobileDisplayScope,label})))} onChange={setDisplayPage}/></div>
@@ -51,14 +52,17 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {range('mobilePreviewWidth',t("缩略预览行宽"),64,144,8,88,' px')}
       </>}
       {category==='library' && <>
-        {select('tagSearchMode',t("搜索匹配方式"),[{value:'fuzzy',label:'模糊（任一条件）'},{value:'exact',label:'精准（全部条件）'}],'fuzzy')}
-        {select('mobilePageSize',t("每页资源数量"),[50,100,150,200,500].map(n=>({value:n,label:`${n} 项`})),50)}
+        {select('tagSearchMode',t("多条件匹配方式"),[{value:'fuzzy',label:'任一条件'},{value:'exact',label:'全部条件'}],'fuzzy')}
+        {toggle('searchSplitSpaces',t("空格分隔搜索条件"))}
+        <p className="settings-hint">{t("默认保留关键词中的空格。开启后，空格分隔的条件必须同时满足。")}</p>
+        <p className="settings-hint">{t("逗号分隔条件；| 表示满足任一条件。此设置也控制多个标签的筛选关系。")}</p>
+        {select('mobilePageSize',t("每页数量"),[50,100,150,200,500].map(n=>({value:n,label:String(n)})),50)}
         {select('sortMode',t("资源库默认排序"),[{value:'name-asc',label:'名称升序'},{value:'name-desc',label:'名称降序'},{value:'time-desc',label:'最新修改'},{value:'time-asc',label:'最早修改'},{value:'type',label:'资源类型'}])}
         {toggle('folderFirst',t("文件夹优先"))}{toggle('hideBookshelfItemsInLibrary',t("资源库隐藏已加入书架的资源"))}
-        {select('recentOpenedLimit',t("最近阅读记录上限"),[50,100,150,200].map(n=>({value:n,label:`${n} 条`})))}
+        {select('recentOpenedLimit',t("最近阅读记录上限"),[50,100,150,200].map(n=>({value:n,label:String(n)})))}
       </>}
       {category==='reading' && <>
-        <label className="settings-toggle"><span>{t('阅读工具栏 3 秒自动隐藏')}</span><input type="checkbox" checked={value.mobileReaderAutoHide !== false} onChange={event=>save({mobileReaderAutoHide:event.target.checked})}/></label>
+
         <div className="settings-row"><span>{t("打开漫画时的缩放")}</span><strong>{t("适应窗口")}</strong></div>
         {toggle('readerDefaultPanorama',t("默认开启全景模式"))}
         {select('readerDefaultFlow',t("默认阅读流向"),[{value:'horizontal',label:'横向'},{value:'vertical',label:'纵向'}])}
@@ -68,7 +72,10 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {toggle('readerVolumeKeys',t("音量键翻页"))}{toggle('readerVolumeKeysReversed',t("反转音量键翻页方向"))}
         {range('readerVolumePanoramaPages',t("全景音量键翻页间隔"),.25,2,.25,1,' 页')}
       </>}
-      {category==='book' && bookSettings}
+      {category==='book' && <>
+        <label className="settings-toggle"><span>{t('阅读工具栏 3 秒自动隐藏')}</span><input type="checkbox" checked={value.mobileReaderAutoHide !== false} onChange={event=>save({mobileReaderAutoHide:event.target.checked})}/></label>
+        {bookSettings}
+      </>}
       {category==='performance' && <>
         {range('androidReaderDiskCacheSizeMb',t("阅读页面磁盘缓存"),0,2048,128,512,' MB')}
         {range('androidThumbnailCacheSizeMb',t("封面与预览磁盘缓存"),64,512,64,128,' MB')}

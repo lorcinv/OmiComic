@@ -1,0 +1,13 @@
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const wait=async(fn,label)=>{const end=Date.now()+40000;while(!await fn()){if(Date.now()>end)throw new Error('Timeout: '+label);await pause(80);}};
+const value=async promise=>{const result=await promise;if(!result.ok)throw new Error(JSON.stringify(result));return result.data;};
+const api=window.omicomic,initial=await value(api.getAppData()),root=initial.library.roots.find(item=>item.name==='OmiRegression1141');
+if(!root)throw new Error('Authorized fixture root missing');
+await value(api.updateLibraryState({lastActiveRootPath:root.path,lastCurrentPath:root.path}));
+const start=performance.now();
+document.querySelector('[aria-label="打开资源库"]').click();
+await wait(()=>[...document.querySelectorAll('.page-panel.is-visible .resource-preview img')].filter(img=>img.complete&&img.naturalWidth>0).length>=6,'six visible covers');
+const sixCoversMs=Math.round(performance.now()-start);
+const target=root.path+'/Artists/Volumes/Series/Target JK.cbz';
+await value(api.addFavorite({resourceKey:'archive:'+target,sourcePath:target,sourceType:'archive',title:'Upgrade preservation',tags:['Regression1141'],note:'Preserve this record'}));
+return {version:(await api.getAppInfo()).version,sixCoversMs,root:root.path,favorites:(await value(api.getAppData())).favorites.length};

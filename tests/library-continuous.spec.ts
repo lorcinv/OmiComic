@@ -81,7 +81,7 @@ test('columns, window size and page size preserve the visible item; short last p
   await list(page).evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(current(page)).toHaveValue('2');
   await expect(page.locator('[data-library-index="129"]')).toBeVisible();
-  const search = page.getByRole('textbox', { name: '搜索当前目录', exact: true });
+  const search = page.getByRole('textbox', { name: '搜索当前资源库', exact: true });
   await search.fill('nothing-matches');
   await expect(page.locator('.resource-card')).toHaveCount(0);
   await search.fill('');
@@ -96,7 +96,7 @@ test('Escape goes to the immediate parent, and menus, inputs and selection consu
   await expect(page.locator('[data-library-index="0"]')).toHaveAttribute('data-selection-key', '/comics/0/0/0');
   await page.getByText('视图', { exact: true }).click(); await page.keyboard.press('Escape');
   await expect(page.locator('[data-library-index="0"]')).toHaveAttribute('data-selection-key', '/comics/0/0/0');
-  const search = page.getByRole('textbox', { name: '搜索当前目录', exact: true });
+  const search = page.getByRole('textbox', { name: '搜索当前资源库', exact: true });
   await search.focus(); await page.keyboard.press('Escape');
   await expect(page.locator('[data-library-index="0"]')).toHaveAttribute('data-selection-key', '/comics/0/0/0');
   await page.getByRole('button', { name: '选择', exact: true }).click(); await page.keyboard.press('Escape');
@@ -106,5 +106,6 @@ test('Escape goes to the immediate parent, and menus, inputs and selection consu
   await page.keyboard.press('Escape');
   await expect(page.locator('.resource-card')).toHaveCount(12);
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: '上一级', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '上一级', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '返回', exact: true })).toBeDisabled();
 });

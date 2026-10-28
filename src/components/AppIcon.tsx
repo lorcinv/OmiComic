@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react';
 
-export type AppIconName = 'menu' | 'search' | 'grid' | 'list' | 'more' | 'dots' | 'close' | 'back' | 'next' | 'chevron' | 'rename' | 'info' | 'shelf' | 'delete' | 'select' | 'pin' | 'sort' | 'add' | 'move' | 'remove' | 'cover' | 'reset' | 'refresh' | 'settings' | 'library' | 'heart' | 'bookmark' | 'history' | 'open-folder';
+export type AppIconName = 'menu' | 'search' | 'grid' | 'list' | 'more' | 'dots' | 'close' | 'back' | 'next' | 'chevron' | 'rename' | 'info' | 'shelf' | 'delete' | 'select' | 'pin' | 'sort' | 'add' | 'move' | 'remove' | 'cover' | 'reset' | 'refresh' | 'settings' | 'library' | 'heart' | 'bookmark' | 'history' | 'open-folder' | 'shuffle' | 'temporary';
 const paths: Record<Exclude<AppIconName, 'more' | 'dots'>, string> = {
+  shuffle: 'M3 5h3c5 0 7 14 12 14h3m-4-4 4 4-4 3M3 19h3c2 0 4-3 6-7m3-5c1-1 2-2 3-2h3m-4-3 4 3-4 4',
+  temporary: 'M3.6 6h16.8l1.2 13.2H2.4L3.6 6Zm-.6 8.4h5.4l1.8 2.4h3.6l1.8-2.4H21M8.4 3.6h7.2',
   menu: 'M4 6h16M4 12h16M4 18h16', search: 'm16 16 4 4M17.5 10.5a7 7 0 1 1-14 0 7 7 0 0 1 14 0',
   grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z', list: 'M4 5h4v5H4zM4 14h4v5H4zM12 6h8M12 9h6M12 15h8M12 18h6',
   close: 'm6 6 12 12M6 18 18 6', back: 'm10 5-7 7 7 7M3 12h18', next: 'm14 5 7 7-7 7M21 12H3', chevron: 'm9 5 7 7-7 7',

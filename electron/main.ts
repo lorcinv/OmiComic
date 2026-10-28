@@ -1,3 +1,5 @@
+import { scanLibraryCatalog, scanLibraryCatalogBatch, configureLibraryCatalog, observeCatalogDirectory, cancelLibraryCatalogScans } from './services/libraryCatalog';
+import { foregroundWork } from './services/foregroundWork';
 import { scanDirectory, listDirectoryImages } from "./services/directoryService";
 import { normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages, type PageSort } from "./shared/readerPreferences";
 import { 切换阅读页面顺序 } from "./services/appDataService";
@@ -15,6 +17,7 @@ import type { 操作结果, 阅读资源结果 } from "./preload";
 import {
   读取压缩包单张图片,
   读取压缩包图片列表,
+  读取压缩包快速页数,
   是压缩包服务错误,
 } from "./services/archiveService";
 import {
@@ -317,8 +320,7 @@ async function 获取可阅读页数(输入: 可阅读页数输入): Promise<num
 
   if (输入.type === "archive") {
     if (!是支持的压缩包(输入.path)) return null;
-    const 图片列表 = await 读取压缩包图片列表(输入.path);
-    return 图片列表.length;
+    return 读取压缩包快速页数(输入.path);
   }
 
   return null;
@@ -462,7 +464,7 @@ async function 读取原始阅读资源(输入: unknown): Promise<操作结果<�
 
         const 页面 = 压缩包图片.map((图片, 索引) => ({
           index: 索引,
-          name: 图片.virtualPath,
+          name: 图片.archiveChain?.join(" / ") ?? 图片.virtualPath,
           sourcePath: 资源路径,
           virtualPath: 图片.virtualPath,
           archiveInnerPath: 图片.virtualPath,
@@ -572,7 +574,7 @@ async function 读取原始阅读资源(输入: unknown): Promise<操作结果<�
   }
 
 async function 读取阅读资源(输入: unknown, overrideSort?: PageSort): Promise<操作结果<阅读资源结果>> {
-  const result = await 读取原始阅读资源(输入);
+  const result = await foregroundWork(() => 读取原始阅读资源(输入));
   if (!result.ok || result.data.sourceType === "pdf" || result.data.sourceType === "epub") return result;
   const progress = await 获取阅读进度(result.data.resourceKey);
   const mode = overrideSort ?? normalizePageSort(progress?.readerViewState?.pageSort);
@@ -723,11 +725,10 @@ function 注册安全通道(): void {
       return { ok: true, data: await 读取应用数据() };
     } catch { return { ok: false, error: { code: "PROMOTE_TEMP_FAILED", message: "无法将所在目录加入资源库，请检查原目录是否仍然存在。" } }; }
   });
-  ipcMain.handle("应用:获取信息", () => ({
-    name: "OmiComic",
-    version: app.getVersion(),
-    platform: process.platform,
-  }));
+  ipcMain.handle("应用:获取信息", async () => {
+    const metadata = JSON.parse(await 文件系统.readFile(path.join(app.getAppPath(), "package.json"), "utf8"));
+    return { name: "OmiComic", version: metadata.desktopVersion || app.getVersion(), platform: process.platform };
+  });
 
   ipcMain.handle("窗口:设置全屏", (事件, enabled: unknown) => {
     if (typeof enabled !== "boolean") {
@@ -1955,8 +1956,20 @@ function 注册安全通道(): void {
     }
   });
 
+  ipcMain.on("目录:取消资源库索引", () => cancelLibraryCatalogScans());
+  ipcMain.handle("目录:资源库索引", async (_event, input: unknown, refresh: unknown, booksOnly: unknown, options: import('./services/libraryCatalog').CatalogBatchOptions = {}) => {
+    if (typeof input !== "string" || !input.trim()) return { ok: false, error: { code: "INVALID_PATH", message: "资源库目录无效。" } };
+    const target = 规范化路径(input), root = 查找所属根目录(target);
+    if (!root) return { ok: false, error: { code: "PATH_NOT_ALLOWED", message: "无法读取未添加的目录。" } };
+    try {
+      const hidden = (await 读取应用数据()).excludedResourcePaths ?? [];
+      const catalog = options.incremental ? await scanLibraryCatalogBatch(target, root, { ...options, excludedPaths: hidden }) : await scanLibraryCatalog(target, root, refresh === true);
+      return { ok: true, data: options.incremental ? catalog : { ...catalog, items: catalog.items.filter(item => !hidden.some(p => withinPath(item.path, p)) && (booksOnly !== true || (item.type === 'folder' ? item.containsImages : ['archive','pdf','epub'].includes(item.type)))) } };
+    } catch (error) { return { ok: false, error: { code: "LIBRARY_SCAN_FAILED", message: error instanceof Error ? error.message : "资源库索引读取失败。" } }; }
+  });
+
   const 目录扫描任务 = new Map<number, AbortController>();
-  ipcMain.handle("目录:读取", async (事件, 输入路径: unknown) => {
+  ipcMain.handle("目录:读取", async (事件, 输入路径: unknown, options: unknown) => {
     if (typeof 输入路径 !== "string" || 输入路径.trim() === "") {
       return {
         ok: false,
@@ -1973,13 +1986,17 @@ function 注册安全通道(): void {
       };
     }
 
-    目录扫描任务.get(事件.sender.id)?.abort();
+    // Background inventory reads may overlap; foreground navigation keeps its
+    // existing latest-request-wins cancellation without losing random candidates.
+    const 后台扫描 = typeof options === "object" && options !== null && "background" in options && options.background === true;
+    if (!后台扫描) 目录扫描任务.get(事件.sender.id)?.abort();
     const 扫描控制器 = new AbortController();
-    目录扫描任务.set(事件.sender.id, 扫描控制器);
+    if (!后台扫描) 目录扫描任务.set(事件.sender.id, 扫描控制器);
     const 取消扫描 = () => 扫描控制器.abort();
     事件.sender.once("destroyed", 取消扫描);
     try {
-      const 扫描列表 = await scanDirectory(目标路径, { authorizedRoot: 所属根目录, signal: 扫描控制器.signal });
+      const 扫描列表 = await foregroundWork(() => scanDirectory(目标路径, { authorizedRoot: 所属根目录, signal: 扫描控制器.signal }));
+      void observeCatalogDirectory(目标路径, 扫描列表);
       const 隐藏路径 = (await 读取应用数据()).excludedResourcePaths ?? [];
       const 文件列表 = 扫描列表.filter(item => !隐藏路径.some(p => withinPath(item.path, p)));
 
@@ -2163,10 +2180,11 @@ function 注册安全通道(): void {
     }
 
     try {
-      const 结果 = await 获取缩略图({
+      const 缩略图类型 = 输入.type;
+      const 结果 = await foregroundWork(() => 获取缩略图({
         path: 目标路径,
-        type: 输入.type,
-      });
+        type: 缩略图类型,
+      }));
       return { ok: true, data: 结果 };
     } catch {
       return {
@@ -2346,6 +2364,7 @@ else {
 app.on("second-instance", (_事件, 参数, 工作目录) => 接收启动参数(参数, 工作目录));
 app.on("open-file", (事件, 文件) => { 事件.preventDefault(); 接收外部文件([文件]); });
 app.whenReady().then(() => {
+  configureLibraryCatalog(path.join(app.getPath('userData'), 'library-catalog-v1'));
   registerDesktopImageProtocol();
   Menu.setApplicationMenu(null);
   注册安全通道();

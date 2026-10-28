@@ -85,7 +85,7 @@ test.describe('phone polish',()=>{
     await setup(page,120);await library(page);const pill=page.getByRole('navigation',{name:'列表页码'});await expect(pill).toContainText('1 / 3');await expect(page.locator('.pagination-bar')).toHaveCount(0);
     await page.getByRole('button',{name:'下一页资源'}).click();await expect(pill).toContainText('2 / 3');
     await page.getByRole('button',{name:'资源库',exact:true}).click();await expect(pill).toContainText('1 / 3');
-    await page.getByRole('button',{name:'显示选项'}).click();await page.getByRole('button',{name:/应用设置/}).click();await page.locator('.mobile-setting-category').filter({hasText:'资源库'}).click();await page.getByRole('combobox',{name:'每页资源数量'}).click();await expect(page.getByRole('option',{name:'500 项'})).toBeVisible();await page.getByRole('option',{name:'100 项'}).click();await back(page);await back(page);await expect(pill).toContainText('1 / 2');await page.screenshot({path:'test-results/polish-page-pill.png'});
+    await page.getByRole('button',{name:'显示选项'}).click();await page.getByRole('button',{name:/应用设置/}).click();await page.locator('.mobile-setting-category').filter({hasText:'资源库'}).click();await page.getByRole('combobox',{name:'每页数量',exact:true}).click();await expect(page.getByRole('option',{name:'500',exact:true})).toBeVisible();await page.getByRole('option',{name:'100',exact:true}).click();await back(page);await back(page);await expect(pill).toContainText('1 / 2');await page.screenshot({path:'test-results/polish-page-pill.png'});
   });
 });
 

@@ -1608,7 +1608,7 @@ a,
   width: 156px;
   height: 30px;
   border-radius: 999px;
-  background: var(--控件背景);
+  background: transparent;
 }
 
 .card-scale-track {
@@ -3276,6 +3276,7 @@ a,
 
 .empty-library p {
   max-width: 480px;
+  min-height: 3.4em;
   margin: 0;
   color: var(--次文字);
   line-height: 1.7;
@@ -4720,6 +4721,7 @@ a,
 .settings-window-content[data-active-category="safety"] .settings-section[data-settings-category="safety"],
 .settings-window-content[data-active-category="reader-default"] .settings-section[data-settings-category="reader-default"],
 .settings-window-content[data-active-category="reader"] .settings-section[data-settings-category="reader"],
+.settings-window-content[data-active-category="performance"] .settings-section[data-settings-category="performance"],
 .settings-window-content[data-active-category="about"] .settings-section[data-settings-category="about"] {
   display: grid;
 }
@@ -7704,3 +7706,27 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 .resource-detail-footer .resource-detail-file-actions { margin-left:auto; }
 
 .bookmark-card .bookmark-card-source { display:none; }
+
+/* Random browsing shares the library footer and the existing pager surface. */
+.random-browse-actions { display:flex; align-items:center; flex:none; height:34px; gap:0; border-radius:9px; background:var(--控件背景); }
+.random-browse-toggle { display:inline-flex; align-items:center; justify-content:center; gap:7px; flex:none; min-height:34px; padding:5px 9px; border:0; border-radius:9px; background:var(--控件背景); color:var(--控件文字); font:inherit; font-size:calc(12px * var(--desktop-font-scale, 1)); cursor:pointer; white-space:nowrap; }
+.random-browse-toggle:hover { background:var(--控件悬停); }
+.random-browse-track { display:block; position:relative; width:30px; height:18px; border-radius:12px; background:color-mix(in srgb,var(--次文字) 28%,transparent); transition:background 120ms ease; }
+.random-browse-track > span { position:absolute; left:3px; top:3px; width:12px; height:12px; border-radius:50%; background:var(--面板色); box-shadow:0 1px 3px #17263825; transition:transform 120ms ease; }
+.random-browse-toggle.is-active .random-browse-track { background:var(--强调色); }
+.random-browse-toggle.is-active .random-browse-track > span { transform:translateX(12px); background:#fff; }
+.random-browse-toggle:focus-visible,.random-redraw-button:focus-visible { outline:2px solid var(--强调色); outline-offset:2px; }
+.random-browse-actions:has(.random-redraw-button) .random-browse-toggle { border-radius:9px 0 0 9px; }
+.random-redraw-button { display:grid; place-items:center; position:relative; width:34px; height:34px; padding:7px; border:0; border-radius:0 9px 9px 0; background:transparent; color:var(--控件文字); }
+.random-redraw-button::before { content:""; position:absolute; left:0; top:9px; bottom:9px; width:1px; background:var(--控件边框); }
+.random-refresh-icon { display:block; width:20px; height:20px; }
+.random-refresh-icon.is-spinning { animation:random-refresh-spin 1s linear infinite; }
+@keyframes random-refresh-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .random-refresh-icon.is-spinning { animation:none; } }
+.random-redraw-button:disabled { opacity:.4; }
+/* Feedback must paint above the sticky bookshelf category rail. */
+.library-body > .error-banner { z-index:110; }
+.settings-section > .settings-help { color:var(--次文字); font-size:calc(12px * var(--desktop-font-scale, 1)); line-height:1.6; }
+
+.empty-illustration .random-refresh-icon { width:32px; height:32px; }
+.is-mobile-library .empty-illustration .random-refresh-icon { width:44px; height:44px; }

@@ -31,6 +31,13 @@ import MobileReorderList from "../components/MobileReorderList";
 import MobileResourceCard from "../components/MobileResourceCard";
 import MobileBookshelfCard from "../components/MobileBookshelfCard";
 import MobileActionBar, { type MobileAction } from "../components/MobileActionBar";
+import { useRandomBrowse } from '../hooks/useRandomBrowse';
+import { useLibraryQuery } from '../hooks/useLibraryQuery';
+import { useLibraryCatalog, observeLibraryDirectory, excludeLibraryCatalogPaths, invalidateLibraryCatalog } from '../library/libraryCatalog';
+import LibraryPageIcon from '../components/LibraryPageIcon';
+import { useResponsiveLibrary } from '../hooks/useResponsiveLibrary';
+import RandomRefreshIcon from '../components/RandomRefreshIcon';
+import RandomBrowseToggle from '../components/RandomBrowseToggle';
 import { matchesMobileSearch } from "../library/mobileSearch";
 import { getMobileDisplay, mobileDisplayScope, mobileDisplayLabels, patchMobileDisplay } from "../library/mobileDisplay";
 import MobilePagePager, { MobileDetailPager } from "../components/MobilePagePager";
@@ -87,6 +94,7 @@ import type {
 } from "../types";
 
 interface LibraryPageProps {
+  initialData?: OmiComicAppData;
   onReady?: () => void;
   onOpenReader: (
     resource: 阅读资源结果,
@@ -121,14 +129,15 @@ type 选择视图 = Exclude<资源库视图, "bookshelf">;
 type 收藏输入 = Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex">;
 
 type 右侧抽屉 = "settings" | "tag-filter" | null;
-type 设置分类 = "appearance" | "library" | "progress" | "safety" | "reader-default" | "reader" | "about";
+type 设置分类 = "appearance" | "library" | "progress" | "safety" | "reader-default" | "reader" | "performance" | "about";
 
 const 设置分类选项: Array<{ id: 设置分类; label: string; description: string }> = [
   { id: "appearance", label: "外观与主题", description: "界面配色与主题预览" },
   { id: "library", label: "资源库", description: "卡片、排序、记录与标签检索" },
   { id: "progress", label: "进度显示", description: "卡片进度条与页数信息" },
   { id: "reader-default", label: "默认阅读", description: "新书首次打开时的阅读方式" },
-  { id: "reader", label: "阅读器", description: "页面排序、自动阅读、沉浸与缓存" },
+  { id: "reader", label: "漫画阅读设置", description: "页面排序、自动阅读与工具栏" },
+  { id: "performance", label: "性能与缓存", description: "内存缓存、预加载与并发" },
   { id: "safety", label: "安全与确认", description: "删除软件记录前的确认选项" },
   { id: "about", label: "关于 OmiComic", description: "版本、介绍与操作说明" },
 ];
@@ -193,6 +202,9 @@ type 清空无效资源确认状态 = { folder: VirtualFolder; resourceKeys: str
 type 全局清空无效资源确认状态 = { sourcePaths: string[]; resourceKeys: string[]; count: number } | null;
 type 框选状态 = {
   view: 选择视图;
+  container: HTMLDivElement;
+  scrollLeft: number;
+  scrollTop: number;
   startX: number;
   startY: number;
   currentX: number;
@@ -296,7 +308,7 @@ function 获取书架目标加入状态(文件夹: VirtualFolder, items: Virtual
   return 已有数量 === items.length ? "all" : "partial";
 }
 
-const 每页数量选项: 每页数量[] = [60, 100, 150, 200];
+const 每页数量选项: 每页数量[] = [50, 100, 150, 200, 500];
 const 图书切换按钮透明度选项: 图书切换按钮透明度[] = [20, 30, 40, 50, 60, 70, 80];
 const 整理侧边栏透明度选项: 整理侧边栏透明度[] = [100, 90, 80, 70];
 const 书架备注悬停延迟选项: 书架备注悬停延迟[] = [0, 500, 1000, 1500, 2000];
@@ -306,8 +318,8 @@ const 最近打开上限下拉选项: readonly GlassSelectOption<最近打开记
 const 整理透明度下拉选项: readonly GlassSelectOption<整理侧边栏透明度>[] = 整理侧边栏透明度选项.map((透明度) => ({ value: 透明度, label: `${透明度}%` }));
 const 备注悬停延迟下拉选项: readonly GlassSelectOption<书架备注悬停延迟>[] = 书架备注悬停延迟选项.map((延迟) => ({ value: 延迟, label: 延迟 === 0 ? "立即显示" : `${延迟 / 1000} 秒` }));
 const 搜索模式下拉选项: readonly GlassSelectOption<搜索匹配模式>[] = [
-  { value: "fuzzy", label: "模糊" },
-  { value: "exact", label: "精准" },
+  { value: "fuzzy", label: "任一条件" },
+  { value: "exact", label: "全部条件" },
 ];
 const 进度文本模式下拉选项: readonly GlassSelectOption<进度文本模式>[] = [
   { value: "page", label: "页数" },
@@ -445,7 +457,7 @@ const 默认设置: AppSettings = {
   cardSize: "medium",
   cardScale: 100,
   detailThumbnailScale: 100,
-  pageSize: 60,
+  pageSize: 50,
   sortMode: "name-asc",
   sortDirection: "asc",
   folderFirst: true,
@@ -719,9 +731,6 @@ function 获取整理标签(项目: Pick<FavoriteItem | BookmarkItem, "tags">): 
   return 规范化标签列表(项目.tags);
 }
 
-function 匹配关键词(内容: string | undefined, 搜索词: string): boolean {
-  return 搜索词 === "" || (内容 ?? "").toLocaleLowerCase("zh-CN").includes(搜索词);
-}
 
 function 获取标签筛选选项(项目列表: Array<Pick<FavoriteItem | BookmarkItem, "tags">>): string[] {
   const 标签集合 = new Set<string>();
@@ -810,34 +819,6 @@ function 资源标签匹配筛选模式(
   return 筛选标签.some((查询) => 资源标签.some((标签) => 标签匹配查询(标签, 查询)));
 }
 
-function 标签按模式匹配(资源标签: string[], 查询: string, 模式: 搜索匹配模式): boolean {
-  const 修正查询 = 查询.trim();
-  if (!修正查询) return true;
-  if (模式 === "exact") return 资源标签.includes(修正查询);
-  return 资源标签.some((标签) => 标签匹配查询(标签, 修正查询));
-}
-
-function 匹配桌面整理搜索(
-  搜索内容: string,
-  文本列表: Array<string | undefined | null>,
-  标签列表: string[],
-  模式: 搜索匹配模式,
-): boolean {
-  const 搜索词 = 搜索内容.trim().toLocaleLowerCase("zh-CN");
-  if (!搜索词) return true;
-
-  const 标签查询列表 = 搜索内容.includes(",") || 搜索内容.includes("，")
-    ? 解析标签输入(搜索内容)
-    : [];
-  if (标签查询列表.length > 0) {
-    return 模式 === "exact"
-      ? 标签查询列表.every((查询) => 标签按模式匹配(标签列表, 查询, 模式))
-      : 标签查询列表.some((查询) => 标签按模式匹配(标签列表, 查询, 模式));
-  }
-
-  return 文本列表.some((文本) => 匹配关键词(文本 ?? "", 搜索词))
-    || 标签按模式匹配(标签列表, 搜索词, 模式);
-}
 
 function 获取可阅读页数Key(文件: 文件条目): string | null {
   return 获取文件资源Key(文件) ?? null;
@@ -928,7 +909,8 @@ function 获取卡片进度显示状态(
   };
 }
 
-function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, backgroundPaused = false }: LibraryPageProps) {
+function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, backgroundPaused = false, initialData }: LibraryPageProps) {
+  const 首次资料刷新 = useRef(initialData ? { active: isActive, refreshToken } : null);
   const [初始目录就绪, 设置初始目录就绪] = useState(false);
   useEffect(() => { if (初始目录就绪) onReady?.(); }, [初始目录就绪,onReady]);
   const 手机布局 = useMobileLayout();
@@ -949,7 +931,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [手机预览宽度, 设置手机预览宽度] = useState(88);
   const 手机导航区域 = useRef<HTMLElement>(null);
   function 匹配整理搜索(query: string, texts: Array<string | undefined | null>, tags: string[], mode: 搜索匹配模式): boolean {
-    return 手机布局 ? matchesMobileSearch(query, texts, tags, mode) : 匹配桌面整理搜索(query, texts, tags, mode);
+    return matchesMobileSearch(query, texts, tags, mode, 空格分隔搜索条件);
   }
   const [手机筛选展开, 设置手机筛选展开] = useState(false);
   const [音量键翻页, 设置音量键翻页] = useState(false);
@@ -987,11 +969,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       if (选择模式) { 退出选择模式(); 设置手机操作目标(null); 设置手机排序中(false); event.preventDefault(); return; }
       if (手机操作目标) { 设置手机操作目标(null); event.preventDefault(); return; }
       if (手机书架管理 || 手机书架排序) { 设置手机书架管理(null); 设置手机书架排序(false); event.preventDefault(); return; }
-      if (手机筛选展开) { 设置手机筛选展开(false); event.preventDefault(); return; }
+      if (手机筛选展开 || 当前搜索内容) { 取消当前搜索(); event.preventDefault(); return; }
       if (正在打开资源路径 || 正在读取) { 打开阅读请求序号.current++; 读取序号.current++; 设置正在打开资源路径(null); 设置正在读取(false); event.preventDefault(); return; }
       if (当前视图 === "virtual-folder") { 返回书架根层(); event.preventDefault(); return; }
       if (当前视图 === "directory" && 当前目录?.parentPath && 当前根目录) {
-        void 打开目录(当前目录.parentPath,当前根目录); event.preventDefault();
+        void 返回上一处(); event.preventDefault();
       }
     };
     window.addEventListener("omi-library-back",back);
@@ -1011,11 +993,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [收藏搜索内容, 设置收藏搜索内容] = useState("");
   const [书签搜索内容, 设置书签搜索内容] = useState("");
   const [搜索模式, 设置搜索模式] = useState<搜索匹配模式>("fuzzy");
+  const [空格分隔搜索条件, 设置空格分隔搜索条件] = useState(false);
   const [主搜索建议可见, 设置主搜索建议可见] = useState(false);
   const [已选标签列表, 设置已选标签列表] = useState<string[]>([]);
   const [标签搜索内容, 设置标签搜索内容] = useState("");
   const [标签搜索建议可见, 设置标签搜索建议可见] = useState(false);
   const [当前主题配色, 设置当前主题配色] = useState<主题配色>(默认设置.colorTheme);
+  const [显示主界面, 设置显示主界面] = useState(true);
   const [排序, 设置排序] = useState<排序方式>(默认设置.sortMode);
   const [卡片缩放, 设置卡片缩放] = useState(默认设置.cardScale);
   const [缩放动效, 设置缩放动效] = useState<Partial<Record<"library" | "detail", CardScaleMotion>>>({});
@@ -1068,8 +1052,28 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [当前虚拟文件夹ID, 设置当前虚拟文件夹ID] = useState<string | null>(null);
   const [数据已加载, 设置数据已加载] = useState(false);
   const [当前视图, 设置当前视图] = useState<资源库视图>("directory");
+  const [导航会话, 设置导航会话] = useState(0);
+  const 当前随机范围 = 当前视图 === "directory" ? 当前根目录 ? `directory:${当前根目录}` : null
+    : 当前视图 === "favorites" || 当前视图 === "bookmarks" ? 当前视图 : null;
+  const 随机浏览 = useRandomBrowse(当前随机范围, 手机布局 ? 手机每页数量 : 每页数量,
+    JSON.stringify([搜索内容, 收藏搜索内容, 书签搜索内容, 已选标签列表, 搜索模式, 空格分隔搜索条件]));
+  const 随机模式 = 随机浏览.active;
+  const 浏览排序选项: readonly GlassSelectOption<排序方式 | 'random'>[] = 当前随机范围 ? [...排序方式选项, { value: 'random', label: '随机排序' }] : 排序方式选项;
+  function 应用浏览排序(value: 排序方式 | 'random') {
+    if (value === 'random') { if (!随机模式) 随机浏览.toggle(); return; }
+    随机浏览.stop(); 设置排序(value); 保存界面设置({ sortMode: value }); 回到第一页();
+  }
+  const 目录穿透搜索 = 当前视图 === "directory" && Boolean(搜索内容.trim() || 已选标签列表.length);
+  const 全库索引 = useLibraryCatalog(当前根目录, 当前视图 === "directory" && (目录穿透搜索 || 随机模式) && isActive && !正在打开资源路径,
+    !随机模式 && 排序.startsWith('time-'));
+  useEffect(() => { if (当前根目录 && 当前目录) observeLibraryDirectory(当前根目录, 当前目录); }, [当前根目录, 当前目录]);
+  const 搜索返回会话 = useRef<{ entrance: string; root: string; directory: 目录结果; query: string; tags: string[];
+    sort: 排序方式; searchOpen: boolean; scrollTop: number; history: 历史状态; random: ReturnType<typeof 随机浏览.capture> } | null>(null);
+  useEffect(() => { if (当前视图 !== 'directory') 搜索返回会话.current = null; }, [当前视图]);
   const 手机显示范围 = mobileDisplayScope(当前视图);
-  const { layout: 手机卡片布局, columns: 手机列数, coverSize: 手机封面尺寸 } = getMobileDisplay(手机显示设置, 手机显示范围);
+  const { layout: 手机卡片布局, columns: 手机基础列数, coverSize: 手机封面尺寸 } = getMobileDisplay(手机显示设置, 手机显示范围);
+  const 手机自适应 = useResponsiveLibrary(手机基础列数, 手机布局);
+  const 手机列数 = 手机自适应.columns;
   const [目录空白菜单, 设置目录空白菜单] = useState<{ x: number; y: number } | null>(null);
   const [资源菜单, 设置资源菜单] = useState<{
     x: number;
@@ -1250,6 +1254,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 缩放保存定时器 = useRef<number | null>(null);
   const 待保存缩放 = useRef<Partial<AppSettings>>({});
 
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const enabled = (event as CustomEvent<boolean>).detail !== false;
+      设置显示主界面(enabled);
+      界面设置快照.current = { ...界面设置快照.current, showHomePage: enabled };
+    };
+    window.addEventListener('omi-home-visibility-changed', changed);
+    return () => window.removeEventListener('omi-home-visibility-changed', changed);
+  }, []);
+
   function 保存缩放设置(): void {
     if (缩放保存定时器.current !== null) window.clearTimeout(缩放保存定时器.current);
     缩放保存定时器.current = null;
@@ -1296,6 +1310,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     设置音量键翻页(Boolean(设置.readerVolumeKeys));
     设置反转音量键(Boolean(设置.readerVolumeKeysReversed));
     设置当前主题配色(应用主题配色(设置.colorTheme));
+    设置显示主界面(设置.showHomePage !== false);
     setUiLanguage(设置.language); 设置界面语言(normalizeLanguage(设置.language));
     const 字号 = applyDesktopTypography(设置);
     设置信息字号(字号.desktopInfoFontSize);
@@ -1331,6 +1346,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     设置书架备注悬停延迟(设置.bookshelfNoteHoverDelayMs);
     设置最近打开记录上限(设置.recentOpenedLimit);
     设置搜索模式(设置.tagSearchMode);
+    设置空格分隔搜索条件(设置.searchSplitSpaces === true);
     设置删除标签前确认(设置.confirmBeforeDeleteTags);
     设置删除前确认设置(设置.confirmBeforeBatchDelete);
   }
@@ -1351,6 +1367,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         if (请求序号 !== 设置保存请求序号.current) return;
         if (结果.ok) {
           应用界面设置({ ...完整设置, ...结果.data, ...局部设置 });
+          if (局部设置.showHomePage !== undefined) window.dispatchEvent(new CustomEvent('omi-home-visibility-changed', { detail: 结果.data.showHomePage !== false }));
           if (保存成功后) {
             void Promise.resolve(保存成功后()).catch(() => {
               if (请求序号 === 设置保存请求序号.current) 设置错误信息("设置已保存，但界面数据刷新失败，请稍后重试。");
@@ -1438,7 +1455,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     });
   }
 
+  function 取消当前搜索(): void {
+    搜索返回会话.current = null; 设置当前视图搜索内容(''); 设置已选标签列表([]);
+    设置手机筛选展开(false); 设置主搜索建议可见(false); 主搜索输入框.current?.blur();
+  }
+  function 重置栏目搜索(): void {
+    取消当前搜索(); 设置搜索内容(''); 设置收藏搜索内容(''); 设置书签搜索内容(''); 设置最近搜索内容('');
+  }
+
   function 设置当前视图搜索内容(值: string): void {
+    if (!值 && 当前搜索内容) 设置导航会话(value => value + 1);
     if (当前视图 === "recent") 设置最近搜索内容(值);
     else if (当前视图 === "favorites") 设置收藏搜索内容(值);
     else if (当前视图 === "bookmarks") 设置书签搜索内容(值);
@@ -1600,80 +1626,58 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     return { resourceKeys, sourcePaths };
   }, [虚拟文件夹列表]);
 
-  const 筛选排序后项目 = useMemo(() => {
-    const 项目 = (当前目录?.items ?? []).filter((文件) => {
-      if (隐藏已加入书架资源 && 当前目录?.path === 当前根目录) {
-        const resourceKey = 获取文件资源Key(文件);
-        if (resourceKey && 已加入书架资源集合.resourceKeys.has(resourceKey)) return false;
-        if (已加入书架资源集合.sourcePaths.has(文件.path)) return false;
-        if (文件.type === "image" && 已加入书架资源集合.sourcePaths.has(获取父目录路径(文件.path))) return false;
-      }
-      const 整理信息 = 获取文件整理信息(文件);
-      const 标签列表 = 整理信息?.tags ?? [];
-      const 标签匹配 = 资源标签匹配筛选模式(标签列表, 已选标签列表, 搜索模式);
-      const 搜索匹配 = 匹配整理搜索(
-        搜索内容,
-        [文件.name, 文件.path, 整理信息?.note],
-        标签列表,
-        搜索模式,
-      );
-      return 标签匹配 && 搜索匹配;
-    });
+  const 目录查询签名 = JSON.stringify([导航会话, 当前根目录, 当前目录?.path, 搜索内容, 已选标签列表, 搜索模式, 空格分隔搜索条件, 排序, 文件夹优先, 隐藏已加入书架资源, 随机模式]);
+  const 目录查询来源 = useMemo(() => (目录穿透搜索 || 随机模式) ? 全库索引.items : 当前目录?.items ?? [],
+    [目录穿透搜索, 随机模式, 全库索引.items, 当前目录]);
+  const 目录查询条件 = useMemo(() => (文件: 文件条目) => {
+    if ((目录穿透搜索 || 随机模式) && 文件.path === 当前根目录 && !文件.containsImages) return false;
+    if (随机模式 && !(文件.type === 'folder' ? 文件.containsImages : ['archive','pdf','epub'].includes(文件.type))) return false;
+    if (隐藏已加入书架资源 && 当前目录?.path === 当前根目录) {
+      const resourceKey = 获取文件资源Key(文件);
+      if (resourceKey && 已加入书架资源集合.resourceKeys.has(resourceKey)) return false;
+      if (已加入书架资源集合.sourcePaths.has(文件.path)) return false;
+      if (文件.type === "image" && 已加入书架资源集合.sourcePaths.has(获取父目录路径(文件.path))) return false;
+    }
+    const info = 获取文件整理信息(文件), tags = info?.tags ?? [];
+    return 资源标签匹配筛选模式(tags, 已选标签列表, 搜索模式)
+      && 匹配整理搜索(搜索内容, [文件.name, info?.note], tags, 搜索模式);
+  }, [目录查询签名, 资源元数据表, 已加入书架资源集合]);
+  const 目录比较 = useMemo(() => (左侧: 文件条目, 右侧: 文件条目) => {
+    if (随机模式) return 0;
+    if ((文件夹优先 || 目录穿透搜索) && (左侧.type === 'folder') !== (右侧.type === 'folder')) return 左侧.type === 'folder' ? -1 : 1;
+    if (排序 === 'name-desc') return 文件名排序器.compare(右侧.name, 左侧.name);
+    if (排序 === 'time-asc' || 排序 === 'time-desc') {
+      // Unknown timestamps wait behind known metadata rather than pretending to
+      // be the oldest files. Background batches supply the actual timestamps.
+      if (左侧.modifiedAt === undefined || 右侧.modifiedAt === undefined) {
+        if (左侧.modifiedAt !== 右侧.modifiedAt) return 左侧.modifiedAt === undefined ? 1 : -1;
+      } else if (左侧.modifiedAt !== 右侧.modifiedAt) return (排序 === 'time-asc' ? 1 : -1) * (左侧.modifiedAt - 右侧.modifiedAt);
+    }
+    if (排序 === 'type' && 左侧.type !== 右侧.type) return 类型顺序[左侧.type] - 类型顺序[右侧.type];
+    return 文件名排序器.compare(左侧.name, 右侧.name);
+  }, [排序, 随机模式, 文件夹优先, 目录穿透搜索]);
+  const 稳定搜索选项 = useMemo(() => 目录穿透搜索 && !随机模式 ? {
+    key: (item: 文件条目) => item.path,
+    first: (item: 文件条目) => item.type === 'folder',
+  } : undefined, [目录穿透搜索, 随机模式]);
+  const 目录匹配项目 = useLibraryQuery(目录查询来源, 目录查询条件, 目录比较, 目录查询签名, 稳定搜索选项);
+  const 筛选排序后项目 = useMemo(() => 随机模式 && 当前视图 === 'directory' ? 随机浏览.select(目录匹配项目, item => item.path) : 目录匹配项目,
+    [目录匹配项目, 随机模式, 随机浏览.revision, 随机浏览.selectionRevision, 手机每页数量, 每页数量]);
 
-    return [...项目].sort((左侧, 右侧) => {
-      const 左侧为文件夹 = 左侧.type === "folder";
-      const 右侧为文件夹 = 右侧.type === "folder";
-      if (文件夹优先 && 左侧为文件夹 !== 右侧为文件夹) return 左侧为文件夹 ? -1 : 1;
-
-      if (排序 === "name-desc") return 文件名排序器.compare(右侧.name, 左侧.name);
-      if (排序 === "time-asc") {
-        return (左侧.modifiedAt ?? 0) - (右侧.modifiedAt ?? 0)
-          || 文件名排序器.compare(左侧.name, 右侧.name);
-      }
-      if (排序 === "time-desc") {
-        return (右侧.modifiedAt ?? 0) - (左侧.modifiedAt ?? 0)
-          || 文件名排序器.compare(左侧.name, 右侧.name);
-      }
-      if (排序 === "type") {
-        return 类型顺序[左侧.type] - 类型顺序[右侧.type]
-          || 文件名排序器.compare(左侧.name, 右侧.name);
-      }
-      return 文件名排序器.compare(左侧.name, 右侧.name);
-    });
-  }, [当前目录, 搜索内容, 排序, 文件夹优先, 资源元数据表, 已选标签列表, 搜索模式, 隐藏已加入书架资源, 已加入书架资源集合]);
-
-  const 筛选后收藏列表 = useMemo(() => {
-    return 收藏列表.filter((项目) => {
-      const 整理信息 = 获取资源整理信息({
-        resourceKey: 项目.resourceKey,
-        sourcePath: 项目.sourcePath,
-        sourceType: 项目.sourceType,
-        title: 项目.title,
-      }, 项目);
-      const 标签列表 = 整理信息.tags;
-      const 标签匹配 = 资源标签匹配筛选模式(标签列表, 已选标签列表, 搜索模式);
-      const 搜索匹配 = 匹配整理搜索(
-        收藏搜索内容,
-        [项目.title, 项目.sourcePath, 整理信息.note],
-        标签列表,
-        搜索模式,
-      );
-      return 标签匹配 && 搜索匹配;
-    });
-  }, [收藏列表, 收藏搜索内容, 已选标签列表, 资源元数据表, 搜索模式]);
-  const 筛选后书签列表 = useMemo(() => {
-    return 书签列表.filter((项目) => {
-      const 标签列表 = 获取整理标签(项目);
-      const 标签匹配 = 资源标签匹配筛选模式(标签列表, 已选标签列表, 搜索模式);
-      const 搜索匹配 = 匹配整理搜索(
-        书签搜索内容,
-        [项目.bookmarkTitle ?? 项目.title, 项目.note, 项目.title, 项目.sourcePath, 项目.pageName],
-        标签列表,
-        搜索模式,
-      );
-      return 标签匹配 && 搜索匹配;
-    });
-  }, [书签列表, 书签搜索内容, 已选标签列表, 搜索模式]);
+  const 普通筛选后收藏列表 = useMemo(() => 收藏列表.filter(项目 => {
+    const info = 获取资源整理信息({ resourceKey: 项目.resourceKey, sourcePath: 项目.sourcePath, sourceType: 项目.sourceType, title: 项目.title }, 项目);
+    return 资源标签匹配筛选模式(info.tags, 已选标签列表, 搜索模式)
+      && 匹配整理搜索(收藏搜索内容, [项目.title, info.note], info.tags, 搜索模式);
+  }), [收藏列表, 收藏搜索内容, 已选标签列表, 资源元数据表, 搜索模式, 空格分隔搜索条件]);
+  const 筛选后收藏列表 = useMemo(() => 随机模式 && 当前视图 === 'favorites' ? 随机浏览.select(普通筛选后收藏列表, item => item.resourceKey) : 普通筛选后收藏列表,
+    [普通筛选后收藏列表, 随机模式, 随机浏览.revision, 随机浏览.selectionRevision, 手机每页数量, 每页数量]);
+  const 普通筛选后书签列表 = useMemo(() => 书签列表.filter(项目 => {
+    const tags = 获取整理标签(项目);
+    return 资源标签匹配筛选模式(tags, 已选标签列表, 搜索模式)
+      && 匹配整理搜索(书签搜索内容, [项目.bookmarkTitle ?? 项目.title, 项目.note, 项目.title, 项目.pageName], tags, 搜索模式);
+  }), [书签列表, 书签搜索内容, 已选标签列表, 搜索模式, 空格分隔搜索条件]);
+  const 筛选后书签列表 = useMemo(() => 随机模式 && 当前视图 === 'bookmarks' ? 随机浏览.select(普通筛选后书签列表, item => item.id) : 普通筛选后书签列表,
+    [普通筛选后书签列表, 随机模式, 随机浏览.revision, 随机浏览.selectionRevision, 手机每页数量, 每页数量]);
   const 当前虚拟文件夹 = useMemo(
     () => 虚拟文件夹列表.find((项目) => 项目.id === 当前虚拟文件夹ID) ?? null,
     [虚拟文件夹列表, 当前虚拟文件夹ID],
@@ -2215,7 +2219,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           const 标签匹配 = 资源标签匹配筛选模式(标签列表, 已选标签列表, 搜索模式);
           const 搜索匹配 = 匹配整理搜索(
             搜索,
-            [项目.title, 项目.sourcePath, 整理信息.note],
+            [项目.title, 整理信息.note],
             标签列表,
             搜索模式,
           );
@@ -2223,7 +2227,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         });
       })
       .sort(比较书架文件夹);
-  }, [当前书架文件夹列表, 搜索内容, 搜索模式, 排序, 已选标签列表, 资源元数据表]);
+  }, [当前书架文件夹列表, 搜索内容, 搜索模式, 空格分隔搜索条件, 排序, 已选标签列表, 资源元数据表]);
   const 筛选后虚拟文件夹项目 = useMemo(() => {
     const 项目列表 = 当前虚拟文件夹?.items ?? [];
     const 搜索 = 搜索内容;
@@ -2239,7 +2243,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         const 标签匹配 = 资源标签匹配筛选模式(标签列表, 已选标签列表, 搜索模式);
         const 搜索匹配 = 匹配整理搜索(
           搜索,
-          [项目.title, 项目.sourcePath, 整理信息.note],
+          [项目.title, 整理信息.note],
           标签列表,
           搜索模式,
         );
@@ -2250,7 +2254,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           || 左侧.addedAt - 右侧.addedAt
           || 文件名排序器.compare(左侧.title, 右侧.title);
       });
-  }, [当前虚拟文件夹, 搜索内容, 已选标签列表, 资源元数据表, 搜索模式]);
+  }, [当前虚拟文件夹, 搜索内容, 已选标签列表, 资源元数据表, 搜索模式, 空格分隔搜索条件]);
   const 筛选后最近打开列表 = useMemo(() => 当前阅读记录列表.filter((项目) => {
     const 整理信息 = 获取资源整理信息({
       resourceKey: 项目.resourceKey,
@@ -2262,12 +2266,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 标签匹配 = 资源标签匹配筛选模式(标签列表, 已选标签列表, 搜索模式);
     const 搜索匹配 = 匹配整理搜索(
       最近搜索内容,
-      [项目.title, 项目.sourcePath, 整理信息.note],
+      [项目.title, 整理信息.note],
       标签列表,
       搜索模式,
     );
     return 标签匹配 && 搜索匹配;
-  }), [当前阅读记录列表, 最近搜索内容, 已选标签列表, 资源元数据表, 搜索模式]);
+  }), [当前阅读记录列表, 最近搜索内容, 已选标签列表, 资源元数据表, 搜索模式, 空格分隔搜索条件]);
   const 最近打开卡片项目 = useMemo(() => 筛选后最近打开列表.map((项目) => {
     const 文件类型: 资源类型 = 项目.sourceType;
     const 扩展名 = 文件类型 === "folder" ? "" : 获取文件扩展名(项目.sourcePath);
@@ -2358,10 +2362,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             ? 虚拟文件夹卡片项目.length
             : 筛选排序后项目.length;
   const 连续列表启用 = true;
+  const 目录资源身份 = useMemo(() => 筛选排序后项目.map(item => item.path), [筛选排序后项目]);
   const 目录连续列表 = useContinuousLibrary(列表容器, isActive && 连续列表启用 && !资源信息目标 && !正在读取,
-    当前分页项目总数, 手机布局 ? 手机卡片布局 === 'list' ? 1 : 手机列数 : 获取卡片列数(卡片缩放), 手机布局 ? 手机每页数量 : 每页数量,
-    JSON.stringify([当前视图,当前目录?.path,当前书架ID,当前虚拟文件夹ID,搜索内容,最近搜索内容,收藏搜索内容,书签搜索内容,排序,文件夹优先,隐藏已加入书架资源,已选标签列表]),手机布局);
-  const 实际每页数量 = 连续列表启用 ? 目录连续列表.pageSize : 每页数量;
+    当前分页项目总数, 手机布局 ? 手机卡片布局 === 'list' ? 手机自适应.listColumns : 手机列数 : 获取卡片列数(卡片缩放), 手机布局 ? 手机每页数量 : 每页数量,
+    JSON.stringify([导航会话,随机模式 ? 当前随机范围 : "normal",随机浏览.revision,当前视图,当前目录?.path,当前书架ID,当前虚拟文件夹ID,搜索内容,最近搜索内容,收藏搜索内容,书签搜索内容,排序,文件夹优先,隐藏已加入书架资源,已选标签列表,搜索模式,空格分隔搜索条件]),手机布局 || 随机模式, 当前视图 === 'directory' ? 目录资源身份 : undefined);
+  const 实际每页数量 = 随机模式 ? (手机布局 ? 手机每页数量 : 每页数量) : 连续列表启用 ? 目录连续列表.pageSize : 每页数量;
   const 手机连续样式 = {paddingTop:目录连续列表.offset,paddingBottom:目录连续列表.bottom};
   const 总页数 = Math.max(1, Math.ceil(当前分页项目总数 / 实际每页数量));
   const 安全当前页 = 连续列表启用 ? 目录连续列表.page : Math.min(Math.max(当前页, 1), 总页数);
@@ -2441,7 +2446,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         : 搜索内容;
   const 标签建议列表 = useMemo(() => {
     return 获取标签建议(当前搜索内容, 全部标签列表, 搜索模式);
-  }, [全部标签列表, 当前搜索内容, 搜索模式]);
+  }, [全部标签列表, 当前搜索内容, 搜索模式, 空格分隔搜索条件]);
   const 抽屉标签建议列表 = useMemo(
     () => 获取标签建议(标签搜索内容, 全部标签列表, 搜索模式),
     [全部标签列表, 标签搜索内容, 搜索模式],
@@ -2489,6 +2494,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       title: 项目.title,
     }))
   ), [筛选后最近打开列表]);
+  const 书签阅读队列 = useMemo<阅读相邻资源项[]>(() => 筛选后书签列表.map(item => ({
+    key: item.id, path: item.sourcePath, type: item.sourceType, title: item.bookmarkTitle ?? item.title,
+    pageIndex: item.pageIndex, pageId: item.pageId, pageName: item.pageName,
+  })), [筛选后书签列表]);
   const 收藏阅读队列 = useMemo<阅读相邻资源项[]>(() => (
     筛选后收藏列表.map((项目) => ({
       key: 项目.resourceKey,
@@ -2518,12 +2527,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     : 当前视图;
   const 当前选择视图Key列表 = useMemo(() => {
     if (当前视图 === "directory") return 筛选排序后项目.map((项目) => 项目.id);
-    if (当前视图 === "recent") return (手机布局 ? 最近打开卡片项目 : 当前页最近打开卡片项目).map(({ 项目 }) => 项目.resourceKey);
-    if (当前视图 === "favorites") return (手机布局 ? 收藏卡片项目 : 当前页收藏卡片项目).map(({ 项目 }) => 项目.resourceKey);
-    if (当前视图 === "bookmarks") return (手机布局 ? 书签卡片项目 : 当前页书签卡片项目).map(({ 项目 }) => 项目.id);
-    if (当前视图 === "virtual-folder") return (手机布局 ? 虚拟文件夹卡片项目 : 当前页虚拟文件夹卡片项目).map(({ 项目 }) => 项目.resourceKey);
+    if (当前视图 === "recent") return 最近打开卡片项目.map(({ 项目 }) => 项目.resourceKey);
+    if (当前视图 === "favorites") return 收藏卡片项目.map(({ 项目 }) => 项目.resourceKey);
+    if (当前视图 === "bookmarks") return 书签卡片项目.map(({ 项目 }) => 项目.id);
+    if (当前视图 === "virtual-folder") return 虚拟文件夹卡片项目.map(({ 项目 }) => 项目.resourceKey);
     return [];
-  }, [手机布局, 当前视图, 筛选排序后项目, 最近打开卡片项目, 收藏卡片项目, 书签卡片项目, 虚拟文件夹卡片项目, 当前页最近打开卡片项目, 当前页收藏卡片项目, 当前页书签卡片项目, 当前页虚拟文件夹卡片项目]);
+  }, [当前视图, 筛选排序后项目, 最近打开卡片项目, 收藏卡片项目, 书签卡片项目, 虚拟文件夹卡片项目]);
   const 左下统计文本 = useMemo(() => {
     if (当前视图 === "recent") return `${t(阅读记录标题)} ${当前阅读记录列表.length} 项`;
     if (当前视图 === "favorites") return `收藏 ${收藏列表.length} 项`;
@@ -2557,7 +2566,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const keys = 当前虚拟文件夹无效资源项目.map((项目) => 项目.resourceKey).sort();
     return `${当前虚拟文件夹.id}:${keys.join("|")}`;
   }, [当前虚拟文件夹, 当前虚拟文件夹无效资源项目]);
-  const 是否显示分页 = 当前分页项目总数 > 实际每页数量;
+  const 是否显示分页 = !随机模式 && 当前分页项目总数 > 实际每页数量;
 
   useEffect(() => {
     if (当前页 !== 安全当前页) {
@@ -2696,6 +2705,25 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }, [isActive, 当前右侧抽屉, 资源信息目标]);
 
   useEffect(() => {
+    if (!isActive || !随机模式) return;
+    document.documentElement.dataset.randomBrowse = 'on';
+    const 先退出随机 = (event: Event) => {
+      if (event instanceof KeyboardEvent && event.key !== 'Escape') return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      随机浏览.stop();
+    };
+    window.addEventListener('keydown', 先退出随机, true);
+    window.addEventListener('omi-back', 先退出随机, true);
+    window.addEventListener('omi-library-back', 先退出随机, true);
+    return () => {
+      delete document.documentElement.dataset.randomBrowse;
+      window.removeEventListener('keydown', 先退出随机, true);
+      window.removeEventListener('omi-back', 先退出随机, true);
+      window.removeEventListener('omi-library-back', 先退出随机, true);
+    };
+  }, [isActive, 随机模式]);
+
+  useEffect(() => {
     if (!isActive) return;
 
     const 退出主搜索焦点 = (): void => {
@@ -2715,17 +2743,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     };
 
     const 处理搜索退出按键 = (事件: KeyboardEvent): void => {
-      if (事件.key !== "Escape") return;
-      退出主搜索焦点();
+      if (事件.key !== 'Escape' || 事件.defaultPrevented || 当前右侧抽屉 || 资源信息目标) return;
+      if (document.activeElement === 主搜索输入框.current) {
+        事件.preventDefault(); 事件.stopImmediatePropagation(); 退出主搜索焦点(); return;
+      }
+      if (当前搜索内容 || 手机筛选展开) {
+        事件.preventDefault(); 事件.stopImmediatePropagation(); 取消当前搜索();
+      }
     };
 
     document.addEventListener("pointerdown", 处理搜索外部点击, true);
-    window.addEventListener("keydown", 处理搜索退出按键);
+    document.addEventListener("keydown", 处理搜索退出按键, true);
     return () => {
       document.removeEventListener("pointerdown", 处理搜索外部点击, true);
-      window.removeEventListener("keydown", 处理搜索退出按键);
+      document.removeEventListener("keydown", 处理搜索退出按键, true);
     };
-  }, [isActive]);
+  }, [isActive, 当前搜索内容, 手机筛选展开, 当前右侧抽屉, 资源信息目标]);
 
   useEffect(() => () => {
     if (滚轮停止定时器.current !== null) {
@@ -2789,7 +2822,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     let 已取消 = false;
 
     async function 恢复本地数据(): Promise<void> {
-      const 结果 = await window.omicomic.getAppData();
+      const 结果 = initialData ? await Promise.resolve({ ok: true as const, data: initialData }) : await window.omicomic.getAppData();
       if (已取消) return;
       if (!结果.ok) {
         设置错误信息(结果.error.message);
@@ -2838,6 +2871,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   useEffect(() => {
     if (!数据已加载 || !isActive) return;
+    const 首次快照 = 首次资料刷新.current;
+    if (首次快照) {
+      首次资料刷新.current = null;
+      if (首次快照.active && 首次快照.refreshToken === refreshToken) return;
+    }
     let 已取消 = false;
 
     async function 刷新阅读数据(): Promise<void> {
@@ -3562,8 +3600,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       ) return;
 
       事件.preventDefault();
+      if (当前搜索内容 || 已选标签列表.length) { 取消当前搜索(); return; }
       if (当前视图 === "virtual-folder") 返回书架根层();
-      else if (当前目录?.parentPath && 当前根目录 && !正在读取) void 打开目录(当前目录.parentPath, 当前根目录);
+      else if (当前目录?.parentPath && 当前根目录 && !正在读取) void 返回上一处();
     }
 
     window.addEventListener("keydown", 处理书架内部返回快捷键);
@@ -3615,7 +3654,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (!isActive || 正在打开资源路径 || backgroundPaused) return;
     const 封面取消 = new AbortController();
     const 版本 = (文件: 文件条目) => `${文件.size ?? ""}:${文件.modifiedAt ?? ""}`;
-    const 可复用 = (状态: 缩略图状态 | undefined, 文件: 文件条目) => 状态?.sourceVersion === 版本(文件)
+    const 可复用 = (状态: 缩略图状态 | undefined, 文件: 文件条目) => !!状态
+      && (文件.size === undefined && 文件.modifiedAt === undefined || 状态.sourceVersion === 版本(文件))
       && (状态.status === "loaded" || (状态.status === "error" && (状态.retryAfter === undefined || Date.now() < 状态.retryAfter)));
     const 可加载项目 = 缩略图目标项目.filter((文件) => 支持真实缩略图(文件.type));
 
@@ -3725,6 +3765,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           try {
             const 结果 = await window.omicomic.checkResourcePath({ path: 文件.path, type: 文件.type });
             if (本次序号 !== 路径状态请求序号.current) return;
+            if (随机模式 && 结果.ok && (!结果.data.exists || !结果.data.readable)) 随机浏览.rejectPath(文件.path);
             设置资源路径状态表((原表) => {
               if (!当前路径集合.has(文件.path)) return 原表;
               return {
@@ -4017,7 +4058,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     重置分页 = true,
     motion = mobileNavigationEpoch(),
   ): Promise<boolean> {
+    目录连续列表.sync();
     const 本次序号 = ++读取序号.current;
+    const 搜索入口 = 当前视图 === 'directory' && 目录穿透搜索 && 当前目录 && 目录路径 !== 当前目录.path
+      ? { entrance: 目录路径, root: 根目录路径, directory: 当前目录, query: 搜索内容, tags: 已选标签列表,
+        sort: 排序, searchOpen: 手机筛选展开, scrollTop: 列表容器.current?.scrollTop ?? 0, history: 历史记录, random: 随机浏览.capture() } : null;
     设置正在读取(true);
     设置错误信息(null);
 
@@ -4034,6 +4079,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         if (本次序号 !== 读取序号.current) return;
         设置正在读取(false);
       设置当前目录(结果.data);
+      if (搜索入口) {
+        搜索返回会话.current = 搜索入口;
+        设置搜索内容(''); 设置已选标签列表([]); 设置手机筛选展开(false); 随机浏览.stop();
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      }
       设置当前根目录(根目录路径);
       设置当前视图("directory");
       void window.omicomic.updateLibraryState({
@@ -4041,7 +4091,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         lastCurrentPath: 结果.data.path,
       });
       if (重置分页) {
-        回到第一页();
+        退出选择模式();
+        设置当前页(1);
       }
 
       设置历史记录((原记录) => {
@@ -4104,11 +4155,31 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   async function 返回上一处(): Promise<void> {
-    if (历史记录.index <= 0) return;
-    const 目标位置 = 历史记录.index - 1;
-    const 目标 = 历史记录.entries[目标位置];
-    if (await 打开目录(目标.path, 目标.rootPath, "none")) {
-      设置历史记录((原记录) => ({ ...原记录, index: 目标位置 }));
+    const saved = 搜索返回会话.current;
+    if (saved && 当前目录?.path === saved.entrance && 当前根目录 === saved.root && !正在读取) {
+      const commit = () => {
+        搜索返回会话.current = null; 设置当前目录(saved.directory); 设置当前根目录(saved.root);
+        设置搜索内容(saved.query); 设置已选标签列表(saved.tags); 设置排序(saved.sort); 设置手机筛选展开(saved.searchOpen);
+        随机浏览.restore(saved.random);
+        设置历史记录(old => ({ entries: old.entries, index: Math.min(saved.history.index, old.entries.length - 1) }));
+        待恢复精确滚动位置.current = saved.scrollTop;
+      };
+      目录连续列表.sync();
+      if (手机布局) await mobileNavigate(commit, 'back'); else commit();
+      return;
+    }
+    if (!当前目录?.parentPath || !当前根目录 || 当前目录.path === 当前根目录 || 正在读取) return;
+    const parent = 当前目录.parentPath;
+    let previous = -1;
+    for (let index = 历史记录.index - 1; index >= 0; index--) {
+      if (历史记录.entries[index].path === parent && 历史记录.entries[index].rootPath === 当前根目录) { previous = index; break; }
+    }
+    if (await 打开目录(parent, 当前根目录, "none")) {
+      设置历史记录(old => {
+        if (previous >= 0) return { entries: [...old.entries.slice(0, previous + 1), ...old.entries.slice(old.index)], index: previous };
+        const entries = [...old.entries.slice(0, old.index), { path: parent, rootPath: 当前根目录 }, ...old.entries.slice(old.index)];
+        return { entries, index: Math.max(0, old.index) };
+      });
     }
   }
 
@@ -4179,7 +4250,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   async function 打开混合目录(path: string, type: string, request: number, motion: number): Promise<boolean> {
-    if (isAndroid() || type !== 'folder') return false;
+    if (随机模式 || isAndroid() || type !== 'folder') return false;
     let summary: Pick<缩略图状态,'itemCount'|'childFolderCount'|'folderSummary'> | undefined = 缩略图表[path];
     if (summary?.childFolderCount === undefined) {
       const result = await window.omicomic.getThumbnail({path,type:'folder'});
@@ -4390,7 +4461,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         设置错误信息("书签页码已超出当前资源页数，已跳转到最后一页。");
       }
       void 保存资源当前进度(结果.data, 起始页);
-      打开阅读器(结果.data, 起始页, undefined, undefined, motion);
+      打开阅读器(结果.data, 起始页, 随机模式 ? 创建阅读上下文("bookmarks", 项目.id, 书签阅读队列) : undefined, undefined, motion);
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       if(isAndroid())设置正在打开资源路径(null);
@@ -4584,7 +4655,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 已选列表 = 获取已选书架栏列表();
     const 删除列表 = 已选书架栏ID集合.has(书架.id) && 已选列表.length > 1 ? 已选列表 : [书架];
     if (书架列表.length - 删除列表.length < 1) {
-      设置错误信息("至少需要保留一个书架栏。");
+      设置错误信息("至少需要保留一个书架分类。");
       设置书架菜单(null);
       return;
     }
@@ -4929,17 +5000,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 切换手机栏目(目标: 资源库视图, commit: () => void): void {
     取消手机后台打开请求();
+    重置栏目搜索();
     const 当前序号 = 手机栏目序号(当前视图), 目标序号 = 手机栏目序号(目标);
     if (当前序号 === 目标序号) { cancelMobileNavigation(); commit(); return; }
     void mobileNavigate(commit, 目标序号 > 当前序号 ? 'tab-next' : 'tab-prev');
   }
 
   function 打开书架(已转场: unknown = false): void {
-    if (手机布局 && 已转场 !== true) {
-      if (当前视图 === 'virtual-folder') 返回书架根层();
-      else 切换手机栏目('bookshelf', () => 打开书架(true));
-      return;
-    }
+    if (手机布局 && 已转场 !== true) { 切换手机栏目('bookshelf', () => 打开书架(true)); return; }
+    设置导航会话(value => value + 1);
+    重置栏目搜索();
     if (资源信息目标) 关闭资源详情页面(true);
     if (排序 === "type") 设置排序("name-asc");
     if (!当前书架ID && 书架列表[0]) 设置当前书架ID(书架列表[0].id);
@@ -4952,19 +5022,23 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   function 进入书架文件夹(文件夹: VirtualFolder, 已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 进入书架文件夹(文件夹, true), "folder"); return; }
     设置当前虚拟文件夹ID(文件夹.id);
+    目录连续列表.sync();
     设置当前视图("virtual-folder");
     设置错误信息(null);
-    回到第一页();
+    退出选择模式();
+    设置当前页(1);
   }
 
   function 返回书架根层(已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 返回书架根层(true), "folder"); return; }
     if (排序 === "type") 设置排序("name-asc");
     if (!当前书架ID && 书架列表[0]) 设置当前书架ID(书架列表[0].id);
+    目录连续列表.sync();
     设置当前视图("bookshelf");
     设置当前虚拟文件夹ID(null);
     设置错误信息(null);
-    回到第一页();
+    退出选择模式();
+    设置当前页(1);
   }
 
   async function 刷新最近打开(): Promise<void> {
@@ -4977,6 +5051,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 切换阅读记录分类(分类: "recent" | "temporary", 已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 切换手机栏目('recent', () => 切换阅读记录分类(分类, true)); return; }
+    重置栏目搜索();
     if (资源信息目标) 关闭资源详情页面(true);
     退出选择模式();
     设置最近菜单(null);
@@ -5035,8 +5110,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     设置标签顺序(数据.tagOrder);
   }
 
-  async function 同步文件操作(数据: OmiComicAppData): Promise<void> {
+  async function 同步文件操作(数据: OmiComicAppData, changedPaths?: string[]): Promise<void> {
     clearMobileTreeCache();
+    excludeLibraryCatalogPaths(数据.excludedResourcePaths ?? []);
+    const parents = changedPaths ? [...new Set(changedPaths.map(获取父目录路径))] : 当前目录 ? [当前目录.path] : [];
+    for (const root of 根目录列表) {
+      const affected = parents.filter(path => path === root.path || path.replace(/\\/g,'/').startsWith(root.path.replace(/\\/g,'/').replace(/\/$/,'') + '/'));
+      if (affected.length) invalidateLibraryCatalog(root.path, affected);
+    }
     clearResourceThumbnailCache();
     设置缩略图表({});
     设置手机操作目标(null);
@@ -5105,7 +5186,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   async function 处理刷新按钮(): Promise<void> {
+    设置导航会话(value => value + 1);
     clearMobileTreeCache();
+    invalidateLibraryCatalog(当前根目录 ?? undefined, 当前目录 ? [当前目录.path] : undefined);
     clearResourceThumbnailCache();
     if (正在读取 || 正在检查全局无效资源) return;
 
@@ -5125,6 +5208,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         设置缩略图表({});
         await 打开目录(当前目录.path, 当前根目录, "none", false);
       }
+      if (随机模式) 随机浏览.redraw();
     } catch {
       设置错误信息("失效资源检测失败，请稍后重试。");
     } finally {
@@ -5156,21 +5240,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 打开资源库(已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 切换手机栏目('directory', () => 打开资源库(true)); return; }
-    if (手机布局 && 当前视图 === 'directory' && 当前根目录) { 设置手机筛选展开(false); 设置搜索内容(''); if(当前目录?.path===当前根目录) {回到第一页();目录连续列表.jump(1);} else void 打开目录(当前根目录,当前根目录); return; }
+    设置导航会话(value => value + 1);
+    重置栏目搜索();
+    随机浏览.stop();
     if (资源信息目标) 关闭资源详情页面(true);
+    设置手机筛选展开(false);
+    设置搜索内容("");
     设置错误信息(null);
     设置当前虚拟文件夹ID(null);
-    if (当前目录 && 当前根目录) {
-      设置当前视图("directory");
-      回到第一页();
-      return;
-    }
-    const 首个根目录 = 根目录列表[0];
-    if (首个根目录) {
-      void 打开目录(首个根目录.path, 首个根目录.path);
-      return;
-    }
-    设置当前视图("directory");
+    const root = 当前根目录 ?? 根目录列表[0]?.path;
+    if (root) {
+      if (当前目录?.path === root) { 设置当前视图("directory"); 回到第一页(); }
+      else void 打开目录(root, root);
+    } else 设置当前视图("directory");
   }
 
   function 转为收藏输入(项目: VirtualFolderItemInput): 收藏输入 | null {
@@ -5349,7 +5431,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 删除列表 = 待删除书架列表 ?? (待删除书架 ? [待删除书架] : []);
     if (删除列表.length === 0 || 删除确认处理中) return;
     if (书架列表.length - 删除列表.length < 1) {
-      设置错误信息("至少需要保留一个书架栏。");
+      设置错误信息("至少需要保留一个书架分类。");
       设置待删除书架(null);
       设置待删除书架列表(null);
       return;
@@ -5360,7 +5442,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       for (const 书架 of 删除列表) {
         const 结果 = await window.omicomic.deleteBookshelf(书架.id);
         if (!结果.ok) {
-          设置错误信息(结果.error.message === "BOOKSHELF_MINIMUM_REQUIRED" ? "至少需要保留一个书架栏。" : 结果.error.message);
+          设置错误信息(结果.error.message === "BOOKSHELF_MINIMUM_REQUIRED" ? "至少需要保留一个书架分类。" : 结果.error.message);
           return;
         }
         最新数据 = 结果.data;
@@ -5839,7 +5921,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       if (资源详情编辑模式 && !(await 完成资源详情信息编辑())) return;
       关闭资源详情页面();
     } else if (当前视图 === "directory" && 当前目录?.parentPath && 当前根目录) {
-      await 打开目录(当前目录.parentPath, 当前根目录);
+      await 返回上一处();
     } else onHome();
   }
 
@@ -6224,33 +6306,39 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 获取框选矩形(状态: NonNullable<框选状态>): DOMRect {
-    const left = Math.min(状态.startX, 状态.currentX);
-    const top = Math.min(状态.startY, 状态.currentY);
-    const width = Math.abs(状态.currentX - 状态.startX);
-    const height = Math.abs(状态.currentY - 状态.startY);
+    const startX = 状态.startX - (状态.container.scrollLeft - 状态.scrollLeft);
+    const startY = 状态.startY - (状态.container.scrollTop - 状态.scrollTop);
+    const left = Math.min(startX, 状态.currentX);
+    const top = Math.min(startY, 状态.currentY);
+    const width = Math.abs(状态.currentX - startX);
+    const height = Math.abs(状态.currentY - startY);
     return new DOMRect(left, top, width, height);
   }
 
-  function 矩形相交(左侧: DOMRect, 右侧: DOMRect): boolean {
-    return 左侧.left <= 右侧.right
-      && 左侧.right >= 右侧.left
-      && 左侧.top <= 右侧.bottom
-      && 左侧.bottom >= 右侧.top;
-  }
-
   function 开始框选(事件: ReactMouseEvent<HTMLDivElement>, 视图: 选择视图): void {
-    if (选择模式 !== 视图 || 事件.button !== 0) return;
+    if (手机布局 || 选择模式 !== 视图 || 事件.button !== 0) return;
     const 目标 = 事件.target;
     if (
       目标 instanceof HTMLElement
       && 目标.closest("input, select, textarea, .recent-context-menu, .selection-check, .favorite-button, .resource-info-button, .preview-tag-more")
     ) return;
 
+    const 容器边界 = 事件.currentTarget.getBoundingClientRect();
+    // Scrollbar interaction must keep the current selection intact.
+    if (事件.clientX >= 容器边界.left + 事件.currentTarget.clientLeft + 事件.currentTarget.clientWidth
+      || 事件.clientY >= 容器边界.top + 事件.currentTarget.clientTop + 事件.currentTarget.clientHeight) return;
+
     事件.preventDefault();
     框选抑制点击.current = false;
     const baseKeys = 事件.ctrlKey ? Array.from(已选项目Key集合) : [];
+    if (!事件.ctrlKey && !(目标 instanceof Element && 目标.closest("[data-selection-key]"))) {
+      设置已选项目Key集合(new Set());
+    }
     设置框选({
       view: 视图,
+      container: 事件.currentTarget,
+      scrollLeft: 事件.currentTarget.scrollLeft,
+      scrollTop: 事件.currentTarget.scrollTop,
       startX: 事件.clientX,
       startY: 事件.clientY,
       currentX: 事件.clientX,
@@ -6263,18 +6351,45 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (!框选) return;
     事件.preventDefault();
     const 新框选 = { ...框选, currentX: 事件.clientX, currentY: 事件.clientY };
-    if (Math.abs(新框选.currentX - 新框选.startX) > 4 || Math.abs(新框选.currentY - 新框选.startY) > 4) {
-      框选抑制点击.current = true;
-    }
     设置框选(新框选);
-    const 选择矩形 = 获取框选矩形(新框选);
-    const 容器 = 事件.currentTarget;
-    const 命中Key列表 = Array.from(容器.querySelectorAll<HTMLElement>("[data-selection-key]"))
-      .filter((元素) => 矩形相交(选择矩形, 元素.getBoundingClientRect()))
-      .map((元素) => 元素.dataset.selectionKey)
-      .filter((key): key is string => Boolean(key));
-    设置已选项目Key集合(new Set([...新框选.baseKeys, ...命中Key列表]));
+    应用框选(新框选);
   }
+
+  function 应用框选(状态: NonNullable<框选状态>): void {
+    const 选择矩形 = 获取框选矩形(状态);
+    if (选择矩形.width > 4 || 选择矩形.height > 4) 框选抑制点击.current = true;
+    const 首项 = 状态.container.querySelector<HTMLElement>("[data-selection-key]");
+    if (!首项) return;
+    const 首索引 = 当前选择视图Key列表.indexOf(首项.dataset.selectionKey!);
+    if (首索引 < 0) return;
+    // The virtual window may unmount selected rows. Its uniform grid still gives
+    // every resource a stable content position, including rows outside the DOM.
+    const 样式 = getComputedStyle(首项.parentElement!);
+    const 列数 = Math.max(1, 样式.gridTemplateColumns.split(/\s+/).filter(Boolean).length);
+    const 首矩形 = 首项.getBoundingClientRect();
+    if (!首矩形.width || !首矩形.height) return;
+    const 横步长 = 首矩形.width + (parseFloat(样式.columnGap) || 0);
+    const 纵步长 = 首矩形.height + (parseFloat(样式.rowGap) || 0);
+    const 起点X = 首矩形.left - (首索引 % 列数) * 横步长;
+    const 起点Y = 首矩形.top - Math.floor(首索引 / 列数) * 纵步长;
+    const 首行 = Math.max(0, Math.ceil((选择矩形.top - 起点Y - 首矩形.height) / 纵步长));
+    const 末行 = Math.min(Math.ceil(当前选择视图Key列表.length / 列数) - 1, Math.floor((选择矩形.bottom - 起点Y) / 纵步长));
+    const 首列 = Math.max(0, Math.ceil((选择矩形.left - 起点X - 首矩形.width) / 横步长));
+    const 末列 = Math.min(列数 - 1, Math.floor((选择矩形.right - 起点X) / 横步长));
+    const 已选 = new Set(状态.baseKeys);
+    for (let 行 = 首行; 行 <= 末行; 行++) for (let 列 = 首列; 列 <= 末列; 列++) {
+      const key = 当前选择视图Key列表[行 * 列数 + 列];
+      if (key) 已选.add(key);
+    }
+    设置已选项目Key集合(已选);
+  }
+
+  useEffect(() => {
+    if (!框选) return;
+    const 滚动时更新 = () => { 设置框选({ ...框选 }); 应用框选(框选); };
+    框选.container.addEventListener("scroll", 滚动时更新, { passive: true });
+    return () => 框选.container.removeEventListener("scroll", 滚动时更新);
+  }, [框选, 当前选择视图Key列表]);
 
   function 结束框选(): void {
     if (框选) 设置框选(null);
@@ -6668,9 +6783,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 已开始 = 进度 && (进度.hasStartedReading || 进度.currentPageIndex > 0 || 进度.completed);
     const 当前页 = 总页数 ? Math.min(总页数, Math.max(0, 书签 ? 书签.pageIndex + 1 : 已开始 ? 进度.currentPageIndex + 1 : 0)) : 0;
     const 百分比 = 总页数 ? Math.round(当前页 / 总页数 * 100) : 0;
-    const summary = 缩略图.folderSummary;
-    const 合集说明 = summary?.folders ? [tr`${summary.folders} 文件夹`, summary.books ? tr`${summary.books} 文档` : '', summary.images ? tr`${summary.images} 图片` : ''].filter(Boolean).join(' · ')
-      : 缩略图.childFolderCount ? tr`${缩略图.childFolderCount} 文件夹` : '';
+    const 合集说明 = String(缩略图.itemCount ?? 0) + t(" 项");
     const 页码 = 合集 ? 合集说明
       : 书签 ? (总页数 ? `${当前页}/${总页数}` : "")
       : 显示进度文本 && 总页数 ? (进度文本模式 === "percent" ? `${百分比}%` : `${当前页}/${总页数} · ${百分比}%`) : "";
@@ -7070,18 +7183,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               )}
             </div>
             <div className="tag-drawer-mode-row">
-              <span className="tag-drawer-mode-label">{t("搜索模式")}</span>
-              <div className="search-mode-toggle" role="group" aria-label={t("标签侧边栏搜索模式")}>
+              <span className="tag-drawer-mode-label">{t("多条件匹配方式")}</span>
+              <div className="search-mode-toggle" role="group" aria-label={t("多条件匹配方式")}>
                 <button
                   type="button"
                   className={搜索模式 === "fuzzy" ? "is-active" : ""}
                   onClick={() => 更新标签搜索模式("fuzzy")}
-                >{t("模糊")}</button>
+                >{t("任一条件")}</button>
                 <button
                   type="button"
                   className={搜索模式 === "exact" ? "is-active" : ""}
                   onClick={() => 更新标签搜索模式("exact")}
-                >{t("精准")}</button>
+                >{t("全部条件")}</button>
               </div>
             </div>
             <section className="settings-section">
@@ -7273,7 +7386,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 正在显示书签 = 当前视图 === "bookmarks";
   const 正在显示虚拟文件夹 = 当前视图 === "virtual-folder";
   const 正在显示非目录视图 = 正在显示最近打开 || 正在显示书架 || 正在显示收藏 || 正在显示书签 || 正在显示虚拟文件夹;
-  const 可以返回 = 当前视图 === "directory" && 历史记录.index > 0 && !正在读取;
+  const 可以返回 = 当前视图 === "directory" && Boolean(当前目录?.parentPath && 当前根目录 && 当前目录.path !== 当前根目录) && !正在读取;
   const 可以前进 = 历史记录.index >= 0
     && 历史记录.index < 历史记录.entries.length - 1
     && 当前视图 === "directory"
@@ -7571,7 +7684,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   return (
     <section className={`library-layout ${手机布局 ? `is-mobile-library mobile-cards-${手机卡片布局}` : ""} ${手机筛选展开 ? "is-mobile-filters-open" : ""}`} ref={手机导航区域}
-      aria-labelledby="library-title" style={手机布局 ? { "--mobile-columns": 手机列数, "--mobile-cover-size": `${手机封面尺寸}px`, "--mobile-preview-width": `${手机预览宽度}px` } as CSSProperties : undefined}>
+      aria-labelledby="library-title" style={手机布局 ? { "--mobile-columns": 手机列数, "--mobile-list-columns": 手机自适应.listColumns, "--mobile-cover-size": `${手机封面尺寸}px`, "--mobile-preview-width": `${手机预览宽度}px` } as CSSProperties : undefined}>
       {手机布局 && !资源信息目标 && <MobileLibraryBar title={资源信息目标 ? t("漫画详情") : 当前视图 === "directory" ? 当前目录 ? (根目录列表.find(root => root.path === 当前目录.path)?.name ?? 获取目录名称(当前目录.path)) : t("资源库") : 当前视图 === "bookshelf" ? t("我的书架") : 当前视图 === "virtual-folder" ? 视图标题 : t(视图标题)}
         detail={Boolean(资源信息目标)}
         drawerLabel={当前视图 === "bookshelf" || 当前视图 === "virtual-folder" ? "书架分类" : "资源库目录"}
@@ -7579,8 +7692,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         onOptions={() => 设置手机显示选项(true)} layout={手机卡片布局}
         onLayout={() => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, { layout: 手机卡片布局 === "grid" ? "list" : "grid" }))}
         searchOpen={手机筛选展开} query={当前搜索内容} suggestions={标签建议列表}
-        onQuery={value => { if (当前视图 === "recent") 设置最近搜索内容(value); else if (当前视图 === "favorites") 设置收藏搜索内容(value); else if (当前视图 === "bookmarks") 设置书签搜索内容(value); else 设置搜索内容(value); 回到第一页(); }}
-        onSearch={设置手机筛选展开} />}
+        onQuery={value => { 设置当前视图搜索内容(value); 回到第一页(); }}
+        onSearch={open => open ? 设置手机筛选展开(true) : 取消当前搜索()} />}
       {书签重命名 && <RenameBookmarkDialog bookmark={书签重命名} onClose={() => 设置书签重命名(null)} onSaved={item => { 设置书签列表(old => old.map(value => value.id===item.id ? item : value)); if(资源信息目标?.kind==='bookmark' && 资源信息目标.item.id===item.id) 设置资源信息目标({...资源信息目标,item}); }}/>}
       {手机布局 && 手机详情菜单 && 资源信息目标 && <MobileSheet title={t("漫画操作")} onClose={() => 设置手机详情菜单(false)}>
         <button className="mobile-settings-link" onClick={() => { if(资源信息目标.kind==='bookmark') 设置书签重命名(资源信息目标.item); else 打开详情文件操作("rename"); 设置手机详情菜单(false); }}><MobileIcon name="rename"/>{资源信息目标.kind==='bookmark' ? t("重命名书签") : t("重命名")}</button>
@@ -7596,14 +7709,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       </MobileSheet>}
       {手机布局 && 手机分类管理 && <MobileSheet title={手机分类管理.name} showClose={false} onClose={() => 设置手机分类管理(null)}>
         <button className="mobile-settings-link" onClick={() => { 打开书架弹窗({mode:"rename",bookshelf:手机分类管理}); 设置手机分类管理(null); }}>{t("重命名分类")}</button>
-        <button className="mobile-settings-link" disabled={书架列表.length < 2} onClick={() => { 请求删除书架栏(手机分类管理); 设置手机分类管理(null); }}>{t("删除分类")}</button>
+        <button className="mobile-settings-link" onClick={() => { 请求删除书架栏(手机分类管理); 设置手机分类管理(null); }}>{t("删除分类")}</button>
       </MobileSheet>}
       {手机布局 && 渲染手机书架操作栏()}
       {手机布局 && 手机显示选项 && <MobileSheet title={t("显示选项")} onClose={() => 设置手机显示选项(false)}>
         <p className="settings-hint">{t("仅调整")}{t(mobileDisplayLabels[手机显示范围])}{t("的显示方式。")}</p>
-        <label className="mobile-option-row"><span>{t("网格列数 ")}<b>{手机列数}</b></span><input aria-label={t("网格列数")} type="range" min="2" max="6" step="1" value={手机列数} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {columns:Number(event.target.value)}))} /></label>
+        <label className="mobile-option-row"><span>{t("网格列数 ")}<b>{手机基础列数}</b></span><input aria-label={t("网格列数")} type="range" min="2" max="6" step="1" value={手机基础列数} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {columns:Number(event.target.value)}))} /></label>
+        {手机自适应.wide && <small className="mobile-adaptive-hint">{t("宽屏自动适配")} · {手机列数} {t("列")}</small>}
         <label className="mobile-option-row"><span>{t("列表封面尺寸 ")}<b>{手机封面尺寸}</b></span><input aria-label={t("列表封面尺寸")} type="range" min="64" max="132" step="4" value={手机封面尺寸} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {coverSize:Number(event.target.value)}))} /></label>
-        <div className="mobile-option-row"><span>{t("资源库默认排序")}</span><GlassSelect value={排序} options={uiOptions(排序方式选项)} ariaLabel={t("资源库默认排序")} onChange={value => 保存界面设置({sortMode:value})} /></div>
+        <div className="mobile-option-row mobile-sort-row"><span>{t("排序")}</span><GlassSelect value={随机模式 ? 'random' : 排序} options={uiOptions(浏览排序选项)} ariaLabel={t("资源库默认排序")} onChange={应用浏览排序} />{当前随机范围 && <RandomBrowseToggle active={随机模式} onChange={随机浏览.toggle}/>}</div>
         <button className="mobile-settings-link" disabled={正在读取 || 正在检查全局无效资源} onClick={() => { 设置手机显示选项(false); void 处理刷新按钮(); }}>{t("刷新资源库 ")}<MobileIcon name="refresh"/></button>
         {移除索引数量 > 0 && <button className="mobile-settings-link" onClick={async () => { const result = await window.omicomic.restoreResourceIndex(); if (result.ok) { await 同步文件操作(result.data); 设置手机显示选项(false); } else 设置错误信息(result.error.message); }}>{t("恢复文件索引 (")}{移除索引数量})</button>}
         <button className="mobile-settings-link" onClick={() => { 设置手机显示选项(false); 设置当前右侧抽屉("tag-filter"); }}>{t("标签管理 ")}<MobileIcon name="chevron"/></button>
@@ -7642,7 +7756,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             aria-current={手机布局 && 当前视图 === 'favorites' ? 'page' : undefined}
             onClick={() => {
               if (资源信息目标) 关闭资源详情页面(手机布局);
-              if(手机布局 && 当前视图 === "favorites") 回到第一页();
+              重置栏目搜索(); 设置导航会话(value => value + 1); if(当前视图 === "favorites") { 随机浏览.stop(); 回到第一页(); 目录连续列表.reset(); }
               if (手机布局) { 切换手机栏目('favorites', () => { 设置当前视图("favorites"); 设置错误信息(null); }); }
               else { 设置当前视图("favorites"); 设置错误信息(null); }
             }}
@@ -7657,7 +7771,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             aria-current={手机布局 && 当前视图 === 'bookmarks' ? 'page' : undefined}
             onClick={() => {
               if (资源信息目标) 关闭资源详情页面(手机布局);
-              if(手机布局 && 当前视图 === "bookmarks") 回到第一页();
+              重置栏目搜索(); 设置导航会话(value => value + 1); if(当前视图 === "bookmarks") { 随机浏览.stop(); 回到第一页(); 目录连续列表.reset(); }
               if (手机布局) { 切换手机栏目('bookmarks', () => { 设置当前视图("bookmarks"); 设置错误信息(null); }); }
               else { 设置当前视图("bookmarks"); 设置错误信息(null); }
             }}
@@ -7671,7 +7785,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             className={`sidebar-item ${手机布局 ? "mobile-hidden" : ""} ${当前视图 === "recent" && 是临时存放 ? "is-active" : ""}`}
             onClick={() => 切换阅读记录分类("temporary")}
           >
-            <svg className="sidebar-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5h14l1 11H2L3 5Zm-.5 7H7l1.5 2h3l1.5-2h4.5M7 3h6" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" /></svg>
+            <AppIcon name="temporary" className="sidebar-nav-icon"/>
             <span>{t("临时存放")}</span>
             <em className="sidebar-count">{临时存放列表.length}</em>
           </button>
@@ -7708,7 +7822,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         <h1 className="visually-hidden">{当前视图 === "virtual-folder" ? 视图标题 : t(视图标题)}</h1>
         {!手机布局 && 资源信息目标 && <div className="resource-detail-window-drag" aria-hidden="true" />}
 
-        {!资源信息目标 && <div className="library-controls">
+        {!资源信息目标 && <div className={`library-controls ${选择模式 ? "is-selecting" : ""}`}>
           {移除索引数量 > 0 && <button className="restore-index-button" onClick={async () => {
             const 结果 = await window.omicomic.restoreResourceIndex();
             if (结果.ok) await 同步文件操作(结果.data);
@@ -7719,8 +7833,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               <span aria-hidden="true">⌕</span>
               <input
                 ref={主搜索输入框}
-                aria-label={正在显示最近打开 ? tr`搜索${t(阅读记录标题)}` : 正在显示收藏 ? t("搜索收藏") : 正在显示书签 ? t("搜索书签") : 正在显示书架 ? t("搜索书架") : 正在显示虚拟文件夹 ? t("搜索当前书架") : t("搜索当前目录")}
-                placeholder={正在显示最近打开 ? tr`搜索${t(阅读记录标题)}名称、路径、备注或标签` : 正在显示收藏 ? t("搜索收藏文件名、备注或标签") : 正在显示书签 ? t("搜索书签资源、页面、备注或标签") : 正在显示书架 ? t("搜索书架、内部资源、备注或标签") : 正在显示虚拟文件夹 ? t("搜索当前书架内资源、备注或标签") : t("搜索当前目录、备注或标签")}
+                aria-label={正在显示最近打开 ? tr`搜索${t(阅读记录标题)}` : 正在显示收藏 ? t("搜索收藏") : 正在显示书签 ? t("搜索书签") : 正在显示书架 ? t("搜索书架") : 正在显示虚拟文件夹 ? t("搜索当前书架") : t("搜索当前资源库")}
+                placeholder={正在显示最近打开 ? tr`搜索${t(阅读记录标题)}名称、备注或标签` : 正在显示收藏 ? t("搜索收藏文件名、备注或标签") : 正在显示书签 ? t("搜索书签资源、页面、备注或标签") : 正在显示书架 ? t("搜索书架、内部资源、备注或标签") : 正在显示虚拟文件夹 ? t("搜索当前书架内资源、备注或标签") : t("搜索当前资源库、备注或标签")}
                 value={当前搜索内容}
                 disabled={!正在显示最近打开 && !正在显示收藏 && !正在显示书签 && !正在显示书架 && !正在显示虚拟文件夹 && !当前目录}
                 onFocus={() => 设置主搜索建议可见(true)}
@@ -7734,7 +7848,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   } else if (正在显示书签) {
                     设置书签搜索内容(事件.target.value);
                   } else {
-                    设置搜索内容(事件.target.value);
+                    设置当前视图搜索内容(事件.target.value);
                   }
                   回到第一页();
                 }}
@@ -7742,6 +7856,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               {!当前搜索内容 && <kbd className="search-shortcut">Ctrl K</kbd>}
               {当前搜索内容 && (
                 <button
+                  className="search-clear-button"
                   aria-label={t("清空搜索")}
                   title={t("清空搜索")}
                   onClick={() => {
@@ -7752,7 +7867,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                     回到第一页();
                   }}
                 >
-                  ×
+                  <AppIcon name="close"/>
                 </button>
               )}
             </label>
@@ -7781,17 +7896,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           </button>
 
           <GlassSelect
+            compact
             className="compact-sort-control"
             ariaLabel={t("排序方式")}
             title={t("排序方式")}
-            value={排序}
-            options={uiOptions(排序方式选项.map(option => ({ ...option, label: 正在显示书架 && option.value === "name-asc" ? "手动顺序" : option.label })))}
-            disabled={正在显示最近打开 || 正在显示收藏 || 正在显示书签 || 正在显示虚拟文件夹 || (!正在显示书架 && !当前目录)}
-            onChange={(新排序) => {
-              设置排序(新排序);
-              保存界面设置({ sortMode: 新排序 });
-              回到第一页();
-            }}
+            value={随机模式 ? 'random' : 排序}
+            options={uiOptions(浏览排序选项.map(option => ({ ...option, label: 正在显示书架 && option.value === "name-asc" ? "手动顺序" : option.label })))}
+            disabled={正在显示最近打开 || 正在显示虚拟文件夹 || (!当前随机范围 && !正在显示书架 && !当前目录)}
+            onChange={应用浏览排序}
           />
 
           <div className="view-selection-group">
@@ -7906,10 +8018,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             </div>
           )}
 
-          {正在显示最近打开 ? (
+          {当前视图 === 'directory' && (目录穿透搜索 || 随机模式) && 全库索引.error && <div className="library-opening-status" role="status">{全库索引.error}</div>}
+          {随机模式 && 当前分页项目总数 === 0 ? <div className="empty-library compact-empty" role="status" aria-busy={全库索引.loading}>
+            <div className="empty-illustration" aria-hidden="true"><RandomRefreshIcon/></div>
+            <h2>{t(全库索引.loading && 当前视图 === 'directory' ? "正在补全资源清单…" : "暂无可随机阅读的资源")}</h2>
+            <p>{全库索引.loading && 当前视图 === 'directory' ? t("发现漫画后立即显示，完整范围会继续补全。") : t("切换资源库或添加资源后再试。")}</p>
+          </div> : 正在显示最近打开 ? (
             最近打开卡片项目.length === 0 ? (
               <div className="empty-library compact-empty">
-                <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="history"/> : '◴'}</div>
+                <div className="empty-illustration" aria-hidden="true"><AppIcon name={是临时存放 ? "temporary" : "history"}/></div>
                 <h2>{当前阅读记录列表.length === 0 ? tr`暂无${t(阅读记录标题)}${t(是临时存放 ? "文件" : "记录")}` : tr`没有匹配的${t(阅读记录标题)}`}</h2>
                 <p>{当前阅读记录列表.length === 0 ? 是临时存放 ? t("直接打开、尚未加入资源库的文件会留在这里。右键可将所在目录加入资源库。") : t("阅读文件夹图片或漫画压缩包后，这里会显示最近资源卡片。") : t("请尝试缩短关键词、清空搜索内容或取消标签筛选。")}</p>
                 {当前阅读记录列表.length > 0 && (
@@ -8252,7 +8369,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           ) : 正在显示收藏 ? (
             收藏卡片项目.length === 0 ? (
               <div className="empty-library compact-empty">
-                <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="heart"/> : '♥'}</div>
+                <div className="empty-illustration" aria-hidden="true"><AppIcon name="heart"/></div>
                 <h2>{收藏列表.length === 0 ? t("暂无收藏") : t("没有匹配的收藏")}</h2>
                 <p>{收藏列表.length === 0 ? t("在资源卡片右下角点击爱心后，收藏资源会显示在这里。") : t("请尝试清空搜索内容或选择全部标签。")}</p>
               </div>
@@ -8413,7 +8530,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           ) : 正在显示书签 ? (
             书签卡片项目.length === 0 ? (
               <div className="empty-library compact-empty">
-                <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="bookmark"/> : '★'}</div>
+                <div className="empty-illustration" aria-hidden="true"><AppIcon name="bookmark"/></div>
                 <h2>{书签列表.length === 0 ? t("暂无书签") : t("没有匹配的书签")}</h2>
                 <p>{书签列表.length === 0 ? t("在阅读器中点击页码旁的书签按钮后，当前页会显示在这里。") : t("请尝试清空搜索内容或选择全部标签。")}</p>
               </div>
@@ -8719,6 +8836,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 </div>
               </div>
             )
+          ) : 目录穿透搜索 && 筛选排序后项目.length === 0 && (全库索引.loading || 全库索引.error) ? (
+            <div className="empty-library compact-empty" role="status"><div className="empty-illustration" aria-hidden="true"><AppIcon name="search"/></div><h2>{t(全库索引.error || "正在搜索资源库…")}</h2><p>{t("搜索范围包括当前资源库的全部子目录。")}</p></div>
           ) : 正在读取 && (!手机布局 || !当前目录) ? (
             手机布局 ? null : <div className="empty-library compact-empty">
               <div className="loading-mark" aria-hidden="true">…</div>
@@ -8732,15 +8851,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               <p>{document.documentElement.dataset.platform === "android" ? t("选择漫画目录，直接阅读图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF 和 EPUB。") : t("添加漫画目录后，这里会显示文件夹、图片、ZIP / CBZ、RAR / CBR、7z / CB7、PDF 和 EPUB。")}</p>
               <button className="primary-action empty-primary" onClick={() => void 添加目录()}>{t("添加漫画目录")}</button>
             </div>
-          ) : 当前目录.items.length === 0 ? (
+          ) : !随机模式 && !目录穿透搜索 && 当前目录.items.length === 0 ? (
             <div className="empty-library compact-empty">
-              <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="library"/> : t("空")}</div>
+              <div className="empty-illustration" aria-hidden="true"><AppIcon name="library"/></div>
               <h2>{t("此文件夹为空")}</h2>
               <p>{t("可以返回上一级或切换资源库目录。")}</p>
             </div>
           ) : 筛选排序后项目.length === 0 ? (
             <div className="empty-library compact-empty">
-              <div className="empty-illustration" aria-hidden="true">{手机布局 ? <MobileIcon name="search"/> : '⌕'}</div>
+              <div className="empty-illustration" aria-hidden="true"><AppIcon name="search"/></div>
               <h2>{t("没有匹配项目")}</h2>
               <p>{t("请尝试缩短关键词或清空搜索内容。")}</p>
               <button
@@ -8892,14 +9011,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           )}
         </div>
 
-        {(是否显示分页 || 当前视图 === "directory" || 正在显示虚拟文件夹 || (正在显示最近打开 && 是临时存放)) && (
-        <footer className={`library-footer ${是否显示分页 ? "has-pagination" : ""} ${总页数 <= 1 ? "is-single-page" : ""}`}>
+        {(是否显示分页 || 当前随机范围 || 当前视图 === "directory" || 正在显示虚拟文件夹 || (正在显示最近打开 && 是临时存放)) && (
+        <footer className={`library-footer ${随机模式 ? "is-random-footer" : ""} ${是否显示分页 ? "has-pagination" : ""} ${总页数 <= 1 ? "is-single-page" : ""}`}>
           <div className="library-footer-actions">
             {正在显示最近打开 && 是临时存放 && <button type="button" className="primary-action add-library-button" onClick={() => void 直接打开文件()}><span aria-hidden="true">＋</span>{t(" 打开文件")}</button>}
             {当前视图 === "directory" && (
               <button type="button" className="primary-action add-library-button" onClick={() => void 添加目录()} disabled={正在读取}>
                 <span aria-hidden="true">＋</span>{t("添加目录")}</button>
             )}
+            {!手机布局 && 当前随机范围 && <div className="random-browse-actions">
+              <RandomBrowseToggle active={随机模式} onChange={随机浏览.toggle}/>
+              {随机模式 && <button type="button" className="random-redraw-button" aria-label={t("重随机")} title={t("重随机")} disabled={随机浏览.busy} onClick={() => void 随机浏览.redraw()}><RandomRefreshIcon busy={随机浏览.busy}/></button>}
+            </div>}
             {当前视图 === "directory" && (
               <div className="root-library-dropdown" ref={根目录下拉容器}>
                 <button
@@ -8955,21 +9078,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             {(当前视图 === "directory" || 正在显示虚拟文件夹) && (
               <div className="navigation-actions footer-navigation-actions" role="group" aria-label={t("目录导航")}>
 
-                <button
-                  type="button"
-                  disabled={(!正在显示虚拟文件夹 && (!当前目录?.parentPath || 正在读取 || !当前根目录))}
-                  onClick={() => {
-                    if (正在显示虚拟文件夹) 返回书架根层();
-                    else if (当前目录?.parentPath && 当前根目录) void 打开目录(当前目录.parentPath, 当前根目录);
-                  }}
-                  title={正在显示虚拟文件夹 ? t("返回书架") : t("上一级")}
-                  aria-label={正在显示虚拟文件夹 ? t("返回书架") : t("上一级")}
-                >
-                  <ArrowIcon direction="up" />
-                </button>
-                {当前视图 === "directory" && (
-                  <span className="navigation-divider" aria-hidden="true" />
-                )}
+                {正在显示虚拟文件夹 && <button type="button" onClick={() => 返回书架根层()} title={t("返回书架")} aria-label={t("返回书架")}><ArrowIcon direction="left" /></button>}
                 {当前视图 === "directory" && (
                   <button type="button" disabled={!可以返回} onClick={() => void 返回上一处()} title={t("返回")} aria-label={t("返回")}>
                     <ArrowIcon direction="left" />
@@ -8983,12 +9092,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               </div>
             )}
           </div>
+          {手机布局 && 随机模式 && !手机操作目标 && !手机书架管理 && <nav className="mobile-page-pill is-random-pager" aria-label={t("随机阅读")}><button type="button" aria-label={t("重随机")} title={t("重随机")} disabled={随机浏览.busy} onClick={() => void 随机浏览.redraw()}>{t("重随机")}</button></nav>}
           {手机布局 && 是否显示分页 && !手机操作目标 && !手机书架管理 && <MobilePagePager current={安全当前页} total={总页数} onPage={跳转页码}/>}
           {!手机布局 && 是否显示分页 && (
             <div className="pagination-bar" aria-label={t("分页")}>
-              <button type="button" onClick={回到当前页顶部}>{t("顶部")}</button>
-              <button disabled={安全当前页 === 1} onClick={() => 跳转页码(1)}>{t("首页")}</button>
-              <button disabled={安全当前页 === 1} onClick={() => 跳转页码(安全当前页 - 1)}>{t("上一页")}</button>
+              <div className="desktop-inline-page-navigation">
+                <button type="button" onClick={回到当前页顶部}>{t("顶部")}</button>
+                <button disabled={安全当前页 === 1} onClick={() => 跳转页码(1)}>{t("首页")}</button>
+                <button disabled={安全当前页 === 1} onClick={() => 跳转页码(安全当前页 - 1)}>{t("上一页")}</button>
+              </div>
               <label className="page-input">
                 <input
                   inputMode="numeric"
@@ -9006,11 +9118,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 />
               </label>
               <span>/ {总页数}</span>
-              <button
-                disabled={安全当前页 === 总页数}
-                onClick={() => 跳转页码(安全当前页 + 1)}
-              >{t("下一页")}</button>
-              <button disabled={安全当前页 === 总页数} onClick={() => 跳转页码(总页数)}>{t("尾页")}</button>
+              <div className="desktop-inline-page-navigation">
+                <button disabled={安全当前页 === 总页数} onClick={() => 跳转页码(安全当前页 + 1)}>{t("下一页")}</button>
+                <button disabled={安全当前页 === 总页数} onClick={() => 跳转页码(总页数)}>{t("尾页")}</button>
+              </div>
               <div className="page-size-control">
                 <span>{t("每页")}</span>
                 <GlassSelect
@@ -9029,6 +9140,20 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           )}
         </footer>
         )}
+        {!手机布局 && (是否显示分页 || 选择模式) && <nav className="desktop-library-float" aria-label={t("资源列表悬浮操作")}>
+          {选择模式 && <div className="desktop-floating-selection" role="group" aria-label={t("选择操作")}>
+            <button type="button" aria-label={t("全选")} onClick={全选当前选择视图}><span>{t("全选")}</span><i><AppIcon name="select"/></i></button>
+            <button type="button" aria-label={t("取消全选")} onClick={取消全选}><span>{t("取消全选")}</span><i><LibraryPageIcon name="clear"/></i></button>
+            <button type="button" aria-label={t("退出选择")} onClick={退出选择模式}><span>{t("退出选择")}</span><i><AppIcon name="close"/></i></button>
+          </div>}
+          {是否显示分页 && <div className="desktop-page-navigation">
+            <button type="button" aria-label={t("顶部")} onClick={回到当前页顶部}><span>{t("顶部")}</span><i><LibraryPageIcon name="top"/></i></button>
+            <button type="button" aria-label={t("首页")} disabled={安全当前页 === 1} onClick={() => 跳转页码(1)}><span>{t("首页")}</span><i><LibraryPageIcon name="first"/></i></button>
+            <button type="button" aria-label={t("上一页")} disabled={安全当前页 === 1} onClick={() => 跳转页码(安全当前页 - 1)}><span>{t("上一页")}</span><i><LibraryPageIcon name="previous"/></i></button>
+            <button type="button" aria-label={t("下一页")} disabled={安全当前页 === 总页数} onClick={() => 跳转页码(安全当前页 + 1)}><span>{t("下一页")}</span><i><LibraryPageIcon name="next"/></i></button>
+            <button type="button" aria-label={t("尾页")} disabled={安全当前页 === 总页数} onClick={() => 跳转页码(总页数)}><span>{t("尾页")}</span><i><LibraryPageIcon name="last"/></i></button>
+          </div>}
+        </nav>}
         </>}
         {手机布局 && 当前右侧抽屉 === "settings" && <MobileSettings settings={界面设置快照.current} displayScope={手机显示范围} onSaved={应用界面设置} onClose={关闭右侧抽屉} bookSettings={<BookReaderSettings preferred={资源详情阅读资源} onSaved={更新书籍阅读设置}/>}/>}
         {!手机布局 && 当前右侧抽屉 === "settings" && (
@@ -9086,9 +9211,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   hidden={当前设置分类 !== "appearance"}
                 >
                   <div className="settings-row"><span>{t('语言 / Language')}</span><GlassSelect ariaLabel="语言 / Language" value={界面语言} options={[{value:'zh-CN',label:'简体中文'},{value:'en',label:'English'},{value:'ja',label:'日本語'}]} onChange={value => 保存界面设置({language:normalizeLanguage(value)})}/></div>
+                  <label className="settings-toggle"><input type="checkbox" checked={显示主界面} onChange={event => 保存界面设置({showHomePage:event.target.checked})}/><span>{t("显示主界面")}</span></label>
                   <div className="settings-row"><span>{t('全局字号')}</span><FontSizeControl label={t('全局字号')} value={全局字号} onChange={value => 保存界面设置({desktopGlobalFontSize:value, desktopInfoFontSize:信息字号})}/></div>
                   <div className="settings-row"><span>{t('页码与信息字号')}</span><FontSizeControl label={t('页码与信息字号')} value={信息字号} onChange={value => 保存界面设置({desktopInfoFontSize:value, desktopGlobalFontSize:全局字号})}/></div>
                   <HomeArtworkSettings />
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("卡片尺寸")}</span>
+                    <CardScaleControl label={t("卡片尺寸")} scope="library" value={卡片缩放}
+                      motion={缩放动效.library}
+                      onChange={value => 调整卡片缩放(value, "library")} onCommit={保存缩放设置} />
+                  </div>
                   <h3>{t("主题配色")}</h3>
                   <div className="theme-options" role="radiogroup" aria-label={t("主题配色")}>
                     {主题选项.map((配色) => (
@@ -9121,12 +9253,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   hidden={当前设置分类 !== "library"}
                 >
                   <h3>{t("资源库设置")}</h3>
-                  <div className="settings-row mobile-hidden">
-                    <span>{t("卡片尺寸")}</span>
-                    <CardScaleControl label={t("卡片尺寸")} scope="library" value={卡片缩放}
-                      motion={缩放动效.library}
-                      onChange={value => 调整卡片缩放(value, "library")} onCommit={保存缩放设置} />
-                  </div>
+
                   <div className="settings-row">
                     <span>{t("每页数量")}</span>
                     <GlassSelect
@@ -9219,16 +9346,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       }}
                     />
                   </div>
-                  <div className="settings-row mobile-hidden">
-                    <span>{t("标签搜索模式")}</span>
+                  <label className="settings-toggle">
+                    <input type="checkbox" checked={空格分隔搜索条件} onChange={event => 保存界面设置({ searchSplitSpaces: event.target.checked })} />
+                    <span>{t("空格分隔搜索条件")}</span>
+                  </label>
+                  <p className="settings-help">{t("默认保留关键词中的空格。开启后，空格分隔的条件必须同时满足。")}</p>
+                  <div className="settings-row">
+                    <span>{t("多条件匹配方式")}</span>
                     <GlassSelect
                       value={搜索模式}
                       options={uiOptions(搜索模式下拉选项)}
-                      ariaLabel={t("标签搜索模式")}
+                      ariaLabel={t("多条件匹配方式")}
                       className="settings-glass-select"
                       onChange={更新标签搜索模式}
                     />
                   </div>
+                  <p className="settings-help">{t("逗号分隔条件；| 表示满足任一条件。此设置也控制多个标签的筛选关系。")}</p>
                 </section>
 
                 <section
@@ -9433,24 +9566,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       }}
                     />
                   </div>
-                </section>
-
-                <section
-                  id="settings-section-reader"
-                  className="settings-section"
-                  role="tabpanel"
-                  data-settings-category="reader"
-                  aria-labelledby="settings-category-reader"
-                  hidden={当前设置分类 !== "reader"}
-                >
-                  <h3>{t("阅读器设置")}</h3>
-                  {isAndroid() && <div className="mobile-volume-settings">
-                    <label className="settings-toggle"><input type="checkbox" checked={音量键翻页} onChange={event => { 设置音量键翻页(event.target.checked); 保存界面设置({ readerVolumeKeys: event.target.checked }); }} /><span>{t("音量键翻页")}</span></label>
-                    <p>{t("阅读时，音量＋上一页、音量－下一页。退出阅读后恢复调节音量。")}</p>
-                    <label className="settings-toggle"><input type="checkbox" checked={反转音量键} disabled={!音量键翻页} onChange={event => { 设置反转音量键(event.target.checked); 保存界面设置({ readerVolumeKeysReversed: event.target.checked }); }} /><span>{t("反转音量键翻页方向")}</span></label>
-                  </div>}
-                  {!手机布局 && 当前设置分类 === "reader" && <BookReaderSettings preferred={资源详情阅读资源} onSaved={更新书籍阅读设置} />}
-
                   <label className="settings-toggle">
                     <input
                       type="checkbox"
@@ -9462,6 +9577,25 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                     />
                     <span>{t("智能识别跨页图：")}{智能识别跨页图 ? t("开") : t("关")}</span>
                   </label>
+                </section>
+
+                <section
+                  id="settings-section-reader"
+                  className="settings-section"
+                  role="tabpanel"
+                  data-settings-category="reader"
+                  aria-labelledby="settings-category-reader"
+                  hidden={当前设置分类 !== "reader"}
+                >
+                  <h3>{t("漫画阅读设置")}</h3>
+                  {isAndroid() && <div className="mobile-volume-settings">
+                    <label className="settings-toggle"><input type="checkbox" checked={音量键翻页} onChange={event => { 设置音量键翻页(event.target.checked); 保存界面设置({ readerVolumeKeys: event.target.checked }); }} /><span>{t("音量键翻页")}</span></label>
+                    <p>{t("阅读时，音量＋上一页、音量－下一页。退出阅读后恢复调节音量。")}</p>
+                    <label className="settings-toggle"><input type="checkbox" checked={反转音量键} disabled={!音量键翻页} onChange={event => { 设置反转音量键(event.target.checked); 保存界面设置({ readerVolumeKeysReversed: event.target.checked }); }} /><span>{t("反转音量键翻页方向")}</span></label>
+                  </div>}
+                  {!手机布局 && 当前设置分类 === "reader" && <BookReaderSettings preferred={资源详情阅读资源} onSaved={更新书籍阅读设置} />}
+
+
                   <label className="settings-toggle mobile-hidden">
                     <input
                       type="checkbox"
@@ -9508,8 +9642,25 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       }}
                     />
                   </div>
-                  <div className="settings-row"><span>{t('阅读性能')}</span><GlassSelect value={桌面性能模式} ariaLabel={t('阅读性能')} options={uiOptions([{value:'auto' as const,label:'自动'},{value:'balanced' as const,label:'均衡'},{value:'high' as const,label:'高性能'},{value:'custom' as const,label:'自定义'}])} onChange={value=>保存界面设置({desktopPerformanceProfile:value})}/></div>
                   <label className="settings-toggle"><input type="checkbox" checked={桌面自动隐藏} onChange={event=>保存界面设置({desktopReaderAutoHide:event.target.checked})}/><span>{t('普通阅读工具栏自动隐藏')}</span></label>
+                  <div className="settings-row mobile-hidden">
+                    <span>{t("上/下一篇按钮透明度")}</span>
+                    <GlassSelect
+                      value={图书切换按钮透明度}
+                      options={uiOptions(图书按钮透明度下拉选项)}
+                      ariaLabel={t("上/下一篇按钮透明度")}
+                      className="settings-glass-select"
+                      onChange={(新透明度) => {
+                        设置图书切换按钮透明度(新透明度);
+                        保存界面设置({ bookSwitchButtonOpacity: 新透明度 });
+                      }}
+                    />
+                  </div>
+                </section>
+                <section id="settings-section-performance" className="settings-section" role="tabpanel" data-settings-category="performance" aria-labelledby="settings-category-performance" hidden={当前设置分类 !== "performance"}>
+                  <h3>{t("性能与缓存")}</h3>
+                  <div className="settings-row"><span>{t('阅读性能')}</span><GlassSelect value={桌面性能模式} ariaLabel={t('阅读性能')} options={uiOptions([{value:'auto' as const,label:'自动'},{value:'balanced' as const,label:'均衡'},{value:'high' as const,label:'高性能'},{value:'custom' as const,label:'自定义'}])} onChange={value=>保存界面设置({desktopPerformanceProfile:value})}/></div>
+
                   <label className="settings-row">
                     <span>{t("图片缓存预算（估算 MB）")}</span>
                     <input
@@ -9561,19 +9712,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       }}
                     />
                   </label>
-                  <div className="settings-row mobile-hidden">
-                    <span>{t("上/下一篇按钮透明度")}</span>
-                    <GlassSelect
-                      value={图书切换按钮透明度}
-                      options={uiOptions(图书按钮透明度下拉选项)}
-                      ariaLabel={t("上/下一篇按钮透明度")}
-                      className="settings-glass-select"
-                      onChange={(新透明度) => {
-                        设置图书切换按钮透明度(新透明度);
-                        保存界面设置({ bookSwitchButtonOpacity: 新透明度 });
-                      }}
-                    />
-                  </div>
                 </section>
                 <section id="settings-section-about" className="settings-section" role="tabpanel" data-settings-category="about" aria-labelledby="settings-category-about" hidden={当前设置分类 !== "about"}>
                   <AboutOmiComic active={当前设置分类 === "about"} />

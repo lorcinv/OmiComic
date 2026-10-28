@@ -8,7 +8,7 @@ export interface LocalFileTarget { path: string; paths?: string[]; title: string
 export default function LocalFileDialog({ target, onClose, onChanged }: {
   target: LocalFileTarget;
   onClose: () => void;
-  onChanged: (data: OmiComicAppData) => void | Promise<void>;
+  onChanged: (data: OmiComicAppData, paths?: string[]) => void | Promise<void>;
 }) {
   const [name, setName] = useState(target.path.split(/[\\/]/).pop() ?? target.title);
   const [deleteSource, setDeleteSource] = useState(false);
@@ -42,7 +42,7 @@ export default function LocalFileDialog({ target, onClose, onChanged }: {
         completed.current.add(path);
         latest = result.data.appData;
       }
-      if (latest) await onChanged(latest);
+      if (latest) await onChanged(latest, [...completed.current]);
       if (failure) { setError(`${completed.current.size ? `已处理 ${completed.current.size} 项；` : ""}${failure}`); return; }
       onClose();
     } catch { setError("操作未完成，请刷新后检查文件状态。"); }

@@ -30,13 +30,15 @@ describe('bounded cover and document metadata regressions', () => {
     mountLibrary();
     await waitFor(() => expect(navigation(/^书架/).textContent).toContain('600'));
     fireEvent.click(navigation(/^书架/));
-    await waitFor(() => expect(document.querySelectorAll('.bookshelf-folder-card')).toHaveLength(60));
-    await waitFor(() => expect(document.querySelectorAll('.bookshelf-folder-shell.has-preview')).toHaveLength(60));
+    await waitFor(() => expect(document.querySelectorAll('.bookshelf-folder-card').length).toBeGreaterThan(0));
+    const mounted = document.querySelectorAll('.bookshelf-folder-card').length;
+    expect(mounted).toBeLessThan(60);
+    await waitFor(() => expect(document.querySelectorAll('.bookshelf-folder-shell.has-preview')).toHaveLength(mounted));
     const requested = thumbnail.mock.calls.map(([input]) => input.path).filter(path => path.startsWith('/cover-fixture/'));
-    // The first page has 60 distinct assigned covers. A global candidate scan used to churn beyond the 512 cache bound.
-    expect(new Set(requested).size).toBe(60);
-    expect(requested.length).toBeLessThanOrEqual(120);
-    expect(document.querySelectorAll('.bookshelf-folder-cover > img')).toHaveLength(60);
+    // Demand follows the viewport independently of the logical page capacity.
+    expect(new Set(requested).size).toBe(mounted);
+    expect(requested.length).toBeLessThanOrEqual(mounted * 2);
+    expect(document.querySelectorAll('.bookshelf-folder-cover > img')).toHaveLength(mounted);
   });
 
   it.each(['recent', 'favorites'] as const)('keeps PDF source type in %s cards and detail metadata', async view => {

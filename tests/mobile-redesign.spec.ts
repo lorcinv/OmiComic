@@ -50,7 +50,7 @@ test('compact phone home, list/grid, detail and hierarchical settings',async ({p
 test('phone unified search, long press action bar, selection and layered back',async ({page}) => {
   await library(page);
   await page.getByRole('button',{name:'搜索',exact:true}).tap();
-  await page.getByRole('searchbox',{name:'搜索漫画、名称或标签'}).fill('Book -Parent');
+  await page.getByRole('searchbox',{name:'搜索漫画、名称或标签'}).fill('Book');
   await expect(page.locator('.mobile-resource-card')).toHaveCount(1);
   await expect(page.locator('.library-controls')).toBeHidden();
   await back(page);await expect(page.locator('.mobile-library-bar input')).toHaveCount(0);

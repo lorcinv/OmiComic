@@ -19,13 +19,14 @@ export function setUiLanguage(value: unknown) {
   language = next;
   for (const notify of listeners) notify();
 }
-export function useUiLanguage(mobile: boolean) {
+export function useUiLanguage(mobile: boolean, readSettings = true) {
   const current = useSyncExternalStore(callback => { listeners.add(callback); return () => { listeners.delete(callback); }; }, () => language);
   useEffect(() => {
+    if (!readSettings) return;
     let live = true;
     void window.omicomic.getAppData().then(result => { if (live && result.ok) setUiLanguage(result.data.settings.language); });
     return () => { live = false; };
-  }, [mobile]);
+  }, [mobile, readSettings]);
   return current;
 }
 /** Only UI-owned strings enter this function. File names, tags, notes and

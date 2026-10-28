@@ -48,6 +48,25 @@ test('desktop language, information size and performance preferences survive res
   assert.equal(saved.desktopPerformanceProfile,'custom');assert.equal(saved.readerPreloadPages,40);assert.equal(saved.readerImageLoadConcurrency,12);
 });
 
+test('page sizes migrate 60 to 50 and persist 500 plus opt-in space search', async t => {
+  const f = await fixture(t, { settings: { pageSize: 60 } });
+  assert.equal((await f.service.读取应用数据()).settings.pageSize, 50);
+  assert.equal((await f.service.读取应用数据()).settings.searchSplitSpaces, false);
+  await f.service.更新设置({ pageSize: 500, searchSplitSpaces: true });
+  const saved = (await f.load().读取应用数据()).settings;
+  assert.equal(saved.pageSize, 500);
+  assert.equal(saved.searchSplitSpaces, true);
+});
+
+test('home screen remains on for legacy settings and an explicit opt-out survives restart', async t => {
+  const f = await fixture(t, {settings:{}});
+  assert.equal((await f.service.读取应用数据()).settings.showHomePage,true);
+  await f.service.更新设置({showHomePage:false});
+  assert.equal((await f.load().读取应用数据()).settings.showHomePage,false);
+  await f.service.更新设置({showHomePage:true});
+  assert.equal((await f.load().读取应用数据()).settings.showHomePage,true);
+});
+
 test('desktop typography migrates the old standard and persists custom numeric sizes', async t => {
   const f = await fixture(t, { settings: { desktopInfoFontSize: 14 } });
   let settings = (await f.service.读取应用数据()).settings;
@@ -264,7 +283,8 @@ test('invalid legacy values are bounded and malformed records do not erase valid
     virtualFolders: [{ id: 'old', name: 'Old', bookshelfId: 'missing', coverResourceKey: 'missing', items: [null, item, item] }],
   });
   const data = await f.service.读取应用数据();
-  assert.equal(data.settings.pageSize, 60);
+  assert.equal(data.settings.pageSize, 50);
+  assert.equal(data.settings.searchSplitSpaces, false);
   assert.equal(data.settings.readerMemoryCacheSizeMb, 16384);
   assert.equal(data.settings.readerPreloadPages, 0);
   assert.equal(data.settings.readerImageLoadConcurrency, 1);

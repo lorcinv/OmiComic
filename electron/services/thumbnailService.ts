@@ -6,7 +6,7 @@ import { deflateSync } from "node:zlib";
 import { EPUBDocumentSource } from "./epubService";
 import {
   读取压缩包单张图片,
-  读取压缩包图片列表,
+  读取压缩包封面列表,
   是压缩包服务错误,
   type 压缩包图片条目,
 } from "./archiveService";
@@ -530,7 +530,7 @@ export async function 获取压缩包封面缩略图(压缩包路径: string): P
   if (!是支持的压缩包(压缩包路径)) return { url: null };
 
   try {
-    const 图片列表 = await 读取压缩包图片列表(压缩包路径);
+    const 图片列表 = await 读取压缩包封面列表(压缩包路径);
     let retryable = false;
     for (const 封面 of 限制封面候选(生成压缩包封面候选(图片列表))) {
       try {
@@ -538,6 +538,7 @@ export async function 获取压缩包封面缩略图(压缩包路径: string): P
           压缩包路径,
           封面.virtualPath,
           缩略图最大字节数,
+          'background', true,
         );
         const 缩略图 = 图片数据转缩略图DataUrl(图片数据, 封面.virtualPath);
         if (缩略图) return { url: 缩略图 };

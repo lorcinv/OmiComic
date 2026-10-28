@@ -1,5 +1,5 @@
 import { t } from './i18n';
-import { useUiLanguage } from './i18n';
+import { useUiLanguage, setUiLanguage } from './i18n';
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import GlobalTooltip from "./GlobalTooltip";
@@ -8,26 +8,19 @@ import HomePage from "./pages/HomePage";
 import WindowControls from "./WindowControls";
 import MobileSettings from './components/MobileSettings';
 import BookReaderSettings from './components/BookReaderSettings';
-import { 应用主题配色 } from './theme';
+import { 应用主题配色, applyDesktopTypography } from './theme';
 import { isAndroid } from "./platform";
 import { androidCall, hasAndroidRenderer } from './android/bridge';
 import useMobileLayout from "./hooks/useMobileLayout";
 import { mobileNavigate, mobileNavigationEpoch, observeMobileNavigationLifecycle } from "./hooks/mobileNavigation";
-import type { AppSettings, ReadingProgress, 阅读打开上下文, 阅读资源结果, 页面名称 } from "./types";
+import type { AppSettings, OmiComicAppData, ReadingProgress, 操作结果, 阅读打开上下文, 阅读资源结果, 页面名称 } from "./types";
 import "./styles/pageTransitions.css";
 
 function App() {
   const mobile = useMobileLayout();
   useEffect(() => { document.documentElement.dataset.omiLayout = mobile ? 'mobile' : 'desktop'; }, [mobile]);
   useEffect(() => mobile ? observeMobileNavigationLifecycle() : undefined, [mobile]);
-  useEffect(() => {
-    if (!isAndroid()) return;
-    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
-      void androidCall('finishLaunch', { animated: !matchMedia('(prefers-reduced-motion: reduce)').matches }).catch(() => undefined);
-    }); });
-    return () => cancelAnimationFrame(frame);
-  }, []);
-  useUiLanguage(mobile);
+  useUiLanguage(mobile, false);
   const [homeSettings, setHomeSettings] = useState<AppSettings | null>(null);
   const openingSettings = useRef(false);
   async function openHomeSettings() {
@@ -77,6 +70,35 @@ function App() {
   const 等待阅读画面 = useRef<{ id: number; finish: (ready: boolean) => void } | null>(null);
   const 资源库就绪 = useRef(false);
   const 等待资源库 = useRef<Array<() => void>>([]);
+  const [启动资料, 设置启动资料] = useState<OmiComicAppData | null>(null);
+  const [启动设置就绪, 设置启动设置就绪] = useState(false);
+  const [显示主界面, 设置显示主界面] = useState(true);
+  const 主界面开关 = useRef(true);
+  const 启动资料请求 = useRef<Promise<操作结果<OmiComicAppData>> | null>(null);
+  const 初始资源库资料 = useRef<OmiComicAppData>();
+  const 启动导航序号 = useRef(0);
+  const [初始资源库已就绪, 设置初始资源库已就绪] = useState(false);
+  const 启动遮罩已结束 = useRef(false);
+
+  useEffect(() => {
+    if (!isAndroid() || 启动遮罩已结束.current || !启动设置就绪 || 手机阅读器准备中
+      || (!显示主界面 && !初始资源库已就绪 && 当前页面 !== '阅读器')) return;
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
+      启动遮罩已结束.current = true;
+      void androidCall('finishLaunch', { animated: !matchMedia('(prefers-reduced-motion: reduce)').matches }).catch(() => undefined);
+    }); });
+    return () => cancelAnimationFrame(frame);
+  }, [启动设置就绪, 显示主界面, 初始资源库已就绪, 当前页面, 手机阅读器准备中]);
+
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const enabled = (event as CustomEvent<boolean>).detail !== false;
+      主界面开关.current = enabled; 设置显示主界面(enabled);
+      if (!enabled && 当前页面 === '首页') void 直接进入资源库();
+    };
+    window.addEventListener('omi-home-visibility-changed', changed);
+    return () => window.removeEventListener('omi-home-visibility-changed', changed);
+  });
 
   function 取消阅读准备(): void {
     阅读打开请求.current++;
@@ -116,7 +138,10 @@ function App() {
       if (当前页面 === "阅读器") { window.dispatchEvent(new Event("omi-reader-back")); return; }
       if (当前页面 === "资源库") {
         const event = new Event("omi-library-back", { cancelable: true });
-        if (window.dispatchEvent(event)) void 切换主界面("首页");
+        if (window.dispatchEvent(event)) {
+          if (主界面开关.current) void 切换主界面("首页");
+          else void window.omicomic.minimizeWindow();
+        }
         return;
       }
       window.omicomic.minimizeWindow();
@@ -136,6 +161,7 @@ function App() {
           if (!应用已挂载.current) break;
           if (!结果.ok) { 设置外部打开错误(结果.error.message); continue; }
           if (!结果.data) break;
+          启动导航序号.current++; 阅读打开请求.current++;
           设置外部打开错误(null);
           设置进度刷新令牌(值 => 值 + 1);
           await 加载阅读器();
@@ -152,12 +178,51 @@ function App() {
     return () => { 应用已挂载.current = false; 等待阅读画面.current?.finish(false); 取消监听(); };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    // StrictMode remounts effects. Both passes share one settings read, and the
+    // selected first screen reuses that snapshot instead of asking for it again.
+    const request = 启动资料请求.current ??= window.omicomic.getAppData();
+    void request.then(async result => {
+      if (cancelled) return;
+      if (!result.ok) throw new Error(result.error.message);
+      应用主题配色(result.data.settings.colorTheme); applyDesktopTypography(result.data.settings);
+      setUiLanguage(result.data.settings.language);
+      const enabled = result.data.settings.showHomePage !== false;
+      主界面开关.current = enabled; 设置显示主界面(enabled);
+      设置启动资料(result.data); 设置启动设置就绪(true);
+      if (!enabled && 启动导航序号.current === 0) await 直接进入资源库(result.data, 0, () => !cancelled);
+    }).catch(error => {
+      if (cancelled) return;
+      主界面开关.current = true; 设置显示主界面(true); 设置启动设置就绪(true);
+      设置外部打开错误(error instanceof Error ? error.message : '设置读取失败，请重试。');
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function 直接进入资源库(initialData?: OmiComicAppData, navigation = 启动导航序号.current, live = () => true): Promise<void> {
+    const readerRequest = 阅读打开请求.current;
+    try {
+      const page = LibraryPage ?? (await import('./pages/LibraryPage')).default;
+      if (!应用已挂载.current || !live() || navigation !== 启动导航序号.current || readerRequest !== 阅读打开请求.current) return;
+      if (!LibraryPage) 初始资源库资料.current = initialData;
+      // The native launch cover waits for the library's existing onReady signal.
+      // A skipped home screen needs neither its cover work nor a home transition.
+      flushSync(() => { 设置资源库组件(() => page); 设置当前页面('资源库'); });
+    } catch {
+      if (!应用已挂载.current || !live() || navigation !== 启动导航序号.current) return;
+      主界面开关.current = true; 设置显示主界面(true);
+      设置外部打开错误('资源库加载失败，请重试。');
+    }
+  }
+
   async function 加载阅读器(): Promise<void> {
     const 页面 = await import("./pages/ReaderPage");
     if (应用已挂载.current) flushSync(() => 设置阅读器组件(() => 页面.default));
   }
 
   async function 切换主界面(目标页面: "首页" | "资源库"): Promise<void> {
+    if (目标页面 === '首页' && !主界面开关.current) return;
     if (主界面转场中.current || 当前页面 === 目标页面) return;
     const motion = mobileNavigationEpoch();
     if (mobile) 取消阅读准备();
@@ -174,11 +239,12 @@ function App() {
         return;
       } finally { 主界面转场中.current = false; }
     }
+    if (navigationRequest !== 阅读打开请求.current || !应用已挂载.current) return;
     if (mobile) {
       if (目标页面 === "资源库" && !资源库就绪.current) await new Promise<void>(resolve => { 等待资源库.current.push(resolve); });
       if (navigationRequest !== 阅读打开请求.current || !应用已挂载.current) return;
       const request = 阅读打开请求.current;
-      await mobileNavigate(() => 设置当前页面(目标页面), 当前页面 === "阅读器" ? "back" : 目标页面 === "首页" ? "home-collapse" : "home-expand", undefined, undefined, motion);
+      await mobileNavigate(() => { if (request === 阅读打开请求.current && 应用已挂载.current) 设置当前页面(目标页面); }, 当前页面 === "阅读器" ? "back" : 目标页面 === "首页" ? "home-collapse" : "home-expand", undefined, undefined, motion);
       if (request === 阅读打开请求.current && !等待阅读画面.current) 设置阅读资源(null);
       return;
     }
@@ -212,7 +278,7 @@ function App() {
     };
     try {
       const 转场 = document.startViewTransition(() => {
-        flushSync(() => 设置当前页面(目标页面));
+        if (navigationRequest === 阅读打开请求.current && 应用已挂载.current) flushSync(() => 设置当前页面(目标页面));
       });
       void 转场.finished.then(清理, 清理);
     } catch {
@@ -316,12 +382,13 @@ function App() {
 
   return (
     <div className="app-shell">
-      <main className="app-content">
-        {当前页面 === "首页" && <HomePage refreshToken={进度刷新令牌} onBrowse={() => 切换主界面("资源库")} onSettings={openHomeSettings} onOpenReader={打开阅读器页面} />}
+      <main className="app-content" aria-busy={!启动设置就绪 || undefined}>
+        {启动设置就绪 && 显示主界面 && 当前页面 === "首页" && <HomePage initialData={!LibraryPage && !ReaderPage ? 启动资料 ?? undefined : undefined} refreshToken={进度刷新令牌} onBrowse={() => 切换主界面("资源库")} onSettings={openHomeSettings} onOpenReader={打开阅读器页面} />}
 
         <div className={`page-panel ${当前页面 === "资源库" ? "is-visible" : "is-hidden"}`}>
           {LibraryPage && <LibraryPage
-            onReady={() => { 资源库就绪.current=true; 等待资源库.current.splice(0).forEach(resolve => resolve()); }}
+            initialData={初始资源库资料.current}
+            onReady={() => { 资源库就绪.current=true; 设置初始资源库已就绪(true); 等待资源库.current.splice(0).forEach(resolve => resolve()); }}
             onHome={() => 切换主界面("首页")}
             refreshToken={进度刷新令牌}
             isActive={当前页面 === "资源库"}

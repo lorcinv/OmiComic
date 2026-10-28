@@ -6,7 +6,7 @@ export type 阅读页类型 = "folder-image" | "archive-image" | "pdf-page" | "e
 export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 主题配色 = "mist" | "nord" | "sand" | "night";
-export type 每页数量 = 60 | 100 | 150 | 200;
+export type 每页数量 = 50 | 100 | 150 | 200 | 500;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
 export type 进度文本模式 = "page" | "percent";
 export type 进度条粗细 = "thin" | "normal" | "thick";
@@ -35,6 +35,7 @@ export type MobileDisplayScope = "directory" | "bookshelf" | "favorites" | "book
 export interface MobileDisplaySettings { layout: "grid" | "list"; columns: number; coverSize: number }
 
 export interface AppSettings {
+  showHomePage?: boolean;
   desktopInfoFontSize?: number;
   desktopGlobalFontSize?: number;
   desktopReaderAutoHide?: boolean;
@@ -89,6 +90,7 @@ export interface AppSettings {
   bookshelfNoteHoverDelayMs: 书架备注悬停延迟;
   recentOpenedLimit: 最近打开记录上限;
   tagSearchMode: 标签搜索模式;
+  searchSplitSpaces?: boolean;
   confirmBeforeDeleteTags: boolean;
   confirmBeforeBatchDelete: 批量删除确认设置;
 }
@@ -251,7 +253,11 @@ export interface 应用信息 {
   platform: string;
 }
 
+export interface LibraryCatalog { items: 文件条目[]; directories: number; skipped: number; scannedAt: number; complete?: boolean; removedPaths?: string[]; yielded?: boolean }
+export interface CatalogBatchOptions { incremental?: boolean; restart?: boolean; metadata?: boolean; invalidatePaths?: string[] }
+
 export interface 文件条目 {
+  containsImages?: boolean;
   id: string;
   name: string;
   path: string;
@@ -298,6 +304,9 @@ export interface 阅读资源结果 {
 }
 
 export interface 阅读相邻资源项 {
+  pageIndex?: number;
+  pageId?: string;
+  pageName?: string;
   key: string;
   path: string;
   type: 阅读资源类型;
@@ -457,7 +466,9 @@ export interface OmiComicApi {
   removeBookmark(id: string): Promise<操作结果<null>>;
   isPageBookmarked(resourceKey: string, pageIndex: number, pageId?: string): Promise<操作结果<boolean>>;
   selectFolder(): Promise<操作结果<string | null>>;
-  listDirectory(path: string): Promise<操作结果<目录结果>>;
+  listDirectory(path: string, options?: { background?: boolean }): Promise<操作结果<目录结果>>;
+  scanLibrary(path: string, refresh?: boolean, booksOnly?: boolean, options?: CatalogBatchOptions): Promise<操作结果<LibraryCatalog>>;
+  cancelLibraryScan?(): void;
   getResourcePages(input: 打开资源输入): Promise<操作结果<阅读资源结果>>;
   setReaderSession(id: number): Promise<操作结果<null>>;
   getPageImage(input: 获取页面图片输入): Promise<操作结果<页面图片结果>>;

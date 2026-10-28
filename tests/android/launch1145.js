@@ -1,0 +1,20 @@
+// Cold launch with showHomePage=false; all sources remain in the dedicated grant.
+const assert=(value,message)=>{if(!value)throw new Error(message);},pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const wait=async(condition,label)=>{const until=Date.now()+18000;while(!await condition()){if(Date.now()>until)throw new Error('Timeout: '+label);await pause(70);}};
+const api=window.omicomic, data=await api.getAppData();
+assert(data.ok&&data.data.settings.showHomePage===false,'Home-off preference was not loaded');
+assert(!document.querySelector('.omi-home'),'Disabled home mounted during startup');
+await wait(()=>document.querySelector('.page-panel.is-visible .mobile-resource-card'),'direct library ready');
+const visible=element=>element&&element.getBoundingClientRect().width>0&&getComputedStyle(element).visibility!=='hidden';
+const tap=async element=>{assert(element,'Missing native tap target');element.scrollIntoView({block:'nearest'});await pause(200);const r=element.getBoundingClientRect();window.__omiTap={x:r.x+r.width/2,y:r.y+Math.min(55,r.height/2),viewport:innerWidth};await wait(()=>!window.__omiTap,'native touch');await pause(220);};
+const key=async code=>{window.__omiKey=code;await wait(()=>!window.__omiKey,'native key');await pause(220);};
+const stats=async()=>{window.__omiNativeProbe=true;await wait(()=>!window.__omiNativeProbe,'reader pixels');return window.__omiNativeStats;};
+await tap(document.querySelector('.page-panel.is-visible .mobile-resource-card'));
+await wait(()=>document.documentElement.dataset.nativeReader==='on','native reader entry');
+await wait(async()=>{const result=await stats();return result.active&&result.drawnFrames>0&&result.visiblePages>0;},'first page');
+const first=await stats();
+window.__omiShortLifecycle=true;await wait(()=>!window.__omiShortLifecycle,'background and resume');
+const resumed=await stats();assert(resumed.visiblePages>0,'Reader lost its frame after background resume');
+await key(4);await wait(()=>document.querySelector('.page-panel.is-visible .mobile-resource-card'),'reader returns to library');
+assert(!document.querySelector('.omi-home'),'Reader Back reopened disabled home');
+return {version:(await api.getAppInfo()).version,homeDisabled:true,directLibrary:true,nativeTouch:true,firstNativeVisiblePages:first.visiblePages,resumeVisiblePages:resumed.visiblePages,readerBackKeepsLibrary:true,homeNeverMounted:true};

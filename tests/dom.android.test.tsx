@@ -20,6 +20,22 @@ function nativeStore() {
 }
 
 describe('Android durable library adapter',()=>{
+  it('defaults the home screen on for old data and persists an explicit opt-out', async () => {
+    const store = nativeStore(), api = await createAndroidApi(store.native);
+    const initial = await api.getAppData(); expect(initial.ok && initial.data.settings.showHomePage).toBe(true);
+    await api.updateSettings({showHomePage:false});
+    const restored = await (await createAndroidApi(store.native)).getAppData();
+    expect(restored.ok && restored.data.settings.showHomePage).toBe(false);
+  });
+  it('keeps space splitting disabled by default and persists numeric page sizes', async () => {
+    const store = nativeStore();
+    const api = await createAndroidApi(store.native);
+    const initial = await api.getAppData();
+    expect(initial.ok && initial.data.settings.searchSplitSpaces).toBe(false);
+    await api.updateSettings({ mobilePageSize: 500, searchSplitSpaces: true });
+    const restored = await (await createAndroidApi(store.native)).getAppData();
+    expect(restored.ok && restored.data.settings).toMatchObject({ mobilePageSize: 500, searchSplitSpaces: true });
+  });
   it('opens pages and reads the committed snapshot while a save is held, then commits in order',async()=>{
     const store=nativeStore();let release!:()=>void;let saving=false;
     const native:NativeCall=async(method,args)=>{

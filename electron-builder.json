@@ -25,7 +25,7 @@
     "icon": "resources/icon.ico",
     "executableName": "OmiComic",
     "requestedExecutionLevel": "asInvoker",
-    "artifactName": "OmiComic-Setup-${version}-${arch}.${ext}"
+    "artifactName": "OmiComic-Setup-${buildVersion}-${arch}.${ext}"
   },
   "nsis": {
     "include": "resources/installer.nsh",

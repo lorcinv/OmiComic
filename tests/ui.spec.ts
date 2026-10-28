@@ -7,7 +7,8 @@ test('home shows only three recent comics, brand returns home',async({page})=>{
  await seed(page);await page.goto('/');await expect(page.locator('.omi-home__book')).toHaveCount(3);
  await page.screenshot({path:'test-results/home-desktop.png',fullPage:true});
  await page.getByRole('button',{name:'打开资源库',exact:true}).click();
- await expect(page.locator('.resource-card')).toHaveCount(60);
+ await expect.poll(() => page.locator('.resource-card').count()).toBeGreaterThan(0);
+ expect(await page.locator('.resource-card').count()).toBeLessThan(60);
  await page.getByRole('button',{name:'OmiComic',exact:true}).click();
  await expect(page.locator('.omi-home__book')).toHaveCount(3);
 });

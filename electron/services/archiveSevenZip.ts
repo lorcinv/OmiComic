@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import os from 'node:os';
+import { isNestedArchive } from './nestedArchiveCache';
 import { ARCHIVE_LIMITS, createEntryGuard, failLimit, isImage, 压缩包服务错误, type ArchiveEntry } from "./archiveSafety";
 
 declare const __OMICOMIC_BUNDLED__: boolean | undefined;
@@ -74,7 +75,7 @@ export async function listSevenZip(archivePath: string): Promise<ArchiveEntry[]>
     if (fields.get("Encrypted") === "+") throw new 压缩包服务错误("ARCHIVE_ENCRYPTED", "暂不支持加密压缩包。");
     // RAR5 listings include these keys with empty values for regular files.
     if (["Symbolic Link", "Hard Link", "Copy Link"].some(key => Boolean(fields.get(key)?.trim()))) throw new 压缩包服务错误("ARCHIVE_UNSAFE_ENTRY", "压缩包包含不支持的链接。");
-    if (fields.get("Folder") !== "+" && !fields.get("Attributes")?.startsWith("D") && isImage(name)) {
+    if (fields.get("Folder") !== "+" && !fields.get("Attributes")?.startsWith("D") && (isImage(name) || isNestedArchive(name))) {
       const modifiedAt = Date.parse((fields.get("Modified") ?? "").replace(" ", "T"));
       entries.push({ virtualPath: name, size, modifiedAt: Number.isFinite(modifiedAt) ? modifiedAt : undefined });
     }

@@ -1,5 +1,25 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "显示主界面": ["Show home screen", "ホーム画面を表示"],
+  "多条件匹配方式": ["Condition matching", "条件の一致"],
+  "任一条件": ["Any condition", "いずれかの条件"],
+  "全部条件": ["All conditions", "すべての条件"],
+  "空格分隔搜索条件": ["Space-separated conditions", "空白で検索条件を区切る"],
+  "默认保留关键词中的空格。开启后，空格分隔的条件必须同时满足。": ["Spaces stay in keywords by default. When enabled, every space-separated condition must match.", "既定ではキーワード内の空白を保ちます。有効にすると空白で区切ったすべての条件に一致する必要があります。"],
+  "逗号分隔条件；| 表示满足任一条件。此设置也控制多个标签的筛选关系。": ["Separate conditions with commas; | always means OR. This setting also controls multiple selected tags.", "条件はカンマで区切り、| は常にいずれかの条件を意味します。この設定は複数タグの絞り込みにも適用されます。"],
+  "随机": ["Random", "ランダム"],
+  "随机阅读": ["Random browsing", "ランダム表示"],
+  "重随机": ["Shuffle again", "再シャッフル"],
+  "正在重随机…": ["Shuffling…", "再シャッフル中…"],
+  "随机排序": ["Random order", "ランダム順"],
+  "正在补全资源清单…": ["Discovering comics…", "漫画を検索中…"],
+  "发现漫画后立即显示，完整范围会继续补全。": ["Known comics appear immediately while discovery continues.", "見つかった漫画から表示し、残りの範囲を引き続き検索します。"],
+  "正在扫描资源库…": ["Scanning library…", "ライブラリを走査中…"],
+  "暂无可随机阅读的资源": ["No comics available for random browsing", "ランダム表示できる漫画がありません"],
+  "已扫描 {0} 个目录": ["Scanned {0} folders", "{0} 個のフォルダーを走査済み"],
+  "至少需要保留一个书架分类。": ["Keep at least one bookshelf category.", "本棚の分類は少なくとも一つ必要です。"],
+  "页面排序、自动阅读与工具栏": ["Page order, auto-reading and controls", "ページ順・自動読書・ツールバー"],
+  "内存缓存、预加载与并发": ["Memory cache, preloading and concurrency", "メモリキャッシュ・先読み・並列処理"],
   "操作说明": ["User guide", "操作ガイド"],
   "版本、介绍与操作说明": ["Version, introduction and user guide", "バージョン・紹介・操作ガイド"],
   "按钮功能、快捷键与手机手势": ["Controls, shortcuts and touch gestures", "ボタン・ショートカット・タッチ操作"],
@@ -1147,9 +1167,9 @@ export const messages: Record<string, readonly [string, string]> = {
     "Search this folder",
     "このフォルダーを検索"
   ],
-  "搜索{0}名称、路径、备注或标签": [
-    "Search {0} names, paths, notes or tags",
-    "{0}の名前・パス・メモ・タグを検索"
+  "搜索{0}名称、备注或标签": [
+    "Search {0} names, notes or tags",
+    "{0}の名前・メモ・タグを検索"
   ],
   "搜索收藏文件名、备注或标签": [
     "Search favorite filenames, notes or tags",
@@ -2918,5 +2938,14 @@ export const messages: Record<string, readonly [string, string]> = {
   "阅读工具栏 3 秒自动隐藏": [
     "Auto-hide reading controls after 3 seconds",
     "読書ツールバーを3秒後に自動で隠す"
-  ]
+  ],
+  "宽屏自动适配": ["Adapted to wide screen", "ワイド画面に自動調整"],
+  "资源列表悬浮操作": ["Floating library actions", "一覧のフローティング操作"],
+  "选择操作": ["Selection actions", "選択操作"],
+  "搜索当前资源库": ["Search current library", "現在のライブラリを検索"],
+  "搜索当前资源库、备注或标签": ["Search current library, notes or tags", "現在のライブラリ・メモ・タグを検索"],
+  "正在搜索资源库…": ["Searching the library…", "ライブラリを検索中…"],
+  "搜索范围包括当前资源库的全部子目录。": ["Search includes every subfolder of the current library.", "現在のライブラリ内の全サブフォルダーを検索します。"],
+  "正在准备可阅读资源…": ["Preparing readable resources…", "読めるリソースを準備中…"],
+  "切换资源库或添加资源后再试。": ["Try another library or add resources.", "ライブラリを切り替えるか、リソースを追加してください。"]
 };

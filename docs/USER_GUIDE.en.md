@@ -40,7 +40,7 @@ Image folders, JPG/PNG/WebP/BMP/GIF, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB. Arc
 <details>
 <summary>What do the card controls do?</summary>
 
-The heart toggles favorites; the three dots open details. Folder arrows expand the tree; folder names navigate. Details show paths, tags, notes and page previews.
+The heart toggles favorites; on Android it is at the top right of the card. The three dots open details. Folder arrows expand the tree; folder names navigate. Details show paths, tags, notes and page previews.
 
 **Windows：** Double-click a page preview to read from there. Double-click the description to edit; click outside to save.
 
@@ -51,11 +51,56 @@ The heart toggles favorites; the three dots open details. Folder arrows expand t
 <details>
 <summary>How do I search and filter?</summary>
 
-Search applies to the current view. Select tags to filter: fuzzy mode matches any condition; exact mode requires all conditions.
+PC and Android share the same search syntax. Library search includes every subfolder of the active root and matches each file or folder by its own name, notes and tags, excluding its path. Results appear in discovery batches, with folders before comics in each batch; later results append without moving existing hits or your page position. Favorites and Bookmarks search their current view. Bookmarks also match bookmark titles and page names. Separate conditions with English or Chinese commas; choose Any condition or All conditions in Settings → Library → Condition matching. The same setting controls multiple selected tags.
 
-**Windows：** Ctrl+K focuses search. Enter a name or description keyword; separate tag conditions with commas, such as school,daily.
+**Windows：** Ctrl+K focuses search.
 
-**Android：** Spaces mean AND, | means OR, and -word excludes. Use tag:school, name:volume or note:later to choose a field; tag:school$ matches a full tag.
+- **school,daily** — Any condition matches either term; All conditions requires both.
+- **Keywords with spaces** — By default, blue moon stays one keyword. Enable Space-separated conditions to require every unquoted space-separated term.
+
+</details>
+
+<details>
+<summary>What advanced search syntax is available?</summary>
+
+Both platforms support the syntax below. Space-separated conditions are off by default and can be enabled in Settings → Library. Spaces, commas and pipes inside quotes remain literal. Separate exclusions too: tag:school,-romance with All conditions requires school and excludes romance.
+
+- **adventure | growth** — Always matches either condition, regardless of the condition setting.
+- **-school** — Exclude entries containing this keyword.
+- **tag:school** — Search tags only.
+- **name:volume** — Search names only; title: is also supported.
+- **note:later** — Search notes and supplementary text.
+- **tag:school$** — Match the complete tag. artist:Alice$ also matches a full namespaced tag.
+- **"blue moon" / tag:"full color"$** — Quotes preserve a phrase, including spaces and separators in names or tags.
+
+</details>
+
+<details>
+<summary>How do compact windows and tablets adapt?</summary>
+
+**Windows：** Wide windows keep page navigation in the footer. Compact windows place page and selection actions above the cards at the lower right, with labels beside their icons. Page numbers and page size stay in the footer, and the top toolbar stays on one row.
+
+**Android：** Tablets automatically add grid columns as the screen grows; wide list layouts use two columns. The grid setting remains your phone density baseline. Rotation adjusts the layout, while settings and sheets keep comfortable widths.
+
+</details>
+
+<details>
+<summary>How do I browse random comics?</summary>
+
+Library, Favorites and Bookmarks support random browsing after search and tag filters. Your page size sets the batch size; use Shuffle again to change the order. Known comics appear first while the catalog discovers subfolders in the background. Each image folder is one book. Newly discovered comics join the next shuffle. Reading preserves the current batch; turning random off restores the ordinary order and position.
+
+**Windows：** Random reading sits immediately right of Add folder in the footer; enabling it reveals the refresh icon within the same control, separated by a vertical line.
+
+**Android：** Open display options at the top right and enable Random beside sorting; the page control becomes Shuffle.
+
+</details>
+
+<details>
+<summary>How do folder navigation and position restore work?</summary>
+
+Select Library, Bookshelves or another navigation entry again to return to its top level. Back goes up one level and restores the previous list position.
+
+**Windows：** The footer keeps Back and Forward; Forward reopens the directory you just left.
 
 </details>
 
@@ -113,7 +158,7 @@ Normal reading offers fit window, width, height or original size. Panorama choos
 
 Press play to start and pause to stop. Normal mode advances at intervals; panorama scrolls continuously. Leaving the reader or reaching the end stops it.
 
-**Windows：** Open Settings → Reader from the comic details to set interval and speed. Manual actions stop playback.
+**Windows：** Open Settings → Comic reading settings from the comic details to set interval and speed. Manual actions stop playback.
 
 **Android：** Play is at the right end of the progress bar. Set speed in Comic reading settings; manual actions pause temporarily, then resume.
 
@@ -180,6 +225,13 @@ No. Brightness, contrast, gamma and color effects change display only; Reset res
 **Windows：** Settings → Appearance: choose theme and language, and adjust global and page-number text sizes. Change card size in View.
 
 **Android：** Settings → Appearance: choose theme, language and the view to customize, then set grid columns or cover size. Each view keeps its own layout.
+
+</details>
+
+<details>
+<summary>How do I start directly in the library?</summary>
+
+Settings → Appearance → Show home screen is on by default. Turn it off to start directly in the library; turn it back on to restore Home.
 
 </details>
 

@@ -1,16 +1,17 @@
 import type { AppSettings, OmiComicApi, OmiComicAppData, VirtualFolder, VirtualFolderItemInput, 操作结果, 阅读资源结果 } from "../types";
 import { updateResourceRecords, withinPath } from "../../electron/services/resourceRecords";
-import type { NativeCall } from "./bridge";
+import { androidNotify, type NativeCall } from "./bridge";
 import { sanitizeAndroidChapter } from "./epub";
 import { version as appVersion } from "../../package.json";
 import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
 
 const defaults: AppSettings = {
+  showHomePage: true,
   language: 'zh-CN',
   mobileReaderAutoHide: true,
   mobileLibraryLayout: "grid", mobileGridColumns: 2, mobileListCoverSize: 82, readerVolumeKeys: false, readerVolumeKeysReversed: false,
   colorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
-  pageSize: 60, sortMode: "name-asc", sortDirection: "asc", folderFirst: true,
+  pageSize: 50, sortMode: "name-asc", sortDirection: "asc", folderFirst: true,
   hideBookshelfItemsInLibrary: true, showProgressBar: true, showProgressText: true,
   progressTextMode: "page", progressBarThickness: "normal", readerDefaultFitMode: "fit-window",
   readerPageMode: "single", readerDefaultFlow: "horizontal", readerDefaultPanorama: false,
@@ -20,7 +21,7 @@ const defaults: AppSettings = {
   readerPreloadPages: 2, readerImageLoadConcurrency: 2, bookSwitchButtonOpacity: 40,
   androidReaderDiskCacheSizeMb: 512, androidThumbnailCacheSizeMb: 128,
   organizeDrawerOpacity: 90, bookshelfNoteHoverDelayMs: 1000, recentOpenedLimit: 50,
-  tagSearchMode: "fuzzy", confirmBeforeDeleteTags: true,
+  tagSearchMode: "fuzzy", searchSplitSpaces: false, confirmBeforeDeleteTags: true,
   confirmBeforeBatchDelete: { favorites: true, bookmarks: true, recent: true },
 };
 const ok = <T>(data: T): 操作结果<T> => ({ ok: true, data });
@@ -45,6 +46,9 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     ...stored,
   };
   data.settings = { ...defaults, ...stored?.settings };
+  data.settings.showHomePage = data.settings.showHomePage !== false;
+  if (![50,100,150,200,500].includes(Number(data.settings.pageSize))) data.settings.pageSize = 50;
+  data.settings.searchSplitSpaces = data.settings.searchSplitSpaces === true;
   // Preserve existing direct-file references when upgrading to history-only storage.
   for (const item of data.temporaryOpened) {
     if (!data.recentOpened.some(recent => recent.resourceKey === item.resourceKey)
@@ -154,6 +158,8 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     removeBookmark: id=>write(d=>{d.bookmarks=d.bookmarks.filter(i=>i.id!==id);return null;}),
     isPageBookmarked: (key,page,id)=>read(()=>data.bookmarks.some(i=>i.resourceKey===key&&bookmarkMatches(i,page,id))),
     selectFolder: ()=>call("chooseFolder"),
+    cancelLibraryScan: () => androidNotify("cancelLibraryScan", {}),
+    scanLibrary: async (path, refresh=false, booksOnly=false, options)=>{const result=await call<import("../types").LibraryCatalog>("scanLibrary",{path,refresh,booksOnly,...options,excludedPaths:data.excludedResourcePaths??[]});return result;},
     listDirectory: async path=>{const result=await call<import("../types").目录结果>("listDirectory",{path});if(result.ok){const hidden=data.excludedResourcePaths??[];result.data.items=result.data.items.filter(i=>!hidden.some(p=>withinPath(i.path,p)));result.data.total=result.data.items.length;}return result;},
     getResourcePages: async input=>{
       const result = await call<阅读资源结果>('getResourcePages', input);

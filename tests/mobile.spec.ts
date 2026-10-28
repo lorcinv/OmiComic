@@ -100,9 +100,10 @@ test('phone continuous paging uses its two visible columns and preserves positio
   });
   await expect.poll(first).toBe(50);
   await page.setViewportSize({width:844,height:390});
-  await expect.poll(first).toBe(50); // The configured phone columns and scroll anchor survive rotation.
+  // Wide layouts add columns; retain the same book in its containing row.
+  await expect.poll(first).toBe(48);
   await page.setViewportSize({width:390,height:844});
-  await expect.poll(first).toBe(50);
+  await expect.poll(first).toBe(48);
   await page.getByRole('button',{name:'下一页资源'}).tap();await page.getByRole('button',{name:'下一页资源'}).tap();
   await list.evaluate(element=>{element.scrollTop=element.scrollHeight;});
   await expect(page.locator('[data-library-index="150"]')).toBeVisible();

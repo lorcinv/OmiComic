@@ -1,4 +1,4 @@
-param([string]$JavaHome = $env:JAVA_HOME, [string]$AndroidSdk = $env:ANDROID_SDK_ROOT)
+param([string]$JavaHome = $env:JAVA_HOME, [string]$AndroidSdk = $env:ANDROID_SDK_ROOT, [string]$OutputDirectory = '')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
@@ -16,7 +16,7 @@ function Invoke-Checked([string]$Tool, [string[]]$Arguments) {
 }
 Invoke-Checked 'node' @('scripts/prepare-android.cjs')
 $build = Join-Path $projectRoot 'android\build'
-$release = Join-Path $projectRoot 'release'
+$release = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $projectRoot 'release' }
 $signing = Join-Path $projectRoot '.android-signing'
 New-Item -ItemType Directory -Force -Path $build,$release,$signing,(Join-Path $build 'classes'),(Join-Path $build 'dex'),(Join-Path $build 'res\drawable'),(Join-Path $build 'res\values'),(Join-Path $build 'assets\web') | Out-Null
 # Remove stale bundled assets only after verifying the target is inside this build directory.

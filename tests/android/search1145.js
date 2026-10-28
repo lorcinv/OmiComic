@@ -1,0 +1,66 @@
+// Packaged Android rendering with controlled discovery batches over real SAF entries.
+const assert = (value, message) => { if (!value) throw new Error(message); };
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const wait = async (condition, label) => { const until = Date.now() + 18000; while (!await condition()) { if (Date.now() > until) throw new Error('Timeout: ' + label + '; ' + document.body.innerText.slice(-700)); await pause(70); } };
+const api = window.omicomic, value = async promise => { const result = await promise; assert(result.ok, JSON.stringify(result)); return result.data; };
+const initial = await value(api.getAppData()), baseRoot = initial.library.roots.find(item => item.name === 'OmiRegression1141');
+assert(baseRoot, 'Dedicated grant missing');
+const root = await value(api.addLibraryRoot({ path: baseRoot.path + '/SearchStream1144', name: 'Stream check' }));
+await value(api.updateLibraryState({ lastActiveRootPath: root.path, lastCurrentPath: root.path }));
+await value(api.updateSettings({ mobilePageSize: 50 }));
+const listing = await value(api.listDirectory(root.path));
+const first = listing.items.filter(item => item.name.startsWith('Hit_Zfolder')).map(item => ({ ...item, containsImages: true }));
+const late = listing.items.filter(item => item.name.startsWith('Hit_Afolder')).map(item => ({ ...item, containsImages: true }));
+const books = listing.items.filter(item => item.type === 'archive');
+assert(first.length === 80 && late.length === 80 && books.length === 4, 'Missing native fixture entries');
+const originalList = api.listDirectory, originalScan = api.scanLibrary;
+const released = [true, false, false]; let calls = 0;
+api.listDirectory = async path => path === root.path ? { ok: true, data: { ...listing, items: first, total: first.length } } : originalList(path);
+api.scanLibrary = async () => {
+  const batch = calls++;
+  while (!released[batch] && batch < 3) await pause(30);
+  return { ok: true, data: { items: batch === 0 ? [...first,...books.slice(0,2)] : batch === 1 ? late.slice(0,40) : [...late.slice(40),...books.slice(2)], directories: batch + 1, skipped: 0, scannedAt: Date.now(), complete: batch >= 2 } };
+};
+const visible = element => element && element.getBoundingClientRect().width > 0 && getComputedStyle(element).visibility !== 'hidden';
+const button = label => [...document.querySelectorAll('button')].find(element => visible(element) && (element.getAttribute('aria-label') === label || element.textContent.trim() === label));
+const tap = async element => { assert(element, 'Missing touch target'); element.scrollIntoView({ block: 'nearest' }); await pause(180); const r = element.getBoundingClientRect(); window.__omiTap = { x: r.x + r.width / 2, y: r.y + Math.min(55,r.height / 2), viewport: innerWidth }; await wait(() => !window.__omiTap, 'native tap'); await pause(180); };
+const key = async code => { window.__omiKey = code; await wait(() => !window.__omiKey, 'native key'); await pause(260); };
+const search = () => document.querySelector('.mobile-library-bar input[role="searchbox"]');
+const fill = async (query, commit = true) => { const input = search(); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,query); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:query})); if (commit) await key(66); await pause(220); };
+const list = () => document.querySelector('.page-panel.is-visible .resource-list-scroll');
+const names = () => [...document.querySelectorAll('.page-panel.is-visible .mobile-resource-card strong')].map(element => element.textContent);
+const anchor = () => { const element = list(), top = element.getBoundingClientRect().top; const card = [...element.querySelectorAll('[data-library-index]')].find(item => item.getBoundingClientRect().bottom > top + 2); return { key: card?.dataset.selectionKey, y: card ? card.getBoundingClientRect().top - top : 0, scroll: element.scrollTop, height: element.scrollHeight }; };
+const same = (before, after) => { assert(after.key === before.key, 'Visible card moved'); assert(Math.abs(after.y-before.y) < 1.5, 'Visible row moved'); assert(Math.abs(after.scroll-before.scroll) < 1, 'Scroll offset moved'); };
+try {
+  await tap(button('打开资源库')); await wait(() => names().some(name => name.startsWith('Hit_Zfolder')), 'first folders');
+  await tap(button('搜索')); await wait(() => search(), 'search field'); await fill('Hit_');
+  await wait(() => calls === 2, 'partial discovery');
+
+  list().scrollTop = list().scrollHeight; list().dispatchEvent(new Event('scroll')); await pause(400);
+  assert(document.querySelector('.mobile-page-number output')?.textContent.trim() === '2 / 2', 'Initial last page missing');
+  assert(names().some(name => name.endsWith('.cbz')), 'Books were held until full discovery');
+  assert(calls === 2 && !released[2], 'Late discovery must remain blocked during first-book check');
+  const heart=document.querySelector('.page-panel.is-visible .mobile-card-favorite'), card=heart?.closest('.mobile-resource-card');
+  assert(heart && card, 'Missing mobile favorite'); const h=heart.getBoundingClientRect(), c=card.querySelector('.resource-preview').getBoundingClientRect();
+  assert(Math.abs(h.top-c.top) <= 4 && Math.abs(h.right-c.right) <= 4, 'Favorite is not at upper-right corner');
+  const before = anchor(); released[1] = true;
+  await wait(() => list().scrollHeight > before.height, 'second folder batch'); await pause(250);
+  const middle = anchor(); same(before,middle); assert(document.querySelector('.mobile-page-number output').textContent.trim().startsWith('2 / '), 'New tail changed current page');
+  released[2] = true; await wait(() => list().scrollHeight > middle.height, 'books appended'); await pause(300);
+  same(before,anchor());
+  list().scrollTop = list().scrollHeight; list().dispatchEvent(new Event('scroll'));
+  await wait(() => document.querySelector('[data-library-index="163"]'), 'all appended entries');
+  assert(names().some(name => name.endsWith('.cbz')), 'Books missing after folder phase');
+  await tap(button('清空搜索')); await tap(button('关闭搜索'));
+  await tap(button('显示选项')); await tap(button('随机阅读')); await tap(button('关闭显示选项'));
+  await wait(() => document.documentElement.dataset.randomBrowse === 'on', 'random mode');
+  await tap(button('搜索')); await wait(() => search(), 'random search'); await fill('Hit_',false); await pause(800);
+  await key(4); await wait(() => !document.documentElement.dataset.randomBrowse, 'Back exits random before IME');
+  assert(search()?.value === 'Hit_', 'First Back cleared search');
+  await key(4); assert(search()?.value === 'Hit_', 'IME Back cleared search');
+  await key(4); await wait(() => !search(), 'later Back closes search');
+  return { version: (await api.getAppInfo()).version, nativeTouch: true, nativeSafEntries: listing.items.length, controlledDiscoveryBatches: calls, folderPriorityPerBatch: true, booksBeforeCatalogComplete: true, favoriteTopRight: true, pinnedPrefix: true, appendKeepsScroll: true, appendKeepsPage: true, randomBackBeforeKeyboard: true, secondBackKeepsQuery: true, thirdBackClosesSearch: true };
+} finally {
+  api.listDirectory = originalList; api.scanLibrary = originalScan;
+  await value(api.updateLibraryState(initial.library)); await value(api.updateSettings({ mobilePageSize: initial.settings.mobilePageSize }));
+}

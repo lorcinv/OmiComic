@@ -2,21 +2,23 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 // Page numbers are row-aligned landmarks in one continuous, virtualized list.
 export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabled: boolean,
-  count: number, requestedColumns: number, requestedPageSize: number, resetKey: string, exactPageSize = false) {
+  count: number, requestedColumns: number, requestedPageSize: number, resetKey: string, exactPageSize = false, identities?: readonly string[]) {
   // Responsive CSS can override the saved desktop card scale (phones use two columns).
   const [layoutColumns, setLayoutColumns] = useState<number | null>(null);
   const columns = layoutColumns ?? requestedColumns;
-  const [view, setView] = useState({ stride: 400, height: 800, row: 0, bottom: false, gap:14 });
+  const [view, setView] = useState({ stride: 400, height: 800, row: 0, bottom: false, gap:14, count });
   const viewRef = useRef(view);
-  const anchor = useRef({ index: 0, fraction: 0 });
+  const anchor = useRef<{ index: number; fraction: number; id?: string }>({ index: 0, fraction: 0 });
+  const positions = useRef(new Map<string, { index: number; fraction: number; id?: string }>());
+  const lastIdentities = useRef(identities);
   const previous = useRef({ key: resetKey, columns, stride: 400, gap:14 });
   const lastElement = useRef<HTMLDivElement | null>(null);
   const rows = Math.ceil(count / columns);
   const rowsPerPage = Math.max(1, Math.ceil(requestedPageSize / columns));
   const pageSize = exactPageSize ? requestedPageSize : rowsPerPage * columns;
   const pages = Math.max(1, Math.ceil(count / pageSize));
-  const page = view.bottom ? pages : Math.min(pages, Math.floor(view.row * columns / pageSize) + 1);
-  const windowRows = exactPageSize ? Math.ceil(view.height / view.stride) + 8 : Math.max(rowsPerPage, Math.ceil(view.height / view.stride) + 6);
+  const page = view.bottom && view.count === count ? pages : Math.min(pages, Math.floor(view.row * columns / pageSize) + 1);
+  const windowRows = Math.ceil(view.height / view.stride) + (exactPageSize ? 8 : 6);
   const startRow = Math.max(0, Math.min(view.row - 3, rows - windowRows));
   const endRow = Math.min(rows, startRow + windowRows);
   const height = Math.max(0, rows * view.stride - view.gap);
@@ -37,11 +39,16 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
     const position = Math.max(0, element.scrollTop - padding) / stride;
     // scrollTop may be rounded to a device pixel; tolerate that at row landmarks.
     const row = Math.min(Math.max(0, rows - 1), Math.floor(position + 1 / stride));
-    anchor.current = { index: row * columns, fraction: Math.max(0, position - row) };
-    const bottom = element.scrollTop > 0 && element.scrollHeight - element.clientHeight - element.scrollTop <= 2;
+    anchor.current = { index: row * columns, fraction: Math.max(0, position - row), id: identities?.[row * columns] };
+    positions.current.delete(previous.current.key);
+    positions.current.set(previous.current.key, { ...anchor.current });
+    if (positions.current.size > 160) positions.current.delete(positions.current.keys().next().value!);
+    // Fractional rows and browser scroll rounding can leave up to one grid gap
+    // after restoring a rotated layout. That empty tail still belongs to the last page.
+    const bottom = element.scrollTop > 0 && element.scrollHeight - element.clientHeight - element.scrollTop <= Math.max(2, previous.current.gap);
     const old = viewRef.current;
-    if (old.row !== row || old.bottom !== bottom || old.stride !== stride || old.height !== element.clientHeight || old.gap !== previous.current.gap) {
-      viewRef.current = { row, bottom, stride, height: element.clientHeight, gap:previous.current.gap };
+    if (old.row !== row || old.bottom !== bottom || old.stride !== stride || old.height !== element.clientHeight || old.gap !== previous.current.gap || old.count !== count) {
+      viewRef.current = { row, bottom, stride, height: element.clientHeight, gap:previous.current.gap, count };
       setView(viewRef.current);
     }
   }
@@ -66,6 +73,10 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
     const old = previous.current;
     const reset = old.key !== resetKey;
     const changed = old.columns !== columns || Math.abs(old.stride - stride) > .1 || lastElement.current !== element;
+    // Appending hits does not move the current anchor. Avoid writing scrollTop
+    // on every batch: that interrupts touch momentum and wheel scrolling.
+    const reordered = lastIdentities.current !== identities && !!anchor.current.id && identities?.[anchor.current.index] !== anchor.current.id;
+    lastIdentities.current = identities;
     lastElement.current = element;
     previous.current = { key: resetKey, columns, stride, gap };
     // Update the scroll extent before restoring, so the browser cannot clamp the
@@ -73,10 +84,13 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
     const canvas = element.querySelector<HTMLElement>('.library-virtual-canvas');
     if (canvas) canvas.style.height = `${Math.max(0, rows * stride - gap)}px`;
     if (reset) {
-      anchor.current = { index: 0, fraction: 0 };
-      element.scrollTop = 0;
-    } else if (changed) {
+      anchor.current = positions.current.get(resetKey) ?? { index: 0, fraction: 0 };
+      if (anchor.current.id && identities) { const index = identities.indexOf(anchor.current.id); if (index >= 0) anchor.current.index = index; }
+      const row = Math.floor(Math.min(anchor.current.index, Math.max(0, count - 1)) / columns);
+      element.scrollTop = row * stride + anchor.current.fraction * stride + (row ? contentTop(element) : 0);
+    } else if (changed || reordered) {
       // Keep the same first visible item when the window or column count changes.
+      if (anchor.current.id && identities) { const index = identities.indexOf(anchor.current.id); if (index >= 0) anchor.current.index = index; }
       const row = Math.floor(Math.min(anchor.current.index, Math.max(0, count - 1)) / columns);
       element.scrollTop = row * stride + anchor.current.fraction * stride + (row ? contentTop(element) : 0);
     }
@@ -101,5 +115,6 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
   }
   return { start: startRow * columns, end: Math.min(count, endRow * columns), offset: startRow * view.stride,
     visibleStart:view.row*columns, visibleEnd:Math.min(count,(view.row+Math.ceil(view.height/view.stride)+1)*columns), columns,
-    height, bottom:Math.max(0,(rows-endRow)*view.stride), page, pages, pageSize, sync, jump };
+    height, bottom:Math.max(0,(rows-endRow)*view.stride), page, pages, pageSize, sync, jump,
+    reset: () => { positions.current.delete(resetKey); jump(1); } };
 }

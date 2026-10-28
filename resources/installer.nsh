@@ -1,4 +1,8 @@
 ; Offer OmiComic in Open With and Default Apps without replacing the user's defaults.
+!include "${PROJECT_DIR}\\.packaged-app\\desktop-version.nsh"
+!undef VERSION
+!define VERSION "${OMI_DESKTOP_VERSION}"
+
 !macro OmiRegisterExtension EXT
   WriteRegNone HKCU "Software\Classes\.${EXT}\OpenWithProgids" "OmiComic.Document"
   WriteRegStr HKCU "Software\Classes\Applications\OmiComic.exe\SupportedTypes" ".${EXT}" ""

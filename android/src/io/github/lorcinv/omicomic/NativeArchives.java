@@ -16,6 +16,8 @@ import me.zhanghai.android.libarchive.ArchiveException;
 final class NativeArchives implements Closeable {
   private static final long MAX_IMAGE=64L*1024*1024, MAX_TOTAL=8L*1024*1024*1024;
   private static final int MAX_ENTRIES=30000, CACHE_BYTES=24*1024*1024;
+  private static final long MAX_NESTED=256L*1024*1024;
+  private static final String NESTED_PREFIX="__omi_nested_v1__/";
   /** Bound retained metadata too: entry count and decoded image bytes alone do not bound names. */
   static final class MetadataBudget {
     private int bytes;
@@ -29,7 +31,9 @@ final class NativeArchives implements Closeable {
   }
   private static final class PageEntry {
     final int ordinal; final Long modifiedAt;
-    PageEntry(int ordinal,Long modifiedAt){this.ordinal=ordinal;this.modifiedAt=modifiedAt;}
+    final String nestedArchive,childName;
+    PageEntry(int ordinal,Long modifiedAt){this(ordinal,modifiedAt,null,null);}
+    PageEntry(int ordinal,Long modifiedAt,String nestedArchive,String childName){this.ordinal=ordinal;this.modifiedAt=modifiedAt;this.nestedArchive=nestedArchive;this.childName=childName;}
   }
   private final Map<String,LinkedHashMap<String,PageEntry>> indexes=new LinkedHashMap<>(4,.75f,true);
   private final Map<String,Integer> indexNameBytes=new HashMap<>();
@@ -40,12 +44,17 @@ final class NativeArchives implements Closeable {
   private final DiskCache disk;
   private final DiskCache pageDisk;
   private final boolean retainPages;
+  private final File nestedDirectory;
+  private final Map<String,File> nestedFiles=new LinkedHashMap<>(8,.75f,true);
   private final java.util.concurrent.atomic.AtomicBoolean caching=new java.util.concurrent.atomic.AtomicBoolean(true);
   private final java.util.concurrent.atomic.AtomicLong cacheEpoch=new java.util.concurrent.atomic.AtomicLong();
   void setCaching(boolean enabled){if(caching.getAndSet(enabled)!=enabled)cacheEpoch.incrementAndGet();}
   private long indexBuilds,pageDecodes,pageDiskHits,zipRandomReads;
 
-  NativeArchives(DiskCache cache,DiskCache pageDisk,boolean retainPages){disk=cache;this.pageDisk=pageDisk;this.retainPages=retainPages;}
+  NativeArchives(DiskCache cache,DiskCache pageDisk,boolean retainPages,File nestedDirectory){
+    disk=cache;this.pageDisk=pageDisk;this.retainPages=retainPages;this.nestedDirectory=nestedDirectory;
+    File[] stale=nestedDirectory.listFiles();if(stale!=null)for(File file:stale)if(file.isFile()&&file.getName().startsWith("nested-"))file.delete();
+  }
   private Handle reader;
   private int nextOrdinal;
 
@@ -92,14 +101,56 @@ final class NativeArchives implements Closeable {
     int dot=name.lastIndexOf('.');
     return dot>=0&&Arrays.asList("jpg","jpeg","png","webp","gif","bmp").contains(name.substring(dot+1).toLowerCase(Locale.ROOT));
   }
+  static boolean archive(String name){
+    if(name==null||name.startsWith("__MACOSX/")||name.indexOf('\0')>=0)return false;
+    String path=name.replace('\\','/');if(path.startsWith("/")||path.matches("^[A-Za-z]:.*"))return false;
+    for(String part:path.split("/"))if(part.equals(".."))return false;
+    int dot=name.lastIndexOf('.');return dot>=0&&Arrays.asList("zip","cbz","rar","cbr","7z","cb7").contains(name.substring(dot+1).toLowerCase(Locale.ROOT));
+  }
+  private static String encoded(String name){try{return java.net.URLEncoder.encode(name,"UTF-8").replace("+","%20").replace("%21","!").replace("%27","'").replace("%28","(").replace("%29",")").replace("%7E","~");}catch(UnsupportedEncodingException impossible){throw new AssertionError(impossible);}}
+  private static String nestedName(String outer,String child){return NESTED_PREFIX+encoded(outer)+"/"+(child.startsWith(NESTED_PREFIX)?child.substring(NESTED_PREFIX.length()):encoded(child));}
+  static String displayName(String name){
+    if(!name.startsWith(NESTED_PREFIX))return name;
+    try{String[] parts=name.substring(NESTED_PREFIX.length()).split("/");for(int i=0;i<parts.length;i++)parts[i]=java.net.URLDecoder.decode(parts[i].replace("+","%2B"),"UTF-8");return String.join(" / ",parts);}catch(Exception invalid){return name;}
+  }
+  private String childKey(String key,String name){return key+"\n@nested:"+name;}
+  private synchronized File stage(SeekableSource source,String key,String name)throws IOException{
+    String id=childKey(key,name);File cached=nestedFiles.get(id);if(cached!=null&&cached.isFile())return cached;
+    if(!nestedDirectory.isDirectory()&&!nestedDirectory.mkdirs())throw new IOException("无法创建内层压缩包缓存。");
+    String suffix=name.substring(name.lastIndexOf('.'));File file=File.createTempFile("nested-",suffix,nestedDirectory);
+    try(OutputStream output=new BufferedOutputStream(new FileOutputStream(file))){
+      ZipArchive zip=zipIndexes.get(key);
+      if(zip!=null)zip.copyTo(source,name,output,MAX_NESTED);
+      else try(Handle handle=open(source)){
+        long entry;int count=0;boolean found=false;
+        while((entry=Archive.readNextHeader(handle.archive))!=0){
+          if(++count>MAX_ENTRIES)throw new IOException("压缩包条目过多。");
+          if(!name.equals(name(entry)))continue;checkEncryption(entry);long size=ArchiveEntry.size(entry);
+          if(size<0||size>MAX_NESTED)throw new IOException("内层压缩包超过 256 MB，请先解压后打开。");
+          ByteBuffer buffer=ByteBuffer.allocateDirect(65536);byte[] bytes=new byte[65536];long done=0;
+          while(true){buffer.clear();Archive.readData(handle.archive,buffer);int n=buffer.position();if(n==0)break;if(n>size-done)throw new IOException("内层压缩包展开长度不符。");buffer.flip();buffer.get(bytes,0,n);output.write(bytes,0,n);done+=n;}
+          if(done!=size)throw new IOException("内层压缩包内容不完整。");found=true;break;
+        }
+        if(!found)throw new FileNotFoundException("内层压缩包已不存在。");
+      }
+    }catch(IOException|RuntimeException error){file.delete();throw error;}
+    nestedFiles.put(id,file);long bytes=0;for(File item:nestedFiles.values())bytes+=item.length();
+    Iterator<Map.Entry<String,File>> it=nestedFiles.entrySet().iterator();
+    while(nestedFiles.size()>1&&(bytes>512L*1024*1024||nestedFiles.size()>12)){Map.Entry<String,File> oldest=it.next();long size=oldest.getValue().length();if(oldest.getValue().delete())bytes-=size;it.remove();}
+    return file;
+  }
   private static void checkEncryption(long entry)throws IOException {
     if(ArchiveEntry.isEncrypted(entry))throw new IOException("此压缩包已加密，暂不支持密码漫画。");
   }
   synchronized List<String> images(SeekableSource source,String key)throws IOException {
+    return images(source,key,0);
+  }
+  private synchronized List<String> images(SeekableSource source,String key,int depth)throws IOException {
+    try {
     LinkedHashMap<String,PageEntry> index=indexes.get(key);
     if(index==null){
-      ZipArchive zip=ZipArchive.restore(disk.get("zip2\n"+key),source.size());
-      if(zip==null){zip=ZipArchive.open(source);if(zip!=null){indexBuilds++;disk.put("zip2\n"+key,zip.serialize());}}
+      ZipArchive zip=ZipArchive.restore(disk.get("zip3\n"+key),source.size());
+      if(zip==null){zip=ZipArchive.open(source);if(zip!=null){indexBuilds++;disk.put("zip3\n"+key,zip.serialize());}}
       if(zip!=null){
         zipIndexes.put(key,zip);index=new LinkedHashMap<>();int ordinal=0;
         for(ZipArchive.Entry entry:zip.entries.values())index.put(entry.name,new PageEntry(ordinal++,entry.modified));
@@ -122,7 +173,7 @@ final class NativeArchives implements Closeable {
           total+=size;
           String name=name(entry);
           names.add(name);
-          if(ArchiveEntry.filetype(entry)==ArchiveEntry.AE_IFREG&&image(name)&&size<=MAX_IMAGE) {
+          if(ArchiveEntry.filetype(entry)==ArchiveEntry.AE_IFREG&&((image(name)&&size<=MAX_IMAGE)||archive(name))) {
             Long modifiedAt=null;
             if(ArchiveEntry.mtimeIsSet(entry)) {
               try { modifiedAt=Math.addExact(Math.multiplyExact(ArchiveEntry.mtime(entry),1000),ArchiveEntry.mtimeNsec(entry)/1000000); }
@@ -136,12 +187,31 @@ final class NativeArchives implements Closeable {
       finally { handle.close(); }
       saveIndex(key,index);
     }
+    // Raw indexes retain containers; public page indexes flatten their images.
+    if(!indexes.containsKey(key)){
+      LinkedHashMap<String,PageEntry> flattened=new LinkedHashMap<>();MetadataBudget names=new MetadataBudget();
+      for(Map.Entry<String,PageEntry> row:index.entrySet()){
+        if(image(row.getKey())){names.add(row.getKey());flattened.put(row.getKey(),row.getValue());continue;}
+        if(!archive(row.getKey()))continue;
+        if(depth>=3)throw new IOException("压缩包嵌套超过 3 层，请解压一层后打开。");
+        File child=stage(source,key,row.getKey());String nestedKey=childKey(key,row.getKey());
+        try(SeekableSource nested=new SeekableSource(child)){
+          for(String page:images(nested,nestedKey,depth+1)){
+            if(flattened.size()>=MAX_ENTRIES)throw new IOException("压缩包条目过多。");
+            String virtual=nestedName(row.getKey(),page);names.add(virtual);
+            if(flattened.put(virtual,new PageEntry(-1,modifiedAt(nestedKey,page),row.getKey(),page))!=null)throw new IOException("内层压缩包图片路径重复。");
+          }
+        }
+      }
+      index=flattened;
+    }
     indexes.put(key,index);
     if(!indexNameBytes.containsKey(key)){int size=0;for(String name:index.keySet())size+=name.getBytes(StandardCharsets.UTF_8).length;indexNameBytes.put(key,size);}
     int entries=0;for(Map<String,PageEntry> value:indexes.values())entries+=value.size();
     int names=0;for(int size:indexNameBytes.values())names+=size;
     while(indexes.size()>1&&(indexes.size()>32||entries>60000||names>16*1024*1024)){String oldest=indexes.keySet().iterator().next();entries-=indexes.remove(oldest).size();names-=indexNameBytes.remove(oldest);zipIndexes.remove(oldest);}
     List<String> result=new ArrayList<>(index.keySet());result.sort(LocalLibrary::natural);return result;
+    }catch(IOException|RuntimeException error){indexes.remove(key);indexNameBytes.remove(key);zipIndexes.remove(key);throw error;}
   }
   synchronized Long modifiedAt(String key,String name) {
     Map<String,PageEntry> index=indexes.get(key);
@@ -158,6 +228,10 @@ final class NativeArchives implements Closeable {
       if(!indexes.containsKey(identity))images(source,identity);
       metadata=indexes.get(identity).get(name);zip=zipIndexes.get(identity);
       if(metadata==null)throw new IOException("压缩包图片已不存在或超出读取上限。");
+    }
+    if(metadata.nestedArchive!=null){
+      File child=stage(source,identity,metadata.nestedArchive);
+      try(SeekableSource nested=new SeekableSource(child)){return read(nested,childKey(identity,metadata.nestedArchive),metadata.childName);}
     }
     if(zip!=null){
       // pread has an independent cursor. A background ZIP page must not hold
@@ -195,7 +269,7 @@ final class NativeArchives implements Closeable {
     while(cachedBytes>CACHE_BYTES||pages.size()>12){String first=pages.keySet().iterator().next();cachedBytes-=pages.remove(first).length;}
   }
   private LinkedHashMap<String,PageEntry> loadIndex(String key) {
-    byte[] cached=disk.get(key);if(cached==null)return null;
+    byte[] cached=disk.get("raw3\n"+key);if(cached==null)return null;
     try {
       JSONArray rows=new JSONArray(new String(cached,StandardCharsets.UTF_8));
       if(rows.length()>MAX_ENTRIES)return null;
@@ -207,32 +281,52 @@ final class NativeArchives implements Closeable {
         if(row.length()!=3)return null;
         Long modifiedAt=row.isNull(2)?null:row.getLong(2);
         names.add(name);
-        if(!image(name)||ordinal<0||ordinal>=MAX_ENTRIES||result.put(name,new PageEntry(ordinal,modifiedAt))!=null)return null;
+        if((!image(name)&&!archive(name))||ordinal<0||ordinal>=MAX_ENTRIES||result.put(name,new PageEntry(ordinal,modifiedAt))!=null)return null;
       }
       return result;
     }catch(Exception invalid){return null;}
   }
   private void saveIndex(String key,Map<String,PageEntry> index) {
     JSONArray rows=new JSONArray();for(Map.Entry<String,PageEntry> entry:index.entrySet())rows.put(new JSONArray().put(entry.getKey()).put(entry.getValue().ordinal).put(entry.getValue().modifiedAt==null?JSONObject.NULL:entry.getValue().modifiedAt));
-    disk.put(key,rows.toString().getBytes(StandardCharsets.UTF_8));
+    disk.put("raw3\n"+key,rows.toString().getBytes(StandardCharsets.UTF_8));
   }
   /** Covers do not build a whole-book index or disturb the active reader. */
-  static byte[] cover(SeekableSource source)throws IOException {
+  byte[] cover(SeekableSource source,String key)throws IOException {
+    return cover(source,key,0);
+  }
+  private byte[] cover(SeekableSource source,String key,int depth)throws IOException {
     ZipArchive zip=ZipArchive.open(source);
-    if(zip!=null){List<String> names=new ArrayList<>(zip.entries.keySet());names.sort(LocalLibrary::natural);if(names.isEmpty())throw new IOException("压缩包没有可阅读图片。");return zip.read(source,names.get(0),MAX_IMAGE);}
+    List<String> nested=new ArrayList<>();
+    if(zip!=null){
+      List<String> names=new ArrayList<>();for(String name:zip.entries.keySet()){if(image(name))names.add(name);else if(archive(name))nested.add(name);}
+      names.sort(LocalLibrary::natural);if(!names.isEmpty())return zip.read(source,names.get(0),MAX_IMAGE);
+      synchronized(this){zipIndexes.put(key,zip);while(zipIndexes.size()>6){String oldest=zipIndexes.keySet().iterator().next();if(oldest.equals(key))break;zipIndexes.remove(oldest);}}
+      return nestedCover(source,key,nested,depth);
+    }
     Handle handle=open(source);
     try {
       long entry,skipped=0;int count=0;
       while((entry=Archive.readNextHeader(handle.archive))!=0){
         if(++count>MAX_ENTRIES)throw new IOException("压缩包条目过多。");
         checkEncryption(entry);
+        if(archive(name(entry)))nested.add(name(entry));
         long size=ArchiveEntry.size(entry);
-        if(size<0||size>MAX_IMAGE-skipped)throw new IOException("此压缩包需要先打开漫画才能生成封面。");
+        if(size<0||size>MAX_NESTED-skipped)throw new IOException("此压缩包需要先打开漫画才能生成封面。");
         if(ArchiveEntry.filetype(entry)==ArchiveEntry.AE_IFREG&&image(name(entry)))return readEntry(handle.archive,entry);
         skipped+=size;
       }
-      throw new IOException("压缩包没有可阅读图片。");
     }catch(IOException error){throw friendly(error);}finally{handle.close();}
+    return nestedCover(source,key,nested,depth);
+  }
+  private byte[] nestedCover(SeekableSource source,String key,List<String> names,int depth)throws IOException{
+    if(depth>=3)throw new IOException("压缩包嵌套超过 3 层，请解压一层后打开。");
+    names.sort(LocalLibrary::natural);int attempts=0;IOException last=null;
+    for(String name:names){
+      if(++attempts>4)break;
+      try{File file=stage(source,key,name);try(SeekableSource child=new SeekableSource(file)){return cover(child,childKey(key,name),depth+1);}}
+      catch(IOException failed){last=failed;}
+    }
+    if(last!=null)throw last;throw new IOException("压缩包没有可阅读图片。");
   }
   static byte[] entry(SeekableSource source,String name,long limit)throws IOException {
     try(Handle handle=open(source)){
@@ -274,10 +368,10 @@ final class NativeArchives implements Closeable {
     while(it.hasNext()){Map.Entry<String,byte[]> entry=it.next();if(matches(entry.getKey(),path)){cachedBytes-=entry.getValue().length;it.remove();}}
   }
   private boolean matches(String key,String path){return key.startsWith(path+"\n")||key.startsWith(path+"/");}
-  synchronized void release(){closeReader();pages.clear();cachedBytes=0;}
+  synchronized void release(){closeReader();pages.clear();cachedBytes=0;for(File file:nestedFiles.values())file.delete();nestedFiles.clear();}
   private void closeReader() {
     if(reader!=null){try{reader.close();}catch(IOException ignored){}reader=null;}
     currentKey=null;nextOrdinal=0;
   }
-  @Override public synchronized void close(){closeReader();indexes.clear();indexNameBytes.clear();zipIndexes.clear();pages.clear();cachedBytes=0;}
+  @Override public synchronized void close(){closeReader();indexes.clear();indexNameBytes.clear();zipIndexes.clear();pages.clear();cachedBytes=0;for(File file:nestedFiles.values())file.delete();nestedFiles.clear();}
 }

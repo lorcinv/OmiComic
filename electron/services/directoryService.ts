@@ -1,5 +1,6 @@
 import { promises as fs, type Dirent, type Stats } from "node:fs";
 import path from "node:path";
+export const directoryMetrics = { stat: 0, readdir: 0 };
 
 export type DirectoryResourceType = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
 export interface DirectoryEntry {
@@ -77,6 +78,7 @@ function classify(entry: Dirent): DirectoryResourceType {
 
 export async function scanDirectory(directory: string, options: DirectoryScanOptions): Promise<DirectoryEntry[]> {
   const { target, realRoot } = await authorizedDirectory(directory, options);
+  directoryMetrics.readdir++;
   const entries = await fs.readdir(target, { withFileTypes: true });
   checkAbort(options.signal);
   const results = new Array<DirectoryEntry>(entries.length);
@@ -96,6 +98,7 @@ export async function scanDirectory(directory: string, options: DirectoryScanOpt
         checkAbort(options.signal);
         // Do not follow a symlink into an unapproved tree to retrieve metadata.
         if (entry.isSymbolicLink() && !isWithin(realRoot, await fs.realpath(filePath))) throw new Error("Link escapes authorized root");
+        directoryMetrics.stat++;
         const stat = await (options.stat ?? fs.stat)(filePath);
         item.size = stat.size;
         item.modifiedAt = stat.mtimeMs;
@@ -115,6 +118,7 @@ export async function scanDirectory(directory: string, options: DirectoryScanOpt
 
 export async function listDirectoryImages(directory: string, options: DirectoryScanOptions): Promise<string[]> {
   const { target } = await authorizedDirectory(directory, options);
+  directoryMetrics.readdir++;
   const entries = await fs.readdir(target, { withFileTypes: true });
   checkAbort(options.signal);
   const names = entries.filter(entry => entry.isFile() && imageExtensions.has(path.extname(entry.name).slice(1).toLowerCase())).map(entry => entry.name);

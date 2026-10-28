@@ -52,6 +52,13 @@ final class LocalLibrary {
   private volatile String cacheSession=UUID.randomUUID().toString();
   private volatile long mediaEpoch;
   private long directoryQueries,copiedBytes,directoryIndexHits,uriIndexHits;
+  private long scannerQueries,scannerIndexHits,scannerBatches,scannerBytes,scannerLockWaitNanos,scannerLockNanos,resolveQueries;
+  private volatile boolean catalogPaused;
+  private volatile long foregroundUntil;
+  private final java.util.concurrent.atomic.AtomicInteger foregroundTasks=new java.util.concurrent.atomic.AtomicInteger();
+  private volatile android.os.CancellationSignal catalogQuery;
+  void pauseCatalog(boolean paused){catalogPaused=paused;if(paused){android.os.CancellationSignal query=catalogQuery;if(query!=null)query.cancel();}}
+  private void foregroundActivity(){foregroundUntil=System.currentTimeMillis()+220;android.os.CancellationSignal query=catalogQuery;if(query!=null)query.cancel();}
   private final Map<String,Doc> documents=new HashMap<>();
   private final Map<String,Media> media=new LinkedHashMap<>();
   private final NativeArchives nativeArchives,previewArchives;
@@ -81,7 +88,7 @@ final class LocalLibrary {
     // from a killed process or the old mixed raw/raster cache.
     folderCovers=new DiskCache(new File(context.getCacheDir(),"folder-covers"),2*1024*1024);
     DiskCache indexCache=new DiskCache(new File(context.getCacheDir(),"archive-indexes"),16*1024*1024);
-    nativeArchives=new NativeArchives(indexCache,readerPages,true);previewArchives=new NativeArchives(indexCache,readerPages,false);
+    nativeArchives=new NativeArchives(indexCache,readerPages,true,new File(context.getCacheDir(),"nested-reader"));previewArchives=new NativeArchives(indexCache,readerPages,false,new File(context.getCacheDir(),"nested-preview"));
     readerStartupCleanup=readerCleanup.submit(()->{readerPages.clear();clearSourceCopies();});
   }
   private void awaitReaderCleanup()throws Exception{readerStartupCleanup.get();}
@@ -94,6 +101,7 @@ final class LocalLibrary {
   }
   private JSONObject cacheInfo()throws Exception{return new JSONObject().put("thumbnailBytes",thumbnails.size()).put("thumbnailLimit",thumbnails.limit()).put("readerBytes",readerPages.size()+readerRasters.size()).put("readerLimit",readerPages.limit()+readerRasters.limit()).put("readerTemporaryBytes",readerPages.size()).put("readerRasterBytes",readerRasters.size()).put("readerRasterLimit",readerRasters.limit());}
   void beginReaderSession(){
+    foregroundActivity();
     if(!readerSessionActive.getAndSet(true))readerSessionEpoch.incrementAndGet();
     nativeArchives.setCaching(true);previewArchives.setCaching(true);
   }
@@ -158,6 +166,7 @@ final class LocalLibrary {
     while(entries.size()>32000)entries.remove(entries.keySet().iterator().next());
   }
   private void refreshMetadata(String path){
+    directoryIndex.invalidateCatalog(parent(path));directoryIndex.invalidateCatalog(path);
     synchronized(metadataLock){
       metadataGeneration++;
       entries.keySet().removeIf(key->key.equals(path)||key.startsWith(path+"/"));
@@ -166,6 +175,7 @@ final class LocalLibrary {
     }
   }
   private Entry stat(Uri uri,String path)throws Exception{
+    resolveQueries++;
     try(Cursor c=resolver.query(uri,COLUMNS,null,null,null)){if(c==null||!c.moveToFirst())throw new FileNotFoundException();return entry(c,uri,path);}
   }
   private Entry entry(Cursor c,Uri uri,String path){
@@ -179,7 +189,7 @@ final class LocalLibrary {
       generation=metadataGeneration;
     }
     Entry directory=stat(uri,path);
-    String version=uri+"\n"+directory.modified+"\n"+directory.size+"\n"+mediaEpoch;
+    String version=directoryVersion(directory);
     JSONArray saved=directory.modified>0?directoryIndex.children(path,version):null;
     if(saved!=null){
       List<Entry> restored=new ArrayList<>();
@@ -199,8 +209,8 @@ final class LocalLibrary {
       }
     }
     entries.sort((a,b)->natural(a.name,b.name));
-    JSONArray snapshot=new JSONArray();for(Entry e:entries)snapshot.put(new JSONObject().put("path",e.path).put("uri",e.uri.toString()).put("name",e.name).put("mime",e.mime).put("size",e.size).put("modified",e.modified).put("directory",e.directory));
-    indexWrites.execute(()->{if(!closed&&generation==metadataGeneration)directoryIndex.save(path,version,snapshot);});
+    JSONArray snapshot=snapshot(entries);JSONObject folder=snapshotEntry(directory).put("containsImages",entries.stream().anyMatch(e->image(e.name)&&!e.directory));
+    indexWrites.execute(()->{if(!closed&&generation==metadataGeneration){directoryIndex.save(path,version,snapshot);directoryIndex.saveCatalog(path,version,folder,snapshot);}});
     synchronized(metadataLock){
     if(generation!=metadataGeneration)return entries;
     for(Entry item:entries)remember(item);
@@ -233,6 +243,145 @@ final class LocalLibrary {
     for(Entry child:children(e.uri,path))if(!type(child).equals("unknown"))items.put(item(child));
     return new JSONObject().put("path",path).put("parentPath",path.equals(root(path))?JSONObject.NULL:parent(path)).put("items",items).put("total",items.length());
   }
+  private final java.util.concurrent.atomic.AtomicLong catalogEpoch=new java.util.concurrent.atomic.AtomicLong();
+  private final Object catalogLock=new Object();
+  private static final class CatalogJob {
+    final Entry folder;final boolean verify;
+    CatalogJob(Entry folder,boolean verify){this.folder=folder;this.verify=verify;}
+  }
+  private static final class CatalogSession {
+    final Deque<CatalogJob> queue=new ArrayDeque<>();
+    final Set<String> visited=new HashSet<>(),hidden=new HashSet<>();
+    JSONArray pending=new JSONArray(),removed=new JSONArray();int offset,directories,skipped;
+  }
+  private final Map<String,CatalogSession> catalogs=new LinkedHashMap<String,CatalogSession>(8,.75f,true);
+  void cancelCatalog(){catalogEpoch.incrementAndGet();android.os.CancellationSignal query=catalogQuery;if(query!=null)query.cancel();}
+  long catalogGeneration(){return catalogEpoch.get();}
+  private String directoryVersion(Entry entry){return entry.uri+"\n"+entry.modified+"\n"+entry.size+"\n"+mediaEpoch;}
+  private JSONObject snapshotEntry(Entry entry)throws Exception{return new JSONObject().put("path",entry.path).put("uri",entry.uri.toString()).put("name",entry.name).put("mime",entry.mime).put("size",entry.size).put("modified",entry.modified).put("directory",entry.directory);}
+  private JSONArray snapshot(List<Entry> entries)throws Exception{JSONArray rows=new JSONArray();for(Entry entry:entries)rows.put(snapshotEntry(entry));return rows;}
+  private Entry restoreEntry(JSONObject row)throws Exception{
+    Entry entry=new Entry();entry.path=row.getString("path");entry.uri=Uri.parse(row.getString("uri"));entry.name=row.getString("name");entry.mime=row.getString("mime");entry.size=row.getLong("size");entry.modified=row.getLong("modified");entry.directory=row.getBoolean("directory");entry.cachedAt=0;return entry;
+  }
+  private List<Entry> restoreChildren(JSONArray rows,String path)throws Exception{
+    List<Entry> result=new ArrayList<>();for(int i=0;i<rows.length();i++){Entry entry=restoreEntry(rows.getJSONObject(i));
+      if(!entry.path.equals(path+"/"+entry.name)||entry.name.contains("/")||entry.name.equals(".")||entry.name.equals(".."))throw new IOException("Invalid derived index");result.add(entry);
+    }return result;
+  }
+  private boolean catalogHidden(String path,Set<String> hidden){
+    for(String current=path;;current=parent(current)){if(hidden.contains(current))return true;if(current.lastIndexOf('/')<=0)return false;}
+  }
+  private List<Entry> catalogChildren(Entry folder,boolean refresh)throws Exception{
+    List<Entry> result;
+    synchronized(metadataLock){if(!refresh&&directories.containsKey(folder.path)&&System.currentTimeMillis()-directoryTimes.get(folder.path)<30000)return directories.get(folder.path);}
+    JSONArray saved=!refresh&&folder.modified>0?directoryIndex.children(folder.path,directoryVersion(folder)):null;
+    if(saved!=null){try{result=restoreChildren(saved,folder.path);scannerIndexHits++;return result;}catch(Exception invalid){/* Rebuild only this directory. */}}
+    result=new ArrayList<>();Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(folder.uri,DocumentsContract.getDocumentId(folder.uri));
+    android.os.CancellationSignal signal=new android.os.CancellationSignal();catalogQuery=signal;
+    try{
+      if(catalogPaused||foregroundTasks.get()>0||System.currentTimeMillis()<foregroundUntil)throw new android.os.OperationCanceledException();
+      scannerQueries++;directoryQueries++;
+      try(Cursor cursor=resolver.query(children,COLUMNS,null,null,null,signal)){
+        if(cursor==null)throw new IOException("目录读取失败。");
+        while(cursor.moveToNext()){
+          signal.throwIfCanceled();
+          String name=cursor.getString(1);if(name==null||name.contains("/")||name.equals(".")||name.equals(".."))continue;
+          result.add(entry(cursor,DocumentsContract.buildDocumentUriUsingTree(folder.uri,cursor.getString(0)),folder.path+"/"+name));
+          if(result.size()>30000)throw new IOException("目录内容过多。");
+        }
+      }
+      return result;
+    }finally{if(catalogQuery==signal)catalogQuery=null;}
+  }
+  private JSONObject catalogBatch(JSONObject input)throws Exception{
+    String path=input.getString("path");root(path); // Grants remain the authority, including SQLite hits.
+    synchronized(catalogLock){
+      CatalogSession session=catalogs.get(path);
+      if(session==null||input.optBoolean("restart")){
+        session=new CatalogSession();session.queue.add(new CatalogJob(resolve(path),false));catalogs.put(path,session);
+        while(catalogs.size()>6)catalogs.remove(catalogs.keySet().iterator().next());
+        JSONArray hidden=input.optJSONArray("excludedPaths");if(hidden!=null)for(int i=0;i<hidden.length();i++)session.hidden.add(hidden.getString(i));
+      }
+      JSONArray invalid=input.optJSONArray("invalidatePaths");if(invalid!=null)for(int i=0;i<invalid.length();i++){
+        String directory=invalid.getString(i);if(!directory.equals(path)&&!directory.startsWith(path+"/"))continue;
+        directoryIndex.invalidateCatalog(directory);
+        try{session.queue.addFirst(new CatalogJob(resolve(directory),true));}catch(Exception missing){/* A successful parent refresh removes a missing child. */}
+      }
+      JSONArray hidden=input.optJSONArray("excludedPaths");if(hidden!=null){session.hidden.clear();for(int i=0;i<hidden.length();i++)session.hidden.add(hidden.getString(i));}
+      boolean yielded=false;
+      if(session.offset>=session.pending.length()){session.pending=new JSONArray();session.offset=0;}
+      int processed=0;long batchStarted=System.currentTimeMillis();
+      while(session.pending.length()<128&&!session.queue.isEmpty()&&++processed<=4&&System.currentTimeMillis()-batchStarted<24){
+        if(catalogPaused||foregroundTasks.get()>0||System.currentTimeMillis()<foregroundUntil)yielded=true;
+        else{
+          long waiting=System.nanoTime();
+          if(!fileAccess.readLock().tryLock())yielded=true;
+          else{
+            long held=System.nanoTime();scannerLockWaitNanos+=held-waiting;
+            CatalogJob job=session.queue.removeFirst();Entry folder=job.folder;
+            try{
+              if(closed)throw new IOException("文件服务已关闭。");
+              if(catalogHidden(folder.path,session.hidden)||!job.verify&&session.visited.contains(folder.path)){yielded=true;}
+              else{
+                session.visited.add(folder.path);
+                JSONObject saved=directoryIndex.catalog(folder.path);
+                List<Entry> children;boolean hasImages=false;JSONArray records;String version=directoryVersion(folder);
+                if(saved!=null&&!job.verify&&!input.optBoolean("refresh")){
+                  children=restoreChildren(saved.getJSONArray("items"),folder.path);hasImages=saved.getJSONObject("folder").optBoolean("containsImages");
+                  scannerIndexHits++;
+                  if(System.currentTimeMillis()-saved.optLong("saved")>300000)session.queue.addLast(new CatalogJob(folder,true));
+                }else{
+                  children=catalogChildren(folder,input.optBoolean("refresh"));for(Entry child:children)if(image(child.name)&&!child.directory)hasImages=true;
+                  records=snapshot(children);JSONObject folderRecord=snapshotEntry(folder).put("containsImages",hasImages);
+                  // Only complete reads replace persisted children. The same URI
+                  // records are available to covers and opens immediately.
+                  directoryIndex.saveCatalog(folder.path,version,folderRecord,records);
+                  final String dir=folder.path,ver=version;final JSONArray snapshot=records;final long generation=metadataGeneration;
+                  indexWrites.execute(()->{if(!closed&&generation==metadataGeneration)directoryIndex.save(dir,ver,snapshot);});
+                  if(saved!=null){Set<String> live=new HashSet<>();for(Entry child:children)live.add(child.path);
+                    JSONArray old=saved.getJSONArray("items");for(int i=0;i<old.length();i++){String oldPath=old.getJSONObject(i).getString("path");if(!live.contains(oldPath))session.removed.put(oldPath);}
+                  }
+                }
+                session.directories++;
+                session.pending.put(item(folder).put("containsImages",hasImages));
+                for(Entry child:children){
+                  if(catalogHidden(child.path,session.hidden))continue;
+                  String kind=type(child);
+                  if(child.directory&&!session.visited.contains(child.path))session.queue.addLast(new CatalogJob(child,false));
+                  if(kind.equals("image")||kind.equals("unknown"))continue;
+                  session.pending.put(item(child));
+                }
+              }
+            }catch(android.os.OperationCanceledException cancelled){if(!job.verify)session.visited.remove(folder.path);session.queue.addFirst(job);yielded=true;}
+            catch(InterruptedIOException cancelled){session.queue.addFirst(job);throw cancelled;}
+            catch(Exception failed){session.skipped++;directoryIndex.failCatalog(folder.path,snapshotEntry(folder));if(folder.path.equals(path)&&session.directories==0)throw failed;}
+            finally{scannerLockNanos+=System.nanoTime()-held;fileAccess.readLock().unlock();}
+          }
+        }
+        if(yielded)break;
+      }
+      JSONArray items=new JSONArray();int stop=Math.min(session.pending.length(),session.offset+128);
+      while(session.offset<stop)items.put(session.pending.get(session.offset++));
+      JSONObject result=new JSONObject().put("items",items).put("directories",session.directories).put("skipped",session.skipped)
+        .put("scannedAt",System.currentTimeMillis()).put("complete",session.queue.isEmpty()&&session.offset>=session.pending.length()).put("yielded",yielded).put("removedPaths",session.removed);
+      session.removed=new JSONArray();if(result.getBoolean("complete")){session.pending=new JSONArray();session.offset=0;}scannerBatches++;scannerBytes+=result.toString().getBytes(StandardCharsets.UTF_8).length;return result;
+    }
+  }
+  private JSONObject scanLibrary(JSONObject input)throws Exception{
+    if(input.optBoolean("incremental"))return catalogBatch(input);
+    JSONObject request=new JSONObject(input.toString()).put("incremental",true).put("restart",true),batch;
+    LinkedHashMap<String,JSONObject> items=new LinkedHashMap<>();long epoch=catalogEpoch.get();
+    do{
+      if(epoch!=catalogEpoch.get())throw new InterruptedIOException("资源库扫描已取消。");
+      batch=catalogBatch(request);request.put("restart",false);
+      if(epoch!=catalogEpoch.get())throw new InterruptedIOException("资源库扫描已取消。");
+      JSONArray rows=batch.getJSONArray("items");for(int i=0;i<rows.length();i++){JSONObject item=rows.getJSONObject(i);if(!item.getString("path").equals(input.getString("path"))||item.optBoolean("containsImages"))items.put(item.getString("path"),item);}
+      if(batch.optBoolean("yielded"))Thread.sleep(25);
+    }while(!batch.getBoolean("complete"));
+    JSONArray all=new JSONArray();for(JSONObject item:items.values())if(!input.optBoolean("booksOnly")||!item.optString("type").equals("folder")||item.optBoolean("containsImages"))all.put(item);
+    return batch.put("items",all);
+  }
+  JSONObject catalogStats()throws Exception{return new JSONObject().put("scannerQueries",scannerQueries).put("directoryQueries",directoryQueries).put("scannerIndexHits",scannerIndexHits).put("directoryIndexHits",directoryIndexHits).put("uriIndexHits",uriIndexHits).put("resolveQueries",resolveQueries).put("scannerBatches",scannerBatches).put("scannerBytes",scannerBytes).put("scannerLockWaitNanos",scannerLockWaitNanos).put("scannerLockNanos",scannerLockNanos).put("javaUsedBytes",Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory()).put("nativeBytes",android.os.Debug.getNativeHeapAllocatedSize());}
   private String parent(String path){return path.substring(0,path.lastIndexOf('/'));}
   private String identity(Entry entry){return entry.path+"\n"+entry.uri+"\n"+entry.size+"\n"+entry.modified+(entry.modified>0?"":"\n"+cacheSession);}
   private SeekableSource source(Entry entry,boolean allowCopy)throws Exception{
@@ -275,7 +424,7 @@ final class LocalLibrary {
       for(Entry page:entries)if(image(page.name)&&!page.directory)pages.put(new JSONObject().put("index",pages.length()).put("name",page.name).put("sourcePath",page.path).put("type","folder-image").put("modifiedAt",page.modified>0?page.modified:null));
       key="folder:"+(type.equals("folder")?path:parent(path));
     }else if(type.equals("archive")){
-      for(String name:archiveImages(path))pages.put(new JSONObject().put("index",pages.length()).put("name",name).put("sourcePath",path).put("archiveInnerPath",name).put("type","archive-image").put("modifiedAt",nativeArchives.modifiedAt(identity(e),name)));key="archive:"+path;
+      for(String name:archiveImages(path))pages.put(new JSONObject().put("index",pages.length()).put("name",NativeArchives.displayName(name)).put("sourcePath",path).put("archiveInnerPath",name).put("type","archive-image").put("modifiedAt",nativeArchives.modifiedAt(identity(e),name)));key="archive:"+path;
     }else if(type.equals("pdf")||type.equals("epub"))key=type+":"+path;
     else throw new IOException("不支持此文件格式。");
     if(pages.length()==0&&!type.equals("pdf")&&!type.equals("epub"))throw new IOException("NO_IMAGES:未在该文件夹中找到可阅读图片。");
@@ -298,6 +447,10 @@ final class LocalLibrary {
     catch(Exception|OutOfMemoryError unavailable){return null;/* A derived fast path must not make the actual page unreadable. */}
   }
   WebResourceResponse media(String key)throws Exception{
+    foregroundTasks.incrementAndGet();foregroundActivity();
+    try{return foregroundMedia(key);}finally{foregroundTasks.decrementAndGet();foregroundActivity();}
+  }
+  private WebResourceResponse foregroundMedia(String key)throws Exception{
     awaitReaderCleanup();
     Media m;synchronized(media){m=media.get(key);}if(m==null)throw new FileNotFoundException();
     if(m.preview){
@@ -370,7 +523,7 @@ final class LocalLibrary {
       if(m.inner!=null||type(entry).equals("archive")||type(entry).equals("epub")){
         try(SeekableSource source=source(entry,!m.preview)){
           if(type(entry).equals("epub"))bytes=NativeArchives.entry(source,m.inner==null?epubCover(source):m.inner,MAX_IMAGE);
-          else bytes=m.inner==null?NativeArchives.cover(source):(m.preview?previewArchives:nativeArchives).read(source,m.identity,m.inner);
+          else bytes=m.inner==null?previewArchives.cover(source,m.identity):(m.preview?previewArchives:nativeArchives).read(source,m.identity,m.inner);
         }
       }else {
         if(entry.directory){
@@ -566,11 +719,16 @@ final class LocalLibrary {
     FileOutputStream out=null;try{out=target.startWrite();out.write(data.toString().getBytes(StandardCharsets.UTF_8));target.finishWrite(out);}catch(Exception e){target.failWrite(out);throw e;}
   }
   Object call(String method,JSONObject input)throws Exception{
+    if(method.equals("scanLibrary"))return scanLibrary(input);
+    foregroundTasks.incrementAndGet();foregroundActivity();
+    try{return foregroundCall(method,input);}finally{foregroundTasks.decrementAndGet();foregroundActivity();}
+  }
+  private Object foregroundCall(String method,JSONObject input)throws Exception{
     awaitReaderCleanup();
     if(method.equals("loadData")||method.equals("saveData")||method.equals("backupData")){
       synchronized(dataLock){return dispatch(method,input);}
     }
-    if(method.equals("getResourcePages")||method.equals("listDirectory")){
+    if(method.equals("getResourcePages")||method.equals("listDirectory")||method.equals("scanLibrary")){
       fileAccess.readLock().lock();try{if(closed)throw new IOException("文件服务已关闭。");return dispatch(method,input);}finally{fileAccess.readLock().unlock();}
     }
     if(method.equals("getPageImage")){
@@ -593,6 +751,8 @@ final class LocalLibrary {
       case "clearAndroidReadCache":readerPages.clear();readerRasters.clear();thumbnails.clear();nativeArchives.release();previewArchives.release();invalidateMedia();return cacheInfo();
       case "backupData":save(new AtomicFile(new File(context.getFilesDir(),"before-file-operation.json")),input.getJSONObject("data"));return null;
       case "listDirectory":return directory(input.getString("path"));
+      case "scanLibrary":return scanLibrary(input);
+      case "catalogStats":return catalogStats();
       case "getResourcePages":return pages(input.getString("path"));
       case "getPageImage":return pageImage(input);
       case "getThumbnail":return thumbnail(input);

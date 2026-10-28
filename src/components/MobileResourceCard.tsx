@@ -50,9 +50,9 @@ export default function MobileResourceCard(p: MobileResourceCardProps) {
     cancel();
   }
   const open = () => { if (suppress.current) { suppress.current = false; return; } if (p.sorting) return; p.selecting ? p.onSelect() : p.onOpen(); };
-  const favorite = p.onFavorite && <button className={`mobile-card-favorite ${p.favorite ? 'is-active' : ''}`} aria-label={p.favorite ? t("取消收藏") : t("收藏")} aria-pressed={p.favorite} onClick={event => { event.stopPropagation(); p.onFavorite!(); }}><MobileIcon name="heart"/></button>;
+  const favorite = p.onFavorite && <button className={`mobile-card-favorite ${p.favorite ? 'is-active' : ''}`} aria-label={p.favorite ? t("取消收藏") : t("收藏")} aria-pressed={p.favorite} onClick={event => { event.stopPropagation(); p.onFavorite!(); }} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}><MobileIcon name="heart"/></button>;
   return <article className={`resource-card mobile-resource-card ${p.selected ? 'is-selected' : ''} ${p.invalid ? 'is-path-invalid' : ''} ${dragging ? 'is-touch-dragging' : ''} ${p.sorting ? 'is-touch-sortable' : ''}`} tabIndex={0} role="button" aria-label={p.title} data-selection-key={p.id} data-bookmark-card-id={p.bookmarkId} data-library-index={p.index}
-    onClick={open} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } }}
+    onClick={open} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); open(); } }}
     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); suppress.current = true; cancel(); p.onHold(); }} onMouseDown={event => event.stopPropagation()} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
     <div className="resource-preview" onClick={event => { if (p.layout === 'list' && p.onInfo && !p.selecting && !suppress.current) { event.stopPropagation(); p.onInfo(); } }}>
       {p.thumbnail && !failed ? <img src={p.thumbnail} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} /> : <ResourcePlaceholder type={p.type} />}
@@ -62,6 +62,7 @@ export default function MobileResourceCard(p: MobileResourceCardProps) {
     </div>
     <div className="resource-details"><strong>{p.title}</strong>{p.layout === 'list' && !!p.tags?.length && <span className="mobile-card-tags">{p.tags.slice(0,4).join(' · ')}</span>}</div>
     <div className="mobile-card-meta"><span className="mobile-card-pages">{p.pages}{p.pages && p.size ? ' ' : ''}{p.size}</span>{p.bookmarkDate && <><span aria-hidden="true">·</span><time className="mobile-bookmark-date">{p.bookmarkDate}</time></>}</div>
-    {!p.selecting && <div className="mobile-card-actions">{p.layout === 'list' && favorite}{p.onInfo && <button className="mobile-card-info" aria-label={t("打开资源信息")} onClick={event => { event.stopPropagation(); p.onInfo!(); }}><MobileIcon name="dots"/></button>}</div>}
+    {p.layout === 'list' && !p.selecting && favorite}
+    {!p.selecting && <div className="mobile-card-actions">{p.onInfo && <button className="mobile-card-info" aria-label={t("打开资源信息")} onClick={event => { event.stopPropagation(); p.onInfo!(); }}><MobileIcon name="dots"/></button>}</div>}
   </article>;
 }

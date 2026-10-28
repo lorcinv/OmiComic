@@ -87,7 +87,8 @@ test('every detent fills the available width across all tabs, details and resize
     const isShelf = view === '书架';
     const grid = page.locator(isShelf ? '.bookshelf-folder-grid' : '.resource-list');
     const cards = grid.locator(isShelf ? '.bookshelf-folder-card' : '.resource-card');
-    await expect(cards, view).toHaveCount(isShelf ? 12 : 24);
+    await expect.poll(() => cards.count(), { message: view }).toBeGreaterThan(0);
+    expect(await cards.count(), view).toBeLessThanOrEqual(isShelf ? 12 : 24);
     for (const width of [960, 1280, 1440, 1800, 1920, 2559]) {
       await page.setViewportSize({ width, height: 900 });
       const sizes: number[] = [];
@@ -230,6 +231,7 @@ test('always-visible detents support dragging, keyboard and Ctrl wheel, with ind
   await page.screenshot({ path: 'test-results/detail-scale-detents-960.png' });
   await page.locator('.resource-detail-back').click();
   await page.locator('.sidebar-settings-button').click();
+  await page.getByRole('tab', { name: /^外观/ }).click();
   const settingsControl = page.getByRole('group', { name: '卡片尺寸', exact: true });
   const settingsSlider = settingsControl.getByRole('slider');
   await expect(settingsSlider).toHaveAttribute('aria-valuetext', '每行 3 张');

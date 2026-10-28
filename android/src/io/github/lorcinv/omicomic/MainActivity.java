@@ -29,6 +29,7 @@ public final class MainActivity extends Activity {
   private String systemTheme = "mist";
   private WebMessagePort channel;
   private LocalLibrary library;
+  private final ReaderWorkQueue catalogWork = new ReaderWorkQueue();
   private final ReaderWorkQueue work = new ReaderWorkQueue();
   private final ReaderWorkQueue covers = new ReaderWorkQueue();
   private final ReaderWorkQueue pageRequests = new ReaderWorkQueue();
@@ -50,7 +51,15 @@ public final class MainActivity extends Activity {
     launchReveal=content;
     readerSurface=new NativeReaderSurface(this,library);
     content.addView(readerSurface,new FrameLayout.LayoutParams(-1,-1));
-    web = new WebView(this);
+    web = new WebView(this){
+      @Override public boolean onKeyPreIme(int code,KeyEvent key){
+        if(code==KeyEvent.KEYCODE_BACK&&keyboardVisible){
+          if(key.getAction()==KeyEvent.ACTION_UP)MainActivity.this.onBackPressed();
+          return true;
+        }
+        return super.onKeyPreIme(code,key);
+      }
+    };
     // Keep one compositor mode throughout navigation and background restore.
     // Root/theme surfaces paint the background; only the reader DOM is clear.
     web.setBackgroundColor(android.graphics.Color.TRANSPARENT);
@@ -148,9 +157,10 @@ public final class MainActivity extends Activity {
               }
               if(method.equals("isFullscreen")){reply(id,fullscreen,null);return;}
               if(method.equals("setReaderVolumeKeys")){readerVolumeKeys=args.optBoolean("enabled");reply(id,readerVolumeKeys,null);return;}
-              final JSONObject params=args;
+              if(method.equals("cancelLibraryScan")){library.cancelCatalog();return;}
+              final JSONObject params=args;final long catalogRequestEpoch=library.catalogGeneration();
               int priority=method.equals("getThumbnail")||method.equals("getReadablePageCount")||method.equals("checkResourcePath")||method.equals("getBookmarkPagePreview")||(method.equals("openDocument")&&params.optString("purpose").equals("thumbnail"))?2:0;
-              (method.equals("saveData")||method.equals("backupData")?persistence:method.equals("getResourcePages")?openings:method.equals("getThumbnail")?covers:method.equals("getPageImage")?pageRequests:work).execute(priority,()->{try{reply(id,library.call(method,params),null);}catch(Exception e){reply(id,null,explain(e));}});
+              (method.equals("scanLibrary")?catalogWork:method.equals("saveData")||method.equals("backupData")?persistence:method.equals("getResourcePages")?openings:method.equals("getThumbnail")?covers:method.equals("getPageImage")?pageRequests:work).execute(priority,()->{try{if(method.equals("scanLibrary")&&catalogRequestEpoch!=library.catalogGeneration())throw new InterruptedIOException("资源库扫描已取消。");reply(id,library.call(method,params),null);}catch(Exception e){reply(id,null,explain(e));}});
             }catch(Exception e){android.util.Log.e("OmiComic","Invalid request",e);}
           }
         });
@@ -226,7 +236,16 @@ public final class MainActivity extends Activity {
     work.execute(()->{try{getContentResolver().takePersistableUriPermission(uri,flags);reply(id,library.addGrant(uri,request==41),null);}catch(Exception e){reply(id,null,explain(e));}});
   }
   private void event(String event){try{if(channel!=null)channel.postMessage(new WebMessage(new JSONObject().put("event",event).toString()));}catch(Exception ignored){}}
-  @Override public void onBackPressed(){event("back");}
+  @Override public void onBackPressed(){
+    if(keyboardVisible){
+      web.evaluateJavascript("document.documentElement.dataset.randomBrowse === 'on'",value->{
+        if("true".equals(value))event("back");
+        else ((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(web.getWindowToken(),0);
+      });
+      return;
+    }
+    event("back");
+  }
   @Override public boolean dispatchKeyEvent(KeyEvent key){
     int code=key.getKeyCode();
     if(code==KeyEvent.KEYCODE_VOLUME_UP||code==KeyEvent.KEYCODE_VOLUME_DOWN){
@@ -244,11 +263,11 @@ public final class MainActivity extends Activity {
     super.onStart();
     if(webStopped){resumeDrawGate.begin();web.onResume();webStopped=false;}
   }
-  @Override protected void onResume(){super.onResume();sceneTransition.resume();event("app-resume");event("resume");resumeDrawGate.readyWhenWebIsReady();}
-  @Override protected void onPause(){readerVolumeKeys=false;capturedVolumeKeys.clear();sceneTransition.pause();launchReveal.finish();event("app-pause");event("pause");resumeDrawGate.pause();super.onPause();}
+  @Override protected void onResume(){super.onResume();library.pauseCatalog(false);sceneTransition.resume();event("app-resume");event("resume");resumeDrawGate.readyWhenWebIsReady();}
+  @Override protected void onPause(){library.pauseCatalog(true);readerVolumeKeys=false;capturedVolumeKeys.clear();sceneTransition.pause();launchReveal.finish();event("app-pause");event("pause");resumeDrawGate.pause();super.onPause();}
   // onPause can run while the launcher is still animating the app window.
   // Suspend WebView only once it is invisible, keeping that outgoing frame.
   @Override protected void onStop(){web.onPause();webStopped=true;super.onStop();}
   @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(readerSurface!=null&&level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)readerSurface.trimMemory();}
-  @Override protected void onDestroy(){if(channel!=null){channel.close();channel=null;}launchReveal.finish();resumeDrawGate.cancel();sceneTransition.cancel();readerSurface.close();covers.getQueue().clear();covers.shutdownNow();pageRequests.getQueue().clear();pageRequests.shutdownNow();openings.getQueue().clear();openings.shutdownNow();persistence.shutdown();work.getQueue().clear();work.execute(library::close);work.shutdown();web.destroy();super.onDestroy();}
+  @Override protected void onDestroy(){if(channel!=null){channel.close();channel=null;}launchReveal.finish();resumeDrawGate.cancel();sceneTransition.cancel();readerSurface.close();covers.getQueue().clear();covers.shutdownNow();pageRequests.getQueue().clear();pageRequests.shutdownNow();openings.getQueue().clear();openings.shutdownNow();persistence.shutdown();work.getQueue().clear();work.execute(library::close);work.shutdown();library.cancelCatalog();catalogWork.getQueue().clear();catalogWork.shutdownNow();web.destroy();super.onDestroy();}
 }

@@ -31,6 +31,53 @@ test('ZIP/CBZ naturally sorted, nested Unicode, exact bytes', async t => {
  assert.equal((await archive.读取压缩包单张图片(p,'章/2.jpg')).toString(),'image fixture');
 });
 
+test('nested ZIP/ZIP and ZIP/RAR pages retain exact names, bytes, and natural page order', async t => {
+ const inner=zip([{name:'页10.png',data:Buffer.from('ten')},{name:'页2.png',data:Buffer.from('two')}]);
+ const p=await fixture(t,'nested.zip',[{name:'卷 [1].zip',data:inner},{name:'卷2.rar',data:rar([{name:'1.jpg',data:Buffer.from('rar inner')}])}]);
+ const pages=await archive.读取压缩包图片列表(p);
+ assert.equal(pages.length,3);
+ assert.deepEqual(pages[0].archiveChain,['卷 [1].zip','页2.png']);
+ assert.equal((await archive.读取压缩包单张图片(p,pages[0].virtualPath)).toString(),'two');
+ assert.equal((await archive.读取压缩包单张图片(p,pages[2].virtualPath)).toString(),'rar inner');
+});
+
+test('nested archives reject corrupt containers, unsafe names and excessive depth', async t => {
+ const corrupt=await fixture(t,'broken-inner.zip',[{name:'child.zip',data:zip([{name:'1.png'}]),badCrc:true}]);
+ await assert.rejects(archive.读取压缩包图片列表(corrupt),hasCode('ARCHIVE_READ_FAILED'));
+ const unsafe=await fixture(t,'unsafe-inner.zip',[{name:'child.zip',data:zip([{name:'../1.png'}])}]);
+ await assert.rejects(archive.读取压缩包图片列表(unsafe));
+ let nested=zip([{name:'1.png'}]);for(let n=0;n<4;n++)nested=zip([{name:`level-${n}.zip`,data:nested}]);
+ const dir=await temp(t),p=path.join(dir,'too-deep.zip');await fs.writeFile(p,nested);
+ await assert.rejects(archive.读取压缩包图片列表(p),hasCode('ARCHIVE_LIMIT_EXCEEDED'));
+});
+
+test('nested covers stage only the first usable child and skip a bad candidate', async t => {
+ const { nestedArchiveMetrics } = require('../dist-electron/services/nestedArchiveCache');
+ const first=zip([{name:'1.png',data:Buffer.from('first cover')}]);
+ const p=await fixture(t,'cover-only.zip',Array.from({length:18},(_,n)=>({name:`${String(n).padStart(3,'0')}.zip`,data:n===0?Buffer.from('broken'):first})));
+ const before=nestedArchiveMetrics.extractions;
+ const cover=await archive.读取压缩包封面列表(p);
+ assert.equal(cover.length,1);assert.deepEqual(cover[0].archiveChain,['001.zip','1.png']);
+ assert.equal((await archive.读取压缩包单张图片(p,cover[0].virtualPath,undefined,'background',true)).toString(),'first cover');
+ assert.equal(nestedArchiveMetrics.extractions-before,2,'remaining 16 inner containers must not be staged for a cover');
+});
+
+test('requested nested staging bypasses queued cover staging and shares an existing extraction', async t => {
+ const { withNestedArchive }=require('../dist-electron/services/nestedArchiveCache');
+ const parent=await fixture(t,'priority.zip',[{name:'1.png'}]),order=[];
+ let release;const gate=new Promise(resolve=>{release=resolve;});
+ const stage=(name,priority,hold=false)=>withNestedArchive(parent,{virtualPath:name+'.zip',size:1},async()=>{order.push(name);if(hold)await gate;return Buffer.from('x');},async()=>name,priority);
+ const first=stage('first','background',true);
+ while(!order.length)await new Promise(resolve=>setTimeout(resolve,1));
+ const second=stage('second','background'),third=stage('third','background'),reader=stage('reader','foreground');
+ await new Promise(resolve=>setTimeout(resolve,20));release();
+ await Promise.all([first,second,third,reader]);assert.equal(order[0],'first');assert.equal(order[1],'reader');
+ let reads=0;
+ const entry={virtualPath:'shared.zip',size:1};
+ await Promise.all(['background','foreground'].map(priority=>withNestedArchive(parent,entry,async()=>{reads++;return Buffer.from('y');},async()=>true,priority)));
+ assert.equal(reads,1);
+});
+
 test('real RAR4/RAR5 compressed artwork retains entry times and empty RAR5 link fields are regular files', async () => {
   for (const name of ['RAR4.rar','RAR5.cbr']) {
     const file=path.resolve('tests/fixtures/android-archives',name);
@@ -139,4 +186,19 @@ test('metadata cache invalidates after archive replacement; parallel reads stay 
 test('legacy ZIP Windows separators normalize safely', async t => {
  const p=await fixture(t,'windows.cbz',[{name:'chapter\\page.jpg'}]);assert.equal((await archive.读取压缩包图片列表(p))[0].virtualPath,'chapter/page.jpg');assert.equal((await archive.读取压缩包单张图片(p,'chapter/page.jpg')).toString(),'image fixture');
  const unsafe=await fixture(t,'traversal.cbz',[{name:'chapter\\..\\..\\out.jpg'}]);await assert.rejects(archive.读取压缩包图片列表(unsafe));
+});
+
+test('ordinary cover does not open nested containers when a direct cover already exists', async t => {
+ const p=await fixture(t,'mixed-cover.zip',[{name:'cover.png',data:Buffer.from('direct cover')},{name:'collection.zip',data:Buffer.from('unreadable inner container')}]);
+ const covers=await archive.读取压缩包封面列表(p);
+ assert.equal(covers.length,1);assert.equal(covers[0].virtualPath,'cover.png');
+ assert.equal((await archive.读取压缩包单张图片(p,'cover.png',1024,'background',true)).toString(),'direct cover');
+ await assert.rejects(archive.读取压缩包图片列表(p));
+});
+
+test('background page counts defer nested decompression until the book is actually opened', async t=>{
+ const p=await fixture(t,'count-later.zip',[{name:'inner.zip',data:zip([{name:'1.png'},{name:'2.png'}])}]);
+ assert.equal(await archive.读取压缩包快速页数(p),null);
+ assert.equal((await archive.读取压缩包图片列表(p)).length,2);
+ assert.equal(await archive.读取压缩包快速页数(p),2);
 });

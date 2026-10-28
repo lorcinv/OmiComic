@@ -11,7 +11,7 @@ export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "un
 export type 阅读页类型 = "folder-image" | "archive-image" | "pdf-page" | "epub-chapter";
 export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
 export type 卡片尺寸 = "small" | "medium" | "large";
-export type 每页数量 = 60 | 100 | 150 | 200;
+export type 每页数量 = 50 | 100 | 150 | 200 | 500;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
 export type 进度文本模式 = "page" | "percent";
 export type 进度条粗细 = "thin" | "normal" | "thick";
@@ -76,6 +76,7 @@ export interface AppSettings {
   bookshelfNoteHoverDelayMs: 书架备注悬停延迟;
   recentOpenedLimit: 最近打开记录上限;
   tagSearchMode: 标签搜索模式;
+  searchSplitSpaces?: boolean;
   confirmBeforeDeleteTags: boolean;
   confirmBeforeBatchDelete: 批量删除确认设置;
 }
@@ -460,8 +461,10 @@ contextBridge.exposeInMainWorld("omicomic", {
     ipcRenderer.invoke("数据:当前页是否书签", resourceKey, pageIndex, pageId),
   selectFolder: (): Promise<操作结果<string | null>> =>
     ipcRenderer.invoke("目录:选择根目录"),
-  listDirectory: (目标路径: string): Promise<操作结果<目录结果>> =>
-    ipcRenderer.invoke("目录:读取", 目标路径),
+  cancelLibraryScan: () => ipcRenderer.send("目录:取消资源库索引"),
+  scanLibrary: (path: string, refresh = false, booksOnly = false, options?: { incremental?: boolean; restart?: boolean; metadata?: boolean; invalidatePaths?: string[] }) => ipcRenderer.invoke("目录:资源库索引", path, refresh, booksOnly, options),
+  listDirectory: (目标路径: string, options?: { background?: boolean }): Promise<操作结果<目录结果>> =>
+    ipcRenderer.invoke("目录:读取", 目标路径, options),
   getResourcePages: (输入: 打开资源输入): Promise<操作结果<阅读资源结果>> =>
     ipcRenderer.invoke("阅读:获取图片列表", 输入),
   setReaderSession: (id: number): Promise<操作结果<null>> =>

@@ -19,6 +19,7 @@ interface GlassSelectProps<T extends GlassSelectValue> {
   title?: string;
   disabled?: boolean;
   className?: string;
+  compact?: boolean;
 }
 
 interface 下拉位置 {
@@ -47,6 +48,7 @@ export default function GlassSelect<T extends GlassSelectValue>({
   title,
   disabled = false,
   className = "",
+  compact = false,
 }: GlassSelectProps<T>) {
   const [已打开, 设置已打开] = useState(false);
   const [活动索引, 设置活动索引] = useState(0);
@@ -97,7 +99,7 @@ export default function GlassSelect<T extends GlassSelectValue>({
     const 实际高度 = Math.min(估算内容高度, maxHeight);
     const 视口可用宽度 = Math.max(0, 视口宽度 - 下拉边距 * 2);
     const width = Math.min(
-      Math.max(矩形.width, 下拉最小宽度),
+      Math.max(矩形.width, compact ? 132 : 下拉最小宽度),
       视口可用宽度,
     );
     const left = Math.min(
@@ -339,7 +341,7 @@ export default function GlassSelect<T extends GlassSelectValue>({
         <div
           ref={下拉菜单}
           id={列表Id}
-          className="glass-select-options is-portal"
+          className={`glass-select-options is-portal ${compact ? "is-compact" : ""}`}
           data-placement={下拉位置.placement}
           style={下拉样式}
           role="listbox"

@@ -39,7 +39,7 @@ async function settings(page: Page) {
   await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'返回',exact:true}).click();
   selectedBooks.set(page,await page.evaluate(()=>(window as any).__saved.at(-1).resourceKey));
-  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^阅读器 /}).click();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^漫画阅读设置/}).click();
   await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toBeVisible();
 }
 async function resume(page: Page) {
@@ -76,7 +76,7 @@ test('reader settings follow the detail or last read book and persist auto read 
   await page.screenshot({path:'test-results/general-reader-settings.png'});
   await resume(page);await expect(play(page)).toBeVisible();await page.getByRole('button',{name:'返回',exact:true}).click();
   await page.getByRole('button',{name:/^资源库/}).click();await page.locator('.resource-card').filter({hasText:'Book'}).getByRole('button',{name:'打开资源信息'}).click();
-  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^阅读器 /}).click();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^漫画阅读设置/}).click();
   await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toHaveValue('5');
   await expect(page.getByRole('combobox',{name:'当前漫画'})).toHaveCount(0);
   await expect(page.getByRole('slider',{name:'滚动速度',exact:true})).toHaveValue('80');

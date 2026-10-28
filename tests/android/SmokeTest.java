@@ -442,15 +442,18 @@ public final class SmokeTest extends Instrumentation {
       if("cold".equals(args.getString("cache")))for(String name:new String[]{"reader","covers","archive-indexes","folder-covers","reader-pages","reader-rasters"})clearCache(new File(getTargetContext().getCacheDir(),name));
       Intent entry=new Intent().setClassName("io.github.lorcinv.omicomic","io.github.lorcinv.omicomic.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
       if("launcher".equals(args.getString("fixture")))entry.setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+      long launchStarted=SystemClock.uptimeMillis();
       Activity activity=startActivitySync(entry);
       runOnMainSync(()->web=find(activity.getWindow().getDecorView()));
       if(web==null)throw new IOException("WebView missing");
       long deadline=System.currentTimeMillis()+30000;
-      while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('.omi-home')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
+      String startupSelector="launch1145".equals(args.getString("mode"))?".library-layout":".omi-home";
+      while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('"+startupSelector+"')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
       // DOM existence precedes the first composed frame. Do not inject taps
       // through the launch cover while observing its initial reveal.
       long launchDeadline=SystemClock.uptimeMillis()+6000;
       while(true){boolean[] covered={false};runOnMainSync(()->{try{covered[0]=launchProgress(activity)>=0;}catch(NoSuchFieldException legacy){}catch(Exception error){throw new RuntimeException(error);}});if(!covered[0])break;if(SystemClock.uptimeMillis()>launchDeadline)throw new IOException("Launch cover did not close");Thread.sleep(20);}
+      long launchReadyMs=SystemClock.uptimeMillis()-launchStarted;
       String mode=args.getString("mode","smoke");
       java.util.Map<String,Integer> mainSamples=new java.util.concurrent.ConcurrentHashMap<>();
       java.util.concurrent.atomic.AtomicBoolean sampling=new java.util.concurrent.atomic.AtomicBoolean(mode.equals("native-speed"));
@@ -476,12 +479,57 @@ public final class SmokeTest extends Instrumentation {
       byte[] script;
       try(InputStream input=getContext().getAssets().open(mode+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
-      deadline=System.currentTimeMillis()+((mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
+      deadline=System.currentTimeMillis()+((mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
       String result;
+      if(mode.equals("authorize1141")){
+        // A background WebView pauses JavaScript callbacks while SAF owns the window.
+        // Wait on the native picker lifecycle instead of evaluating that WebView.
+        boolean opened=false;
+        while(true){
+          int[] picker={-1};runOnMainSync(()->{try{picker[0]=(Integer)field(activity,"pickerId");}catch(Exception error){throw new RuntimeException(error);}});
+          if(picker[0]>=0)opened=true;
+          if(opened&&picker[0]<0)break;
+          if(System.currentTimeMillis()>deadline)throw new IOException("Directory authorization timed out");
+          Thread.sleep(100);
+        }
+        Thread.sleep(500);
+      }
       long continuousTouchDown=0;
       SceneFrames[] sceneFrames={null};
       while("null".equals(result=eval("JSON.stringify(window.__omiResult)"))||"\"null\"".equals(result)){
         if(System.currentTimeMillis()>deadline)throw new IOException("Smoke timed out: "+eval("document.body.innerText"));
+        if("true".equals(eval("window.__omiCatalogProviderTest===true"))){
+          JSONObject checks=new CatalogChecks(field(activity,"library"),getTargetContext()).run();
+          eval("window.__omiCatalogProviderResult="+checks+";window.__omiCatalogProviderTest=false");
+        }
+        String libraryProbe=eval("JSON.stringify(window.__omiLibraryProbe||null)");
+        if(!"null".equals(libraryProbe)&&!"\"null\"".equals(libraryProbe)){
+          JSONObject request=new JSONObject((String)new JSONTokener(libraryProbe).nextValue());
+          Object library=field(activity,"library");
+          if(request.optString("action").equals("clear-hot")){
+            ((java.util.concurrent.ExecutorService)field(library,"indexWrites")).submit(()->{}).get(5,TimeUnit.SECONDS);
+            synchronized(field(library,"metadataLock")){
+              ((java.util.Map<?,?>)field(library,"entries")).clear();
+              ((java.util.Map<?,?>)field(library,"directories")).clear();
+              ((java.util.Map<?,?>)field(library,"directoryTimes")).clear();
+            }
+          }
+          JSONObject metrics=new JSONObject();
+          for(String metric:new String[]{"directoryQueries","scannerQueries","scannerIndexHits","scannerBatches","scannerBytes","scannerLockWaitNanos","scannerLockNanos","resolveQueries","directoryIndexHits","uriIndexHits"})metrics.put(metric,field(library,metric));
+          metrics.put("javaUsedBytes",Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory()).put("nativeHeapBytes",android.os.Debug.getNativeHeapAllocatedSize());
+          metrics.put("previewIndexBuilds",field(field(library,"previewArchives"),"indexBuilds"));
+          metrics.put("directoryDbVersion",((android.database.sqlite.SQLiteOpenHelper)field(library,"directoryIndex")).getReadableDatabase().getVersion());
+          metrics.put("catalogPaused",field(library,"catalogPaused"));
+          eval("window.__omiLibraryMetrics="+metrics+";window.__omiLibraryProbe=null");
+        }
+        if("true".equals(eval("window.__omiShortLifecycle===true"))){
+          JSONObject resumed=lifecycle(activity,"icon");
+          eval("window.__omiShortLifecycleResult="+resumed+";window.__omiShortLifecycle=false");
+        }
+        if("true".equals(eval("window.__omiQuickLock===true"))){
+          JSONObject resumed=lifecycle(activity,"lock-1500");
+          eval("window.__omiQuickLockResult="+resumed+";window.__omiQuickLock=false");
+        }
         if((mode.startsWith("mobile1121-")||mode.startsWith("mobile1122-")||mode.startsWith("mobile1123-")||mode.equals("mobile1138-entry"))){
         if("true".equals(eval("window.__omiFrameProbe===true"))){runOnMainSync(()->{sceneFrames[0]=new SceneFrames(activity);Choreographer.getInstance().postFrameCallback(sceneFrames[0]);});eval("window.__omiFrameProbe=false");}
         if("true".equals(eval("window.__omiFrameProbeStop===true"))){if(mode.equals("mobile1138-entry"))awaitSceneSettled(activity);JSONObject[] captured={null};runOnMainSync(()->{try{captured[0]=sceneFrames[0].result();}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiFrameProbeResult="+captured[0]+";window.__omiFrameProbeStop=false");}
@@ -644,6 +692,7 @@ public final class SmokeTest extends Instrumentation {
       }
       String json=(String)new JSONTokener(result).nextValue();
       JSONObject resultObject=new JSONObject(json);
+      if(mode.equals("launch1145")||mode.equals("search1145"))resultObject.put("launchReadyMs",launchReadyMs);
       if(mode.equals("mobile1138-entry")){String trace=(String)new JSONTokener(eval("JSON.stringify(window.__omiEntryTrace||[])")).nextValue();resultObject.put("entryTrace",new JSONArray(trace));}
       if(!resultObject.optBoolean("ok")){String snapshot=(String)new JSONTokener(eval("JSON.stringify(window.__omiNativeStats||null)")).nextValue();if(snapshot!=null&&!snapshot.equals("null"))resultObject.put("lastReaderStats",new JSONObject(snapshot));}
       if(mode.equals("about")){
@@ -697,6 +746,7 @@ public final class SmokeTest extends Instrumentation {
       try {
         Object library=field(activity,"library");
         JSONObject io=new JSONObject().put("directoryQueries",field(library,"directoryQueries")).put("wholeArchiveCopiedBytes",field(library,"copiedBytes"));
+        try{for(String metric:new String[]{"scannerQueries","scannerIndexHits","scannerBatches","scannerBytes","scannerLockWaitNanos","scannerLockNanos","resolveQueries","directoryIndexHits","uriIndexHits"})io.put(metric,field(library,metric));io.put("javaUsedBytes",Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory()).put("nativeHeapBytes",android.os.Debug.getNativeHeapAllocatedSize());}catch(NoSuchFieldException legacy){}
         io.put("readerIndexBuilds",field(field(library,"nativeArchives"),"indexBuilds"));
         io.put("previewIndexBuilds",field(field(library,"previewArchives"),"indexBuilds"));
         try{io.put("readerPageDecodes",field(field(library,"nativeArchives"),"pageDecodes")).put("readerPageDiskHits",field(field(library,"nativeArchives"),"pageDiskHits"));}catch(NoSuchFieldException legacy){}

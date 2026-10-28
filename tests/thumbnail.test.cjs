@@ -11,6 +11,7 @@ function serviceWith(archive, nativeImage) {
     if (id === 'electron') return { nativeImage };
     if (id === './archiveService') return {
       是压缩包服务错误: error => Boolean(error.code), ...archive,
+      读取压缩包封面列表: archive.读取压缩包图片列表,
     };
     return original.call(this, id, ...args);
   };

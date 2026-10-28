@@ -13,7 +13,7 @@ export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub"
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 主题配色 = "mist" | "nord" | "sand" | "night";
-export type 每页数量 = 60 | 100 | 150 | 200;
+export type 每页数量 = 50 | 100 | 150 | 200 | 500;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
 export type 排序方向 = "asc" | "desc";
 export type 进度文本模式 = "page" | "percent";
@@ -40,6 +40,7 @@ export interface LibraryRoot {
 }
 
 export interface AppSettings {
+  showHomePage?: boolean;
   language?: 'zh-CN' | 'en' | 'ja';
   desktopInfoFontSize?: number;
   desktopGlobalFontSize?: number;
@@ -81,6 +82,7 @@ export interface AppSettings {
   bookshelfNoteHoverDelayMs: 书架备注悬停延迟;
   recentOpenedLimit: 最近打开记录上限;
   tagSearchMode: 标签搜索模式;
+  searchSplitSpaces?: boolean;
   confirmBeforeDeleteTags: boolean;
   confirmBeforeBatchDelete: 批量删除确认设置;
 }
@@ -241,7 +243,7 @@ export interface OmiComicAppData {
 const 数据版本 = 1;
 const 最近打开默认上限: 最近打开记录上限 = 50;
 const 默认书架ID = "bookshelf-default";
-const 每页数量选项 = new Set<number>([60, 100, 150, 200]);
+const 每页数量选项 = new Set<number>([50, 100, 150, 200, 500]);
 const 卡片尺寸选项 = new Set<string>(["small", "medium", "large"]);
 const 排序方式选项 = new Set<string>(["name-asc", "name-desc", "time-asc", "time-desc", "type"]);
 const 进度文本模式选项 = new Set<string>(["page", "percent"]);
@@ -260,11 +262,12 @@ const 主题配色选项 = new Set<string>(["mist", "nord", "sand", "night"]);
 const 资源类型选项 = new Set<string>(["folder", "image", "archive", "pdf", "epub", "unknown"]);
 
 const 默认设置: AppSettings = {
+  showHomePage: true,
   colorTheme: "mist",
   cardSize: "medium",
   cardScale: 100,
   detailThumbnailScale: 100,
-  pageSize: 60,
+  pageSize: 50,
   sortMode: "name-asc",
   sortDirection: "asc",
   folderFirst: true,
@@ -294,6 +297,7 @@ const 默认设置: AppSettings = {
   bookshelfNoteHoverDelayMs: 1000,
   recentOpenedLimit: 最近打开默认上限,
   tagSearchMode: "fuzzy",
+  searchSplitSpaces: false,
   confirmBeforeDeleteTags: true,
   confirmBeforeBatchDelete: {
     favorites: true,
@@ -466,6 +470,7 @@ function 修正设置(输入: unknown): AppSettings {
 
   return {
     language: 设置.language === 'en' || 设置.language === 'ja' ? 设置.language : 'zh-CN',
+    showHomePage: 设置.showHomePage !== false,
     ...desktopTypography(设置),
     desktopReaderAutoHide: 设置.desktopReaderAutoHide === true,
     desktopPerformanceProfile,
@@ -524,6 +529,7 @@ function 修正设置(输入: unknown): AppSettings {
     bookshelfNoteHoverDelayMs,
     recentOpenedLimit,
     tagSearchMode,
+    searchSplitSpaces: 设置.searchSplitSpaces === true,
     confirmBeforeDeleteTags: typeof 设置.confirmBeforeDeleteTags === "boolean"
       ? 设置.confirmBeforeDeleteTags
       : 默认设置.confirmBeforeDeleteTags,
