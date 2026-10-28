@@ -47,6 +47,9 @@ test.describe('mobile favorite corner', () => {
         expect(Math.abs(action!.y - bounds!.y - 2)).toBeLessThan(1);
         expect(Math.abs(action!.x + action!.width - bounds!.x - bounds!.width + 1)).toBeLessThan(1);
         expect(action!.height).toBe(40); expect(action!.width).toBe(40);
+        const heart = await favorite.locator('svg').boundingBox();
+        expect(heart!.y - action!.y).toBeCloseTo(6, 0);
+        expect(action!.x + action!.width - heart!.x - heart!.width).toBeCloseTo(6, 0);
         if (layout === 'list') {
           const title = await card.locator('strong').boundingBox();
           expect(title!.x + title!.width).toBeLessThanOrEqual(action!.x);

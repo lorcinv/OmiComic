@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 | 対応環境 | パッケージ |
 | --- | --- |
 | PC · Windows x64 | [OmiComic 1.1.45 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.45/OmiComic-Portable-1.1.45-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.45/OmiComic-Setup-1.1.45-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.45 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.45/OmiComic-1.1.45-android.apk) |
+| Android 8.0+ | [OmiComic 1.1.46 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.46/OmiComic-1.1.46-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 

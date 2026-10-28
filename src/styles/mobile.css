@@ -303,6 +303,7 @@ body:has(.mobile-sheet-overlay) .glass-select-options.is-portal { z-index:1120; 
 .mobile-card-info svg,.mobile-card-favorite svg { width:20px; height:20px; }
 .mobile-card-info svg { fill:currentColor; }
 .mobile-card-favorite svg { fill:transparent; stroke:currentColor; stroke-width:1.7; }
+.mobile-resource-card .mobile-card-favorite svg { transform:translate(4px,-4px); }
 .mobile-card-favorite.is-active { color:var(--收藏色); }
 .mobile-card-favorite.is-active svg { fill:currentColor; }
 .mobile-resource-card .resource-preview .mobile-card-favorite { position:absolute; top:2px; right:1px; height:40px; width:40px; color:#fff; filter:drop-shadow(0 1px 2px #18202dcc); }

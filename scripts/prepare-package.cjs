@@ -11,13 +11,14 @@ async function main() {
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   const desktopVersion = manifest.desktopVersion || manifest.version;
   const config = JSON.parse(await fs.readFile(path.join(root, 'electron-builder.json'), 'utf8'));
-  const windowsVersion = config.buildNumber ? `${manifest.version}.${config.buildNumber}` : manifest.version;
+  const desktopBaseVersion = config.buildNumber ? manifest.version : desktopVersion;
+  const windowsVersion = config.buildNumber ? `${desktopBaseVersion}.${config.buildNumber}` : desktopBaseVersion;
   if (desktopVersion !== windowsVersion) throw new Error('Desktop display version and Windows build number must match.');
   await fs.writeFile(path.join(stage, 'desktop-version.nsh'), `!define OMI_DESKTOP_VERSION "${desktopVersion}"\n`);
   if ((await fs.readdir(path.join(root, 'dist', 'assets'))).some(name => name.startsWith('home-scene-')))
     throw new Error('Old, unverified home illustration remains in renderer output. Clean dist and rebuild.');
   await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify({
-    name: manifest.name, version: manifest.version, desktopVersion, productName: 'OmiComic',
+    name: manifest.name, version: desktopBaseVersion, desktopVersion, productName: 'OmiComic',
     description: manifest.description, main: 'dist-electron/main.js', author: manifest.author,
     homepage: manifest.homepage, license: manifest.license, dependencies: {},
   }, null, 2));
