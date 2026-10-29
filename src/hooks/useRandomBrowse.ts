@@ -25,15 +25,27 @@ export function useRandomBrowse(scope: string | null, count: number, filter = ''
     if (!order.current || order.current.signature !== signature) {
       order.current = { signature, value: newOrder(items, key) };
     }
-    // A cold partial catalog may initially be empty. Publish its first known
-    // batch once; later discovery is eligible on the next explicit redraw.
-    if (!order.current.value.ids.length && items.length) order.current.value = newOrder(items, key);
     const value = order.current.value, available = new Map(items.filter(item => {
       const source = item as { path?: string; sourcePath?: string };
       return !rejected.current.has(source.path ?? source.sourcePath ?? key(item));
     }).map(item => [key(item), item]));
     value.selected = value.ids.slice(0, value.selected).filter(id => available.has(value.keys[id])).length;
     value.ids = value.ids.filter(id => available.has(value.keys[id]));
+    // A cold catalog arrives in small batches. Keep the already drawn prefix,
+    // then admit new candidates until the requested batch is full. Once full,
+    // later scan batches cannot move or replace its cards.
+    if (value.selected < Math.min(count, available.size)) {
+      const remaining = new Set(Array.from(value.ids, id => value.keys[id]));
+      const indices = new Map(value.keys.map((key, index) => [key, index]));
+      const extra: number[] = [];
+      for (const candidate of available.keys()) {
+        if (remaining.has(candidate)) continue;
+        let index = indices.get(candidate);
+        if (index === undefined) { index = value.keys.length; value.keys.push(candidate); }
+        extra.push(index);
+      }
+      if (extra.length) value.ids = Uint32Array.from([...value.ids, ...extra]);
+    }
     const take = Math.min(count, value.ids.length);
     for (let index = value.selected; index < take; index++) {
       const selected = index + secureRandomIndex(value.ids.length - index);

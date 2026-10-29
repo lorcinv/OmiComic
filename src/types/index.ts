@@ -293,6 +293,7 @@ export interface 阅读页面项 {
 }
 
 export interface 阅读资源结果 {
+  readerInit?: { settings: AppSettings; progress: ReadingProgress | null };
   requestedPageId?: string;
   key: string;
   resourceKey: string;

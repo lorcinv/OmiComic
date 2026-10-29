@@ -577,8 +577,13 @@ async function 读取原始阅读资源(输入: unknown): Promise<操作结果<�
 
 async function 读取阅读资源(输入: unknown, overrideSort?: PageSort): Promise<操作结果<阅读资源结果>> {
   const result = await foregroundWork(() => 读取原始阅读资源(输入));
-  if (!result.ok || result.data.sourceType === "pdf" || result.data.sourceType === "epub") return result;
-  const progress = await 获取阅读进度(result.data.resourceKey);
+  if (!result.ok) return result;
+  // The manifest, sort and reader initialization share this fresh snapshot.
+  // Avoid sending the complete library back to the reader in another round trip.
+  const data = await 读取应用数据();
+  const progress = data.readingProgress[result.data.resourceKey] ?? null;
+  result.data.readerInit = { settings: data.settings, progress };
+  if (result.data.sourceType === "pdf" || result.data.sourceType === "epub") return result;
   const mode = overrideSort ?? normalizePageSort(progress?.readerViewState?.pageSort);
   if ((mode.startsWith("time") || progress?.readerViewState?.pageSort?.startsWith("time")) && result.data.sourceType !== "archive") {
     let cursor = 0;

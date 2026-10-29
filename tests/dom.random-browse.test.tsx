@@ -2,9 +2,34 @@ import { describe, it, expect } from 'vitest';
 import { sampleRandom, collectRandomComics, secureRandomIndex } from '../src/library/randomBrowse';
 import { vi } from 'vitest';
 import type { 文件条目 } from '../src/types';
+import { act, renderHook } from '@testing-library/react';
+import { useRandomBrowse } from '../src/hooks/useRandomBrowse';
 
 const file = (path: string, type: 文件条目['type']): 文件条目 => ({ id: path, path, name: path.split('/').at(-1)!, type, extension: '' });
 describe('random comic browsing', () => {
+  it('fills a cold partial batch as scanning discovers more books, preserving its existing prefix', () => {
+    const { result } = renderHook(() => useRandomBrowse('directory:/cold', 50));
+    act(() => result.current.toggle());
+    const items = Array.from({ length: 150 }, (_, index) => `book-${index}`);
+    const first = result.current.select(items.slice(0, 4), key => key);
+    expect(first).toHaveLength(4);
+    const full = result.current.select(items.slice(0, 100), key => key);
+    expect(full).toHaveLength(50);
+    expect(full.slice(0, 4)).toEqual(first);
+    expect(new Set(full).size).toBe(50);
+    expect(result.current.select(items, key => key)).toEqual(full);
+  });
+  it('backfills rejected books from later discoveries without changing the surviving prefix', () => {
+    const { result } = renderHook(() => useRandomBrowse('directory:/refill', 5));
+    act(() => result.current.toggle());
+    const first = result.current.select(['a', 'b'], key => key);
+    act(() => result.current.rejectPath(first[0]));
+    const filled = result.current.select(['a', 'b', 'c', 'd', 'e', 'f', 'g'], key => key);
+    expect(filled).toHaveLength(5);
+    expect(filled[0]).toBe(first[1]);
+    expect(filled).not.toContain(first[0]);
+    expect(new Set(filled).size).toBe(5);
+  });
   it('samples the requested count without duplicates, with independent redraws', () => {
     const items = Array.from({ length: 160 }, (_, index) => String(index));
     const first = sampleRandom([...items, '0'], 50, key => key);

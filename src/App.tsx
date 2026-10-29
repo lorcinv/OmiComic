@@ -49,8 +49,12 @@ function App() {
     };
   }, [mobile]);
   useEffect(()=>{
-    if(!isAndroid())return;
-    const timer=window.setTimeout(()=>{void import('./pages/ReaderPage');},350);
+    const prepare = () => { void import('./pages/ReaderPage').catch(() => undefined); };
+    if (!isAndroid() && window.requestIdleCallback) {
+      const idle = window.requestIdleCallback(prepare, { timeout: 1500 });
+      return () => window.cancelIdleCallback(idle);
+    }
+    const timer=window.setTimeout(prepare,350);
     return()=>clearTimeout(timer);
   },[]);
   const [LibraryPage, 设置资源库组件] = useState<(typeof import("./pages/LibraryPage"))["default"] | null>(null);
@@ -65,7 +69,7 @@ function App() {
   const [外部打开错误, 设置外部打开错误] = useState<string | null>(null);
   const 外部请求处理中 = useRef(false);
   const 应用已挂载 = useRef(false);
-  const [手机阅读器准备中, 设置手机阅读器准备中] = useState(false);
+  const [阅读器准备中, 设置阅读器准备中] = useState(false);
   const [手机阅读转场中, 设置手机阅读转场中] = useState(false);
   const 阅读打开请求 = useRef(0);
   const 等待阅读画面 = useRef<{ id: number; finish: (ready: boolean) => void } | null>(null);
@@ -82,14 +86,14 @@ function App() {
   const 启动遮罩已结束 = useRef(false);
 
   useEffect(() => {
-    if (!isAndroid() || 启动遮罩已结束.current || !启动设置就绪 || 手机阅读器准备中
+    if (!isAndroid() || 启动遮罩已结束.current || !启动设置就绪 || 阅读器准备中
       || (!显示主界面 && !初始资源库已就绪 && 当前页面 !== '阅读器')) return;
     let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
       启动遮罩已结束.current = true;
       void androidCall('finishLaunch', { animated: !matchMedia('(prefers-reduced-motion: reduce)').matches }).catch(() => undefined);
     }); });
     return () => cancelAnimationFrame(frame);
-  }, [启动设置就绪, 显示主界面, 初始资源库已就绪, 当前页面, 手机阅读器准备中]);
+  }, [启动设置就绪, 显示主界面, 初始资源库已就绪, 当前页面, 阅读器准备中]);
 
   useEffect(() => {
     const changed = (event: Event) => {
@@ -105,15 +109,28 @@ function App() {
     阅读打开请求.current++;
     等待阅读画面.current?.finish(false);
     等待阅读画面.current = null;
-    设置手机阅读器准备中(false);
+    设置阅读器准备中(false);
     设置手机阅读转场中(false);
     if (当前页面 !== "阅读器") 设置阅读资源(null);
   }
   useEffect(() => {
     const cancel=()=>{if(等待阅读画面.current)取消阅读准备();};
+    const key = (event: KeyboardEvent) => {
+      if (mobile || event.key !== 'Escape' || !等待阅读画面.current) return;
+      cancel();
+      if (document.documentElement.dataset.randomBrowse === 'on') return;
+      event.preventDefault(); event.stopImmediatePropagation();
+    };
+    const pointer = () => { if (!mobile) cancel(); };
     window.addEventListener('omi-cancel-reader-prepare',cancel);
-    return()=>window.removeEventListener('omi-cancel-reader-prepare',cancel);
-  });
+    window.addEventListener('keydown',key,true);
+    window.addEventListener('pointerdown',pointer,true);
+    return()=>{
+      window.removeEventListener('omi-cancel-reader-prepare',cancel);
+      window.removeEventListener('keydown',key,true);
+      window.removeEventListener('pointerdown',pointer,true);
+    };
+  }, [mobile]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -316,7 +333,8 @@ function App() {
     }
     await 加载阅读器();
     if (!应用已挂载.current || request !== 阅读打开请求.current) return;
-    if (mobile) {
+    const 准备后显示 = mobile || 当前页面 !== '阅读器';
+    if (准备后显示) {
       // Keep the library/home on screen while the actual reader image decodes.
       // The prepared reader keeps the same DOM/image nodes through the reveal.
       const ready = await new Promise<boolean>(resolve => {
@@ -324,21 +342,27 @@ function App() {
         等待阅读画面.current = { id: request, finish: value => { clearTimeout(timer); resolve(value); } };
         flushSync(() => {
           设置阅读资源(资源); 设置阅读起始页(起始页); 设置阅读上下文(上下文 ?? null);
-          设置阅读打开序号(request); 设置手机阅读器准备中(true);
+          设置阅读打开序号(request); 设置阅读器准备中(true);
         });
       });
       if (request !== 阅读打开请求.current || !应用已挂载.current) return;
       等待阅读画面.current = null;
-      if (!ready) { 设置手机阅读器准备中(false); 设置阅读资源(null); 设置外部打开错误("漫画页面读取超时，请重试。"); return; }
-      设置手机阅读转场中(true);
-      await mobileNavigate(() => { if (request !== 阅读打开请求.current) return; 设置当前页面("阅读器"); 设置手机阅读器准备中(false); }, 'forward', undefined, undefined, motion);
-      if (request === 阅读打开请求.current) 设置手机阅读转场中(false);
-      return;
+      if (!ready) { 设置阅读器准备中(false); 设置阅读资源(null); 设置外部打开错误("漫画页面读取超时，请重试。"); return; }
+      if (mobile) {
+        设置手机阅读转场中(true);
+        await mobileNavigate(() => { if (request !== 阅读打开请求.current) return; 设置当前页面("阅读器"); 设置阅读器准备中(false); }, 'forward', undefined, undefined, motion);
+        if (request === 阅读打开请求.current) 设置手机阅读转场中(false);
+        return;
+      }
     }
+    const 显示阅读器 = () => {
+      if (准备后显示) { 设置当前页面('阅读器'); 设置阅读器准备中(false); }
+      else 提交阅读器页面(资源, 起始页, 上下文);
+    };
     const 减少动画 = isAndroid() || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const 转场原点 = 获取转场原点?.();
     if (!转场原点 || 减少动画 || typeof document.startViewTransition !== "function") {
-      提交阅读器页面(资源, 起始页, 上下文);
+      显示阅读器();
       return;
     }
 
@@ -349,12 +373,12 @@ function App() {
     };
     try {
       const 转场 = document.startViewTransition(() => {
-        flushSync(() => 提交阅读器页面(资源, 起始页, 上下文));
+        flushSync(显示阅读器);
       });
       void 转场.finished.then(清理转场, 清理转场);
     } catch {
       清理转场();
-      提交阅读器页面(资源, 起始页, 上下文);
+      显示阅读器();
     }
   }
 
@@ -393,19 +417,19 @@ function App() {
             onHome={() => 切换主界面("首页")}
             refreshToken={进度刷新令牌}
             isActive={当前页面 === "资源库"}
-            backgroundPaused={isAndroid() && 手机阅读器准备中}
+            backgroundPaused={阅读器准备中}
             onOpenReader={打开阅读器页面}
           />}
         </div>
-        <div className={`page-panel ${当前页面 === "阅读器" ? "is-visible" : "is-hidden"} ${手机阅读器准备中 ? "mobile-reader-preparing" : ""}`} aria-hidden={手机阅读器准备中 || undefined}>
-          {(当前页面 === "阅读器" || 手机阅读器准备中) && ReaderPage && <ReaderPage
+        <div className={`page-panel ${当前页面 === "阅读器" ? "is-visible" : "is-hidden"} ${阅读器准备中 ? "mobile-reader-preparing" : ""}`} aria-hidden={阅读器准备中 || undefined}>
+          {(当前页面 === "阅读器" || 阅读器准备中) && ReaderPage && <ReaderPage
             key={阅读资源 ? `${阅读打开序号}:${阅读资源.resourceKey}:${阅读资源.sourcePath}:${阅读起始页}:${阅读资源.total}` : "reader-empty"}
             resource={阅读资源}
             initialPageIndex={阅读起始页}
             openContext={阅读上下文}
-            isActive={当前页面 === "阅读器" || 手机阅读器准备中}
-            interactive={!手机阅读器准备中}
-            recordProgress={!mobile || (当前页面 === "阅读器" && !手机阅读器准备中 && !手机阅读转场中)}
+            isActive={当前页面 === "阅读器" || 阅读器准备中}
+            interactive={!阅读器准备中}
+            recordProgress={当前页面 === "阅读器" && !阅读器准备中 && !手机阅读转场中}
             onReady={() => { if (等待阅读画面.current?.id === 阅读打开序号) 等待阅读画面.current.finish(true); }}
             onSwitchResource={(资源, 起始页, 上下文, motion) => {
               if (mobile) {
@@ -417,7 +441,7 @@ function App() {
               设置阅读上下文(上下文);
               设置阅读打开序号((序号) => 序号 + 1);
             }}
-            onBack={() => 手机阅读器准备中 ? 取消阅读准备() : void 切换主界面("资源库")}
+            onBack={() => 阅读器准备中 ? 取消阅读准备() : void 切换主界面("资源库")}
             onProgressSaved={(_进度: ReadingProgress) => {
               设置进度刷新令牌((令牌) => 令牌 + 1);
             }}

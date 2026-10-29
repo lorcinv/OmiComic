@@ -132,8 +132,9 @@ test('failed documents and cancellation retain the normal return path and releas
     (window as any).omicomic.openDocument = () => new Promise(resolve => setTimeout(() => resolve({ ok: true, data: { size: 10, chapters: [{ index: 0, name: '第 1 章' }] } }), 500));
   });
   await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
-  await expect(page.getByRole('status').filter({ hasText: '正在打开文档' })).toBeVisible();
-  await page.getByRole('button', { name: '返回', exact: true }).click();
+  await expect(page.locator('.mobile-reader-preparing')).toHaveCount(1);
+  await expect(page.locator('.omi-home')).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(page.locator('.reader-layout')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as any).__closedDocuments.length)).toBeGreaterThan(0);
   await expect(page.locator('body > iframe')).toHaveCount(0);

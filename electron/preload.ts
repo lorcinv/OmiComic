@@ -15,7 +15,7 @@ export type 每页数量 = 50 | 100 | 150 | 200 | 500;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
 export type 进度文本模式 = "page" | "percent";
 export type 进度条粗细 = "thin" | "normal" | "thick";
-export type 阅读器缩放模式 = "fit-width" | "fit-height" | "original";
+export type 阅读器缩放模式 = "fit-window" | "fit-width" | "fit-height" | "original";
 export type 阅读器页模式 = "single" | "double";
 export type 双页阅读方向 = "left-to-right" | "right-to-left";
 export type 阅读流向 = "horizontal" | "vertical";
@@ -268,6 +268,7 @@ export interface 阅读页面项 {
 }
 
 export interface 阅读资源结果 {
+  readerInit?: { settings: AppSettings; progress: ReadingProgress | null };
   requestedPageId?: string;
   key: string;
   resourceKey: string;

@@ -277,7 +277,7 @@ function ReaderPage({
   const [当前索引, 设置当前索引] = useState(0);
   const [页面图片状态表, 提交页面图片状态表] = useState<Record<number, 页面图片状态>>({});
   const [可显示页组, 设置可显示页组] = useState<可显示页组 | null>(null);
-  const [手机解码完成, 设置手机解码完成] = useState<Record<number,string>>({});
+  const [页面解码完成, 设置页面解码完成] = useState<Record<number,string>>({});
   const 手机页面元素 = useRef(new Map<number,HTMLImageElement>());
   const [, 设置页组加载状态] = useState<页组加载状态>({
     status: "idle",
@@ -511,7 +511,14 @@ function ReaderPage({
   const 当前页组Key = 当前页组索引.join("|");
   const 目标页组已准备 = 当前页组页面.length > 0 && 当前页组页面.every((页面) => {
     const 状态 = 页面图片状态引用.current[页面.index];
-    return Boolean(状态 && !状态.loading && (状态.error || 状态.canvas || 状态.html || 状态.native || 状态.url && (!手机布局 || 手机解码完成[页面.index] === 状态.url && 手机页面元素.current.get(页面.index)?.isConnected)));
+    return Boolean(状态 && !状态.loading && (状态.error || 状态.canvas || 状态.html || 状态.native || 状态.url && (!手机布局 || 页面解码完成[页面.index] === 状态.url && 手机页面元素.current.get(页面.index)?.isConnected)));
+  });
+  // Entry waits for the actual visible DOM image. Page turns use the prepared
+  // pixels above, so they can mount the next group without waiting on its DOM.
+  const 桌面画面已解码 = 手机布局 || 当前页组页面.every(页面 => {
+    const 状态 = 页面图片状态引用.current[页面.index];
+    return 状态 && (状态.error || 状态.canvas || 状态.html || 状态.native
+      || 状态.url && 页面解码完成[页面.index] === 状态.url && 手机页面元素.current.get(页面.index)?.isConnected);
   });
   const 显示页组 = 目标页组已准备
     ? { indices: 当前页组索引, visualIndices: 视觉页组索引, pages: 当前页组页面 }
@@ -684,13 +691,17 @@ function ReaderPage({
     ? (全景横向符号 === -1 ? resource.pages.slice(模式2窗口起点, 模式2窗口终点 + 1).reverse() : resource.pages.slice(模式2窗口起点, 模式2窗口终点 + 1))
     : 手机布局 ? [...new Map([...显示页组页面,...当前页组页面,...手机预解码页面].map(page=>[page.index,page])).values()] : 显示页组页面;
   const 模式2当前锚点 = 模式2 ? 计算模式2页面锚点(安全索引) : 0;
-  全景当前锚点引用.current = 模式2当前锚点;
+  useLayoutEffect(() => {
+    // The gesture loop owns this property. React commits must not restore an
+    // older render's translation while a drag or inertia frame is advancing.
+    全景当前锚点引用.current = 模式2当前锚点;
+    if (模式2) 同步全景位移样式(全景偏移引用.current);
+  });
   const 页面流样式 = 模式2
     ? ({
         gap: "0px",
         "--reader-panorama-width": `${模式2可用宽度}px`,
         "--reader-panorama-height": `${模式2可用高度}px`,
-        "--reader-panorama-translate": `${全景偏移引用.current * 全景横向符号 - 模式2当前锚点}px`,
       } as CSSProperties)
     : ({ gap: `${页组间距}px` } as CSSProperties);
   const 进度百分比 = 总页数 > 1 ? (显示进度索引 / (总页数 - 1)) * 100 : 总页数 === 1 ? 100 : 0;
@@ -989,7 +1000,7 @@ function ReaderPage({
     };
     window.addEventListener('pointerdown',outside,true);return()=>window.removeEventListener('pointerdown',outside,true);
   },[手机布局,手机页面预览打开]);
-  useEffect(()=>{设置手机解码完成({});},[resource?.resourceKey]);
+  useEffect(()=>{设置页面解码完成({});},[resource?.resourceKey]);
   function 开始手机触控(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType !== "touch" || (event.target as HTMLElement).closest("button,input")) return;
     if (!event.isPrimary) { 手机触点.current = null; return; }
@@ -1124,9 +1135,12 @@ function ReaderPage({
   function 同步全景位移样式(偏移: number): void {
     const 页面流 = 全景页面流.current;
     if (!页面流) return;
+    const 像素比例 = window.devicePixelRatio || 1;
+    const 平移 = 偏移 * 全景横向符号 - 全景当前锚点引用.current;
+    const 对齐平移 = 手机布局 ? 平移 : Math.round(平移 * 像素比例) / 像素比例;
     页面流.style.setProperty(
       "--reader-panorama-translate",
-      `${偏移 * 全景横向符号 - 全景当前锚点引用.current}px`,
+      `${对齐平移}px`,
     );
   }
 
@@ -2835,10 +2849,15 @@ function ReaderPage({
     const 本次初始化序号 = ++阅读视图初始化序号.current;
     let 已取消 = false;
 
-    void Promise.all([
+    const snapshot = resource.readerInit;
+    const initialization = snapshot ? Promise.resolve([
+      { ok: true as const, data: { settings: snapshot.settings, readingProgress: { [初始化资源Key]: snapshot.progress } } },
+      { ok: true as const, data: snapshot.progress },
+    ] as const) : Promise.all([
       window.omicomic.getAppData().catch(() => null),
       window.omicomic.getReadingProgress(初始化资源Key).catch(() => null),
-    ])
+    ]);
+    void initialization
       .then(async ([应用数据结果, 阅读进度结果]) => {
         if (
           已取消
@@ -3425,13 +3444,20 @@ function ReaderPage({
   }, [resource, 当前页组Key, 目标页组已准备]);
 
   useEffect(() => {
-    if (!手机布局 || !onReady || 阅读视图初始化中 || 文档加载中 || (!目标页组已准备 && !文档错误)) return;
+    if (!onReady || 文档加载中 || (!文档错误 && !错误信息 && (阅读视图初始化中 || !目标页组已准备 || !桌面画面已解码))) return;
+    if (!手机布局) {
+      // The actual DOM images have decoded; reveal them without an extra pair
+      // of animation-frame waits (the native mobile surface still needs those).
+      let cancelled = false;
+      queueMicrotask(() => { if (!cancelled) onReady(); });
+      return () => { cancelled = true; };
+    }
     let frame=0;
     // Layout and the decoded image get a paint opportunity before App reveals
     // this same reader surface over the still-visible library.
     frame=requestAnimationFrame(()=>{frame=requestAnimationFrame(()=>onReady());});
     return()=>cancelAnimationFrame(frame);
-  }, [手机布局,onReady,阅读视图初始化中,文档加载中,目标页组已准备,文档错误]);
+  }, [手机布局,onReady,阅读视图初始化中,文档加载中,目标页组已准备,桌面画面已解码,文档错误,错误信息]);
 
   useEffect(() => {
     if (!isActive || 阅读视图初始化中) return;
@@ -4127,13 +4153,13 @@ function ReaderPage({
                           onLoad={async (事件) => {
                             const img=事件.currentTarget,url=状态.url;
                             记录页面原始尺寸(页面.index,img);
-                            if(!手机布局)return;
+                            if(!手机布局){设置页面解码完成(old=>({...old,[页面.index]:url}));return;}
                             try { await img.decode(); } catch { if(!img.complete||!img.naturalWidth)return; }
                             if(!img.isConnected || 页面图片状态引用.current[页面.index]?.url!==url)return;
                             // Keep the old DOM/page until this exact image is decoded.
                             requestAnimationFrame(()=>requestAnimationFrame(()=>{
                               if(!img.isConnected || 页面图片状态引用.current[页面.index]?.url!==url)return;
-                              设置手机解码完成(old=>old[页面.index]===url?old:({...Object.fromEntries(Object.entries(old).filter(([key])=>手机页面元素.current.has(Number(key)))),[页面.index]:url}));
+                              设置页面解码完成(old=>old[页面.index]===url?old:({...Object.fromEntries(Object.entries(old).filter(([key])=>手机页面元素.current.has(Number(key)))),[页面.index]:url}));
                             }));
                           }}
                         />

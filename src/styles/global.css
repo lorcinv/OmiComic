@@ -5663,6 +5663,13 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
   contain: layout paint style;
 }
 
+[data-omi-layout="desktop"] .reader-page-spread.is-panorama-strip .reader-effects {
+  /* Keep each page's raster stable inside the moving, potentially very long
+     strip, including maximized Windows windows and fractional display scales. */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
 .reader-panorama-jump-ghost {
   position: absolute;
   z-index: 4;

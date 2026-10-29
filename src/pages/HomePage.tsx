@@ -140,12 +140,11 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
     setHeldBook(null); cancelHold();
     setError(null);
     try {
-      const [resource, progress] = await Promise.all([
-        window.omicomic.getResourcePages({ path: book.sourcePath, type: book.sourceType }),
-        window.omicomic.getReadingProgress(book.resourceKey),
-      ]);
+      const resource = await window.omicomic.getResourcePages({ path: book.sourcePath, type: book.sourceType });
       if (request !== openRequest.current) return;
       if (!resource.ok) throw new Error(resource.error.message);
+      const progress = resource.data.readerInit ? { ok: true as const, data: resource.data.readerInit.progress }
+        : await window.omicomic.getReadingProgress(book.resourceKey);
       const isDocument = resource.data.sourceType === "pdf" || resource.data.sourceType === "epub";
       if (!isDocument && !resource.data.pages.length) throw new Error("这本漫画中没有可阅读的图片，请在资源库中检查文件。");
       if (!progress.ok) throw new Error(progress.error.message);

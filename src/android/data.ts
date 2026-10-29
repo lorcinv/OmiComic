@@ -163,6 +163,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     listDirectory: async path=>{const result=await call<import("../types").目录结果>("listDirectory",{path});if(result.ok){const hidden=data.excludedResourcePaths??[];result.data.items=result.data.items.filter(i=>!hidden.some(p=>withinPath(i.path,p)));result.data.total=result.data.items.length;}return result;},
     getResourcePages: async input=>{
       const result = await call<阅读资源结果>('getResourcePages', input);
+      if (result.ok) result.data.readerInit = structuredClone({ settings: data.settings, progress: data.readingProgress[result.data.resourceKey] ?? null });
       if (result.ok && result.data.sourceType !== 'pdf' && result.data.sourceType !== 'epub') result.data.pages = sortReaderPages(result.data.pages, normalizePageSort(data.readingProgress[result.data.resourceKey]?.readerViewState?.pageSort));
       return result;
     },

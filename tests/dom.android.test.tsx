@@ -49,6 +49,13 @@ describe('Android durable library adapter',()=>{
     const read=await Promise.race([Promise.all([api.getAppData(),api.getResourcePages({path:'/local/a',type:'folder'})]),timeout]);
     expect(read).not.toBe('blocked');if(read==='blocked')throw new Error('Reads waited for disk');
     expect(read[0].ok&&read[0].data.settings.colorTheme).toBe('mist');expect(read[1].ok).toBe(true);
+    expect(read[1].ok && read[1].data.readerInit?.settings.colorTheme).toBe('mist');
+    expect(read[1].ok && read[1].data.readerInit?.progress).toBeNull();
+    if (!read[0].ok || !read[1].ok || !read[1].data.readerInit) throw new Error('Missing reader snapshot');
+    const originalConfirmation = read[0].data.settings.confirmBeforeBatchDelete.favorites;
+    read[1].data.readerInit.settings.confirmBeforeBatchDelete.favorites = !originalConfirmation;
+    const unchanged = await api.getAppData();
+    expect(unchanged.ok && unchanged.data.settings.confirmBeforeBatchDelete.favorites).toBe(originalConfirmation);
     saving=false;release();expect((await write).ok).toBe(true);
     const committed=await api.getAppData();expect(committed.ok&&committed.data.settings.colorTheme).toBe('night');
   });

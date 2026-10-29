@@ -18,12 +18,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.48 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.48/OmiComic-Portable-1.1.48-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.48/OmiComic-Setup-1.1.48-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.48 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.48/OmiComic-1.1.48-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.49 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.49/OmiComic-Portable-1.1.49-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.49/OmiComic-Setup-1.1.49-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.49 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.49/OmiComic-1.1.49-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.48：PC 支持在任何界面拖入单个文件夹加入资源库；双端补充书架、收藏、书签等常见问题，整理操作说明。[更新说明](docs/releases/v1.1.48.md)。
+1.1.49：继续优化两端打开漫画时的加载流程，修复 PC 重新进入阅读时的加载闪现、首次随机数量不足，并调整拖入提示。[更新说明](docs/releases/v1.1.49.md)。
 
 ## 功能
 

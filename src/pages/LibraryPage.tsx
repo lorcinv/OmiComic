@@ -1065,7 +1065,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     随机浏览.stop(); 设置排序(value); 保存界面设置({ sortMode: value }); 回到第一页();
   }
   const 目录穿透搜索 = 当前视图 === "directory" && Boolean(搜索内容.trim() || 已选标签列表.length);
-  const 全库索引 = useLibraryCatalog(当前根目录, 当前视图 === "directory" && (目录穿透搜索 || 随机模式) && isActive && !正在打开资源路径,
+  const 全库索引 = useLibraryCatalog(当前根目录, 当前视图 === "directory" && (目录穿透搜索 || 随机模式) && isActive && !正在打开资源路径 && !backgroundPaused,
     !随机模式 && 排序.startsWith('time-'));
   useEffect(() => { if (当前根目录 && 当前目录) observeLibraryDirectory(当前根目录, 当前目录); }, [当前根目录, 当前目录]);
   const 搜索返回会话 = useRef<{ entrance: string; root: string; directory: 目录结果; query: string; tags: string[];
@@ -4217,7 +4217,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       const 默认起始页 = 文件.type === "image"
         ? Math.max(0, 结果.data.pages.findIndex((页面) => 页面.sourcePath === 文件.path))
         : 0;
-      const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
+      const 进度结果 = 结果.data.readerInit ? { ok: true as const, data: 结果.data.readerInit.progress } : await window.omicomic.getReadingProgress(结果.data.resourceKey);
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 已保存进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = 已保存进度
@@ -4257,7 +4257,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         return;
       }
 
-      const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
+      const 进度结果 = 结果.data.readerInit ? { ok: true as const, data: 结果.data.readerInit.progress } : await window.omicomic.getReadingProgress(结果.data.resourceKey);
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = 定位续读页面(结果.data, 进度, 进度?.currentPageIndex ?? 项目.currentPageIndex ?? 0);
@@ -4296,7 +4296,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         return;
       }
 
-      const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
+      const 进度结果 = 结果.data.readerInit ? { ok: true as const, data: 结果.data.readerInit.progress } : await window.omicomic.getReadingProgress(结果.data.resourceKey);
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = 定位续读页面(结果.data, 进度, 进度?.currentPageIndex ?? 0);
@@ -4336,7 +4336,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         return;
       }
 
-      const 进度结果 = await window.omicomic.getReadingProgress(结果.data.resourceKey);
+      const 进度结果 = 结果.data.readerInit ? { ok: true as const, data: 结果.data.readerInit.progress } : await window.omicomic.getReadingProgress(结果.data.resourceKey);
       if (本次打开序号 !== 打开阅读请求序号.current) return;
       const 进度 = 进度结果.ok ? 进度结果.data : null;
       const 起始页 = 定位续读页面(结果.data, 进度, 进度?.currentPageIndex ?? 0);

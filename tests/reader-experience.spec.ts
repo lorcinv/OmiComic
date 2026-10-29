@@ -52,6 +52,43 @@ async function jump(page: Page, pageNumber: number) {
   await expect(input).toHaveValue(String(pageNumber));
 }
 
+for (const flow of ['horizontal', 'vertical']) test(`held panorama drag remains stable while late pages decode: ${flow}`, async ({ page }) => {
+  await seedReader(page);
+  await page.evaluate(() => {
+    const api = (window as any).omicomic, load = api.getPageImage;
+    (window as any).__lateImages = [];
+    api.getPageImage = (input: any) => /page12\D/.test(input.sourcePath) ? load(input) : new Promise(resolve => {
+      (window as any).__lateImages.push(() => load(input).then(resolve));
+    });
+  });
+  await openReader(page);
+  await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
+  if (flow === 'vertical') await page.getByRole('button', { name: '当前横向阅读，点击切换纵向阅读', exact: true }).click();
+  const stage = (await page.locator('.reader-stage').boundingBox())!;
+  const x = stage.x + stage.width * .65, y = stage.y + stage.height * .65;
+  await page.mouse.move(x, y); await page.mouse.down();
+  const samples: number[] = [];
+  for (let step = 0; step <= 18; step++) {
+    if (step) await page.mouse.move(x - (flow === 'horizontal' ? step * 10 : 0), y - (flow === 'vertical' ? step * 10 : 0));
+    await page.evaluate(() => { for (const release of (window as any).__lateImages.splice(0)) release(); });
+    await page.waitForTimeout(22);
+    const box = (await page.locator('[data-reader-page-index="12"] img').boundingBox())!;
+    samples.push(flow === 'horizontal' ? box.x : box.y);
+  }
+  const reversals = samples.slice(1).map((value, i) => value - samples[i]).filter(value => value > 1);
+  expect(reversals, JSON.stringify(samples)).toEqual([]);
+  const held: number[] = [];
+  for (let step = 0; step < 20; step++) {
+    await page.evaluate(() => { for (const release of (window as any).__lateImages.splice(0)) release(); });
+    await page.waitForTimeout(22);
+    const box = (await page.locator('[data-reader-page-index="12"] img').boundingBox())!;
+    held.push(flow === 'horizontal' ? box.x : box.y);
+    await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama-dragging/);
+  }
+  expect(Math.max(...held) - Math.min(...held), JSON.stringify(held)).toBeLessThan(1);
+  await page.mouse.up();
+});
+
 test('branding separates main-page navigation from resume, and hidden library does no thumbnail work', async ({ page }) => {
   await seedReader(page);
   const requests = await page.evaluate(() => (window as any).__thumbnailRequests);

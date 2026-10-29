@@ -20,7 +20,7 @@ it('handles native file drops globally, displays feedback and preserves internal
   fireEvent.drop(document.body, { dataTransfer: data });
   await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
   expect(importDirectory).toHaveBeenCalledWith(data.files[0]);
-  expect(screen.getByRole('status').textContent).toContain('目录已加入资源库。');
+  expect(screen.getByRole('status').querySelector('span')?.textContent).toBe('目录已加入资源库');
   expect(document.querySelector('.directory-drop-overlay')).toBeNull();
   expect(fireEvent.dragOver(document.body, { dataTransfer: { types: ['text/plain'] } })).toBe(true);
   fireEvent.dragEnter(document.body, { dataTransfer: data }); fireEvent.blur(window);
@@ -35,13 +35,13 @@ it('rejects multiple drops and avoids overlapping writes; duplicates do not refr
   const onAdded = vi.fn(); render(<DesktopDirectoryDrop onAdded={onAdded} />);
   fireEvent.drop(document.body, { dataTransfer: transfer([file(), file()]) });
   expect(importDirectory).not.toHaveBeenCalled();
-  expect(screen.getByRole('status').textContent).toContain('请每次拖入一个文件夹。');
+  expect(screen.getByRole('status').querySelector('span')?.textContent).toBe('请每次拖入一个文件夹');
   fireEvent.drop(document.body, { dataTransfer: transfer([file()]) });
   fireEvent.drop(document.body, { dataTransfer: transfer([file()]) });
   expect(importDirectory).toHaveBeenCalledTimes(1);
   await act(async () => resolve({ ok: true, data: { root: {}, alreadyAdded: true } }));
   expect(onAdded).not.toHaveBeenCalled();
-  expect(screen.getByRole('status').textContent).toContain('该目录已在资源库中。');
+  expect(screen.getByRole('status').querySelector('span')?.textContent).toBe('该目录已在资源库中');
 });
 
 it('also handles EPUB frame drops and removes listeners when unmounted', async () => {

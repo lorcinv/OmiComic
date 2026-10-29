@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { t } from '../i18n';
 import { isAndroid } from '../platform';
 import '../styles/directoryDrop.css';
@@ -6,8 +6,28 @@ import '../styles/directoryDrop.css';
 export default function DesktopDirectoryDrop({ onAdded }: { onAdded: () => void }) {
   const [dragging, setDragging] = useState(false);
   const [message, setMessage] = useState('');
+  const [pane, setPane] = useState({ x: innerWidth / 2, y: innerHeight / 2, width: innerWidth });
   const added = useRef(onAdded);
   added.current = onAdded;
+
+  useLayoutEffect(() => {
+    if (!dragging && !message) return;
+    const target = document.querySelector<HTMLElement>('.page-panel.is-visible .library-main, .page-panel.is-visible .reader-layout')
+      ?? document.querySelector<HTMLElement>('.omi-home, .app-content');
+    const measure = () => {
+      const rect = target?.getBoundingClientRect();
+      const next = rect?.width && rect.height
+        ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width }
+        : { x: innerWidth / 2, y: innerHeight / 2, width: innerWidth };
+      setPane(old => old.x === next.x && old.y === next.y && old.width === next.width ? old : next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (target) observer.observe(target);
+    window.addEventListener('resize', measure);
+    return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
+  });
+  const paneStyle = { '--drop-center-x': `${pane.x}px`, '--drop-center-y': `${pane.y}px`, '--drop-pane-width': `${pane.width}px` } as CSSProperties;
 
   useEffect(() => {
     const importDirectory = window.omicomic.importDroppedDirectory;
@@ -93,13 +113,13 @@ export default function DesktopDirectoryDrop({ onAdded }: { onAdded: () => void 
   }, []);
 
   return <>
-    {dragging && <div className="directory-drop-overlay" aria-hidden="true">
+    {dragging && <div className="directory-drop-overlay" style={paneStyle} aria-hidden="true">
       <div className="directory-drop-card">
         <svg viewBox="0 0 32 32" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 9V6h9l3 3h12v17H4V9Z"/><path d="M16 13v9m-4-4 4 4 4-4"/></svg>
         <strong>{t('松开添加到资源库')}</strong>
         <span>{t('每次拖入一个文件夹')}</span>
       </div>
     </div>}
-    {message && <div className="directory-drop-notice" role="status">{t(message)}<button type="button" aria-label={t('关闭')} onClick={() => setMessage('')}>×</button></div>}
+    {message && <div className="directory-drop-notice" style={paneStyle} role="status"><span>{t(message).replace(/[。．.]+$/u, '')}</span><button type="button" aria-label={t('关闭')} onClick={() => setMessage('')}>×</button></div>}
   </>;
 }
