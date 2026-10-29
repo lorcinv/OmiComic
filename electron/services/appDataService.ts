@@ -6,6 +6,7 @@ import { normalizeReaderPreferences, normalizePageSort, sortReaderPages, pageIde
 import { app } from "electron";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { promises as 文件系统 } from "node:fs";
+import { constants as 文件权限 } from "node:fs";
 import path from "node:path";
 import { 路径位于目录, 外部资源授权路径 } from "./externalPaths";
 
@@ -1179,6 +1180,34 @@ export async function 添加或更新根目录(根路径: string, 名称: string
   数据.temporaryOpened = 数据.temporaryOpened.filter(项目 => !路径位于目录(项目.sourcePath, 根路径));
   await 保存应用数据(数据);
   return 根目录;
+}
+
+// Import in the existing write transaction: dropping a folder must not change
+// the directory or reading position that the user is currently browsing.
+export async function 添加拖入根目录(输入路径: string): Promise<{ root: LibraryRoot; alreadyAdded: boolean }> {
+  if (!正在数据变更事务中()) return 排队执行数据变更(() => 添加拖入根目录(输入路径));
+  const 根路径 = path.resolve(输入路径);
+  if (!(await 文件系统.stat(根路径)).isDirectory()) throw new Error("DROP_NOT_DIRECTORY");
+  await 文件系统.access(根路径, 文件权限.R_OK);
+  const 路径标识 = (值: string) => process.platform === "win32" ? path.resolve(值).toLowerCase() : path.resolve(值);
+  const 实际路径 = 路径标识(await 文件系统.realpath(根路径));
+  const 数据 = await 读取应用数据();
+  for (const 已有 of 数据.library.roots) {
+    if (路径标识(已有.path) === 路径标识(根路径)) return { root: 已有, alreadyAdded: true };
+    try {
+      if (路径标识(await 文件系统.realpath(已有.path)) === 实际路径) return { root: 已有, alreadyAdded: true };
+    } catch { /* Keep unavailable roots; they can be reconnected later. */ }
+  }
+  const 当前时间 = Date.now();
+  const root: LibraryRoot = { path: 根路径, name: path.basename(根路径) || 根路径, addedAt: 当前时间, lastOpenedAt: 当前时间 };
+  数据.library.roots.push(root);
+  if (数据.library.roots.length === 1) {
+    数据.library.lastActiveRootPath = 根路径;
+    数据.library.lastCurrentPath = 根路径;
+  }
+  数据.temporaryOpened = 数据.temporaryOpened.filter(项目 => !路径位于目录(项目.sourcePath, 根路径));
+  await 保存应用数据(数据);
+  return { root, alreadyAdded: false };
 }
 
 export async function 重排根目录(orderedPaths: string[]): Promise<LibraryRoot[]> {

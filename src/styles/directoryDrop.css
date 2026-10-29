@@ -1,0 +1,42 @@
+.directory-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--面板色) 58%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-app-region: no-drag;
+}
+.directory-drop-card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 36px 52px;
+  border: 2px dashed var(--强调色);
+  border-radius: 18px;
+  color: var(--强调色);
+  background: var(--面板色);
+  pointer-events: none;
+}
+.directory-drop-card strong { font-size: 18px; }
+.directory-drop-card span { font-size: 13px; color: var(--次文字); }
+.directory-drop-notice {
+  position: fixed;
+  z-index: 2147483647;
+  bottom: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(100vw - 40px);
+  padding: 12px 16px;
+  border: 1px solid var(--控件边框);
+  border-radius: 12px;
+  background: var(--面板色);
+  color: var(--主文字);
+  box-shadow: var(--阴影);
+  -webkit-app-region: no-drag;
+}
+.directory-drop-notice button { padding: 0 3px; border: 0; color: var(--次文字); background: transparent; cursor: pointer; font-size: 20px; }

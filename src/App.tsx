@@ -6,6 +6,7 @@ import GlobalTooltip from "./GlobalTooltip";
 import type { OmiBrandOriginGetter } from "./OmiBrandIcon";
 import HomePage from "./pages/HomePage";
 import WindowControls from "./WindowControls";
+import DesktopDirectoryDrop from './components/DesktopDirectoryDrop';
 import MobileSettings from './components/MobileSettings';
 import BookReaderSettings from './components/BookReaderSettings';
 import { 应用主题配色, applyDesktopTypography } from './theme';
@@ -430,6 +431,12 @@ function App() {
       {!mobile && <GlobalTooltip />}
       {外部打开错误 && <div className="external-open-error" role="alert">{t(外部打开错误 ?? '')}<button aria-label={t("关闭打开提示")} onClick={() => 设置外部打开错误(null)}>×</button></div>}
       <WindowControls />
+      <DesktopDirectoryDrop onAdded={() => {
+        // A future first library mount must not reuse the pre-import snapshot.
+        初始资源库资料.current = undefined;
+        设置启动资料(null);
+        设置进度刷新令牌(value => value + 1);
+      }} />
     </div>
   );
 }

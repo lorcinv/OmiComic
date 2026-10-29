@@ -3,12 +3,13 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const data = JSON.parse(fs.readFileSync(path.join(root, 'src/content/user-guide.json'), 'utf8'));
 const intro = [
-  '软件内入口：设置 → 关于 OmiComic → 操作说明。支持离线搜索、分类跳转与折叠；以下内容与软件内置说明共用同一份来源。',
-  'In the app: Settings → About OmiComic → User guide. Search, category jumps and expandable answers work offline. This document shares the in-app content source.',
-  'アプリ内：設定 → OmiComic について → 操作ガイド。オフライン検索・分類移動・折りたたみに対応し、この文書と同じ内容を使用します。',
+  '软件内入口：设置 → 关于 OmiComic → 操作说明。可以按分类查找，也可以搜索关键词；本文与软件内的说明使用同一份内容。',
+  'In the app: Settings → About OmiComic → User guide. Browse a category or search by keyword, even offline. This document uses the same content as the in-app guide.',
+  'アプリ内：設定 → OmiComic について → 操作ガイド。分類やキーワードからオフラインでも調べられます。この文書とアプリ内のガイドは同じ内容です。',
 ];
 for (let language = 0; language < 3; language++) {
   const text = value => value[language];
+  const separator = language === 1 ? ': ' : '：';
   const output = [`# OmiComic · ${text(data.ui.title)}`, '', intro[language], '', data.sections.map(section => `[${text(section.title)}](#guide-${section.id})`).join(' · '), ''];
   for (const section of data.sections) {
     output.push(`<a id="guide-${section.id}"></a>`, '', `## ${text(section.title)}`, '');
@@ -16,10 +17,10 @@ for (let language = 0; language < 3; language++) {
       const platform = topic.platform ? ` · ${topic.platform === 'pc' ? 'Windows' : 'Android'}` : '';
       output.push(`<details>`, `<summary>${text(topic.title)}${platform}</summary>`, '');
       if (topic.body) output.push(text(topic.body), '');
-      if (topic.pc) output.push(`**Windows：** ${text(topic.pc)}`, '');
-      if (topic.android) output.push(`**Android：** ${text(topic.android)}`, '');
+      if (topic.pc) output.push(`**Windows**${separator}${text(topic.pc)}`, '');
+      if (topic.android) output.push(`**Android**${separator}${text(topic.android)}`, '');
       if (topic.rows) {
-        for (const row of topic.rows) output.push(`- **${text(row.label)}** — ${text(row.text)}`);
+        for (const row of topic.rows) output.push(`- **${text(row.label)}**${separator}${text(row.text)}`);
         output.push('');
       }
       output.push('</details>', '');

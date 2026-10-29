@@ -2882,6 +2882,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       const 保存序号 = 设置保存请求序号.current;
       const 结果 = await window.omicomic.getAppData();
       if (已取消 || !结果.ok) return;
+      设置根目录列表(结果.data.library.roots);
       if (isAndroid() && 保存序号 === 设置保存请求序号.current) {
         const { readerVolumeKeys, readerVolumeKeysReversed } = 结果.data.settings;
         界面设置快照.current = { ...界面设置快照.current, readerVolumeKeys, readerVolumeKeysReversed };

@@ -33,6 +33,35 @@ function resource(dir, name, sourceType = 'archive') {
   return { resourceKey: `${sourceType}:${sourcePath}`, sourcePath, sourceType, title: name };
 }
 
+test('dropped directories persist atomically without changing the current directory or existing order', async t => {
+  const f = await fixture(t), current = path.join(f.dir, 'Current'), incoming = path.join(f.dir, 'Incoming');
+  await fs.mkdir(current); await fs.mkdir(incoming);
+  await f.service.添加或更新根目录(current, 'My chosen name');
+  await f.service.更新资源库状态({ lastActiveRootPath: current, lastCurrentPath: current });
+  const before = await f.service.读取应用数据();
+  const [a, b] = await Promise.all([f.service.添加拖入根目录(incoming), f.service.添加拖入根目录(incoming + path.sep)]);
+  assert.deepEqual([a.alreadyAdded, b.alreadyAdded], [false, true]);
+  const after = await f.load().读取应用数据();
+  assert.deepEqual(after.library.roots.map(root => root.path), [current, incoming]);
+  assert.equal(after.library.lastActiveRootPath, before.library.lastActiveRootPath);
+  assert.equal(after.library.lastCurrentPath, before.library.lastCurrentPath);
+  assert.deepEqual(after.library.roots[0], before.library.roots[0]);
+});
+
+test('first dropped directory becomes restorable, rejects files and missing paths, and deduplicates directory aliases', async t => {
+  const f = await fixture(t), incoming = path.join(f.dir, 'Incoming'), alias = path.join(f.dir, 'Alias'), file = path.join(f.dir, 'file.cbz');
+  await fs.mkdir(incoming); await fs.writeFile(file, 'fixture');
+  await assert.rejects(f.service.添加拖入根目录(file), /DROP_NOT_DIRECTORY/);
+  await assert.rejects(f.service.添加拖入根目录(path.join(f.dir, 'Missing')));
+  assert.equal((await f.service.读取应用数据()).library.roots.length, 0);
+  await f.service.添加拖入根目录(incoming);
+  await fs.symlink(incoming, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await f.service.添加拖入根目录(alias)).alreadyAdded, true);
+  if (process.platform === 'win32') assert.equal((await f.service.添加拖入根目录(incoming.toUpperCase())).alreadyAdded, true);
+  const saved = await f.load().读取应用数据();
+  assert.equal(saved.library.roots.length, 1); assert.equal(saved.library.lastCurrentPath, incoming);
+});
+
 test('desktop language, information size and performance preferences survive restart without losing manual values',async t=>{
   const f=await fixture(t,{settings:{readerMemoryCacheSizeMb:350,readerPreloadPages:7,readerImageLoadConcurrency:3}});
   assert.equal((await f.service.读取应用数据()).settings.desktopPerformanceProfile,'custom');

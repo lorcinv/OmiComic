@@ -412,6 +412,7 @@ export interface OmiComicApi {
   getAppData(): Promise<操作结果<OmiComicAppData>>;
   updateSettings(input: Partial<AppSettings>): Promise<操作结果<AppSettings>>;
   addLibraryRoot(input: { path: string; name: string }): Promise<操作结果<LibraryRoot>>;
+  importDroppedDirectory?(file: File): Promise<操作结果<{ root: LibraryRoot; alreadyAdded: boolean }>>;
   removeLibraryRoot(path: string): Promise<操作结果<OmiComicAppData>>;
   reorderLibraryRoots(orderedPaths: string[]): Promise<操作结果<LibraryRoot[]>>;
   updateLibraryState(input: {

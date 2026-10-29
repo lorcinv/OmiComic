@@ -1,5 +1,5 @@
 import type { ReaderPreferences, PageSort } from "./shared/readerPreferences";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 export interface 应用信息 {
   name: string;
@@ -365,6 +365,13 @@ contextBridge.exposeInMainWorld("omicomic", {
     ipcRenderer.invoke("数据:更新设置", 输入),
   addLibraryRoot: (输入: { path: string; name: string }): Promise<操作结果<LibraryRoot>> =>
     ipcRenderer.invoke("数据:添加根目录", 输入),
+  importDroppedDirectory: (file: File): Promise<操作结果<{ root: LibraryRoot; alreadyAdded: boolean }>> => {
+    try {
+      return ipcRenderer.invoke("目录:拖入添加", webUtils.getPathForFile(file));
+    } catch {
+      return Promise.resolve({ ok: false, error: { code: "INVALID_DROP", message: "请从文件管理器拖入单个文件夹。" } });
+    }
+  },
   removeLibraryRoot: (根路径: string): Promise<操作结果<OmiComicAppData>> =>
     ipcRenderer.invoke("数据:移除根目录", 根路径),
   reorderLibraryRoots: (orderedPaths: string[]): Promise<操作结果<LibraryRoot[]>> =>

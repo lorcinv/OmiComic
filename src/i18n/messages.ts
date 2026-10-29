@@ -1,5 +1,14 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "松开添加到资源库": ["Drop to add to library", "ドロップしてライブラリに追加"],
+  "每次拖入一个文件夹": ["Drag one folder at a time", "フォルダーを一つずつドラッグ"],
+  "请每次拖入一个文件夹。": ["Please drop one folder at a time.", "フォルダーを一つずつドロップしてください。"],
+  "目录正在添加，请稍候。": ["Adding the folder. Please wait.", "フォルダーを追加しています。お待ちください。"],
+  "该目录已在资源库中。": ["This folder is already in your library.", "このフォルダーは追加済みです。"],
+  "目录已加入资源库。": ["Folder added to library.", "ライブラリにフォルダーを追加しました。"],
+  "请从文件管理器拖入单个文件夹。": ["Drag a single folder from your file manager.", "ファイル管理アプリからフォルダーを一つドラッグしてください。"],
+  "请拖入单个文件夹，文件请使用“打开文件”。": ["Drop a single folder. For files, use Open file.", "フォルダーを一つドロップしてください。ファイルは「ファイルを開く」を使用します。"],
+  "目录添加失败，请检查文件夹是否存在并且可以访问。": ["Could not add the folder. Check that it exists and is accessible.", "フォルダーを追加できません。存在することとアクセス権を確認してください。"],
   "显示主界面": ["Show home screen", "ホーム画面を表示"],
   "多条件匹配方式": ["Condition matching", "条件の一致"],
   "任一条件": ["Any condition", "いずれかの条件"],

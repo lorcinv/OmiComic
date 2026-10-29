@@ -22,6 +22,7 @@ import {
 } from "./services/archiveService";
 import {
   添加或更新根目录,
+  添加拖入根目录,
   添加虚拟文件夹项目,
   添加收藏,
   保存阅读进度,
@@ -856,6 +857,20 @@ function 注册安全通道(): void {
         ok: false,
         error: { code: "SAVE_ROOT_FAILED", message: "资源库目录保存失败。" },
       };
+    }
+  });
+
+  ipcMain.handle("目录:拖入添加", async (_事件, 输入: unknown) => {
+    if (typeof 输入 !== "string" || 输入.trim() === "" || !path.isAbsolute(输入)) {
+      return { ok: false, error: { code: "INVALID_DROP", message: "请从文件管理器拖入单个文件夹。" } };
+    }
+    try {
+      const 结果 = await 添加拖入根目录(输入);
+      已授权根目录.add(结果.root.path);
+      return { ok: true, data: 结果 };
+    } catch (错误) {
+      return { ok: false, error: { code: "IMPORT_FOLDER_FAILED", message: 错误 instanceof Error && 错误.message === "DROP_NOT_DIRECTORY"
+        ? "请拖入单个文件夹，文件请使用“打开文件”。" : "目录添加失败，请检查文件夹是否存在并且可以访问。" } };
     }
   });
 
