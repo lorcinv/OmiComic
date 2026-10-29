@@ -18,12 +18,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.45 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.45/OmiComic-Portable-1.1.45-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.45/OmiComic-Setup-1.1.45-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.46 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.46/OmiComic-1.1.46-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.47 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Portable-1.1.47-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Setup-1.1.47-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.47 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-1.1.47-android.apk) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.45 adds search results in batches without moving your reading position, and moves the Android favorite button to the top right. In Settings → Appearance, turn off Show home screen to start directly in the library; Home remains enabled by default. [Release notes](docs/releases/v1.1.45.md).
+1.1.47 updates PC and Android together: faster cover scheduling, a persistent PC cover cache and less repeated work during incremental search. [Release notes](docs/releases/v1.1.47.md).
 
 ## Features
 

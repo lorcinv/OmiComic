@@ -475,6 +475,7 @@ contextBridge.exposeInMainWorld("omicomic", {
     ipcRenderer.invoke("书签:获取页面预览", 输入),
   getThumbnail: (输入: 缩略图输入): Promise<操作结果<缩略图结果>> =>
     ipcRenderer.invoke("缩略图:获取", 输入),
+  refreshThumbnails: (): Promise<操作结果<null>> => ipcRenderer.invoke('缩略图:刷新'),
   getReadablePageCount: (输入: 可阅读页数输入): Promise<操作结果<number | null>> =>
     ipcRenderer.invoke("资源:获取可阅读页数", 输入),
   checkResourcePath: (输入: { path: string; type: 资源类型 }): Promise<操作结果<资源路径状态>> =>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { LibraryCatalog, 目录结果, 文件条目 } from '../types';
+import { recordCatalogDelta } from './catalogSnapshot';
 
 type Store = { records: Map<string, 文件条目>; data: LibraryCatalog; listeners: Set<() => void>;
-  consumers: number; pending?: Promise<LibraryCatalog>; invalid: Set<string>; restart: boolean; epoch: number; metadata: boolean; error: string; published: number; dirty: boolean; notification?: number };
+  consumers: number; pending?: Promise<LibraryCatalog>; invalid: Set<string>; restart: boolean; epoch: number; metadata: boolean; error: string; published: number; dirty: boolean; notification?: number;
+  changed: Map<string, 文件条目>; removed: Set<string> };
 const stores = new Map<string, Store>();
 const empty: LibraryCatalog = { items: [], directories: 0, skipped: 0, scannedAt: 0, complete: false };
 const canonical = (path: string) => /^[a-z]:/i.test(path) ? path.replace(/\\/g, '/').toLowerCase() : path;
@@ -18,7 +20,7 @@ function initialize() {
 function storeFor(root: string): Store {
   let store = stores.get(root);
   if (!store) {
-    store = { records: new Map(), data: empty, listeners: new Set(), consumers: 0, invalid: new Set(), restart: true, epoch: 0, metadata: false, error: '', published: 0, dirty: false };
+    store = { records: new Map(), data: empty, listeners: new Set(), consumers: 0, invalid: new Set(), restart: true, epoch: 0, metadata: false, error: '', published: 0, dirty: false, changed: new Map(), removed: new Set() };
     stores.set(root, store);
     // Eviction is an explicit inactive-root budget. Detaching a consumer never
     // clears another library; evicted summaries can be streamed from native disk.
@@ -31,7 +33,11 @@ function storeFor(root: string): Store {
 }
 function publish(store: Store, result?: LibraryCatalog) {
   if (store.notification) { window.clearTimeout(store.notification); store.notification = undefined; }
-  store.data = { ...store.data, ...result, items: store.dirty ? [...store.records.values()] : store.data.items };
+  const previous = store.data.items;
+  const items = store.dirty ? [...store.records.values()] : previous;
+  if (items !== previous) recordCatalogDelta(items, previous, [...store.changed.values()], [...store.removed]);
+  store.changed.clear(); store.removed.clear();
+  store.data = { ...store.data, ...result, items };
   store.dirty = false;
   store.published = performance.now();
   catalogClientMetrics.updates++;
@@ -41,7 +47,9 @@ function merge(store: Store, result: LibraryCatalog) {
   let changed = false;
   for (const removed of result.removedPaths ?? []) {
     const path = canonical(removed);
-    for (const [id, entry] of store.records) if (canonical(entry.path) === path || canonical(entry.path).startsWith(path + '/')) { store.records.delete(id); changed = true; }
+    for (const [id, entry] of store.records) if (canonical(entry.path) === path || canonical(entry.path).startsWith(path + '/')) {
+      store.records.delete(id); store.changed.delete(id); store.removed.add(entry.path); changed = true;
+    }
   }
   for (const item of result.items) {
     if (item.type === 'image' || item.type === 'unknown') continue;
@@ -49,7 +57,8 @@ function merge(store: Store, result: LibraryCatalog) {
     // Unknown catalog versions preserve metadata obtained from foreground reads.
     const next = old ? { ...old, ...item } : item;
     if (!old || Object.keys(next).some(field => next[field as keyof 文件条目] !== old[field as keyof 文件条目])) {
-      store.records.set(id, next); changed = true;
+      if (old && old.path !== next.path) store.removed.add(old.path);
+      store.records.set(id, next); store.changed.set(id, next); store.removed.delete(next.path); changed = true;
     }
   }
   if (changed || store.data.complete !== result.complete || store.data.directories !== result.directories) {
@@ -83,7 +92,7 @@ export function excludeLibraryCatalogPaths(paths: string[]) {
     for (const [id, item] of store.records) {
       let path = canonical(item.path);
       while (path) {
-        if (hidden.has(path)) { store.records.delete(id); changed = true; break; }
+        if (hidden.has(path)) { store.records.delete(id); store.changed.delete(id); store.removed.add(item.path); changed = true; break; }
         const split = path.lastIndexOf('/'); if (split <= 0) break; path = path.slice(0, split);
       }
     }

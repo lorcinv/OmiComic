@@ -146,12 +146,16 @@ async function batch(root: string, options: CatalogBatchOptions): Promise<Librar
   if (session.offset >= session.out.length) { session.out = []; session.offset = 0; }
   let processed = 0;
   while (session.out.length < 256 && session.queue.length && ++processed <= 4 && Date.now() - started < 24) {
-    if (foregroundBusy()) { catalogMetrics.yielded++; break; }
     if (requestEpoch !== epoch) throw Object.assign(new Error('资源库扫描已取消。'), { name: 'AbortError' });
     const job = session.queue.shift()!;
     if (excluded(job.path, session.hidden) || !job.verify && session.seen.has(key(job.path))) continue;
     session.seen.add(key(job.path));
     let block = await savedBlock(job.path);
+    // Replaying validated summaries needs no directory enumeration or decoding.
+    // Keep warm searches responsive while visible covers own foreground I/O.
+    if (foregroundBusy() && (!block || job.verify || options.refresh)) {
+      session.seen.delete(key(job.path)); session.queue.unshift(job); catalogMetrics.yielded++; break;
+    }
     try {
       if (!block || job.verify || options.refresh) {
         const old = block; block = await discover(job, !!options.metadata, root);

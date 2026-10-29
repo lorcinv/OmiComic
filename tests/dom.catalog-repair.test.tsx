@@ -1,12 +1,23 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { useLibraryCatalog, cancelLibraryCatalog } from '../src/library/libraryCatalog';
+import { useLibraryCatalog, cancelLibraryCatalog, observeLibraryDirectory } from '../src/library/libraryCatalog';
 import { useRandomBrowse } from '../src/hooks/useRandomBrowse';
 import { useLibraryQuery } from '../src/hooks/useLibraryQuery';
 import { installMock } from './mock';
 
 const file = (root: string, name: string) => ({ id: root + '/' + name, path: root + '/' + name, name, type: 'archive' as const, extension: 'cbz' });
 describe('shared discovery and query generations', () => {
+  it('publishes a Windows case-only rename as one replacement without keeping the old hit',async()=>{
+    const root='C:/case-1147',old={...file(root,'Case.cbz'),size:1,modifiedAt:1};
+    observeLibraryDirectory(root,{path:root,parentPath:null,total:1,items:[old]});
+    const predicate=(item:typeof old)=>item.type==='archive',compare=(a:typeof old,b:typeof old)=>a.name.localeCompare(b.name);
+    const order={key:(item:typeof old)=>item.path,first:()=>false};
+    const view=renderHook(()=>{const catalog=useLibraryCatalog(root,false);return useLibraryQuery(catalog.items as typeof old[],predicate,compare,'case',order);});
+    await waitFor(()=>expect(view.result.current.map(item=>item.name)).toEqual(['Case.cbz']));
+    const renamed={...old,id:root+'/case.cbz',path:root+'/case.cbz',name:'case.cbz'};
+    await act(async()=>{observeLibraryDirectory(root,{path:root,parentPath:null,total:1,items:[renamed]});await new Promise(resolve=>setTimeout(resolve,130));});
+    await waitFor(()=>expect(view.result.current.map(item=>item.name)).toEqual(['case.cbz']));
+  });
   it('publishes a partial batch and preserves two root caches after a consumer leaves', async () => {
     installMock({count:1});
     let release!: () => void;

@@ -7,6 +7,7 @@ const pending = new Map<string, Promise<string | null>>();
 const waiting: Array<() => void> = [];
 let active = 0;
 const archivePending = new Map<string, Promise<操作结果<缩略图结果>>>();
+let desktopGeneration = 0;
 const androidChunks = new Map<string, Promise<操作结果<缩略图结果>>>();
 const androidCache = new Map<string, { result: 操作结果<缩略图结果>; version?: string; expires: number }>();
 const androidTasks = new Map<string, { promise: Promise<操作结果<缩略图结果>>; controller: AbortController; users: number; version?: string }>();
@@ -14,12 +15,13 @@ let androidActive = 0;
 const androidWaiting: Array<() => void> = [];
 
 export function clearResourceThumbnailCache(path?: string): void {
+  desktopGeneration++;
   if (isAndroid()) clearMobilePagePreviews(path);
   if (!path) { androidCache.clear(); cache.clear(); }
   else for (const key of androidCache.keys()) if (key === path || key.startsWith(path + '/')) androidCache.delete(key);
   for (const [key, task] of androidTasks) if (!path || key === path || key.startsWith(path + '/')) { task.controller.abort(); androidTasks.delete(key); }
   for (const key of androidChunks.keys()) if (!path || key === path || key.startsWith(path + '/')) androidChunks.delete(key);
-  if(isAndroid())window.dispatchEvent(new CustomEvent('omi-thumbnail-invalidated',{detail:path}));
+  window.dispatchEvent(new CustomEvent('omi-thumbnail-invalidated',{detail:path}));
 }
 
 async function androidSlot(signal: AbortSignal): Promise<() => void> {
@@ -132,13 +134,21 @@ async function renderPdf(path: string): Promise<string | null> {
 export async function getResourceThumbnail(input: 缩略图输入, signal?: AbortSignal, version?: string): Promise<操作结果<缩略图结果>> {
   // Scrolling can replace a card's effect while its archive is still being read.
   // Share that work across the old/new view instead of filling the decoder queue.
-  if (!isAndroid() && input.type === "archive") {
-    let task = archivePending.get(input.path);
-    if (!task) { task = readArchiveCover(input); archivePending.set(input.path, task); }
-    try { return await task; }
-    finally { if (archivePending.get(input.path) === task) archivePending.delete(input.path); }
+  if (!isAndroid()) {
+    signal?.throwIfAborted();
+    const key = JSON.stringify([desktopGeneration,input.type,input.path,version]);
+    let task = archivePending.get(key);
+    if (!task) {
+      task = (input.type === 'archive' ? readArchiveCover(input) : window.omicomic.getThumbnail(input)).then(completeCover);
+      archivePending.set(key, task);
+      const finished = () => { if (archivePending.get(key) === task) archivePending.delete(key); };
+      void task.then(finished, finished);
+    }
+    return task;
   }
-  const result = isAndroid() ? await sharedAndroidCover(input, signal, version) : await window.omicomic.getThumbnail(input);
+  return completeCover(await sharedAndroidCover(input, signal, version));
+}
+async function completeCover(result: 操作结果<缩略图结果>): Promise<操作结果<缩略图结果>> {
   if (!result.ok || result.data.url || !result.data.pdfPath) return result;
   const key = `${result.data.pdfPath}:${result.data.sourceVersion ?? ""}`;
   let url = cache.get(key) ?? null;

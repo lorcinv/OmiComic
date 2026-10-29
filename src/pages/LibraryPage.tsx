@@ -9,7 +9,7 @@ import ModalOverlay from '../components/ModalOverlay';
 import { cancelMobileNavigation, mobileNavigate, mobileNavigationEpoch, type MobileNavigationOrigin } from '../hooks/mobileNavigation';
 import { useMobileDrawerGesture } from '../hooks/mobileDrawerGesture';
 import { useContinuousLibrary } from '../hooks/useContinuousLibrary';
-import { useMobileCoverQueue } from '../hooks/useMobileCoverQueue';
+import { useCoverQueue } from '../hooks/useMobileCoverQueue';
 import BookReaderSettings from '../components/BookReaderSettings';
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail, clearResourceThumbnailCache } from "../reader/thumbnailClient";
@@ -164,6 +164,7 @@ interface 缩略图状态 {
 interface 可阅读页数状态 {
   status: "loading" | "loaded" | "error";
   count: number | null;
+  sourceVersion?: string;
 }
 
 interface 卡片进度显示状态 {
@@ -1192,7 +1193,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [备注悬停快捷键按下, 设置备注悬停快捷键按下] = useState(false);
   const [资源路径状态表, 设置资源路径状态表] = useState<Record<string, 资源路径状态>>({});
   const 读取序号 = useRef(0);
-  const 缩略图请求序号 = useRef(0);
   const 书签预览请求序号 = useRef(0);
   const 可阅读页数请求序号 = useRef(0);
   const 路径状态请求序号 = useRef(0);
@@ -2461,11 +2461,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       const items=当前视图 === "recent" ? 当前页最近打开卡片项目.map(({ 文件 }) => 文件)
         : 当前视图 === "favorites" ? 当前页收藏卡片项目.map(({ 文件 }) => 文件)
         : 当前视图 === "virtual-folder" ? 当前页虚拟文件夹卡片项目.map(({ 文件 }) => 文件) : 当前页项目;
-      if(!isAndroid())return items;
       const start=Math.max(0,目录连续列表.visibleStart-目录连续列表.start),end=目录连续列表.visibleEnd-目录连续列表.start;
       // Visible rows precede a single look-ahead row. DOM overscan stays mounted
       // for smooth scrolling but no longer starts dozens of archive extractions.
-      return [...items.slice(start,end),...items.slice(end,end+目录连续列表.columns),...items.slice(Math.max(0,start-目录连续列表.columns),start)];
+      const lookAhead = 目录连续列表.columns * (isAndroid() ? 1 : 2);
+      return [...items.slice(start,end),...items.slice(end,end+lookAhead),...items.slice(Math.max(0,start-lookAhead),start)];
     },
     [当前视图, 当前页最近打开卡片项目, 当前页收藏卡片项目, 书架文件夹缩略图候选项目, 当前页虚拟文件夹卡片项目, 当前页项目,目录连续列表.visibleStart,目录连续列表.visibleEnd,目录连续列表.start,目录连续列表.columns],
   );
@@ -3642,97 +3642,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     选择模式,
   ]);
 
-  const 手机封面目标 = useMemo(()=>isAndroid()?缩略图目标项目.filter(file=>支持真实缩略图(file.type)):[],[缩略图目标项目]);
-  useMobileCoverQueue(手机封面目标,isAndroid()&&isActive&&!正在打开资源路径&&!backgroundPaused,(文件,结果)=>{
+  const 封面目标 = useMemo(()=>缩略图目标项目.filter(file=>支持真实缩略图(file.type)),[缩略图目标项目]);
+  useCoverQueue(封面目标,isActive&&!正在打开资源路径&&!backgroundPaused,(文件,结果)=>{
     设置缩略图表(原表=>({...原表,[文件.path]:结果.ok&&结果.data.url
-      ? {status:'loaded',url:结果.data.url,itemCount:结果.data.itemCount,byteSize:结果.data.byteSize,sourceVersion:`${文件.size??''}:${文件.modifiedAt??''}`}
-      : {status:'error',url:null,itemCount:结果.ok?结果.data.itemCount:undefined,retryAfter:Date.now()+10_000,sourceVersion:`${文件.size??''}:${文件.modifiedAt??''}`}}));
-  });
-  useEffect(() => {
-    if(isAndroid())return;
-    const 本次序号 = ++缩略图请求序号.current;
-    if (!isActive || 正在打开资源路径 || backgroundPaused) return;
-    const 封面取消 = new AbortController();
-    const 版本 = (文件: 文件条目) => `${文件.size ?? ""}:${文件.modifiedAt ?? ""}`;
-    const 可复用 = (状态: 缩略图状态 | undefined, 文件: 文件条目) => !!状态
-      && (文件.size === undefined && 文件.modifiedAt === undefined || 状态.sourceVersion === 版本(文件))
-      && (状态.status === "loaded" || (状态.status === "error" && (状态.retryAfter === undefined || Date.now() < 状态.retryAfter)));
-    const 可加载项目 = 缩略图目标项目.filter((文件) => 支持真实缩略图(文件.type));
-
-    设置缩略图表((原表) => {
-      const 新表: Record<string, 缩略图状态> = { ...原表 };
-      for (const 文件 of 缩略图目标项目) {
-        const 原状态 = 原表[文件.path];
-        delete 新表[文件.path];
-        if (可复用(原状态, 文件)) {
-          新表[文件.path] = 原状态;
-        } else {
-          新表[文件.path] = { status: 支持真实缩略图(文件.type) ? "idle" : "error", url: null };
-        }
-      }
-      return 新表;
-    });
-
-    async function 加载缩略图批次(): Promise<void> {
-      const 加载队列 = 可加载项目.filter((文件) => {
-        const 状态 = 缩略图表[文件.path];
-        return !可复用(状态, 文件);
-      });
-      if (加载队列.length === 0) return;
-      const 并发数 = isAndroid() ? 2 : 6;
-      let 游标 = 0;
-
-      async function 工作线程(): Promise<void> {
-        while (游标 < 加载队列.length) {
-          const 文件 = 加载队列[游标];
-          游标 += 1;
-
-          if (本次序号 !== 缩略图请求序号.current) return;
-
-          try {
-            设置缩略图表((原表) => {
-              if (!(文件.path in 原表) || 原表[文件.path]?.status === "loaded") return 原表;
-              return {
-                ...原表,
-                [文件.path]: { status: "loading", url: null },
-              };
-            });
-            const 结果 = await getResourceThumbnail({ path: 文件.path, type: 文件.type }, 封面取消.signal, 版本(文件));
-            if (本次序号 !== 缩略图请求序号.current) return;
-
-            设置缩略图表((原表) => {
-              if (!(文件.path in 原表)) return 原表;
-              return {
-                ...原表,
-                [文件.path]: 结果.ok && 结果.data.url
-                  ? { status: "loaded", url: 结果.data.url, itemCount: 结果.data.itemCount, childFolderCount: 结果.data.childFolderCount, folderSummary: 结果.data.folderSummary, byteSize: 结果.data.byteSize, sourceVersion: 版本(文件) }
-                  : { status: "error", url: null, itemCount: 结果.ok ? 结果.data.itemCount : undefined, childFolderCount: 结果.ok ? 结果.data.childFolderCount : undefined, folderSummary: 结果.ok ? 结果.data.folderSummary : undefined, sourceVersion: 版本(文件),
-                    retryAfter: (isAndroid() || 文件.type === "archive") && (!结果.ok || 结果.data.retryable) ? Date.now() + 10_000 : undefined },
-              };
-            });
-          } catch {
-            if (本次序号 !== 缩略图请求序号.current) return;
-            设置缩略图表((原表) => {
-              if (!(文件.path in 原表)) return 原表;
-              return {
-                ...原表,
-                [文件.path]: { status: "error", url: null, sourceVersion: 版本(文件),
-                  retryAfter: isAndroid() || 文件.type === "archive" ? Date.now() + 10_000 : undefined },
-              };
-            });
-          }
-        }
-      }
-
-      await Promise.all(
-        Array.from({ length: Math.min(并发数, 加载队列.length) }, () => 工作线程()),
-      );
-    }
-
-    void 加载缩略图批次();
-    return () => { 封面取消.abort(); if (缩略图请求序号.current === 本次序号) 缩略图请求序号.current += 1; };
-  }, [缩略图目标项目, isActive, 正在打开资源路径, backgroundPaused]);
-
+      ? {status:'loaded',url:结果.data.url,itemCount:结果.data.itemCount,childFolderCount:结果.data.childFolderCount,folderSummary:结果.data.folderSummary,byteSize:结果.data.byteSize,sourceVersion:`${文件.size??''}:${文件.modifiedAt??''}`}
+      : {status:'error',url:null,itemCount:结果.ok?结果.data.itemCount:undefined,childFolderCount:结果.ok?结果.data.childFolderCount:undefined,folderSummary:结果.ok?结果.data.folderSummary:undefined,retryAfter:(!结果.ok||结果.data.retryable)?Date.now()+10_000:undefined,sourceVersion:`${文件.size??''}:${文件.modifiedAt??''}`}}));
+  },isAndroid()?2:6);
   useEffect(() => {
     const 本次序号 = ++路径状态请求序号.current;
     if (!isActive || backgroundPaused || (isAndroid() && 正在打开资源路径)) return;
@@ -3980,9 +3895,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         const key = 获取可阅读页数Key(文件);
         if (!key) return false;
         const 状态 = 可阅读页数表[key];
-        return 状态?.status !== "loaded";
+        return 状态?.status !== "loaded" || (文件.size !== undefined || 文件.modifiedAt !== undefined)
+          && 状态.sourceVersion !== `${文件.size ?? ''}:${文件.modifiedAt ?? ''}`;
       });
-      const 统计队列 = 待统计项目.length > 0 ? 待统计项目 : 可统计项目;
+      const 统计队列 = 待统计项目;
       const 并发数 = 4;
       let 游标 = 0;
 
@@ -4007,7 +3923,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               return {
                 ...原表,
                 [key]: 结果.ok
-                  ? { status: "loaded", count: 结果.data }
+                  ? { status: "loaded", count: 结果.data, sourceVersion: `${文件.size ?? ''}:${文件.modifiedAt ?? ''}` }
                   : { status: "error", count: null },
               };
             });
@@ -5187,9 +5103,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   async function 处理刷新按钮(): Promise<void> {
     设置导航会话(value => value + 1);
+    设置可阅读页数表({});
     clearMobileTreeCache();
     invalidateLibraryCatalog(当前根目录 ?? undefined, 当前目录 ? [当前目录.path] : undefined);
-    clearResourceThumbnailCache();
     if (正在读取 || 正在检查全局无效资源) return;
 
     设置错误信息(null);
@@ -5197,6 +5113,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     try {
       const 封面刷新 = await window.omicomic.refreshThumbnails?.();
       if (封面刷新 && !封面刷新.ok) throw new Error(封面刷新.error.message);
+      clearResourceThumbnailCache();
       const 清理目标 = await 扫描全局无效资源记录();
       if (清理目标) {
         设置错误信息(`检测到 ${清理目标.count} 个路径失效资源，原记录不会自动删除。`);
@@ -8131,7 +8048,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                           <img
                             src={缩略图.url}
                             alt=""
-                            loading="lazy"
+                            loading="eager"
                             draggable={false}
                             onError={() => {
                               设置缩略图表((原表) => ({
@@ -8479,7 +8396,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                           <img
                             src={缩略图.url}
                             alt=""
-                            loading="lazy"
+                            loading="eager"
                             draggable={false}
                             onError={() => {
                               设置缩略图表((原表) => ({
@@ -8620,7 +8537,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                           <img
                             src={缩略图.url}
                             alt=""
-                            loading="lazy"
+                            loading="eager"
                             draggable={false}
                             onError={() => {
                               书签预览状态Ref.current = {
@@ -8789,7 +8706,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                             <img
                               src={缩略图.url}
                               alt=""
-                              loading="lazy"
+                              loading="eager"
                               draggable={false}
                               onError={() => {
                                 设置缩略图表((原表) => ({
@@ -8961,7 +8878,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                         <img
                           src={缩略图.url}
                           alt=""
-                          loading="lazy"
+                          loading="eager"
                           draggable={false}
                           onError={() => {
                             设置缩略图表((原表) => ({

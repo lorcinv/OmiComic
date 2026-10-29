@@ -4,6 +4,7 @@ import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 import { EPUBDocumentSource } from "./epubService";
+import { readThumbnailDisk, writeThumbnailDisk, clearThumbnailDiskCache } from './thumbnailDiskCache';
 import {
   读取压缩包单张图片,
   读取压缩包封面列表,
@@ -63,6 +64,12 @@ interface 缩略图缓存项 {
 
 const 缩略图缓存 = new Map<string, 缩略图缓存项>();
 const 进行中缩略图 = new Map<string, { signature: string; task: Promise<缩略图结果> }>();
+let thumbnailGeneration = 0;
+export const thumbnailMetrics = { memoryHits: 0, loads: 0, decodes: 0 };
+export async function clearThumbnailCache() {
+  thumbnailGeneration++; 缩略图缓存.clear(); 进行中缩略图.clear();
+  await clearThumbnailDiskCache();
+}
 
 function 写入缩略图缓存(key: string, value: 缩略图缓存项): void {
   if (缩略图缓存.has(key)) 缩略图缓存.delete(key);
@@ -92,20 +99,27 @@ async function 使用缩略图缓存(
   }
   const 已缓存 = 缩略图缓存.get(key);
   if (已缓存?.signature === signature) {
+    thumbnailMetrics.memoryHits++;
     缩略图缓存.delete(key);
     缩略图缓存.set(key, 已缓存);
     return 已缓存.result;
   }
   const 进行中 = 进行中缩略图.get(key);
   if (进行中?.signature === signature) return 进行中.task;
-  const task = loader();
+  const generation = thumbnailGeneration;
+  const task = (async () => {
+    const disk = await readThumbnailDisk(key, signature);
+    if (disk) return disk;
+    thumbnailMetrics.loads++; return loader();
+  })();
   进行中缩略图.set(key, { signature, task });
   try {
     const result = await task;
     // A transient read failure must not become a permanent empty cover. Also avoid
     // caching a cover under the wrong version if the archive changed during a read.
-    if (result.url && await 获取路径签名(路径).catch(() => "") === signature) {
+    if (result.url && generation === thumbnailGeneration && await 获取路径签名(路径).catch(() => "") === signature) {
       写入缩略图缓存(key, { signature, result });
+      void writeThumbnailDisk(key, signature, result);
     }
     return result;
   } finally {
@@ -428,6 +442,7 @@ async function 读取图片为DataUrl(图片路径: string, 显示名称 = 图�
 
 function 图片数据转缩略图DataUrl(图片数据: Buffer, 显示名称: string): string | null {
   if (图片数据.length > 缩略图最大字节数 || !safeRasterImage(图片数据, 缩略图最大像素数)) return null;
+  thumbnailMetrics.decodes++;
   let 原图 = nativeImage.createFromBuffer(图片数据);
   if (原图.isEmpty() && path.extname(显示名称).slice(1).toLowerCase() === "gif") {
     const 静态首帧 = decodeGifFirstFrame(图片数据);

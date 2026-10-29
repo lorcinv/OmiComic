@@ -18,6 +18,23 @@ function navigation(name: RegExp) {
 }
 
 describe('bounded cover and document metadata regressions', () => {
+  it('reuses unchanged page counts across view activation and refreshes them explicitly', async()=>{
+    await fixture();let modifiedAt=1;
+    window.omicomic.listDirectory=async path=>({ok:true,data:{path,parentPath:null,total:1,items:[{id:'book',path:'/comics/counting.cbz',name:'Counting',type:'archive',extension:'cbz',size:20,modifiedAt}]}});
+    const count=vi.spyOn(window.omicomic,'getReadablePageCount').mockResolvedValue({ok:true,data:7});
+    let cover='data:image/png;base64,old';
+    vi.spyOn(window.omicomic,'getThumbnail').mockImplementation(async()=>({ok:true,data:{url:cover}}));
+    const props={onHome:()=>{},onOpenReader:()=>{},refreshToken:0,isActive:true};
+    const view=render(<LibraryPage {...props}/>);
+    await waitFor(()=>expect(count).toHaveBeenCalledTimes(1));
+    await waitFor(()=>expect(document.querySelector('.resource-preview img')?.getAttribute('src')).toBe(cover));
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30));});
+    view.rerender(<LibraryPage {...props} isActive={false}/>);view.rerender(<LibraryPage {...props}/>);
+    await act(async()=>{await new Promise(resolve=>setTimeout(resolve,30));});expect(count).toHaveBeenCalledTimes(1);
+    modifiedAt=2;cover='data:image/png;base64,new';fireEvent.click(screen.getByRole('button',{name:'刷新并检测失效资源',exact:true}));
+    await waitFor(()=>expect(count).toHaveBeenCalledTimes(2));
+    await waitFor(()=>expect(document.querySelector('.resource-preview img')?.getAttribute('src')).toBe(cover));
+  });
   it('600 bookshelves request only the visible page covers and every visible cover loads', async () => {
     const data = await fixture();
     data.bookshelves = [{ id: 'shelf', name: 'Collection', createdAt: 0, updatedAt: 0, sortIndex: 0 }];

@@ -1,7 +1,9 @@
+import { catalogDelta, catalogSnapshotId } from './catalogSnapshot';
 export type ProgressiveOrder<T> = { key: (item: T) => string; first: (item: T) => boolean };
 type Evaluated<T> = { item: T; predicate: (item: T) => boolean; matches: boolean; run: number };
 export type ProgressiveSearch<T> = {
   signature: string; run: number; items: T[]; visible: Set<string>; evaluated: Map<string, Evaluated<T>>;
+  source?: readonly T[]; predicate?: (item: T) => boolean;
 };
 export const progressiveSearchMetrics = { evaluated: 0, cacheHits: 0, publications: 0, maximumSliceMs: 0 };
 export function createProgressiveSearch<T>(signature: string): ProgressiveSearch<T> {
@@ -13,6 +15,12 @@ export function createProgressiveSearch<T>(signature: string): ProgressiveSearch
 export async function updateProgressiveSearch<T>(state: ProgressiveSearch<T>, source: readonly T[],
   predicate: (item: T) => boolean, compare: (a: T, b: T) => number, order: ProgressiveOrder<T>,
   active: () => boolean, publish: (items: T[]) => void) {
+  if (state.source === source && state.predicate === predicate) return;
+  const delta = catalogDelta(source);
+  const incremental = !!delta && !!state.source && delta.previous === catalogSnapshotId(state.source) && state.predicate === predicate;
+  const candidates = incremental ? delta!.changed : source;
+  const removed = new Set(incremental ? delta!.removed : []);
+  let reconcile = !incremental || removed.size > 0;
   const run = ++state.run;
   const live = () => active() && state.run === run;
   let slice = performance.now(), lastPublished = slice;
@@ -50,8 +58,9 @@ export async function updateProgressiveSearch<T>(state: ProgressiveSearch<T>, so
     state.items = state.items.concat(batch); pending = []; queued.clear();
     progressiveSearchMetrics.publications++; publish(state.items); lastPublished = performance.now();
   };
-  for (let index = 0; index < source.length && live(); index++) {
-    const item = source[index], id = order.key(item), known = state.evaluated.get(id);
+  for (let index = 0; index < candidates.length && live(); index++) {
+    const item = candidates[index], id = order.key(item), known = state.evaluated.get(id);
+    if (incremental && state.visible.has(id) && known?.item !== item) reconcile = true;
     let entry: Evaluated<T>;
     if (known?.item === item && known.predicate === predicate) {
       entry = known; entry.run = run; progressiveSearchMetrics.cacheHits++;
@@ -77,24 +86,28 @@ export async function updateProgressiveSearch<T>(state: ProgressiveSearch<T>, so
   // Reconcile actual deletions and metadata edits only after this snapshot has
   // been evaluated. A partially processed snapshot must not clear visible hits.
   let updated: T[] | undefined;
-  const removed: string[] = [];
-  for (let index = 0; index < state.items.length && live(); index++) {
+  const missing: string[] = [];
+  for (let index = 0; reconcile && index < state.items.length && live(); index++) {
     const old = state.items[index], id = order.key(old), entry = state.evaluated.get(id);
-    const item = entry?.run === run && entry.matches ? entry.item : undefined;
+    const item = entry && (incremental ? !removed.has(id) : entry.run === run) && entry.matches ? entry.item : undefined;
     if (item !== old && !updated) updated = state.items.slice(0, index);
     if (updated && item !== undefined) updated.push(item);
-    if (item === undefined) removed.push(id);
+    if (item === undefined) missing.push(id);
     if ((index & 255) === 0 && !await checkpoint()) return;
   }
   if (!live()) return;
   if (updated) {
-    state.items = updated; for (const id of removed) state.visible.delete(id);
+    state.items = updated; for (const id of missing) state.visible.delete(id);
     progressiveSearchMetrics.publications++; publish(state.items);
   }
-  let index = 0;
-  for (const [id, entry] of state.evaluated) {
-    if (!live()) return;
-    if (entry.run !== run) state.evaluated.delete(id);
-    if ((index++ & 255) === 0 && !await checkpoint()) return;
+  if (incremental) for (const id of removed) state.evaluated.delete(id);
+  else {
+    let index = 0;
+    for (const [id, entry] of state.evaluated) {
+      if (!live()) return;
+      if (entry.run !== run) state.evaluated.delete(id);
+      if ((index++ & 255) === 0 && !await checkpoint()) return;
+    }
   }
+  state.source = source; state.predicate = predicate;
 }

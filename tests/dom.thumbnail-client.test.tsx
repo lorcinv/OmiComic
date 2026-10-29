@@ -5,6 +5,18 @@ import { render, waitFor } from '@testing-library/react';
 import LibraryPage from '../src/pages/LibraryPage';
 
 describe('PC archive cover requests', () => {
+  it('shares folder work across callers and invalidates it on a requested refresh', async () => {
+    installMock({count:1});
+    let finish!: (value:any)=>void;
+    const thumbnail=vi.spyOn(window.omicomic,'getThumbnail').mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+    const input={path:'/pc-shared-folder',type:'folder' as const};
+    const first=getResourceThumbnail(input,undefined,'1:2'),second=getResourceThumbnail(input,undefined,'1:2');
+    expect(thumbnail).toHaveBeenCalledTimes(1);
+    finish({ok:true,data:{url:'cover'}});await Promise.all([first,second]);
+    clearResourceThumbnailCache();thumbnail.mockResolvedValue({ok:true,data:{url:'fresh'}});
+    await expect(getResourceThumbnail(input,undefined,'1:2')).resolves.toEqual({ok:true,data:{url:'fresh'}});
+    expect(thumbnail).toHaveBeenCalledTimes(2);
+  });
   it('shares an in-flight retry, recovers a temporary read failure and does not cache the failure', async () => {
     installMock({count:1});
     const thumbnail = vi.spyOn(window.omicomic, 'getThumbnail')

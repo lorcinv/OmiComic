@@ -45,6 +45,25 @@ function decoder(onDecode = () => {}) {
   } };
 }
 
+test('persistent file covers survive a service restart, reject changed versions and recover from corrupt cache',async t=>{
+ const file=await source(t),folder=path.join(path.dirname(file),'covers');
+ const disk=require('../dist-electron/services/thumbnailDiskCache');disk.configureThumbnailDiskCache(folder);
+ let reads=0;
+ const archive={读取压缩包图片列表:async()=>[{virtualPath:'1.png',size:24}],读取压缩包单张图片:async()=>{reads++;return image(100,100);}};
+ const decode={createFromBuffer:()=>({isEmpty:()=>false,getSize:()=>({width:100,height:100}),toDataURL:()=> 'data:image/png;base64,AAAA'})};
+ let service=serviceWith(archive,decode);const input={path:file,type:'archive'};
+ await service.获取缩略图(input);
+ const wait=async count=>{const until=Date.now()+3000;while(disk.thumbnailDiskMetrics.writes<count){assert.ok(Date.now()<until);await new Promise(resolve=>setTimeout(resolve,10));}};
+ await wait(1);service=serviceWith(archive,decode);
+ assert.equal((await service.获取缩略图(input)).url,'data:image/png;base64,AAAA');assert.equal(reads,1);
+ assert.ok(disk.thumbnailDiskMetrics.hits>0);
+ await fs.appendFile(file,'new-version');service=serviceWith(archive,decode);await service.获取缩略图(input);assert.equal(reads,2);
+ await wait(2);for(const name of await fs.readdir(folder))if(name.endsWith('.json'))await fs.writeFile(path.join(folder,name),'broken');
+ service=serviceWith(archive,decode);await service.获取缩略图(input);assert.equal(reads,3);
+ await service.clearThumbnailCache();
+ disk.configureThumbnailDiskCache(undefined);
+});
+
 test('18.2 MP / >12 MiB archive cover keeps priority over a smaller later page and is resized', async t => {
   const file = await source(t);
   const data = image(3500, 5200, 13 * 1024 * 1024);

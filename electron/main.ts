@@ -68,7 +68,8 @@ import {
   type FavoriteItem,
   type ReadingProgress,
 } from "./services/appDataService";
-import { 获取缩略图 } from "./services/thumbnailService";
+import { 获取缩略图, clearThumbnailCache } from "./services/thumbnailService";
+import { configureThumbnailDiskCache } from './services/thumbnailDiskCache';
 import { getHomeArtwork, importHomeArtwork, resetHomeArtwork, saveHomeArtwork } from './services/homeArtworkService';
 
 const 开发服务地址 = process.env.VITE_DEV_SERVER_URL;
@@ -2149,6 +2150,9 @@ function 注册安全通道(): void {
     }
   });
 
+  ipcMain.handle('缩略图:刷新', async () => {
+    await clearThumbnailCache(); return { ok: true, data: null };
+  });
   ipcMain.handle("缩略图:获取", async (_事件, 输入: unknown) => {
     if (
       typeof 输入 !== "object"
@@ -2365,6 +2369,7 @@ app.on("second-instance", (_事件, 参数, 工作目录) => 接收启动参数(
 app.on("open-file", (事件, 文件) => { 事件.preventDefault(); 接收外部文件([文件]); });
 app.whenReady().then(() => {
   configureLibraryCatalog(path.join(app.getPath('userData'), 'library-catalog-v1'));
+  configureThumbnailDiskCache(path.join(app.getPath('userData'), 'thumbnail-cache-v1'));
   registerDesktopImageProtocol();
   Menu.setApplicationMenu(null);
   注册安全通道();

@@ -4,9 +4,9 @@ import { getResourceThumbnail } from '../reader/thumbnailClient';
 
 /** Keep visible requests alive across row changes; cancel only cards that left
  * the demand window. Results are published independently, as soon as ready. */
-export function useMobileCoverQueue(files:文件条目[], enabled:boolean,
-  publish:(file:文件条目,result:操作结果<缩略图结果>)=>void) {
-  const state=useRef({wanted:[] as 文件条目[],active:new Map<string,{version:string;controller:AbortController}>(),done:new Map<string,{version:string;expires:number;retry:boolean}>(),enabled:false});
+export function useCoverQueue(files:文件条目[], enabled:boolean,
+  publish:(file:文件条目,result:操作结果<缩略图结果>)=>void, concurrency=2) {
+  const state=useRef({wanted:[] as 文件条目[],active:new Map<string,{version:string;controller:AbortController}>(),done:new Map<string,{version:string;expires:number;retry:boolean;result:操作结果<缩略图结果>}>(),enabled:false});
   const retryTimer=useRef<ReturnType<typeof setTimeout>>();
   const callback=useRef(publish);callback.current=publish;
   const pump=useRef(()=>{});
@@ -14,17 +14,17 @@ export function useMobileCoverQueue(files:文件条目[], enabled:boolean,
   pump.current=()=>{
     clearTimeout(retryTimer.current);const s=state.current;if(!s.enabled)return;
     for(const file of s.wanted){
-      if(s.active.size>=2)break;
+      if(s.active.size>=concurrency)break;
       const key=version(file),saved=s.done.get(file.path);
       if(s.active.has(file.path)||saved?.version===key&&saved.expires>Date.now())continue;
       const task={version:key,controller:new AbortController()};s.active.set(file.path,task);
       void getResourceThumbnail({path:file.path,type:file.type},task.controller.signal,key).then(result=>{
         if(task.controller.signal.aborted)return;
         const retry=!result.ok||Boolean(result.data.retryable);
-        s.done.set(file.path,{version:key,expires:Date.now()+(retry?10_000:300_000),retry});
+        s.done.set(file.path,{version:key,expires:Date.now()+(retry?10_000:300_000),retry,result});
         while(s.done.size>512)s.done.delete(s.done.keys().next().value!);
         callback.current(file,result);
-      },()=>{if(!task.controller.signal.aborted){s.done.set(file.path,{version:key,expires:Date.now()+10_000,retry:true});callback.current(file,{ok:true,data:{url:null,retryable:true}});}}).finally(()=>{
+      },()=>{if(!task.controller.signal.aborted){const result:操作结果<缩略图结果>={ok:true,data:{url:null,retryable:true}};s.done.set(file.path,{version:key,expires:Date.now()+10_000,retry:true,result});callback.current(file,result);}}).finally(()=>{
         if(s.active.get(file.path)===task)s.active.delete(file.path);
         pump.current();
       });
@@ -36,8 +36,9 @@ export function useMobileCoverQueue(files:文件条目[], enabled:boolean,
     const s=state.current;s.wanted=files;s.enabled=enabled;
     const needed=new Map(files.map(file=>[file.path,version(file)]));
     for(const [path,task] of s.active)if(!enabled||needed.get(path)!==task.version){task.controller.abort();s.active.delete(path);}
+    if(enabled)for(const file of files){const saved=s.done.get(file.path);if(saved?.version===version(file)&&saved.expires>Date.now())callback.current(file,saved.result);}
     pump.current();
-  },[files,enabled]);
+  },[files,enabled,concurrency]);
   useEffect(()=>()=>{clearTimeout(retryTimer.current);const s=state.current;s.enabled=false;for(const task of s.active.values())task.controller.abort();s.active.clear();},[]);
   useEffect(()=>{
     const reset=(event:Event)=>{
@@ -49,3 +50,4 @@ export function useMobileCoverQueue(files:文件条目[], enabled:boolean,
     window.addEventListener('omi-thumbnail-invalidated',reset);return()=>window.removeEventListener('omi-thumbnail-invalidated',reset);
   },[]);
 }
+export { useCoverQueue as useMobileCoverQueue };

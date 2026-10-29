@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { scanLibraryCatalog, scanLibraryCatalogBatch, configureLibraryCatalog, observeCatalogDirectory, catalogMetrics, cancelLibraryCatalogScans } = require('../dist-electron/services/libraryCatalog');
+const { foregroundWork } = require('../dist-electron/services/foregroundWork');
 
 test('native catalog recurses once, identifies image books, and refreshes cached changes', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omi-catalog-'));
@@ -24,6 +25,20 @@ test('native catalog recurses once, identifies image books, and refreshes cached
   assert.equal((await scanLibraryCatalog(root, root)).items.some(item => item.name === 'new.pdf'), false);
   assert.equal((await scanLibraryCatalog(root, root, true)).items.some(item => item.name === 'new.pdf'), true);
   await assert.rejects(scanLibraryCatalog(root, path.join(root, 'nonexistent'), true));
+});
+
+test('warm catalog blocks replay while covers are busy but uncached discovery yields',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'omi-catalog-'));
+ t.after(async()=>{assert.equal(path.dirname(root),path.resolve(os.tmpdir()));assert.ok(path.basename(root).startsWith('omi-catalog-'));await fs.rm(root,{recursive:true,force:true});});
+ const file=path.join(root,'book.cbz');await fs.writeFile(file,'fixture');
+ await observeCatalogDirectory(root,[{id:file,path:file,name:'book.cbz',type:'archive',extension:'cbz',size:7,modifiedAt:1}]);
+ let finish;const work=foregroundWork(()=>new Promise(resolve=>{finish=resolve;}));
+ try {
+  const reads=catalogMetrics.readdir;
+  const result=await scanLibraryCatalogBatch(root,root,{restart:true});
+  assert.equal(result.complete,true);assert.ok(result.items.some(item=>item.path===file));assert.equal(catalogMetrics.readdir,reads);
+  const forced=await scanLibraryCatalogBatch(root,root,{restart:true,refresh:true});assert.equal(forced.yielded,true);assert.equal(forced.items.length,0);
+ }finally{finish();await work;await new Promise(resolve=>setTimeout(resolve,190));}
 });
 
 test('a canceled inventory does not finish in the background and can restart independently',async t=>{

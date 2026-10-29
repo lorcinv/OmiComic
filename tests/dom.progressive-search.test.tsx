@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createProgressiveSearch, updateProgressiveSearch, progressiveSearchMetrics } from '../src/library/progressiveSearch';
+import { recordCatalogDelta } from '../src/library/catalogSnapshot';
 
 type Item = { id: string; name: string; folder?: boolean; note?: string };
 const order = { key: (item: Item) => item.id, first: (item: Item) => !!item.folder };
@@ -7,6 +8,25 @@ const compare = (a: Item,b: Item) => a.name.localeCompare(b.name);
 const all = () => true;
 
 describe('directory-by-directory progressive search', () => {
+  it('processes only a published delta and reconciles edits and removals without moving the prefix', async () => {
+    const source = Array.from({length:20000},(_,id)=>({id:String(id),name:'Book '+id}));
+    const state=createProgressiveSearch<Item>('delta');
+    await updateProgressiveSearch(state,source,all,compare,order,()=>true,()=>{});
+    const before={...progressiveSearchMetrics}, added={id:'new',name:'A new book'}, next=[...source,added];
+    recordCatalogDelta(next,source,[added],[]);
+    await updateProgressiveSearch(state,next,all,compare,order,()=>true,()=>{});
+    expect(progressiveSearchMetrics.evaluated-before.evaluated).toBe(1);
+    expect(progressiveSearchMetrics.cacheHits-before.cacheHits).toBe(0);
+    expect(state.items.at(-1)).toBe(added);
+    const changed={...source[5],name:'Edited'}, edited=next.filter(item=>item.id!=='3').map(item=>item.id==='5'?changed:item);
+    recordCatalogDelta(edited,next,[changed],['3']);
+    await updateProgressiveSearch(state,edited,all,compare,order,()=>true,()=>{});
+    expect(state.items.find(item=>item.id==='5')).toBe(changed);
+    expect(state.items.some(item=>item.id==='3')).toBe(false);
+    const changedPredicate=(item:Item)=>item.id==='new';
+    await updateProgressiveSearch(state,edited,changedPredicate,compare,order,()=>true,()=>{});
+    expect(state.items).toEqual([added]);
+  });
   it('shows books immediately and pins them when later folders arrive', async () => {
     const state = createProgressiveSearch<Item>('same query');
     const folder = {id:'folder',name:'Z folder',folder:true}, book = {id:'book',name:'Z book'};

@@ -8,9 +8,19 @@ const file=(name:string):文件条目=>({id:name,name,path:'/'+name,type:'archiv
 let pending:Map<string,{resolve:(v:操作结果<缩略图结果>)=>void;signal:AbortSignal}>;
 const flush=()=>act(async()=>{for(let i=0;i<8;i++)await Promise.resolve();});
 const publish=vi.fn();
-function Queue({names,enabled=true}:{names:string[];enabled?:boolean}){useMobileCoverQueue(names.map(file),enabled,publish);return null;}
+function Queue({names,enabled=true,concurrency=2}:{names:string[];enabled?:boolean;concurrency?:number}){useMobileCoverQueue(names.map(file),enabled,publish,concurrency);return null;}
 beforeEach(()=>{pending=new Map();publish.mockClear();read.mockReset();read.mockImplementation((input,signal)=>new Promise(resolve=>pending.set(input.path,{resolve,signal})));});
 describe('mobile visible cover demand',()=>{
+  it('keeps the desktop six-way budget and retained requests when its viewport changes',async()=>{
+    const view=render(<Queue names={['a','b','c','d','e','f','g','h']} concurrency={6}/>);await flush();
+    expect(read).toHaveBeenCalledTimes(6);
+    const retained=pending.get('/f')!,offscreen=pending.get('/a')!;
+    view.rerender(<Queue names={['f','g','h','i','j','k','l']} concurrency={6}/>);await flush();
+    expect(retained.signal.aborted).toBe(false);expect(offscreen.signal.aborted).toBe(true);
+    expect(read.mock.calls.filter(call=>call[0].path==='/f')).toHaveLength(1);
+    retained.resolve({ok:true,data:{url:'visible-cover'}});await flush();
+    expect(publish.mock.calls[0][0].path).toBe('/f');
+  });
   it('publishes each completed cover immediately and keeps overlapping work during scrolling',async()=>{
     const view=render(<Queue names={['a','b','c','d']}/>);await flush();expect([...pending.keys()]).toEqual(['/a','/b']);
     pending.get('/b')!.resolve({ok:true,data:{url:'b-cover'}});await flush();expect(publish).toHaveBeenCalledTimes(1);expect(publish.mock.calls[0][0].path).toBe('/b');

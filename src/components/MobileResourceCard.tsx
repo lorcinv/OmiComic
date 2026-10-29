@@ -55,7 +55,7 @@ export default function MobileResourceCard(p: MobileResourceCardProps) {
     onClick={open} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); open(); } }}
     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); suppress.current = true; cancel(); p.onHold(); }} onMouseDown={event => event.stopPropagation()} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}>
     <div className="resource-preview" onClick={event => { if (p.layout === 'list' && p.onInfo && !p.selecting && !suppress.current) { event.stopPropagation(); p.onInfo(); } }}>
-      {p.thumbnail && !failed ? <img src={p.thumbnail} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} /> : <ResourcePlaceholder type={p.type} />}
+      {p.thumbnail && !failed ? <img src={p.thumbnail} alt="" loading="eager" draggable={false} onError={() => setFailed(true)} /> : <ResourcePlaceholder type={p.type} />}
       {p.layout === 'grid' && !p.selecting && favorite}
       {p.invalid && <span className="mobile-card-missing">{t("文件不可用")}</span>}
       {p.selecting && <span className="mobile-card-selection" role="checkbox" aria-label={tr`选择 ${p.title}`} aria-checked={p.selected}/>}

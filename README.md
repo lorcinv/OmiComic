@@ -18,12 +18,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.45 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.45/OmiComic-Portable-1.1.45-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.45/OmiComic-Setup-1.1.45-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.46 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.46/OmiComic-1.1.46-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.47 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Portable-1.1.47-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Setup-1.1.47-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.47 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-1.1.47-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.45：搜索逐批追加且保持翻页位置；手机收藏按钮移到右上角。两端可在“设置 → 外观与主题”关闭“显示主界面”，启动时直接进入资源库，默认仍显示主页。[更新说明](docs/releases/v1.1.45.md)。
+1.1.47：PC 与安卓统一更新，优化封面加载与搜索；PC 新增可跨重启复用的封面缓存，两端减少增量搜索的重复处理。[更新说明](docs/releases/v1.1.47.md)。
 
 ## 功能
 
