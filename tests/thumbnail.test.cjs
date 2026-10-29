@@ -56,6 +56,7 @@ test('persistent file covers survive a service restart, reject changed versions 
  const wait=async count=>{const until=Date.now()+3000;while(disk.thumbnailDiskMetrics.writes<count){assert.ok(Date.now()<until);await new Promise(resolve=>setTimeout(resolve,10));}};
  await wait(1);service=serviceWith(archive,decode);
  assert.equal((await service.获取缩略图(input)).url,'data:image/png;base64,AAAA');assert.equal(reads,1);
+ assert.equal(disk.thumbnailDiskMetrics.writes,1,'a disk hit does not rewrite the same cover');
  assert.ok(disk.thumbnailDiskMetrics.hits>0);
  await fs.appendFile(file,'new-version');service=serviceWith(archive,decode);await service.获取缩略图(input);assert.equal(reads,2);
  await wait(2);for(const name of await fs.readdir(folder))if(name.endsWith('.json'))await fs.writeFile(path.join(folder,name),'broken');

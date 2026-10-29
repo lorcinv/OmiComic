@@ -107,9 +107,10 @@ async function 使用缩略图缓存(
   const 进行中 = 进行中缩略图.get(key);
   if (进行中?.signature === signature) return 进行中.task;
   const generation = thumbnailGeneration;
+  let fromDisk = false;
   const task = (async () => {
     const disk = await readThumbnailDisk(key, signature);
-    if (disk) return disk;
+    if (disk) { fromDisk = true; return disk; }
     thumbnailMetrics.loads++; return loader();
   })();
   进行中缩略图.set(key, { signature, task });
@@ -119,7 +120,7 @@ async function 使用缩略图缓存(
     // caching a cover under the wrong version if the archive changed during a read.
     if (result.url && generation === thumbnailGeneration && await 获取路径签名(路径).catch(() => "") === signature) {
       写入缩略图缓存(key, { signature, result });
-      void writeThumbnailDisk(key, signature, result);
+      if (!fromDisk) void writeThumbnailDisk(key, signature, result);
     }
     return result;
   } finally {
