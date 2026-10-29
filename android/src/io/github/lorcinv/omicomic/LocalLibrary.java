@@ -193,7 +193,7 @@ final class LocalLibrary {
     JSONArray saved=directory.modified>0?directoryIndex.children(path,version):null;
     if(saved!=null){
       List<Entry> restored=new ArrayList<>();
-      try{for(int i=0;i<saved.length();i++){JSONObject row=saved.getJSONObject(i);Entry e=new Entry();e.path=row.getString("path");e.uri=Uri.parse(row.getString("uri"));e.name=row.getString("name");e.mime=row.getString("mime");e.size=row.getLong("size");e.modified=row.getLong("modified");e.directory=row.getBoolean("directory");e.cachedAt=0;if(!e.path.equals(path+"/"+e.name)||e.name.contains("/"))throw new IOException();restored.add(e);}
+      try{for(int i=0;i<saved.length();i++){JSONObject row=saved.getJSONObject(i);Entry e=new Entry();e.path=row.getString("path");e.uri=Uri.parse(row.getString("uri"));e.name=row.getString("name");e.mime=row.getString("mime");e.size=row.getLong("size");e.modified=row.getLong("modified");e.directory=row.getBoolean("directory");e.cachedAt=0;if(!e.path.equals(path+"/"+e.name)||e.name.contains("/"))throw new IOException();if(!type(e).equals("unknown"))restored.add(e);}
         synchronized(metadataLock){if(generation==metadataGeneration){for(Entry e:restored)remember(e);directories.put(path,restored);directoryTimes.put(path,System.currentTimeMillis());directoryIndexHits++;return restored;}}
       }catch(Exception invalid){/* Rebuild an invalid derived index. */}
     }
@@ -205,7 +205,7 @@ final class LocalLibrary {
       while(c.moveToNext()){
         if(entries.size()>=30000)throw new IOException("目录内容过多，请选择较小的子目录。");
         String name=c.getString(1);if(name==null||name.contains("/")||name.equals(".")||name.equals(".."))continue;
-        entries.add(entry(c,DocumentsContract.buildDocumentUriUsingTree(uri,c.getString(0)),path+"/"+name));
+        Entry found=entry(c,DocumentsContract.buildDocumentUriUsingTree(uri,c.getString(0)),path+"/"+name);if(!type(found).equals("unknown"))entries.add(found);
       }
     }
     entries.sort((a,b)->natural(a.name,b.name));
@@ -259,13 +259,13 @@ final class LocalLibrary {
   long catalogGeneration(){return catalogEpoch.get();}
   private String directoryVersion(Entry entry){return entry.uri+"\n"+entry.modified+"\n"+entry.size+"\n"+mediaEpoch;}
   private JSONObject snapshotEntry(Entry entry)throws Exception{return new JSONObject().put("path",entry.path).put("uri",entry.uri.toString()).put("name",entry.name).put("mime",entry.mime).put("size",entry.size).put("modified",entry.modified).put("directory",entry.directory);}
-  private JSONArray snapshot(List<Entry> entries)throws Exception{JSONArray rows=new JSONArray();for(Entry entry:entries)rows.put(snapshotEntry(entry));return rows;}
+  private JSONArray snapshot(List<Entry> entries)throws Exception{JSONArray rows=new JSONArray();for(Entry entry:entries)if(!type(entry).equals("unknown"))rows.put(snapshotEntry(entry));return rows;}
   private Entry restoreEntry(JSONObject row)throws Exception{
     Entry entry=new Entry();entry.path=row.getString("path");entry.uri=Uri.parse(row.getString("uri"));entry.name=row.getString("name");entry.mime=row.getString("mime");entry.size=row.getLong("size");entry.modified=row.getLong("modified");entry.directory=row.getBoolean("directory");entry.cachedAt=0;return entry;
   }
   private List<Entry> restoreChildren(JSONArray rows,String path)throws Exception{
     List<Entry> result=new ArrayList<>();for(int i=0;i<rows.length();i++){Entry entry=restoreEntry(rows.getJSONObject(i));
-      if(!entry.path.equals(path+"/"+entry.name)||entry.name.contains("/")||entry.name.equals(".")||entry.name.equals(".."))throw new IOException("Invalid derived index");result.add(entry);
+      if(!entry.path.equals(path+"/"+entry.name)||entry.name.contains("/")||entry.name.equals(".")||entry.name.equals(".."))throw new IOException("Invalid derived index");if(!type(entry).equals("unknown"))result.add(entry);
     }return result;
   }
   private boolean catalogHidden(String path,Set<String> hidden){
@@ -286,7 +286,7 @@ final class LocalLibrary {
         while(cursor.moveToNext()){
           signal.throwIfCanceled();
           String name=cursor.getString(1);if(name==null||name.contains("/")||name.equals(".")||name.equals(".."))continue;
-          result.add(entry(cursor,DocumentsContract.buildDocumentUriUsingTree(folder.uri,cursor.getString(0)),folder.path+"/"+name));
+          Entry found=entry(cursor,DocumentsContract.buildDocumentUriUsingTree(folder.uri,cursor.getString(0)),folder.path+"/"+name);if(!type(found).equals("unknown"))result.add(found);
           if(result.size()>30000)throw new IOException("目录内容过多。");
         }
       }
@@ -489,9 +489,9 @@ final class LocalLibrary {
     if(saved!=null)return new ReaderPreview(saved,true);
     saved=thumbnails.get(key);return saved==null?null:new ReaderPreview(saved,false);
   }
-  byte[] readerRaster(String url,int sample){return readerRasters.get("filtered-raster-v2:"+Uri.parse(url).getLastPathSegment()+":"+sample);}
-  boolean hasReaderRaster(String url,int sample){return readerRasters.contains("filtered-raster-v2:"+Uri.parse(url).getLastPathSegment()+":"+sample);}
-  void saveReaderRaster(String url,int sample,byte[] data){readerRasters.put("filtered-raster-v2:"+Uri.parse(url).getLastPathSegment()+":"+sample,data);}
+  byte[] readerRaster(String url,int sample){return readerRasters.get("filtered-raster-v3:"+Uri.parse(url).getLastPathSegment()+":"+sample);}
+  boolean hasReaderRaster(String url,int sample){return readerRasters.contains("filtered-raster-v3:"+Uri.parse(url).getLastPathSegment()+":"+sample);}
+  void saveReaderRaster(String url,int sample,byte[] data){readerRasters.put("filtered-raster-v3:"+Uri.parse(url).getLastPathSegment()+":"+sample,data);}
   long readerRasterEpoch(){return readerRasters.epoch();}
   void persistReaderRaster(String url,int sample,byte[] data,int width,int height,int orientation,long epoch){
     synchronized(readerRasters){

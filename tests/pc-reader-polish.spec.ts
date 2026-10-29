@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function seed(page: Page, initial = 0, mode: 'single' | 'double' = 'double', spread = -1) {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -43,7 +44,7 @@ async function seed(page: Page, initial = 0, mode: 'single' | 'double' = 'double
 
 async function pair(page: Page, expected: number[]) {
   await expect.poll(() => page.locator('.reader-page-spread > figure').evaluateAll(figures => figures.map(f => Number((f as HTMLElement).dataset.readerPageIndex) + 1))).toEqual(expected);
-  await expect(page.locator('.reader-page-spread img').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-page-spread img').first());
 }
 
 test('double pages include the cover and report the last visible pair as complete inside and outside the reader', async ({ page }) => {

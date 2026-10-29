@@ -55,7 +55,7 @@ test('shipped Windows EXE reads images, ZIP, 7z, PDF and EPUB with isolated pers
     const pageInput = page.getByRole('textbox', { name: name.endsWith('.epub') ? '跳转到章节' : '跳转到页码' });
     await expect(pageInput).toHaveValue('1');
     const content = name.endsWith('.pdf') ? '.reader-page-spread canvas' : name.endsWith('.epub') ? '.reader-chapter' : '.reader-page-spread img';
-    await expect(page.locator(content).first()).toBeVisible();
+    await expect(page.locator(name.endsWith('.epub') ? content : name.endsWith('.pdf') ? '.reader-page-spread canvas:visible' : '.reader-page-spread :is(.reader-image,.reader-processed-image,.reader-display-raster):visible').first()).toBeVisible();
     if (name.endsWith('.epub')) await expect(page.frameLocator('.reader-chapter iframe').first().getByRole('heading', { name: '安装版 EPUB 第一章' })).toBeVisible();
     else if (!name.endsWith('.pdf')) await expect.poll(() => page.locator(content).first().evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
     await page.getByRole('button', { name: '下一页', exact: true }).click();

@@ -7,6 +7,15 @@ import { installMock } from './mock';
 
 const file = (root: string, name: string) => ({ id: root + '/' + name, path: root + '/' + name, name, type: 'archive' as const, extension: 'cbz' });
 describe('shared discovery and query generations', () => {
+  it('excludes unsupported entries and retires stale records when their type becomes unsupported',async()=>{
+    const root='/supported-only',book=file(root,'Book.cbz'),other={id:root+'/clip.mp4',path:root+'/clip.mp4',name:'clip.mp4',type:'unknown' as const,extension:'mp4'};
+    observeLibraryDirectory(root,{path:root,parentPath:null,total:2,items:[book,other]});
+    const view=renderHook(()=>useLibraryCatalog(root,false));
+    await waitFor(()=>expect(view.result.current.items.some(item=>item.name==='Book.cbz')).toBe(true));
+    expect(view.result.current.items.some(item=>item.name==='clip.mp4')).toBe(false);
+    await act(async()=>{observeLibraryDirectory(root,{path:root,parentPath:null,total:1,items:[{...book,type:'unknown'}]});await new Promise(resolve=>setTimeout(resolve,130));});
+    expect(view.result.current.items.some(item=>item.name==='Book.cbz')).toBe(false);view.unmount();
+  });
   it('publishes a Windows case-only rename as one replacement without keeping the old hit',async()=>{
     const root='C:/case-1147',old={...file(root,'Case.cbz'),size:1,modifiedAt:1};
     observeLibraryDirectory(root,{path:root,parentPath:null,total:1,items:[old]});

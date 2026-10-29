@@ -1,5 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import {installMock} from './mock';
+import {expectReaderPixels} from './readerPixels';
 const back=(page:Page)=>page.evaluate(()=>window.dispatchEvent(new Event('omi-back')));
 async function setup(page:Page,theme='mist') {
   await page.addInitScript(installMock,{count:12});
@@ -28,7 +29,7 @@ async function detail(page:Page){await library(page);await page.locator('.resour
 for(const mobile of [false,true])test.describe(mobile?'phone 1.1.7':'desktop 1.1.7',()=>{
   test.use(mobile?{viewport:{width:390,height:844},isMobile:true,hasTouch:true}:{});
   test('panorama reverses physical page order and preserves logical seeking and drag direction',async({page})=>{
-    await setup(page);await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();await expect(page.locator('.reader-image').first()).toBeVisible();
+    await setup(page);await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();await expectReaderPixels(page.locator('.reader-image').first());
     if(mobile){await page.locator('.reader-stage').tap();await page.getByRole('button',{name:'阅读设置',exact:true}).click();}
     await page.getByRole('button',{name:'开启全景连环画',exact:true}).click();
     if(mobile)await back(page);

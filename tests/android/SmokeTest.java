@@ -269,9 +269,12 @@ public final class SmokeTest extends Instrumentation {
       android.graphics.BitmapFactory.Options options=new android.graphics.BitmapFactory.Options();options.inSampleSize=8;
       android.graphics.Bitmap old=android.graphics.BitmapFactory.decodeByteArray(data,0,data.length,options);
       long started=SystemClock.uptimeMillis();android.graphics.Bitmap filtered=(android.graphics.Bitmap)decode.invoke(null,data,8,noop);long ms=SystemClock.uptimeMillis()-started;
-      long error=0,oldError=0;int max=0,count=reference.getWidth()*reference.getHeight()*4;
-      for(int y=0;y<reference.getHeight();y++)for(int x=0;x<reference.getWidth();x++)for(int shift:new int[]{0,8,16,24}){
-        int expectedValue=reference.getPixel(x,y)>>>shift&255,diff=Math.abs((filtered.getPixel(x,y)>>>shift&255)-expectedValue);error+=diff;max=Math.max(max,diff);oldError+=Math.abs((old.getPixel(x,y)>>>shift&255)-expectedValue);
+      // PNG fixtures contain subpixel periodic tones. Their independent ideal
+      // is the DC colour, not the aliases left by the old box-average golden.
+      int[] dc=new int[4];for(int channel=0;channel<4;channel++){long sum=0;for(int y=0;y<reference.getHeight();y++)for(int x=0;x<reference.getWidth();x++)sum+=reference.getPixel(x,y)>>>(channel*8)&255;dc[channel]=(int)Math.round(sum/(double)(reference.getWidth()*reference.getHeight()));}
+      int margin=jpeg?0:4;long error=0,oldError=0;int max=0,count=(reference.getWidth()-margin*2)*(reference.getHeight()-margin*2)*4;
+      for(int y=margin;y<reference.getHeight()-margin;y++)for(int x=margin;x<reference.getWidth()-margin;x++)for(int channel=0;channel<4;channel++){
+        int shift=channel*8,expectedValue=jpeg?(reference.getPixel(x,y)>>>shift&255):dc[channel],diff=Math.abs((filtered.getPixel(x,y)>>>shift&255)-expectedValue);error+=diff;max=Math.max(max,diff);oldError+=Math.abs((old.getPixel(x,y)>>>shift&255)-expectedValue);
       }
       double mean=(double)error/count;
       cases.put(new JSONObject().put("name",name).put("meanError",mean).put("maxError",max).put("oldMeanError",(double)oldError/count).put("decodeMs",ms).put("mipmaps",filtered.hasMipMap()));
@@ -280,13 +283,58 @@ public final class SmokeTest extends Instrumentation {
         android.graphics.BitmapRegionDecoder regional=android.graphics.BitmapRegionDecoder.newInstance(data,0,data.length,false);
         java.lang.reflect.Method region=decoder.getDeclaredMethod("region",android.graphics.BitmapRegionDecoder.class,android.graphics.Rect.class,int.class,boolean.class);region.setAccessible(true);
         android.graphics.Bitmap tile=(android.graphics.Bitmap)region.invoke(null,regional,new android.graphics.Rect(0,0,512,512),8,true);
-        long difference=0;int peak=0;for(int y=0;y<64;y++)for(int x=0;x<64;x++)for(int shift:new int[]{0,8,16,24}){int d=Math.abs((tile.getPixel(x,y)>>>shift&255)-(reference.getPixel(x,y)>>>shift&255));difference+=d;peak=Math.max(peak,d);}
-        if((double)difference/(64*64*4)>1||peak>2)throw new IOException("Zoom tile aliases: "+name+" "+difference+" "+peak);
-        cases.getJSONObject(cases.length()-1).put("tileMeanError",(double)difference/(64*64*4)).put("tileMaxError",peak);tile.recycle();regional.recycle();
+        long difference=0;int peak=0;for(int y=4;y<60;y++)for(int x=4;x<60;x++)for(int channel=0;channel<4;channel++){int d=Math.abs((tile.getPixel(x,y)>>>(channel*8)&255)-dc[channel]);difference+=d;peak=Math.max(peak,d);}
+        if((double)difference/(56*56*4)>1||peak>2)throw new IOException("Zoom tile aliases: "+name+" "+difference+" "+peak);
+        cases.getJSONObject(cases.length()-1).put("tileMeanError",(double)difference/(56*56*4)).put("tileMaxError",peak);tile.recycle();regional.recycle();
       }
       filtered.recycle();old.recycle();reference.recycle();
     }
     return new JSONObject().put("patterns",cases);
+  }
+  private JSONObject displaySamplingTest()throws Exception {
+    Class<?> sampler=Class.forName("io.github.lorcinv.omicomic.DisplayResampler"),check=Class.forName("io.github.lorcinv.omicomic.ReaderBitmapDecoder$Check");
+    java.lang.reflect.Method resize=sampler.getDeclaredMethod("resize",android.graphics.Bitmap.class,int.class,int.class,check);resize.setAccessible(true);
+    Object noop=java.lang.reflect.Proxy.newProxyInstance(check.getClassLoader(),new Class<?>[]{check},(proxy,method,arguments)->null);
+    int width=1062,height=1500;int[] row=new int[width];android.graphics.Bitmap source=android.graphics.Bitmap.createBitmap(width,height,android.graphics.Bitmap.Config.ARGB_8888);
+    for(int y=0;y<height;y++){for(int x=0;x<width;x++)row[x]=(x+y)%2==0?0xff000000:0xffffffff;source.setPixels(row,0,width,0,y,width,1);}
+    JSONArray results=new JSONArray();
+    try{
+      for(int h:new int[]{900,1256}){
+        int w=Math.round(width*h/(float)height);long start=SystemClock.uptimeMillis();
+        android.graphics.Bitmap output=(android.graphics.Bitmap)resize.invoke(null,source,w,h,noop);long elapsed=SystemClock.uptimeMillis()-start;
+        android.graphics.Bitmap old=android.graphics.Bitmap.createScaledBitmap(source,w,h,true);
+        double sum=0,squares=0,oldSum=0,oldSquares=0;int count=0;
+        for(int y=10;y<h-10;y+=3)for(int x=10;x<w-10;x+=3){int value=output.getPixel(x,y)&255,previous=old.getPixel(x,y)&255;sum+=value;squares+=value*value;oldSum+=previous;oldSquares+=previous*previous;count++;}
+        double mean=sum/count,deviation=Math.sqrt(Math.max(0,squares/count-mean*mean)),oldMean=oldSum/count,oldDeviation=Math.sqrt(Math.max(0,oldSquares/count-oldMean*oldMean));
+        if(Math.abs(mean-127.5)>3||deviation>5||deviation>=oldDeviation/2)throw new IOException("Halftone sampling still aliases: "+deviation+" vs "+oldDeviation);
+        results.put(new JSONObject().put("width",w).put("height",h).put("mean",mean).put("deviation",deviation).put("oldDeviation",oldDeviation).put("filterMs",elapsed));output.recycle();old.recycle();
+      }
+      android.graphics.Canvas canvas=new android.graphics.Canvas(source);canvas.drawColor(0xffffffff);android.graphics.Paint ink=new android.graphics.Paint();ink.setColor(0xff000000);canvas.drawRect(80,300,900,315,ink);
+      android.graphics.Bitmap text=(android.graphics.Bitmap)resize.invoke(null,source,638,900,noop);int darkest=255;
+      for(int y=175;y<195;y++)darkest=Math.min(darkest,text.getPixel(100,y)&255);text.recycle();if(darkest>8)throw new IOException("Filtered text stroke lost contrast");
+      return new JSONObject().put("toneCases",results).put("textBlack",darkest).put("boundedSourceRows",true).put("denseDecode",denseDecodeSampling(resize,check,noop)).put("formats",antialiasTest());
+    }finally{source.recycle();}
+  }
+  private JSONArray denseDecodeSampling(java.lang.reflect.Method resize,Class<?> check,Object noop)throws Exception {
+    Class<?> decoder=Class.forName("io.github.lorcinv.omicomic.ReaderBitmapDecoder");
+    java.lang.reflect.Method decode=decoder.getDeclaredMethod("decode",byte[].class,int.class,check);decode.setAccessible(true);
+    int width=3200,height=4000;android.graphics.Bitmap source=android.graphics.Bitmap.createBitmap(width,height,android.graphics.Bitmap.Config.ARGB_8888);int[] row=new int[width];JSONArray results=new JSONArray();
+    try{
+      for(int pitch:new int[]{3,5,10,12,13}){
+        int period=pitch==13?10:pitch;
+        for(int y=0;y<height;y++){for(int x=0;x<width;x++)row[x]=((x%period<period/2)==(y%period<period/2))?0xff000000:0xffffffff;if(pitch==13)row[y%width]=0xff7f7f7f;source.setPixels(row,0,width,0,y,width,1);}
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();source.compress(android.graphics.Bitmap.CompressFormat.PNG,100,bytes);
+        long start=SystemClock.uptimeMillis();android.graphics.Bitmap reduced=(android.graphics.Bitmap)decode.invoke(null,bytes.toByteArray(),8,noop);
+        android.graphics.Bitmap output=(android.graphics.Bitmap)resize.invoke(null,reduced,264,330,noop);
+        double sum=0,sq=0;int count=0;
+        for(int y=50;y<280;y++)for(int x=40;x<224;x++){int value=output.getPixel(x,y)&255;sum+=value;sq+=value*value;count++;}
+        double mean=sum/count,deviation=Math.sqrt(Math.max(0,sq/count-mean*mean));
+        results.put(new JSONObject().put("pitch",period).put("nonrepeating",pitch==13).put("mean",mean).put("deviation",deviation).put("filterMs",SystemClock.uptimeMillis()-start));
+        reduced.recycle();output.recycle();
+        if(deviation>2.5)throw new IOException("PNG decode baked in dense tone aliasing at pitch "+pitch+": "+deviation);
+      }
+      return results;
+    }finally{source.recycle();}
   }
   private JSONObject nativeFrameMessage(Object surface,Object frame)throws Exception {
     android.graphics.RectF clip=(android.graphics.RectF)field(frame,"clip");JSONArray slots=new JSONArray();
@@ -346,6 +394,18 @@ public final class SmokeTest extends Instrumentation {
       if(first==null)first=pixels;else if(!java.util.Arrays.equals(first,pixels))changed++;SystemClock.sleep(120);
     }
     return new JSONObject().put("samples",samples).put("changedSamples",changed).put("pixelsPerSample",first.length);
+  }
+  private JSONObject tonePixels(JSONObject region)throws Exception {
+    int[] origin=new int[2],viewWidth=new int[1];runOnMainSync(()->{web.getLocationOnScreen(origin);viewWidth[0]=web.getWidth();});
+    float scale=(float)(viewWidth[0]/region.getDouble("viewport"));android.graphics.Bitmap image=getUiAutomation().takeScreenshot();
+    if(image==null)throw new IOException("Tone screenshot unavailable");
+    try{
+      int left=Math.max(0,origin[0]+Math.round((float)region.getDouble("left")*scale)),top=Math.max(0,origin[1]+Math.round((float)region.getDouble("top")*scale));
+      int width=Math.min(image.getWidth()-left,Math.round((float)region.getDouble("width")*scale)),height=Math.min(image.getHeight()-top,Math.round((float)region.getDouble("height")*scale));
+      double sum=0,squares=0;int count=0;
+      for(int y=0;y<height;y+=2)for(int x=0;x<width;x+=2){int pixel=image.getPixel(left+x,top+y),r=pixel>>>16&255,g=pixel>>>8&255,b=pixel&255;double value=(r+g+b)/3.;sum+=value;squares+=value*value;count++;}
+      double mean=sum/count;return new JSONObject().put("mean",mean).put("deviation",Math.sqrt(Math.max(0,squares/count-mean*mean))).put("samples",count);
+    }finally{image.recycle();}
   }
   private JSONObject cachePerformanceTest(Object library)throws Exception {
     Class<?> type=Class.forName("io.github.lorcinv.omicomic.DiskCache");
@@ -447,7 +507,7 @@ public final class SmokeTest extends Instrumentation {
       runOnMainSync(()->web=find(activity.getWindow().getDecorView()));
       if(web==null)throw new IOException("WebView missing");
       long deadline=System.currentTimeMillis()+30000;
-      String startupSelector="launch1145".equals(args.getString("mode"))?".library-layout":".omi-home";
+      String startupSelector=("launch1145".equals(args.getString("mode"))||"display-sampling1149".equals(args.getString("mode")))?".library-layout":".omi-home";
       while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('"+startupSelector+"')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
       // DOM existence precedes the first composed frame. Do not inject taps
       // through the launch cover while observing its initial reveal.
@@ -498,6 +558,9 @@ public final class SmokeTest extends Instrumentation {
       SceneFrames[] sceneFrames={null};
       while("null".equals(result=eval("JSON.stringify(window.__omiResult)"))||"\"null\"".equals(result)){
         if(System.currentTimeMillis()>deadline)throw new IOException("Smoke timed out: "+eval("document.body.innerText"));
+        if("true".equals(eval("window.__omiDisplaySamplingCheck===true"))){JSONObject sampled=displaySamplingTest();eval("window.__omiDisplaySamplingResult="+sampled+";window.__omiDisplaySamplingCheck=false");}
+        String toneRequest=(String)new JSONTokener(eval("JSON.stringify(window.__omiToneRegion||null)")).nextValue();
+        if(toneRequest!=null&&!"null".equals(toneRequest)){JSONObject pixels=tonePixels(new JSONObject(toneRequest));eval("window.__omiTonePixels="+pixels+";window.__omiToneRegion=null");}
         if("true".equals(eval("window.__omiCatalogProviderTest===true"))){
           JSONObject checks=new CatalogChecks(field(activity,"library"),getTargetContext()).run();
           eval("window.__omiCatalogProviderResult="+checks+";window.__omiCatalogProviderTest=false");

@@ -45,6 +45,7 @@ public final class CatalogProvider extends ContentProvider {
       }
     }
     if(id.equals("root"))for(String name:new String[]{"Slow","Zero","Branch"})row(result,columns,"root/"+name);
+    if(id.equals("root"))for(String name:new String[]{"Video.mp4","Audio.mp3","notes.txt","README"})row(result,columns,"root/"+name);
     if(id.equals("root/Slow"))row(result,columns,id+"/Slowed.cbr");
     if(id.equals("root/Zero")){row(result,columns,id+"/Zero.cbr");if(extra)row(result,columns,id+"/Extra.cbr");}
     if(id.equals("root/Branch"))row(result,columns,id+"/Deep");
@@ -52,12 +53,12 @@ public final class CatalogProvider extends ContentProvider {
     return result;
   }
   private void row(MatrixCursor result,String[] columns,String id){
-    boolean directory=!id.endsWith(".cbr");Object[] row=new Object[columns.length];
+    boolean directory=id.equals("root")||id.equals("root/Slow")||id.equals("root/Zero")||id.equals("root/Branch")||id.equals("root/Branch/Deep");Object[] row=new Object[columns.length];
     for(int i=0;i<columns.length;i++){
       String column=columns[i];
       if(column.equals(DocumentsContract.Document.COLUMN_DOCUMENT_ID))row[i]=id;
       else if(column.equals(DocumentsContract.Document.COLUMN_DISPLAY_NAME))row[i]=id.equals("root")?"Catalog1142":id.substring(id.lastIndexOf('/')+1);
-      else if(column.equals(DocumentsContract.Document.COLUMN_MIME_TYPE))row[i]=directory?DocumentsContract.Document.MIME_TYPE_DIR:"application/vnd.rar";
+      else if(column.equals(DocumentsContract.Document.COLUMN_MIME_TYPE))row[i]=directory?DocumentsContract.Document.MIME_TYPE_DIR:id.endsWith(".mp4")?"video/mp4":id.endsWith(".mp3")?"audio/mpeg":id.endsWith(".txt")?"text/plain":"application/vnd.rar";
       else if(column.equals(DocumentsContract.Document.COLUMN_SIZE))row[i]=directory?0L:48595L;
       else if(column.equals(DocumentsContract.Document.COLUMN_LAST_MODIFIED))row[i]=id.equals("root/Zero")?0L:1793160000000L;
     }

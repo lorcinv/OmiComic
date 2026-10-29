@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function seed(page: Page, theme = 'mist') {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -44,16 +45,16 @@ test('desktop home requires double click or the revealed resume action and still
   expect(await page.evaluate(() => (window as any).__opens)).toBe(0);
   await expect(page.locator('.reader-layout')).toHaveCount(0);
   await book.dblclick({ position: { x: 30, y: 30 } });
-  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-image').first());
   expect(await page.evaluate(() => (window as any).__opens)).toBe(1);
   await page.reload();
   await book.hover();
   await book.locator('.omi-home__cover-action').click();
-  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-image').first());
   expect(await page.evaluate(() => (window as any).__opens)).toBe(1);
   await page.reload();
   await book.focus(); await book.press('Enter');
-  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-image').first());
 });
 
 for (const [scope, name] of [['shelf', '书架'], ['resource', '书架'], ['favorite', '收藏'], ['bookmark', '书签']]) {
@@ -131,7 +132,7 @@ test('largest custom sizes fit the small desktop reader and mobile ignores deskt
   await page.setViewportSize({ width: 960, height: 640 });
   await library(page);
   await page.locator('.resource-card').filter({ hasText: 'Book' }).dblclick();
-  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-image').first());
   const info = page.locator('.reader-page-jump input');
   expect(await info.evaluate(el => el.clientHeight - parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThan(8);
   await page.screenshot({ path: 'test-results/pc-1.1.27-reader-large-text.png' });
@@ -162,7 +163,7 @@ test('custom typography updates all desktop surfaces and has usable numeric limi
   await page.screenshot({ path: 'test-results/pc-1.1.27-typography.png' });
   await page.getByRole('button', { name: '关闭设置', exact: true }).click();
   await page.locator('.resource-card').filter({ hasText: 'Book' }).dblclick();
-  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-image').first());
   expect(await page.locator('.reader-page-jump input').evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(15 * 18 / 14, 2);
 });
 
@@ -190,7 +191,7 @@ for (const theme of ['mist', 'nord', 'sand', 'night']) {
       await expect(button).toHaveCSS('box-shadow', 'none'); await expect(button).toHaveCSS('border-top-width', '0px');
     }
     await page.screenshot({ path: `test-results/pc-1.1.27-detail-${theme}.png` });
-    await page.locator('.resource-detail-read-button').click(); await expect(page.locator('.reader-image').first()).toBeVisible();
+    await page.locator('.resource-detail-read-button').click(); await expectReaderPixels(page.locator('.reader-image').first());
     // Render colors to the same format before measuring each theme's button/chrome separation.
     const contrast = await page.locator('.reader-footer').evaluate(footer => {
       const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d')!;

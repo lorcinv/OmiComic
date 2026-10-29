@@ -32,6 +32,7 @@ import { useAutoRead } from "../reader/useAutoRead";
 import { DEFAULT_ADJUSTMENTS, DEFAULT_AUTO_READ, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
 import { useReaderDocument } from "../reader/useReaderDocument";
 import { advanceInertia, estimateReleaseVelocity, trimPrefetchBuffer, mouseDragGain, acceleratedMouseVelocity, MAX_MOTION_SPEED, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
+import { holdDisplaySampling, noteDisplaySamplingMotion } from "../reader/displaySampling";
 import type {
   AppSettings,
   ReaderViewState,
@@ -292,6 +293,13 @@ function ReaderPage({
   const [书签处理中, 设置书签处理中] = useState(false);
   const [缩放模式, 设置缩放模式] = useState<阅读器缩放模式>("fit-window");
   const [可用区域, 设置可用区域] = useState<可用区域尺寸>({ width: 0, height: 0 });
+  const 显示缩放缓存用量 = useRef(new Map<string,number>());
+  const [显示缩放缓存字节, 设置显示缩放缓存字节] = useState(0);
+  function 更新显示缩放缓存(页面Key: string, 字节: number): void {
+    if ((显示缩放缓存用量.current.get(页面Key) ?? 0) === 字节) return;
+    if (字节) 显示缩放缓存用量.current.set(页面Key,字节); else 显示缩放缓存用量.current.delete(页面Key);
+    设置显示缩放缓存字节([...显示缩放缓存用量.current.values()].reduce((sum,n)=>sum+n,0));
+  }
   const [页码输入, 设置页码输入] = useState("1");
   const [阅读器设置, 设置阅读器设置] = useState(默认阅读器设置);
   const [沉浸模式, 设置沉浸模式] = useState(false);
@@ -555,7 +563,7 @@ function ReaderPage({
   const 原生跳页代号 = useRef(0);
   const 预加载页数 = Math.min(Math.max(Math.round(阅读器设置.readerPreloadPages), 0), isAndroid() ? 20 : 120);
   const 图片加载线程数 = Math.min(Math.max(Math.round(阅读器设置.readerImageLoadConcurrency), 1), 文档源 ? (isAndroid() ? 2 : 4) : (isAndroid() ? 8 : 24));
-  const 内存缓存上限字节 = Math.max(0, Math.round(阅读器设置.readerMemoryCacheSizeMb) * 1024 * 1024);
+  const 内存缓存上限字节 = Math.max(0, Math.round(阅读器设置.readerMemoryCacheSizeMb) * 1024 * 1024 - 显示缩放缓存字节);
   const 原生预读窗口 = useRef(new Set<number>());
   const 原生阅读方向 = useRef({resourceKey:'',index:0,direction:1});
   const 原生前次位置 = 原生阅读方向.current;
@@ -1169,6 +1177,8 @@ function ReaderPage({
     const 安全偏移 = 限制模式2偏移(偏移);
     全景偏移引用.current = 安全偏移;
     同步全景位移样式(安全偏移);
+    // Keep layout reads and parent cache accounting outside motion frames.
+    noteDisplaySamplingMotion();
   }
 
   function 暂停全景动画(): void {
@@ -1788,8 +1798,11 @@ function ReaderPage({
     if (模式2预热结果缓冲.current.size === 0) return;
 
     const 视口中心索引 = 仅提交运动关键页面 ? 计算模式2偏移最近索引() : -1;
+    // The display worker must see prepared URLs before their pages enter the
+    // viewport. Keep publication batched, but include the mounted PC window.
+    const 运动准备半径 = isAndroid() ? 2 : 模式2窗口半径;
     const 结果列表 = Array.from(模式2预热结果缓冲.current.entries())
-      .filter(([页面索引]) => !仅提交运动关键页面 || Math.abs(页面索引 - 视口中心索引) <= 2);
+      .filter(([页面索引]) => !仅提交运动关键页面 || Math.abs(页面索引 - 视口中心索引) <= 运动准备半径);
     if (结果列表.length === 0) return;
     for (const [页面索引] of 结果列表) {
       模式2预热结果缓冲.current.delete(页面索引);
@@ -1836,6 +1849,15 @@ function ReaderPage({
     if (!resource || resource.total <= 0) return;
     const 操作资源Key = resource.resourceKey;
     const 索引列表 = 获取模式2预热索引(请求.centerIndex, 请求.direction, 请求.intensity);
+    // Unpublished pages behind the moving window must not fill the staging
+    // budget and prevent future pages from loading until they reach the screen.
+    const 本次预热窗口 = new Set(索引列表);
+    for (const 索引 of 模式2预热结果缓冲.current.keys()) {
+      if (!本次预热窗口.has(索引)) 模式2预热结果缓冲.current.delete(索引);
+    }
+    // A finished batch can remain outside the publication window. Revisit it
+    // as the viewport advances, even when no further reads fit the budget.
+    if (模式2预热结果缓冲.current.size > 0) 安排刷新模式2预热结果();
     const 缓冲上限 = Math.min((isAndroid() ? 32 : 192) * 1024 * 1024, 内存缓存上限字节 * 0.2);
     let 缓冲字节 = 0;
     let 已用字节 = 0;
@@ -2774,6 +2796,9 @@ function ReaderPage({
   useLayoutEffect(() => {
     设置全景可见索引(安全索引);
   }, [安全索引, 全景模式, resource?.resourceKey]);
+
+  // A held pointer may fling at any moment; only off-thread URL work continues.
+  useLayoutEffect(() => 全景拖动中 ? holdDisplaySampling() : undefined, [全景拖动中]);
 
   useEffect(() => {
     页面图片并发上限.current = 图片加载线程数;
@@ -4112,7 +4137,7 @@ function ReaderPage({
                       aria-hidden={手机布局 && !模式2 && !显示页组索引.includes(页面.index) ? true : undefined}
                       style={手机布局 && !模式2 && !显示页组索引.includes(页面.index) ? {position:'absolute',visibility:'hidden',pointerEvents:'none'} : 计算模式2页面框架样式(页面.index)}
                     >
-                      <ReaderImageEffects settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sourceKey={`${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
+                      <ReaderImageEffects settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sampleable={!/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
                       {状态.error ? (
                         <div className="reader-page-error" role="alert">
                           <span>{t("第 ")}{页面.index + 1} {阅读单位}{t("加载失败")}</span>

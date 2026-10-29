@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function seedReader(page: Page, mixed = false, stall = false) {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -43,7 +44,7 @@ async function seedReader(page: Page, mixed = false, stall = false) {
 async function openReader(page: Page) {
   await page.getByRole('button', { name: '继续上次阅读', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toBeEnabled();
-  await expect(page.locator('[data-reader-page-index="12"] img')).toBeVisible();
+  await expectReaderPixels(page.locator('[data-reader-page-index="12"] img'));
 }
 
 async function jump(page: Page, pageNumber: number) {
@@ -112,7 +113,7 @@ test('wide and tall pages fit height in single, double and panorama modes withou
     for (const index of [12, 13]) {
       await jump(page, index + 1);
       const img = page.locator(`[data-reader-page-index="${index}"] img`);
-      await expect(img).toBeVisible();
+      await expectReaderPixels(img);
       await expect.poll(() => img.evaluate(element => {
         const image = element as HTMLImageElement;
         const stage = document.querySelector('.reader-stage')!;
@@ -134,7 +135,7 @@ test('a stalled prefetch cannot block a new visible page', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => (window as any).__pageRequests.some((index: number) => index !== 12))).toBe(true);
   const start = Date.now();
   await jump(page, 21);
-  await expect(page.locator('[data-reader-page-index="20"] img')).toBeVisible({ timeout: 1500 });
+  await expectReaderPixels(page.locator('[data-reader-page-index="20"] img'), 1500);
   console.log(`Visible page bypassed stalled prefetch in ${Date.now() - start}ms`);
 });
 
@@ -259,7 +260,7 @@ test('single-page turns yield to reversal, mode changes and reduced motion witho
   await page.getByRole('button', { name: '关闭全景连环画', exact: true }).click();
   await expect(page.locator('.reader-stage')).not.toHaveClass(/\bis-panorama\b(?!-)/);
   await page.waitForTimeout(250);
-  await expect(page.locator('.reader-page-spread img')).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-page-spread img'));
   await jump(page, 13);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
@@ -375,7 +376,7 @@ test('a slow progress jump retains the old picture and yields to the latest clic
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await clickProgress(page, 35);
   await expect(page.locator('.reader-stage')).toHaveAttribute('data-panorama-jump-phase', 'departing');
-  await expect(page.locator('.reader-panorama-jump-ghost [data-reader-page-index="12"] img')).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-panorama-jump-ghost [data-reader-page-index="12"] img'));
   await clickProgress(page, 5);
   await expect(page.locator('.reader-stage')).toHaveAttribute('data-panorama-jump-phase', 'arriving');
   await clickProgress(page, 17);
@@ -383,11 +384,11 @@ test('a slow progress jump retains the old picture and yields to the latest clic
   await expect(page.locator('.reader-stage')).not.toHaveAttribute('data-panorama-jump-phase');
   await page.waitForTimeout(1050);
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('18');
-  await expect(page.locator('.reader-page-spread [data-reader-page-index="17"] img')).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-page-spread [data-reader-page-index="17"] img'));
   await expect(page.locator('.reader-panorama-jump-ghost')).toHaveCount(0);
   await clickProgress(page, 36);
   await page.getByRole('button', { name: '关闭全景连环画', exact: true }).click();
-  await expect(page.locator('.reader-page-spread img').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-page-spread img').first());
   await expect(page.locator('.reader-panorama-jump-ghost')).toHaveCount(0);
   await expect(page.locator('.reader-stage')).not.toHaveAttribute('data-panorama-jump-phase');
 });

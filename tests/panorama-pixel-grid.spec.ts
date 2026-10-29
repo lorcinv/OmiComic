@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 for (const viewport of [{ width: 1920, height: 1040 }, { width: 1100, height: 820 }]) test.describe(`panorama at ${viewport.width}`, () => {
   test.use({ viewport, deviceScaleFactor: 1.25 });
@@ -19,7 +20,7 @@ for (const viewport of [{ width: 1920, height: 1040 }, { width: 1100, height: 82
     });
     await page.emulateMedia({ reducedMotion: 'reduce' }); await page.goto('/');
     await page.getByRole('button', { name: '继续上次阅读', exact: true }).click();
-    await expect(page.locator('[data-reader-page-index="8"] img')).toBeVisible();
+    await expectReaderPixels(page.locator('[data-reader-page-index="8"] img'));
     await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
     if (flow === 'vertical') await page.getByRole('button', { name: '当前横向阅读，点击切换纵向阅读', exact: true }).click();
     await expect.poll(() => page.locator('.reader-page-spread img').evaluateAll(images => images.filter(img => (img as HTMLImageElement).complete).length)).toBeGreaterThan(5);

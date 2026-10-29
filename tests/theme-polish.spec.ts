@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function setup(page: Page, theme='mist') {
   page.on('pageerror',error=>console.log('PAGE ERROR',error.message));
@@ -84,7 +85,7 @@ for(const mobile of [false,true]) test.describe(mobile?'phone theme audit':'PC t
       for(let i=0;i<categories.length;i++){await page.locator('.mobile-setting-category').nth(i).click();await audit(page,`settings: ${categories[i]}`,results);await close(page);await expect(page.locator('.mobile-setting-category')).toHaveCount(categories.length);}
       await page.getByRole('button',{name:'关闭设置',exact:true}).click();await expect(page.locator('.mobile-settings-page')).toHaveCount(0);
     }else{await page.locator('.sidebar-settings-button').click();const tabs=page.locator('.settings-window').getByRole('tab');const count=await tabs.count();for(let i=0;i<count;i++){await tabs.nth(i).click();await audit(page,`settings: ${await tabs.nth(i).innerText()}`,results);}await page.getByRole('button',{name:'关闭设置',exact:true}).click();}
-    await page.locator('.page-panel.is-visible .library-sidebar button').filter({hasText:'资源库'}).first().click();await book.getByRole('button',{name:'打开资源信息'}).click();await page.locator('.resource-detail-read-button').click();await expect(page.locator('.reader-image').first()).toBeVisible();
+    await page.locator('.page-panel.is-visible .library-sidebar button').filter({hasText:'资源库'}).first().click();await book.getByRole('button',{name:'打开资源信息'}).click();await page.locator('.resource-detail-read-button').click();await expectReaderPixels(page.locator('.reader-image').first());
     if(mobile){await page.locator('.reader-stage').tap();await page.getByRole('button',{name:'阅读设置',exact:true}).click();}
     await audit(page,'reader controls',results);await page.getByRole('button',{name:'画面调整',exact:true}).click();if(!mobile){await expect(page.getByRole('button',{name:'画面调整',exact:true})).toHaveCSS('background-color',await roleColor(page,'强调色'));}await audit(page,'reader image adjustments',results);await page.screenshot({path:`test-results/${prefix}-reader.png`});if(mobile)await page.getByRole('button',{name:'关闭面板',exact:true}).click();else await page.keyboard.press('Escape');
     writeFileSync(`test-results/${prefix}-audit.json`,JSON.stringify(results,null,2));
@@ -107,7 +108,7 @@ test.describe('phone motion and transparency',()=>{
     }
   });
   test('filmstrip is transparent without blur; every jump frame remains below reader bars',async({page})=>{
-    await setup(page);await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();await expect(page.locator('.reader-image').first()).toBeVisible();await page.locator('.reader-stage').tap();
+    await setup(page);await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();await expectReaderPixels(page.locator('.reader-image').first());await page.locator('.reader-stage').tap();
     await page.getByRole('button',{name:'阅读设置',exact:true}).click();await page.getByRole('button',{name:'开启全景连环画'}).click();await close(page);await expect(page.locator('.mobile-sheet')).toHaveCount(0);await page.emulateMedia({reducedMotion:'no-preference'});
     const rail=page.getByRole('slider',{name:'阅读进度'}),r=(await rail.boundingBox())!;
     await page.mouse.move(r.x+2,r.y+r.height/2);await page.mouse.down();await page.mouse.move(r.x+r.width*.45,r.y+r.height/2,{steps:12});await page.mouse.up();

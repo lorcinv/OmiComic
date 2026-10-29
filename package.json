@@ -1,7 +1,7 @@
 {
   "name": "omicomic",
-  "version": "1.1.49",
-  "desktopVersion": "1.1.49",
+  "version": "1.1.50",
+  "desktopVersion": "1.1.50",
   "private": true,
   "description": "OmiComic Windows 与 Android 本地漫画阅读器",
   "main": "dist-electron/main.js",

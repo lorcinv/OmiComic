@@ -1630,6 +1630,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 目录查询来源 = useMemo(() => (目录穿透搜索 || 随机模式) ? 全库索引.items : 当前目录?.items ?? [],
     [目录穿透搜索, 随机模式, 全库索引.items, 当前目录]);
   const 目录查询条件 = useMemo(() => (文件: 文件条目) => {
+    if (!['folder','image','archive','pdf','epub'].includes(文件.type)) return false;
     if ((目录穿透搜索 || 随机模式) && 文件.path === 当前根目录 && !文件.containsImages) return false;
     if (随机模式 && !(文件.type === 'folder' ? 文件.containsImages : ['archive','pdf','epub'].includes(文件.type))) return false;
     if (隐藏已加入书架资源 && 当前目录?.path === 当前根目录) {

@@ -19,6 +19,17 @@ async function loadService() {
   return { ...exports, code };
 }
 
+test('library scans exclude unsupported files before metadata reads and preserve supported types and real folders',async t=>{
+  const service=await loadService(),root=await fs.mkdtemp(path.join(os.tmpdir(),'omicomic-directory-types-'));
+  t.after(async()=>{assert.equal(path.dirname(root),path.resolve(os.tmpdir()));assert.ok(path.basename(root).startsWith('omicomic-directory-types-'));await fs.rm(root,{recursive:true,force:true});});
+  const supported=['1.JPG','2.jpeg','3.png','4.WEBP','5.bmp','6.gif','Book.CBZ','Book.zip','Book.rar','Book.cbr','Book.7z','Book.cb7','Book.PDF','Book.EPUB'];
+  const unsupported=['clip.mp4','CLIP.MP4','audio.mp3','movie.mkv','notes.txt','script.exe','metadata.json','README'];
+  await Promise.all([...supported,...unsupported].map(name=>fs.writeFile(path.join(root,name),'fixture')));await fs.mkdir(path.join(root,'Folder.mp4'));
+  const read=[];const entries=await service.scanDirectory(root,{authorizedRoot:root,stat:async file=>{read.push(path.basename(file));return fs.stat(file);}});
+  assert.deepEqual([...entries].map(x=>x.name).sort(),[...supported,'Folder.mp4'].sort());assert.ok(entries.every(x=>x.type!=='unknown'));
+  assert.ok(unsupported.every(name=>!read.includes(name)),'unsupported files do not consume stat work');assert.equal(entries.find(x=>x.name==='Folder.mp4').type,'folder');
+});
+
 test('11,000-image directory stress, natural sort, errors, root security and rapid cancellation', { timeout: 120000 }, async t => {
   const service = await loadService();
   if (global.gc) global.gc();
@@ -66,7 +77,7 @@ test('11,000-image directory stress, natural sort, errors, root security and rap
     let time = performance.now();
     const entries = await service.scanDirectory(root, { authorizedRoot: root, stat: measuredStat });
     metrics.scanMs = performance.now() - time;
-    assert.equal(entries.length, fileLinks ? 10015 : 10013);
+    assert.equal(entries.length, fileLinks ? 10013 : 10011);
     assert.equal(entries[0].name, 'chapter1');
     assert.equal(entries[9].name, 'chapter10');
     assert.ok(entries.findIndex(entry => entry.name === 'page2.png') < entries.findIndex(entry => entry.name === 'page10.png'));
@@ -75,7 +86,8 @@ test('11,000-image directory stress, natural sort, errors, root security and rap
       assert.equal(entries.find(entry => entry.name === 'broken.png').hasError, true);
       assert.equal(entries.find(entry => entry.name === 'escaped.png').hasError, true);
     }
-    assert.equal(entries.find(entry => entry.name === 'escaped-folder').hasError, true);
+    assert.equal(entries.some(entry => entry.name === 'escaped-folder'), false);
+    assert.equal(entries.some(entry => entry.name === 'notes.txt'), false);
 
     time = performance.now();
     const images = await service.listDirectoryImages(root, { authorizedRoot: root });
@@ -114,7 +126,7 @@ test('11,000-image directory stress, natural sort, errors, root security and rap
     }
     const outcomes = await Promise.all(scans);
     metrics.rapidScansMs = performance.now() - time;
-    assert.equal(outcomes[11].result.length, fileLinks ? 10015 : 10013);
+    assert.equal(outcomes[11].result.length, fileLinks ? 10013 : 10011);
     assert.ok(outcomes.slice(0, 11).every(outcome => outcome.error?.name === 'AbortError'));
     assert.ok(metrics.maxActiveStats <= service.DIRECTORY_STAT_CONCURRENCY);
 

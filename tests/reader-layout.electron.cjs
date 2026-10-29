@@ -36,7 +36,8 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
     await zoom.click(); await page.getByRole('option', { name: label, exact: true }).click();
     await expect(zoom).toContainText(label); await expect(zoom).toHaveAttribute('aria-expanded', 'false');
   };
-  const jump = async number => { const input = page.getByRole('textbox', { name: '跳转到页码' }); await input.fill(String(number)); await input.press('Enter'); await expect(page.locator(`[data-reader-page-index="${number - 1}"] img`)).toBeVisible(); };
+  const pixels = index => page.locator(`[data-reader-page-index="${index}"] :is(.reader-image,.reader-processed-image,.reader-display-raster):visible`).first();
+  const jump = async number => { const input = page.getByRole('textbox', { name: '跳转到页码' }); await input.fill(String(number)); await input.press('Enter'); await expect(pixels(number-1)).toBeVisible(); };
   const contained = async () => expect.poll(() => page.locator('.reader-stage').evaluate(stage => {
     const r = stage.getBoundingClientRect(), css = getComputedStyle(stage);
     const left = r.left + parseFloat(css.paddingLeft), top = r.top + parseFloat(css.paddingTop);
@@ -50,7 +51,7 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   await page.getByRole('button', { name: '当前单页，点击切换双页', exact: true }).click();
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained();
   await page.getByRole('button', { name: '下一页', exact: true }).click();
-  await expect(page.locator('[data-reader-page-index="2"] img')).toBeVisible();
+  await expect(pixels(2)).toBeVisible();
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained();
   await fit('适应高度');
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1); await contained();

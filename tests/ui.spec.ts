@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 async function seed(page: Page, count = 10000) {
  await page.addInitScript(installMock, {count});
 }
@@ -57,7 +58,7 @@ test('real PDF worker renders, changes page and releases its session',async({pag
    api.closeDocument=async(id:string)=>{(window as any).__closedDocuments.push(id);return {ok:true,data:null};};
  },{bytes});
  await page.goto('/');await page.getByRole('button',{name:/继续阅读 Small PDF/}).dblclick();
- const current=()=>page.locator('.reader-page-frame canvas').first();await expect(current()).toBeVisible({timeout:20000});
+ const current=()=>page.locator('.reader-page-frame canvas:not(.reader-display-raster)').first();await expectReaderPixels(current(), 20000);
  await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('2');
  await expect(page.locator('.document-reader')).toHaveCount(0);
  const hasInk=await current().evaluate((canvas:HTMLCanvasElement)=>{const pixels=canvas.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height).data;for(let i=0;i<pixels.length;i+=4){if(pixels[i+3]>0&&pixels[i]<240)return true;}return false;});
@@ -65,14 +66,14 @@ test('real PDF worker renders, changes page and releases its session',async({pag
  const pageTwoPixels=await current().evaluate((canvas:HTMLCanvasElement)=>canvas.toDataURL());
  await page.getByRole('button',{name:'下一页',exact:true}).click();
  await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('3');
- await expect(current()).toBeVisible();
+ await expectReaderPixels(current());
  await expect.poll(()=>current().evaluate((canvas:HTMLCanvasElement)=>canvas.toDataURL())).not.toBe(pageTwoPixels);
  await expect(page.locator('.reader-layout')).toHaveAttribute('aria-busy','false');
  await page.getByRole('button',{name:'当前单页，点击切换双页',exact:true}).click();
  // The current last page is the new pairing anchor, so it stays alone.
- await expect(page.locator('.reader-page-frame canvas')).toHaveCount(1);
+ await expect(page.locator('.reader-page-frame canvas:not(.reader-display-raster)')).toHaveCount(1);
  const pairStart=page.getByRole('textbox',{name:'跳转到页码'});await pairStart.fill('2');await pairStart.press('Enter');
- await expect(page.locator('.reader-page-frame canvas')).toHaveCount(2);
+ await expect(page.locator('.reader-page-frame canvas:not(.reader-display-raster)')).toHaveCount(2);
  await page.getByRole('combobox', { name: '缩放方式' }).click(); await page.getByRole('option', { name: '适应宽度', exact: true }).click();
  await expect(page.locator('.reader-stage')).toHaveClass(/zoom-stage-fit-width/);
  await page.getByRole('button',{name:'开启全景连环画',exact:true}).click();

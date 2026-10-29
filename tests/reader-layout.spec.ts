@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function open(page: Page, sizes = [[600, 900], [600, 900], [1200, 1000], [1200, 1000], [6000, 400], [400, 6000], [1200, 400]], resumeIndex = 0) {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -24,7 +25,7 @@ async function open(page: Page, sizes = [[600, 900], [600, 900], [1200, 1000], [
   await page.goto('/');
   await page.getByRole('button', { name: '继续上次阅读', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toBeEnabled();
-  await expect(page.locator('.reader-page-spread img').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-page-spread img').first());
 }
 
 async function fit(page: Page, label: string) {
@@ -37,7 +38,7 @@ async function fit(page: Page, label: string) {
 async function jump(page: Page, value: number) {
   const input = page.getByRole('textbox', { name: '跳转到页码' });
   await input.fill(String(value)); await input.press('Enter');
-  await expect(page.locator(`[data-reader-page-index="${value - 1}"] img`)).toBeVisible();
+  await expectReaderPixels(page.locator(`[data-reader-page-index="${value - 1}"] img`));
 }
 
 async function contained(page: Page, centered = true) {
@@ -98,13 +99,13 @@ test('double pages fit the viewport, fall back for broad pairs and respond to re
   await page.setViewportSize({ width: 1440, height: 960 });
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained(page);
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('[data-reader-page-index="2"] img')).toBeVisible();
+  await expectReaderPixels(page.locator('[data-reader-page-index="2"] img'));
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained(page);
   await fit(page, '适应高度');
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1); await contained(page);
   await page.keyboard.press('Tab');
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('[data-reader-page-index="3"] img')).toBeVisible(); await contained(page);
+  await expectReaderPixels(page.locator('[data-reader-page-index="3"] img')); await contained(page);
   await page.screenshot({ path: 'test-results/reader-wide-pair-fallback.png' });
 });
 
@@ -134,7 +135,7 @@ test('panorama uses its cross axis, clears old scroll, and restores the ordinary
 test('restoring the final page keeps it visible inside its fitted pair', async ({ page }) => {
   await open(page, [[1200, 1000], [1200, 1000]], 1);
   await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2);
-  await expect(page.locator('[data-reader-page-index="1"] img')).toBeVisible();
+  await expectReaderPixels(page.locator('[data-reader-page-index="1"] img'));
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
   await contained(page);
 });

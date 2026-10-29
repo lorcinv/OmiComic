@@ -16,11 +16,13 @@ test('native catalog recurses once, identifies image books, and refreshes cached
   await fs.writeFile(path.join(deep, title), 'fixture');
   await fs.writeFile(path.join(deep, '1.png'), 'fixture');
   await fs.writeFile(path.join(deep, 'ignore.txt'), 'fixture');
+  await fs.writeFile(path.join(deep, 'clip.mp4'), 'fixture');
   const first = await scanLibraryCatalog(root, root);
   assert.ok(first.items.some(item => item.name === title && item.path.length > 260));
   assert.equal(first.items.find(item => item.path === deep).containsImages, true);
   assert.equal(first.items.filter(item => item.type === 'image').length, 0, 'image pages belong to one image-folder record');
   assert.equal(first.items.some(item => item.name === 'ignore.txt'), false);
+  assert.equal(first.items.some(item => item.name === 'clip.mp4'), false);
   await fs.writeFile(path.join(root, 'new.pdf'), 'fixture');
   assert.equal((await scanLibraryCatalog(root, root)).items.some(item => item.name === 'new.pdf'), false);
   assert.equal((await scanLibraryCatalog(root, root, true)).items.some(item => item.name === 'new.pdf'), true);

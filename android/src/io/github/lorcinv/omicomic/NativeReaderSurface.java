@@ -59,6 +59,14 @@ final class NativeReaderSurface extends View {
   private long rasterDiskHits;
   private long rasterSourceSkips;
   private long refinements,refinementFailures,refinementCancellations;
+  private final ExecutorService displayWorker=Executors.newSingleThreadExecutor(work->new Thread(()->{android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);work.run();},"Omi-display-sampling"));
+  private final LinkedHashMap<String,Bitmap> displayRasters=new LinkedHashMap<>(8,.75f,true);
+  private final LinkedHashMap<String,DisplayRequest> displayPending=new LinkedHashMap<>();
+  private final Set<String> visibleDisplay=new HashSet<>();
+  private final LinkedHashSet<String> displayFailed=new LinkedHashSet<>();
+  private DisplayRequest displayActive;
+  private long displayBytes,displayBuilds,displayHits,displayBuildMs,displayBackoffUntil,tileFilterBuilds;
+  private static final class DisplayRequest {String key,url;Bitmap source;int width,height;long generation;volatile boolean cancelled;}
   private List<String> previewRasterUrls=new ArrayList<>();
 
   private static final class Raster {
@@ -69,7 +77,7 @@ final class NativeReaderSurface extends View {
   private static final class Slot {String url;RectF rect,clip;float alpha;Raster raster;}
   private static final class Frame {RectF clip;List<Slot> slots=new ArrayList<>();}
   private static final class Tile {Bitmap bitmap;Rect source;}
-  private static final class TilePlan {Slot slot;int sample;List<Rect> regions=new ArrayList<>();List<String> keys=new ArrayList<>();long bytes;}
+  private static final class TilePlan {Slot slot;int sample,filterBucket;List<Rect> regions=new ArrayList<>();List<String> keys=new ArrayList<>();long bytes;}
   private static final class PendingRaster {
     volatile long generation,seek;volatile String key="";final CompletableFuture<Raster> future=new CompletableFuture<>();
     PendingRaster(long generation,long seek){this.generation=generation;this.seek=seek;}
@@ -96,6 +104,7 @@ final class NativeReaderSurface extends View {
   void configure(JSONObject args){
     long next=args.optLong("session",session);
     if(next!=session){
+      clearDisplaySampling();
       current=null;pendingFrame=null;queuedGeometry=null;frameSequence=0;
       synchronized(cacheLock){
         session=next;generation++;seekGeneration=0;workingKeys.clear();pageKeys.clear();pinned.clear();visibleTiles.clear();failedTiles.clear();tilesPending.clear();tiles.clear();tileBytes=0;previewRestoring.clear();previewRestoreFailed.clear();
@@ -118,7 +127,7 @@ final class NativeReaderSurface extends View {
     boolean wasActive=active;active=args.optBoolean("active");
     boolean wasReading=readerOpen;readerOpen=args.optBoolean("reading",active);
     synchronized(cacheLock){if(readerOpen&&!wasReading)library.beginReaderSession();else if(!readerOpen&&wasReading)library.endReaderSession();}
-    if(!active){current=null;pendingFrame=null;queuedGeometry=null;previews.clear();synchronized(cacheLock){if(wasActive){generation++;warmGeneration++;cache.clear();previewCache.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;adjusted.clear();adjusting.clear();adjustedBytes=0;}workingKeys.clear();pinned.clear();visibleTiles.clear();previewRestoring.clear();previewRestoreFailed.clear();}}
+    if(!active){clearDisplaySampling();current=null;pendingFrame=null;queuedGeometry=null;previews.clear();synchronized(cacheLock){if(wasActive){generation++;warmGeneration++;cache.clear();previewCache.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;adjusted.clear();adjusting.clear();adjustedBytes=0;}workingKeys.clear();pinned.clear();visibleTiles.clear();previewRestoring.clear();previewRestoreFailed.clear();}}
     synchronized(cacheLock){trim();}invalidate();
   }
   void seek(JSONObject args){
@@ -404,7 +413,7 @@ final class NativeReaderSurface extends View {
     List<Raster> candidates=new ArrayList<>(cache.values());
     candidates.sort((a,b)->Integer.compare(workingKeys.getOrDefault(b.request==null?"":b.request.key,Integer.MAX_VALUE),workingKeys.getOrDefault(a.request==null?"":a.request.key,Integer.MAX_VALUE)));
     long now=SystemClock.uptimeMillis();
-    for(Raster raster:candidates){if(bytes<=budget)break;if(pinned.contains(raster.url)||(cache.size()<=2&&now-raster.created<1500))continue;cache.remove(raster.url);bytes-=raster.bitmap.getAllocationByteCount();}
+    for(Raster raster:candidates){if(bytes+displayBytes<=budget)break;if(pinned.contains(raster.url)||(cache.size()<=2&&now-raster.created<1500))continue;cache.remove(raster.url);bytes-=raster.bitmap.getAllocationByteCount();}
     Iterator<Map.Entry<String,Tile>> ti=tiles.entrySet().iterator();while(tileBytes>tileBudget()&&ti.hasNext()){Map.Entry<String,Tile> tile=ti.next();if(visibleTiles.contains(tile.getKey()))continue;tileBytes-=tile.getValue().bitmap.getAllocationByteCount();ti.remove();}
   }
   private long tileBudget(){return Math.min(24L*1024*1024,Math.max(4L*1024*1024,budget/4));}
@@ -455,14 +464,63 @@ final class NativeReaderSurface extends View {
     for(Slot slot:frame.slots){TilePlan plan=tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size()));plans.add(plan);if(plan!=null)wanted.addAll(plan.keys);if(slot.raster!=null)visibleAdjustments.add(slot.raster.url+":"+slot.raster.sample+effectsKey);}
     for(String key:wanted)visibleAdjustments.add(key+effectsKey);
     synchronized(cacheLock){visibleTiles.clear();visibleTiles.addAll(wanted);trim();}
+    Set<String> displayed=new HashSet<>();
     canvas.save();canvas.clipRect(frame.clip);
     for(int i=0;i<frame.slots.size();i++){Slot slot=frame.slots.get(i);
       Raster raster=slot.raster;if(raster==null)continue;
       paint.setAlpha(Math.round(slot.alpha*255));
-      Bitmap base=adjust(raster.url+":"+raster.sample,raster.bitmap);canvas.drawBitmap(base,null,slot.rect,paint);
+      Bitmap base=adjust(raster.url+":"+raster.sample,raster.bitmap);drawDisplayRaster(canvas,base,slot,displayed);
       drawTiles(canvas,plans.get(i));
     }
     canvas.restore();
+    synchronized(cacheLock){visibleDisplay.clear();visibleDisplay.addAll(displayed);trimDisplayRasters();}
+  }
+  private void drawDisplayRaster(Canvas canvas,Bitmap source,Slot slot,Set<String> displayed){
+    int width=Math.max(1,Math.round(slot.rect.width())),height=Math.max(1,Math.round(slot.rect.height()));
+    if(width>=source.getWidth()||height>=source.getHeight()||(long)width*height>4000000L||SystemClock.uptimeMillis()<displayBackoffUntil){canvas.drawBitmap(source,null,slot.rect,paint);return;}
+    String key=slot.url+":"+source.getGenerationId()+":"+width+":"+height;displayed.add(key);
+    Bitmap ready;synchronized(cacheLock){ready=displayRasters.get(key);}
+    if(ready!=null){
+      displayHits++;float left=Math.round(slot.rect.left),top=Math.round(slot.rect.top);
+      canvas.drawBitmap(ready,null,new RectF(left,top,left+width,top+height),paint);return;
+    }
+    canvas.drawBitmap(source,null,slot.rect,paint);
+    if(displayFailed.contains(key)||(displayActive!=null&&!displayActive.cancelled&&displayActive.key.equals(key)))return;
+    DisplayRequest old=displayPending.get(slot.url);if(old!=null&&old.key.equals(key))return;
+    if(old!=null)old.cancelled=true;
+    if(displayActive!=null&&displayActive.url.equals(slot.url))displayActive.cancelled=true;
+    DisplayRequest request=new DisplayRequest();request.key=key;request.url=slot.url;request.source=source;request.width=width;request.height=height;request.generation=generation;
+    displayPending.put(slot.url,request);
+    while(displayPending.size()>4){String first=displayPending.keySet().iterator().next();displayPending.remove(first).cancelled=true;}
+    nextDisplaySampling();
+  }
+  private void nextDisplaySampling(){
+    if(displayActive!=null||displayPending.isEmpty()||stopped)return;
+    String first=displayPending.keySet().iterator().next();final DisplayRequest request=displayPending.remove(first);displayActive=request;
+    displayWorker.execute(()->{
+      Bitmap result=null;boolean failed=false;long started=SystemClock.uptimeMillis();
+      try{result=DisplayResampler.resize(request.source,request.width,request.height,()->{if(stopped||request.cancelled||request.generation!=generation||Thread.currentThread().isInterrupted())throw new IOException("Display sampling cancelled");});}
+      catch(IOException|RuntimeException ignored){failed=true;}catch(OutOfMemoryError ignored){failed=true;}
+      final Bitmap sampled=result;final boolean error=failed;final long elapsed=SystemClock.uptimeMillis()-started;
+      post(()->{
+        if(displayActive==request)displayActive=null;
+        if(!stopped&&active&&!request.cancelled&&request.generation==generation){
+          if(sampled!=null){synchronized(cacheLock){Bitmap prior=displayRasters.put(request.key,sampled);displayBytes+=sampled.getAllocationByteCount()-(prior==null?0:prior.getAllocationByteCount());displayBuilds++;displayBuildMs+=elapsed;trimDisplayRasters();trim();}invalidate();}
+          else if(error){displayFailed.add(request.key);while(displayFailed.size()>64)displayFailed.remove(displayFailed.iterator().next());}
+        }else if(sampled!=null)sampled.recycle();
+        nextDisplaySampling();
+      });
+    });
+  }
+  private void trimDisplayRasters(){
+    long limit=Math.min(24L*1024*1024,Math.max(4L*1024*1024,budget/4));
+    Iterator<Map.Entry<String,Bitmap>> old=displayRasters.entrySet().iterator();
+    while(displayBytes>limit&&old.hasNext()){Map.Entry<String,Bitmap> e=old.next();if(visibleDisplay.contains(e.getKey()))continue;displayBytes-=e.getValue().getAllocationByteCount();old.remove();}
+  }
+  private void clearDisplaySampling(){
+    if(displayActive!=null)displayActive.cancelled=true;
+    for(DisplayRequest request:displayPending.values())request.cancelled=true;
+    displayPending.clear();displayFailed.clear();synchronized(cacheLock){displayRasters.clear();visibleDisplay.clear();displayBytes=0;}
   }
   private TilePlan tilePlan(Slot slot,RectF clip,long allocation){
     Raster raster=slot.raster;
@@ -475,13 +533,15 @@ final class NativeReaderSurface extends View {
     RectF visible=new RectF(slot.rect);if(!visible.intersect(clip))return null;
     while(sample<raster.sample){
     TilePlan plan=new TilePlan();plan.slot=slot;plan.sample=sample;
+    float tileRatio=Math.min(slot.rect.width()/raster.width,slot.rect.height()/raster.height)*sample;
+    plan.filterBucket=tileRatio>=.98f?16:Math.max(8,(int)Math.floor(tileRatio*16));
     int unit=512*sample;
     int left=Math.max(0,(int)((visible.left-slot.rect.left)/slot.rect.width()*raster.width)/unit*unit);
     int top=Math.max(0,(int)((visible.top-slot.rect.top)/slot.rect.height()*raster.height)/unit*unit);
     int right=Math.min(raster.width,(int)Math.ceil((visible.right-slot.rect.left)/slot.rect.width()*raster.width));
     int bottom=Math.min(raster.height,(int)Math.ceil((visible.bottom-slot.rect.top)/slot.rect.height()*raster.height));
     for(int y=top;y<bottom;y+=unit)for(int x=left;x<right;x+=unit){
-      Rect region=new Rect(x,y,Math.min(raster.width,x+unit),Math.min(raster.height,y+unit));plan.regions.add(region);plan.keys.add(raster.url+":"+sample+":"+x+":"+y);
+      Rect region=new Rect(x,y,Math.min(raster.width,x+unit),Math.min(raster.height,y+unit));plan.regions.add(region);plan.keys.add(raster.url+":"+sample+":"+x+":"+y+":"+plan.filterBucket);
       plan.bytes+=(long)((region.width()+sample-1)/sample)*((region.height()+sample-1)/sample)*4;
     }
     if(plan.bytes<=allocation)return plan;
@@ -501,7 +561,7 @@ final class NativeReaderSurface extends View {
       Rect region=plan.regions.get(i);RectF dst=new RectF(slot.rect.left+(float)region.left/raster.width*slot.rect.width(),slot.rect.top+(float)region.top/raster.height*slot.rect.height(),slot.rect.left+(float)region.right/raster.width*slot.rect.width(),slot.rect.top+(float)region.bottom/raster.height*slot.rect.height());canvas.drawBitmap(processed.get(i),null,dst,paint);
     }
     if(missing.isEmpty())return;
-    final int resolution=plan.sample;final long expected=generation;
+    final int resolution=plan.sample,filterBucket=plan.filterBucket;final long expected=generation;
     prefetch.execute(2,()->{
       BitmapRegionDecoder decoder=null;
       List<Tile> decoded=new ArrayList<>();List<String> decodedKeys=new ArrayList<>();
@@ -511,15 +571,24 @@ final class NativeReaderSurface extends View {
         boolean png=data.length>8&&data[0]==(byte)137&&data[1]==80;
         for(int i=0;i<missing.size();i++){
           synchronized(cacheLock){if(stopped||expected!=generation||!visibleTiles.contains(keys.get(i)))break;}
-          RectF raw=new RectF(missing.get(i));raster.toOriginal.mapRect(raw);Rect region=new Rect();raw.roundOut(region);region.intersect(0,0,decoder.getWidth(),decoder.getHeight());
-          Bitmap bitmap=ReaderBitmapDecoder.region(decoder,region,resolution,png,()->checkGeneration(expected));if(bitmap==null)continue;bitmap=orient(bitmap,raster.orientation);bitmap.setHasMipMap(true);bitmap.prepareToDraw();Tile tile=new Tile();tile.bitmap=bitmap;tile.source=missing.get(i);
+          Rect content=missing.get(i),coverage=new Rect(content);
+          if(filterBucket<16){int halo=8*resolution;coverage.inset(-halo,-halo);coverage.intersect(0,0,raster.width,raster.height);}
+          RectF raw=new RectF(coverage);raster.toOriginal.mapRect(raw);Rect region=new Rect();raw.roundOut(region);region.intersect(0,0,decoder.getWidth(),decoder.getHeight());
+          Bitmap bitmap=ReaderBitmapDecoder.region(decoder,region,resolution,png,()->checkGeneration(expected));if(bitmap==null)continue;bitmap=orient(bitmap,raster.orientation);
+          if(filterBucket<16){
+            Bitmap filtered=DisplayResampler.prefilter(bitmap,filterBucket/16.,()->checkGeneration(expected));bitmap.recycle();
+            int left=Math.round((content.left-coverage.left)/(float)resolution),top=Math.round((content.top-coverage.top)/(float)resolution);
+            Bitmap cropped=Bitmap.createBitmap(filtered,left,top,Math.min((content.width()+resolution-1)/resolution,filtered.getWidth()-left),Math.min((content.height()+resolution-1)/resolution,filtered.getHeight()-top));
+            if(cropped!=filtered)filtered.recycle();bitmap=cropped;
+          }
+          bitmap.setHasMipMap(true);bitmap.prepareToDraw();Tile tile=new Tile();tile.bitmap=bitmap;tile.source=content;
           decoded.add(tile);decodedKeys.add(keys.get(i));
         }
         // Publish a visible region together. Publishing each tile separately
         // made the upper part repeatedly sharpen while the rest was unchanged.
         synchronized(cacheLock){
           if(stopped||expected!=generation)return;
-          for(int i=0;i<decoded.size();i++){if(!visibleTiles.contains(decodedKeys.get(i)))continue;Tile tile=decoded.get(i),old=tiles.put(decodedKeys.get(i),tile);tileBytes+=tile.bitmap.getAllocationByteCount()-(old==null?0:old.bitmap.getAllocationByteCount());tileDecodes++;}
+          for(int i=0;i<decoded.size();i++){if(!visibleTiles.contains(decodedKeys.get(i)))continue;Tile tile=decoded.get(i),old=tiles.put(decodedKeys.get(i),tile);tileBytes+=tile.bitmap.getAllocationByteCount()-(old==null?0:old.bitmap.getAllocationByteCount());tileDecodes++;if(filterBucket<16)tileFilterBuilds++;}
           trim();
         }
         postInvalidateOnAnimation();
@@ -585,7 +654,7 @@ final class NativeReaderSurface extends View {
     }
     return source;
   }
-  void trimMemory(){synchronized(cacheLock){Iterator<Map.Entry<String,Raster>> it=cache.entrySet().iterator();while(it.hasNext()){Map.Entry<String,Raster> e=it.next();if(!pinned.contains(e.getKey())){bytes-=e.getValue().bitmap.getAllocationByteCount();it.remove();}}tiles.clear();tileBytes=0;}adjusted.clear();adjustedBytes=0;}
-  JSONObject stats()throws JSONException{synchronized(cacheLock){return new JSONObject().put("active",active).put("drawnFrames",drawnFrames).put("emptyFrames",emptyFrames).put("retainedFrames",retainedFrames).put("bitmapDecodes",bitmapDecodes).put("bitmapHits",bitmapHits).put("tileDecodes",tileDecodes).put("decodeMs",decodeMs).put("readMs",readMs).put("bitmapBytes",bytes).put("tileBytes",tileBytes).put("budget",budget).put("visiblePages",current==null?0:current.slots.size()).put("previewHits",previewHits).put("sharedPreviewDraws",sharedPreviewDraws).put("rasterDiskHits",rasterDiskHits).put("rasterSourceSkips",rasterSourceSkips).put("refinements",refinements).put("refinementFailures",refinementFailures).put("refinementCancellations",refinementCancellations).put("previewRestores",previewRestores).put("previewSlots",previews.size()).put("previewRasterUrls",new JSONArray(previewRasterUrls)).put("tileBudget",tileBudget()).put("cancelledLoads",cancelledLoads).put("retiredBytes",retiredBytes).put("coalescedFrames",coalescedFrames).put("retainedLoads",retainedLoads).put("clearPrefetches",clearPrefetches).put("rasterWriteCount",rasterWriteCount).put("deferredRasterWrites",deferredRasterWrites).put("pendingRasterWrites",pendingWrites.size());}}
-  void close(){synchronized(cacheLock){stopped=true;generation++;warmGeneration++;pendingWrites.clear();workingKeys.clear();pageKeys.clear();}library.setReaderPreviewSource(null);foreground.getQueue().clear();prefetch.getQueue().clear();foreground.shutdownNow();prefetch.shutdownNow();rasterWrites.shutdownNow();current=null;pendingFrame=null;queuedGeometry=null;synchronized(cacheLock){cache.clear();previewCache.clear();previewRestoring.clear();previewRestoreFailed.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;}adjusted.clear();}
+  void trimMemory(){clearDisplaySampling();displayBackoffUntil=SystemClock.uptimeMillis()+2000;synchronized(cacheLock){Iterator<Map.Entry<String,Raster>> it=cache.entrySet().iterator();while(it.hasNext()){Map.Entry<String,Raster> e=it.next();if(!pinned.contains(e.getKey())){bytes-=e.getValue().bitmap.getAllocationByteCount();it.remove();}}tiles.clear();tileBytes=0;}adjusted.clear();adjustedBytes=0;}
+  JSONObject stats()throws JSONException{synchronized(cacheLock){return new JSONObject().put("active",active).put("drawnFrames",drawnFrames).put("emptyFrames",emptyFrames).put("retainedFrames",retainedFrames).put("bitmapDecodes",bitmapDecodes).put("bitmapHits",bitmapHits).put("tileDecodes",tileDecodes).put("decodeMs",decodeMs).put("readMs",readMs).put("bitmapBytes",bytes).put("tileBytes",tileBytes).put("displayRasterBytes",displayBytes).put("displayRasterBuilds",displayBuilds).put("displayRasterHits",displayHits).put("displayRasterBuildMs",displayBuildMs).put("tileFilterBuilds",tileFilterBuilds).put("budget",budget).put("visiblePages",current==null?0:current.slots.size()).put("previewHits",previewHits).put("sharedPreviewDraws",sharedPreviewDraws).put("rasterDiskHits",rasterDiskHits).put("rasterSourceSkips",rasterSourceSkips).put("refinements",refinements).put("refinementFailures",refinementFailures).put("refinementCancellations",refinementCancellations).put("previewRestores",previewRestores).put("previewSlots",previews.size()).put("previewRasterUrls",new JSONArray(previewRasterUrls)).put("tileBudget",tileBudget()).put("cancelledLoads",cancelledLoads).put("retiredBytes",retiredBytes).put("coalescedFrames",coalescedFrames).put("retainedLoads",retainedLoads).put("clearPrefetches",clearPrefetches).put("rasterWriteCount",rasterWriteCount).put("deferredRasterWrites",deferredRasterWrites).put("pendingRasterWrites",pendingWrites.size());}}
+  void close(){clearDisplaySampling();displayWorker.shutdownNow();synchronized(cacheLock){stopped=true;generation++;warmGeneration++;pendingWrites.clear();workingKeys.clear();pageKeys.clear();}library.setReaderPreviewSource(null);foreground.getQueue().clear();prefetch.getQueue().clear();foreground.shutdownNow();prefetch.shutdownNow();rasterWrites.shutdownNow();current=null;pendingFrame=null;queuedGeometry=null;synchronized(cacheLock){cache.clear();previewCache.clear();previewRestoring.clear();previewRestoreFailed.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;}adjusted.clear();}
 }

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 test.beforeEach(async ({page}) => {
   await page.addInitScript(installMock,{count:12});
@@ -13,7 +14,7 @@ test.beforeEach(async ({page}) => {
 test('PC ctrl-wheel zoom, left drag, reset and live seek bubble',async ({page}) => {
   await page.goto('/');await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
   const stage=page.locator('.reader-stage'), spread=page.locator('.reader-page-spread');
-  await expect(spread.locator('img')).toBeVisible();
+  await expectReaderPixels(spread.locator('img'));
   await stage.hover();await page.keyboard.down('Control');await page.mouse.wheel(0,-600);await page.keyboard.up('Control');
   await expect(page.getByRole('button',{name:'重置大小'})).toBeVisible();
   expect(await spread.evaluate(el=>Number(getComputedStyle(el).scale))).toBeGreaterThan(2);

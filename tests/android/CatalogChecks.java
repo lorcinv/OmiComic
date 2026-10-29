@@ -30,12 +30,16 @@ final class CatalogChecks {
     control("reset");String root=(String)invoke("addGrant",new Class<?>[]{Uri.class,boolean.class},DocumentsContract.buildTreeDocumentUri(CatalogProvider.AUTHORITY,"root"),true);
     ExecutorService worker=Executors.newSingleThreadExecutor();
     try{
+      JSONObject visible=list(root);check(visible.getJSONArray("items").length()==3,"Unsupported files leaked into directory");
+      check(((java.util.List<?>)((Map<?,?>)field("directories")).get(root)).size()==3,"Unsupported files entered the directory cache");clearHot();
+      check(list(root).getJSONArray("items").length()==3,"Unsupported files returned from persisted directory index");
       String deep=root+"/Branch/Deep";list(deep);clearHot();
       int before=control("state").getInt("children");long beforeHits=(Long)field("directoryIndexHits");list(deep);
       check(control("state").getInt("children")==before&&(Long)field("directoryIndexHits")>beforeHits,"Version key differs between normal listing and persisted snapshot");
       list(root+"/Zero");clearHot();control("extra");before=control("state").getInt("children");JSONObject zero=list(root+"/Zero");
       check(zero.getJSONArray("items").length()==2&&control("state").getInt("children")>before,"Zero mtime reused an unverifiable snapshot");
       SystemClock.sleep(300);JSONObject full=request("scanLibrary",new JSONObject().put("path",root).put("refresh",true));check(full.getInt("skipped")==0,"Initial fixture scan failed");
+      JSONArray supported=full.getJSONArray("items");for(int i=0;i<supported.length();i++){String name=supported.getJSONObject(i).getString("name");check(!name.endsWith(".mp4")&&!name.endsWith(".mp3")&&!name.equals("notes.txt")&&!name.equals("README"),"Unsupported files leaked into catalog");}
       clearHot();before=control("state").getInt("children");long beforeUri=(Long)field("uriIndexHits");JSONObject pages=request("getResourcePages",new JSONObject().put("path",deep+"/Stable.cbr"));
       check(pages.getInt("total")>0&&control("state").getInt("children")==before&&(Long)field("uriIndexHits")>beforeUri,"Deep open did not reuse catalog URI");
       SystemClock.sleep(300);control("slow");
@@ -52,7 +56,7 @@ final class CatalogChecks {
       invoke("pauseCatalog",new Class<?>[]{boolean.class},false);SystemClock.sleep(300);JSONObject resumed=request("scanLibrary",new JSONObject().put("path",root).put("refresh",true).put("incremental",true));check(resumed.getJSONArray("items").length()>0,"Resume did not continue pending work");
       clearHot();resolver.call(endpoint,"deny","true",null);boolean rejected=false;try{list(root);}catch(SecurityException expected){rejected=true;}check(rejected,"Provider permission failure was hidden by disk cache");resolver.call(endpoint,"deny","false",null);
       ((SharedPreferences)field("grants")).edit().remove(root).commit();rejected=false;try{request("scanLibrary",new JSONObject().put("path",root).put("incremental",true));}catch(SecurityException expected){rejected=true;}check(rejected,"Removed grant still admitted cached scan");
-      return new JSONObject().put("directoryDiskVersionShared",true).put("zeroMtimeFreshChildren",zero.getJSONArray("items").length()).put("deepOpenUsedCatalogUri",true).put("slowQueryCanceled",true).put("providerCancellations",control("state").getInt("canceled")).put("foregroundRenameMs",renameMs).put("renamedInventoryCoherent",true).put("pauseStopsQueries",true).put("resumeContinues",true).put("providerDenialRejected",true).put("removedGrantRejected",true);
+      return new JSONObject().put("unsupportedFilesHidden",true).put("directoryDiskVersionShared",true).put("zeroMtimeFreshChildren",zero.getJSONArray("items").length()).put("deepOpenUsedCatalogUri",true).put("slowQueryCanceled",true).put("providerCancellations",control("state").getInt("canceled")).put("foregroundRenameMs",renameMs).put("renamedInventoryCoherent",true).put("pauseStopsQueries",true).put("resumeContinues",true).put("providerDenialRejected",true).put("removedGrantRejected",true);
     }finally{control("release");resolver.call(endpoint,"deny","false",null);invoke("pauseCatalog",new Class<?>[]{boolean.class},false);((SharedPreferences)field("grants")).edit().remove(root).commit();worker.shutdownNow();}
   }
 }

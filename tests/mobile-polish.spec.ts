@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function setup(page:Page,count=12) {
   await page.addInitScript(installMock,{count});
@@ -71,7 +72,7 @@ test.describe('phone polish',()=>{
   });
   test('compact rail, fit window, retained virtual filmstrip and direct panorama scrubbing',async({page})=>{
     await setup(page);await page.evaluate(()=>{document.documentElement.dataset.platform='android'; window.omicomic.getReadingProgress=async()=>({ok:true,data:{readerViewState:{fitMode:'fit-height',pageMode:'single',flow:'horizontal',panorama:false},currentPageIndex:0} as any});});await library(page);await page.locator('.mobile-resource-card').filter({has:page.getByText('Book',{exact:true})}).click();
-    await expect(page.locator('.reader-page-spread .reader-page-frame:not([aria-hidden]) img')).toBeVisible();await page.locator('.reader-stage').tap();await page.getByRole('button',{name:'阅读设置',exact:true}).click();
+    await expectReaderPixels(page.locator('.reader-page-spread .reader-page-frame:not([aria-hidden]) img'));await page.locator('.reader-stage').tap();await page.getByRole('button',{name:'阅读设置',exact:true}).click();
     await expect(page.getByRole('combobox',{name:'缩放方式'})).toContainText('适应窗口');
     await expect(page.getByRole('slider',{name:'全景音量键翻页间隔'})).toHaveValue('1');await back(page);
     expect((await page.locator('.reader-footer').boundingBox())!.height).toBe((await page.locator('.reader-toolbar').boundingBox())!.height);
@@ -90,7 +91,7 @@ test.describe('phone polish',()=>{
 });
 
 test('PC bubble uses page ordinals and appears near the thumb only',async({page})=>{
-  await setup(page);await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();await expect(page.locator('.reader-page-spread .reader-page-frame:not([aria-hidden]) img')).toBeVisible();
+  await setup(page);await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();await expectReaderPixels(page.locator('.reader-page-spread .reader-page-frame:not([aria-hidden]) img'));
   const rail=page.getByRole('slider',{name:'阅读进度'}),r=(await rail.boundingBox())!;
   await page.mouse.move(r.x+r.width*.6,r.y+r.height/2);await expect(page.locator('.reader-progress-label')).toHaveCount(0);
   await page.mouse.move(r.x+2,r.y+r.height/2);await expect(page.locator('.reader-progress-label')).toHaveText('1');
@@ -104,7 +105,7 @@ for(const mobile of [false,true]) test.describe(mobile?'phone panorama gestures'
   test.use({viewport:mobile?{width:390,height:844}:{width:1440,height:960},isMobile:mobile,hasTouch:mobile});
   test('rail drag is continuous while rail click alone creates the jump animation',async({page})=>{
     await setup(page);await page.emulateMedia({reducedMotion:'no-preference'});await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
-    await expect(page.locator('.reader-page-spread .reader-page-frame:not([aria-hidden]) img')).toBeVisible();
+    await expectReaderPixels(page.locator('.reader-page-spread .reader-page-frame:not([aria-hidden]) img'));
     if(mobile){await page.locator('.reader-stage').tap();await page.getByRole('button',{name:'阅读设置',exact:true}).click();}
     await page.getByRole('button',{name:'开启全景连环画'}).click();if(mobile){await back(page);await expect(page.locator('.mobile-sheet')).toHaveCount(0);}
     await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);

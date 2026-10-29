@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function setup(page:Page,count=140) {
   await page.emulateMedia({reducedMotion:'reduce'});
@@ -85,20 +86,20 @@ test('desktop prefetch survives adjacent turns and drops distant work',async({pa
     const api=(window as any).omicomic,read=api.getPageImage;(window as any).__pageReads=[];
     api.getPageImage=async(input:any)=>{if(!input.preview){(window as any).__pageReads.push(input.sourcePath);await new Promise(resolve=>setTimeout(resolve,160));}return read(input);};
   });
-  await page.locator('.resource-card').first().dblclick();await expect(page.locator('.reader-image').first()).toBeVisible();
+  await page.locator('.resource-card').first().dblclick();await expectReaderPixels(page.locator('.reader-image').first());
   await expect.poll(()=>page.evaluate(()=>(window as any).__pageReads.length)).toBeGreaterThan(3);
   for(let i=0;i<6;i++){await page.getByRole('button',{name:'下一页',exact:true}).click();await page.waitForTimeout(45);}
-  await expect(page.locator('.reader-page-jump input')).toHaveValue('7');await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expect(page.locator('.reader-page-jump input')).toHaveValue('7');await expectReaderPixels(page.locator('.reader-image').first());
   await page.getByRole('button',{name:'上一页',exact:true}).click();await expect(page.locator('.reader-page-jump input')).toHaveValue('6');
   const duplicate=await page.evaluate(()=>{const list=(window as any).__pageReads;return list.filter((item:string,i:number)=>list.indexOf(item)!==i);});expect(duplicate).toEqual([]);
   await page.locator('.reader-page-jump input').fill('110');await page.locator('.reader-page-jump input').press('Enter');
-  await expect(page.locator('.reader-page-jump input')).toHaveValue('110');await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expect(page.locator('.reader-page-jump input')).toHaveValue('110');await expectReaderPixels(page.locator('.reader-image').first());
 });
 
 test('normal reader auto-hide keeps controls during held input and restores at screen edges',async({page})=>{
   await setup(page,8);
   await page.evaluate(async()=>{await window.omicomic.updateSettings({desktopReaderAutoHide:true,immersiveAutoHideDelay:500});});
-  await page.locator('.resource-card').first().dblclick();await expect(page.locator('.reader-image').first()).toBeVisible();
+  await page.locator('.resource-card').first().dblclick();await expectReaderPixels(page.locator('.reader-image').first());
   await expect(page.locator('.reader-layout')).toHaveClass(/is-auto-hide/);
   await page.mouse.move(800,400);await expect(page.locator('.reader-layout')).toHaveClass(/is-top-ui-hidden/);
   await page.mouse.move(800,5);await expect(page.locator('.reader-layout')).not.toHaveClass(/is-top-ui-hidden/);

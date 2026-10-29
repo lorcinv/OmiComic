@@ -1,5 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import {installMock} from './mock';
+import {expectReaderPixels} from './readerPixels';
 test.use({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
 async function setup(page:Page,count=150){
   await page.addInitScript(installMock,{count});
@@ -27,19 +28,19 @@ test('phone keeps the decoded old page while the next DOM image decodes, then sw
     const original=HTMLImageElement.prototype.decode;
     HTMLImageElement.prototype.decode=async function(){await original.call(this);if(this.classList.contains('reader-image')){if(this.alt==='page0.png')(window as any).__initialDecoded=true;if(this.alt==='page1.png')await new Promise<void>(resolve=>(window as any).__releasePage=resolve);}};
   });
-  await book(page).click();const old=page.locator('.reader-page-frame[data-reader-page-index="0"]');await expect(old.locator('img')).toBeVisible();
+  await book(page).click();const old=page.locator('.reader-page-frame[data-reader-page-index="0"]');await expectReaderPixels(old.locator('img'));
   await expect.poll(()=>page.evaluate(()=>(window as any).__initialDecoded)).toBe(true);
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
   await page.keyboard.press('ArrowRight');const next=page.locator('.reader-page-frame[data-reader-page-index="1"]');
-  await expect(next).toHaveAttribute('aria-hidden','true');await expect(old.locator('img')).toBeVisible();
+  await expect(next).toHaveAttribute('aria-hidden','true');await expectReaderPixels(old.locator('img'));
   await expect.poll(()=>page.evaluate(()=>typeof (window as any).__releasePage)).toBe('function');
   await page.screenshot({path:'test-results/fixes-decoding-old-page.png'});
-  await page.evaluate(()=>(window as any).__releasePage());await expect(next.locator('img')).toBeVisible();await expect(old).toHaveCount(0);
-  await page.keyboard.press('ArrowLeft');await expect(page.locator('.reader-page-frame[data-reader-page-index="0"] img')).toBeVisible();
+  await page.evaluate(()=>(window as any).__releasePage());await expectReaderPixels(next.locator('img'));await expect(old).toHaveCount(0);
+  await page.keyboard.press('ArrowLeft');await expectReaderPixels(page.locator('.reader-page-frame[data-reader-page-index="0"] img'));
 });
 
 test('reading preview closes on the first outside tap without hiding controls or turning pages',async({page})=>{
-  await setup(page,12);await book(page).click();await expect(page.locator('.reader-image')).toBeVisible();await page.locator('.reader-stage').tap();
+  await setup(page,12);await book(page).click();await expectReaderPixels(page.locator('.reader-image'));await page.locator('.reader-stage').tap();
   const rail=page.getByRole('slider',{name:'阅读进度'}),r=(await rail.boundingBox())!;
   await page.mouse.move(r.x+2,r.y+22);await page.mouse.down();await page.mouse.move(r.x+r.width*.5,r.y+22,{steps:8});await page.mouse.up();
   const preview=page.locator('.mobile-reader-previews');await expect(preview).toBeVisible();await expect(page.getByRole('button',{name:'收起页面预览'})).toHaveCount(0);

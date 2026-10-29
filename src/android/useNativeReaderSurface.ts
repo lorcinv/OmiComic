@@ -2,6 +2,7 @@ import { useLayoutEffect, type RefObject } from 'react';
 import type { AppSettings } from '../types';
 import type { ImageAdjustments } from '../../electron/shared/readerPreferences';
 import { androidNotify, hasAndroidRenderer } from './bridge';
+import { nativeRasterRectangle } from './readerGeometry';
 
 let geometrySequence=0;
 
@@ -56,7 +57,7 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
           if(r.width<=0||r.height<=0||r.right<=clip.left||r.left>=clip.right||r.bottom<=clip.top||r.top>=clip.bottom)continue;
           let alpha=1;
           for(let parent:HTMLElement|null=node;parent&&parent!==element;parent=parent.parentElement)alpha*=Number(getComputedStyle(parent).opacity);
-          if(alpha>0)slots.push({url:node.dataset.nativeImage!,rect:rectangle(r),alpha});
+          if(alpha>0)slots.push({url:node.dataset.nativeImage!,rect:nativeRasterRectangle(r,window.devicePixelRatio||1),alpha});
         }
         const previews:Array<{url:string;rect:number[];clip:number[]}>=[];
         scene?.querySelectorAll<HTMLElement>('[data-native-preview]').forEach(node=>{
@@ -68,7 +69,7 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
           // preview exactly as it covers the rest of the reader's web UI.
           const hit=document.elementFromPoint((left+right)/2,(top+bottom)/2);
           if(!hit||!(node.contains(hit)||hit===node.closest('button')))return;
-          previews.push({url:node.dataset.nativePreview!,rect:rectangle(r),clip:rectangle(new DOMRect(left,top,right-left,bottom-top))});
+          previews.push({url:node.dataset.nativePreview!,rect:nativeRasterRectangle(r,window.devicePixelRatio||1),clip:rectangle(new DOMRect(left,top,right-left,bottom-top))});
         });
         const message={session,viewportWidth:window.innerWidth,clip:rectangle(clip),slots,previews,nativeExpected:nodes.length>0};
         const key=JSON.stringify(message);if(key!==last){last=key;androidNotify('readerFrame',{...message,sequence:++geometrySequence});}

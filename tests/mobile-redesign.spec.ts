@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 test.use({ viewport:{width:390,height:844}, isMobile:true, hasTouch:true });
 test.beforeEach(async ({page}) => {
@@ -100,7 +101,7 @@ test('phone double spread, pinch zoom, double-tap reset and global image setting
   await page.addInitScript(() => { const api=window.omicomic,old=api.getAppData; api.getAppData=async()=>{const r=await old();if(r.ok)r.data.settings.readerDefaultFitMode='fit-window';return r;}; });
   await library(page);await page.locator('.mobile-resource-card').filter({has:page.getByText('Book',{exact:true})}).tap();
   const stage=page.locator('.reader-stage'),spread=page.locator('.reader-page-spread');
-  await expect(spread.locator('.reader-page-frame:not([aria-hidden]) img')).toBeVisible();await stage.tap();
+  await expectReaderPixels(spread.locator('.reader-page-frame:not([aria-hidden]) img'));await stage.tap();
   await page.getByRole('button',{name:'阅读设置',exact:true}).tap();
   await page.getByRole('button',{name:'当前单页，点击切换双页'}).tap();
   await back(page);await expect(spread.locator('figure:not([aria-hidden])')).toHaveCount(2);

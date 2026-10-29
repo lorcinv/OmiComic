@@ -74,6 +74,10 @@ import { configureThumbnailDiskCache } from './services/thumbnailDiskCache';
 import { getHomeArtwork, importHomeArtwork, resetHomeArtwork, saveHomeArtwork } from './services/homeArtworkService';
 
 const 开发服务地址 = process.env.VITE_DEV_SERVER_URL;
+// DirectComposition can tear moving panorama images on Windows. Present the
+// GPU-composited window through the regular swap path instead. Keep GPU
+// decoding/rasterization and the existing reader cache/preload budgets.
+if (process.platform === 'win32') app.commandLine.appendSwitch('disable-direct-composition');
 app.setAppUserModelId("io.github.lorcinv.omicomic");
 // Packaged smoke tests use an isolated profile and never display or focus a window.
 const 后台验证 = process.env.OMICOMIC_TEST_HEADLESS === "1" && !!process.env.OMICOMIC_TEST_PROFILE;

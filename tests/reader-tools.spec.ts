@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 import fs from 'node:fs/promises';
 
 async function open(page: Page, options: { count?: number; delay?: number; tall?: boolean; large?: boolean } = {}) {
@@ -32,7 +33,7 @@ async function open(page: Page, options: { count?: number; delay?: number; tall?
   }, options);
   await page.goto('/'); await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
   await expect(page.getByRole('textbox',{name:'跳转到页码'})).toBeEnabled({timeout:20000});
-  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-image').first());
 }
 const selectedBooks=new WeakMap<Page,string>();
 async function settings(page: Page) {
@@ -49,7 +50,7 @@ async function resume(page: Page) {
   }
   if(await page.locator('.resource-detail-read-button').count()) await page.locator('.resource-detail-read-button').click();
   else {await page.getByRole('button',{name:/^最近阅读/}).click();await page.locator('.resource-card[data-selection-key="'+selectedBooks.get(page)+'"]').dblclick();}
-  await expect(page.locator('.reader-image').first()).toBeVisible();
+  await expectReaderPixels(page.locator('.reader-image').first());
 }
 async function adjust(page: Page) { await page.getByRole('button',{name:'画面调整',exact:true}).click(); }
 async function slider(page: Page, label: string, value: number) {

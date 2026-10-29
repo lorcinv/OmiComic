@@ -5751,6 +5751,9 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 .reader-effects-original { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; }
 .reader-effects.has-processed-image > .reader-effects-original { visibility: hidden; }
 .reader-effects > .reader-processed-image { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
+.reader-effects > .reader-display-raster { position:absolute; inset:0; display:block; width:100%; height:100%; visibility:hidden; pointer-events:none; }
+.reader-effects.has-display-raster > :is(.reader-effects-original,.reader-processed-image) { visibility:hidden; }
+.reader-effects.has-display-raster > .reader-display-raster { visibility:visible; }
 .reader-processing-status { position: absolute; bottom: 8px; left: 8px; max-width: calc(100% - 16px); padding: 4px 8px; border-radius: 8px; font-size: calc(11px * var(--desktop-font-scale, 1)); background: var(--面板色); color: var(--次文字); pointer-events: none; }
 .reader-extra-tools { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .reader-extra-tools button { display: inline-flex; gap: 5px; align-items: center; justify-content: center; min-width: 34px; }

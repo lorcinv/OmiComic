@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { installMock } from './mock';
+import { expectReaderPixels } from './readerPixels';
 
 async function setup(page: Page, theme = 'mist') {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -44,7 +45,7 @@ test('desktop pointer drags cannot select chrome, but detail and reader titles a
   await page.locator('#settings-category-appearance').click();
   await expect(page.getByRole('spinbutton',{name:'全局字号',exact:true})).toHaveCSS('user-select','text');
   await page.getByRole('button',{name:'关闭设置',exact:true}).click();
-  await page.locator('.resource-detail-read-button').click(); await expect(page.locator('.reader-image').first()).toBeVisible();
+  await page.locator('.resource-detail-read-button').click(); await expectReaderPixels(page.locator('.reader-image').first());
   await drag(page.locator('#reader-title')); expect(await selection()).not.toBe('');
   await expect(page.locator('.reader-footer')).toHaveCSS('user-select','none');
   await page.getByRole('button',{name:'画面调整',exact:true}).click();

@@ -79,7 +79,8 @@ function classify(entry: Dirent): DirectoryResourceType {
 export async function scanDirectory(directory: string, options: DirectoryScanOptions): Promise<DirectoryEntry[]> {
   const { target, realRoot } = await authorizedDirectory(directory, options);
   directoryMetrics.readdir++;
-  const entries = await fs.readdir(target, { withFileTypes: true });
+  // Unsupported files never enter the library or its metadata queue.
+  const entries = (await fs.readdir(target, { withFileTypes: true })).filter(entry => entry.isSymbolicLink() || classify(entry) !== 'unknown');
   checkAbort(options.signal);
   const results = new Array<DirectoryEntry>(entries.length);
   let cursor = 0;
@@ -100,6 +101,7 @@ export async function scanDirectory(directory: string, options: DirectoryScanOpt
         if (entry.isSymbolicLink() && !isWithin(realRoot, await fs.realpath(filePath))) throw new Error("Link escapes authorized root");
         directoryMetrics.stat++;
         const stat = await (options.stat ?? fs.stat)(filePath);
+        if (stat.isDirectory()) { item.type = 'folder'; item.extension = ''; }
         item.size = stat.size;
         item.modifiedAt = stat.mtimeMs;
       } catch (error) {
@@ -111,9 +113,10 @@ export async function scanDirectory(directory: string, options: DirectoryScanOpt
     }
   }));
   checkAbort(options.signal);
-  results.sort((left, right) => Number(right.type === "folder") - Number(left.type === "folder") || collator.compare(left.name, right.name));
+  const supported = results.filter(item => item.type !== 'unknown');
+  supported.sort((left, right) => Number(right.type === "folder") - Number(left.type === "folder") || collator.compare(left.name, right.name));
   checkAbort(options.signal);
-  return results;
+  return supported;
 }
 
 export async function listDirectoryImages(directory: string, options: DirectoryScanOptions): Promise<string[]> {

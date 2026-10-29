@@ -1,6 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import {writeFileSync} from 'node:fs';
 import {installMock} from './mock';
+import {expectReaderPixels} from './readerPixels';
 
 test.use({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Asia/Hong_Kong'});
 async function setup(page:Page){
@@ -22,7 +23,7 @@ async function setup(page:Page){
 const back=(page:Page)=>page.evaluate(()=>window.dispatchEvent(new Event('omi-back')));
 const book=(page:Page)=>page.locator('.page-panel.is-visible .mobile-resource-card').filter({has:page.getByText('Book',{exact:true})});
 async function library(page:Page){await page.getByRole('button',{name:'打开资源库',exact:true}).click();await expect(book(page)).toBeVisible();}
-async function reader(page:Page){await library(page);await book(page).click();await expect(page.locator('.reader-image').first()).toBeVisible();await page.locator('.reader-stage').tap();}
+async function reader(page:Page){await library(page);await book(page).click();await expectReaderPixels(page.locator('.reader-image').first());await page.locator('.reader-stage').tap();}
 
 test('phone keeps the current folder during reads and opens comics without a filename or loading popup',async({page})=>{
   await setup(page);await library(page);
@@ -34,7 +35,7 @@ test('phone keeps the current folder during reads and opens comics without a fil
   await page.evaluate(()=>{const api=window.omicomic,original=api.getResourcePages;api.getResourcePages=async input=>{await new Promise<void>(resolve=>(window as any).__bookReady=resolve);return original(input);};});
   await book(page).click();await expect.poll(()=>page.evaluate(()=>typeof (window as any).__bookReady)).toBe('function');
   await expect(book(page)).toBeVisible();await expect(page.locator('.library-opening-status,[role="tooltip"]')).toHaveCount(0);
-  await page.evaluate(()=>(window as any).__bookReady());await expect(page.locator('.reader-image').first()).toBeVisible();
+  await page.evaluate(()=>(window as any).__bookReady());await expectReaderPixels(page.locator('.reader-image').first());
 });
 
 test('phone metadata uses a spaced dot, homepage drops the page suffix and bookmarks keep date on the same line',async({page})=>{
