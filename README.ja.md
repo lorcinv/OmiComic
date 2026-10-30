@@ -12,8 +12,6 @@ OmiComic は、ローカルでの高速起動とすっきりした読書体験�
 
 OmiComic がお役に立ちましたら、作者を応援していただけるとうれしいですヽ(✿ﾟ▽ﾟ)ノ
 
-現在、Alipay と WeChat Pay の QR コードをご利用いただけます。地域やアカウントによってはご利用いただけない場合があります。
-
 ## 紹介動画
 
 https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135

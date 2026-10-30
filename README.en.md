@@ -12,8 +12,6 @@ OmiComic is a local comic reader for Windows and Android, focused on fast startu
 
 If OmiComic has been helpful, you can support the authorヽ(✿ﾟ▽ﾟ)ノ
 
-Payment is currently available via Alipay and WeChat Pay QR codes. Availability may vary by region and account.
-
 ## Video demo
 
 https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
