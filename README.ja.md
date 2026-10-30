@@ -8,6 +8,12 @@
 
 OmiComic は、ローカルでの高速起動とすっきりした読書体験を重視した、Windows・Android 両対応の漫画リーダーです。画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、従来形式の DRM なし MOBI に対応し、本棚、カテゴリー、タグ、お気に入りでローカルの漫画を整理できます。
 
+## [作者を応援する](docs/support.md)
+
+OmiComic がお役に立ちましたら、作者を応援していただけるとうれしいですヽ(✿ﾟ▽ﾟ)ノ
+
+現在、Alipay と WeChat Pay の QR コードをご利用いただけます。地域やアカウントによってはご利用いただけない場合があります。
+
 ## 紹介動画
 
 https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135

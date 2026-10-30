@@ -8,6 +8,12 @@
 
 OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI, with bookshelves, categories, tags and favorites to organize your local collection.
 
+## [Support the author](docs/support.md)
+
+If OmiComic has been helpful, you can support the authorヽ(✿ﾟ▽ﾟ)ノ
+
+Payment is currently available via Alipay and WeChat Pay QR codes. Availability may vary by region and account.
+
 ## Video demo
 
 https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
