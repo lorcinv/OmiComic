@@ -10,6 +10,7 @@ interface Props {
   adjustments: ImageAdjustments; onAdjustments: (value: ImageAdjustments) => void;
   running: boolean; onPlay: () => void; onPanel: (open: boolean) => void;
   mobile?: boolean;
+  zoom?: number; onZoom?: (scale:number)=>void; onResetZoom?: ()=>void;
 }
 function Slider({ label, value, min, max, step = 1, unit = '', disabled = false, onChange }: {
   label: string; value: number; min: number; max: number; step?: number; unit?: string; disabled?: boolean; onChange: (value: number) => void;
@@ -19,16 +20,17 @@ function Slider({ label, value, min, max, step = 1, unit = '', disabled = false,
   </label>;
 }
 export default function ReaderTools(props: Props) {
-  const [panel, setPanel] = useState<'adjustments' | null>(null);
+  const [panel, setPanel] = useState<'adjustments' | 'zoom' | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 52 });
   const tools = useRef<HTMLDivElement>(null), popup = useRef<HTMLDivElement>(null);
   const adjustmentsButton = useRef<HTMLButtonElement>(null);
+  const zoomButton = useRef<HTMLButtonElement>(null);
   const onPanel = useRef(props.onPanel); onPanel.current = props.onPanel;
   useLayoutEffect(() => { onPanel.current(Boolean(panel)); return () => onPanel.current(false); }, [panel]);
   useLayoutEffect(() => {
     if (!panel) return;
     const reposition = () => {
-      const box = adjustmentsButton.current?.getBoundingClientRect();
+      const box = (panel==='zoom'?zoomButton:adjustmentsButton).current?.getBoundingClientRect();
       if (box) setPosition({ left: Math.max(8, Math.min(box.left, window.innerWidth - Math.min(356, window.innerWidth - 16) - 8)), top: Math.min(box.bottom + 12, window.innerHeight - 100) });
     };
     reposition(); window.addEventListener('resize', reposition);
@@ -47,7 +49,7 @@ export default function ReaderTools(props: Props) {
     const key = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || document.querySelector('[role="listbox"]')) return;
       event.preventDefault(); event.stopImmediatePropagation(); setPanel(null);
-      adjustmentsButton.current?.focus({ preventScroll: true });
+      (panel==='zoom'?zoomButton:adjustmentsButton).current?.focus({ preventScroll: true });
     };
     const back = () => setPanel(null);
     document.addEventListener('pointerdown', outside, true); window.addEventListener('keydown', key, true);
@@ -59,10 +61,16 @@ export default function ReaderTools(props: Props) {
     <button ref={adjustmentsButton} className={panel === 'adjustments' ? 'is-active' : ''} disabled={props.disabled} aria-expanded={panel === 'adjustments'} aria-haspopup="dialog" aria-label={t("画面调整")} title={t("画面调整")} onClick={() => setPanel(panel === 'adjustments' ? null : 'adjustments')}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16M12 4v16M19 4v16M2 9h6M9 15h6M16 7h6" /></svg><span>{t("画面调整")}</span>
     </button>
+    {!props.mobile && <button ref={zoomButton} disabled={props.disabled} className={`reader-zoom-toggle${panel==='zoom'?' is-active':''}`} aria-label={t('缩放')} aria-expanded={panel==='zoom'} aria-haspopup="dialog" onClick={()=>setPanel(panel==='zoom'?null:'zoom')}>{t('缩放')} {Math.round((props.zoom??1)*100)}%</button>}
     {!props.mobile && <button data-reader-auto-play className={props.running ? 'is-active' : ''} disabled={props.disabled} onClick={() => { setPanel(null); props.onPlay(); }} aria-pressed={props.running} aria-label={props.running ? t("暂停自动阅读") : t("开始自动阅读")} title={props.running ? t("暂停自动阅读") : t("开始自动阅读")}>
       <svg viewBox="0 0 24 24" aria-hidden="true" className="reader-play-icon">{props.running ? <path d="M7 5h3v14H7zM14 5h3v14h-3z"/> : <path d="m8 5 11 7-11 7Z"/>}</svg>
     </button>}
-    {panel && createPortal(<div className="reader-tool-panel" ref={popup} role="dialog" aria-modal="false" aria-label={t("画面调整")} style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 12}px)` }} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
+    {panel && createPortal(<div className={`reader-tool-panel ${panel==='zoom'?'reader-zoom-panel':''}`} ref={popup} role="dialog" aria-modal="false" aria-label={t(panel==='zoom'?'缩放':'画面调整')} style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 12}px)` }} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
+      {panel==='zoom'?<>
+        <label className="reader-tool-slider"><span>{t('缩放比例')}<output>{Math.round((props.zoom??1)*100)}%</output></span><input aria-label={t('缩放比例')} aria-valuetext={`${Math.round((props.zoom??1)*100)}%`} type="range" min="-100" max="100" step="1" value={Math.round(Math.log(props.zoom??1)/Math.log((props.zoom??1)<1?2:6)*100)} onChange={event=>{const value=Number(event.target.value);props.onZoom?.(Math.pow(value<0?2:6,value/100));}}/></label>
+        <div className="reader-zoom-ticks"><span>50%</span><span>100%</span><span>600%</span></div>
+        <button className="reader-tool-reset" onClick={()=>props.onResetZoom?.()}>{t('重置大小')}</button>
+      </>:<>
       {props.mobile && <div className="reader-tool-heading"><strong>{t("画面调整")}</strong><button aria-label={t("关闭面板")} onClick={() => setPanel(null)}><MobileIcon name="close"/></button></div>}
         {props.mobile && <p className="reader-tool-comparison">{t("全局画面调整 · 应用于所有漫画")}</p>}
         <div className="reader-tool-section"><strong>{t("基础调整")}</strong>
@@ -81,6 +89,7 @@ export default function ReaderTools(props: Props) {
           {props.epub && <p>{t("EPUB 支持基础调整与滤镜。")}</p>}
         </div>
         <button className="reader-tool-reset" onClick={() => props.onAdjustments({ ...DEFAULT_ADJUSTMENTS })}>{t("恢复默认")}</button>
+      </>}
     </div>, document.body)}
   </div>;
 }

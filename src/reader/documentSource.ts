@@ -20,6 +20,7 @@ export class DocumentSource {
   private renders = new Set<RenderTask>();
   private closed = false;
   private failure?: Error;
+  private mobi?: import('./mobiClient').MobiClient;
 
   constructor(private readonly resource: 阅读资源结果, private readonly purpose: "reader" | "thumbnail" = "reader") {}
 
@@ -30,7 +31,7 @@ export class DocumentSource {
 
   async open(): Promise<阅读资源结果> {
     const type = this.resource.sourceType;
-    if (type !== "pdf" && type !== "epub") throw new Error("文档格式无效。");
+    if (type !== "pdf" && type !== "epub" && type !== 'mobi') throw new Error("文档格式无效。");
     this.assertOpen();
     // EPUB needs only the native chapter service. Load the PDF runtime alongside
     // the native file open, so PDF reads gain no extra serial loading step.
@@ -47,6 +48,10 @@ export class DocumentSource {
     this.assertOpen();
     if (!opened.ok) throw new Error(opened.error.message);
     let chapters = opened.data.chapters;
+    if(type==='mobi'){
+      const {MobiClient}=await import('./mobiClient');this.assertOpen();this.mobi=new MobiClient();
+      chapters=await this.mobi.open(opened.data.size,async(begin,end)=>{const result=await window.omicomic.readDocumentRange(this.id,begin,end);this.assertOpen();if(!result.ok)throw Error(result.error.message);return new Uint8Array(result.data);},this.abortController.signal);
+    }
     if (type === "pdf") {
       const { getDocument, PDFDataRangeTransport } = pdfRuntime!;
       const source = this;
@@ -98,7 +103,7 @@ export class DocumentSource {
     signal.throwIfAborted();
     this.assertOpen();
     if (!this.pdf) {
-      const result = await window.omicomic.readDocumentChapter(this.id, index);
+      const result = this.mobi?{ok:true as const,data:await this.mobi.chapter(index)}:await window.omicomic.readDocumentChapter(this.id, index);
       signal.throwIfAborted();
       this.assertOpen();
       if (!result.ok) throw new Error(result.error.message);
@@ -143,6 +148,7 @@ export class DocumentSource {
     if (this.closed) return;
     this.closed = true;
     this.abortController.abort();
+    this.mobi?.close();
     for (const task of this.renders) task.cancel();
     this.renders.clear();
     this.transport?.abort();
@@ -151,11 +157,26 @@ export class DocumentSource {
   }
 }
 
+export function chapterPresentation(input:string) {
+  const document=new DOMParser().parseFromString(input,'text/html');
+  const pageLabel=/^(?:第\s*\d+\s*[页頁]|page\s*\d+|\d+)$/i;
+  const text=document.body.textContent?.trim()??'';
+  const imagePage=document.images.length>0&&(!text||document.images.length===1&&pageLabel.test(text));
+  if(imagePage){
+    document.body.dataset.omiImagePage='true';
+    const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+    let node:Node|null;while((node=walker.nextNode()))if(pageLabel.test(node.textContent?.trim()??''))node.textContent='';
+  }
+  const css=imagePage
+    ? 'html,body{background:transparent!important;margin:0!important;padding:0!important;min-height:0!important;overflow:hidden}body{box-sizing:border-box;width:900px;max-width:none!important}body :is(div,p,h1,h2,h3,h4){margin:0;padding:0}img{display:block;width:100%;max-width:100%;height:auto;margin:0}'
+    : 'html{overflow:hidden}body{box-sizing:border-box;width:900px;max-width:none;margin:0;padding:36px 42px;overflow-wrap:anywhere}img{display:block;max-width:100%;height:auto;margin:auto}table{table-layout:fixed;width:100%;overflow-wrap:anywhere}';
+  const style=document.createElement('style');style.textContent=css;document.head.append(style);
+  return {imagePage,html:'<!doctype html>'+document.documentElement.outerHTML};
+}
 /** Measure inert, sanitized EPUB content once, so the shared stage owns all scrolling. */
 function measureChapter(input: string, signal: AbortSignal): Promise<Omit<DocumentPage, "url">> {
   const width = 900;
-  const css = "html{overflow:hidden}body{box-sizing:border-box;width:900px;max-width:none;margin:0;padding:36px 42px;overflow-wrap:anywhere}img{display:block;max-width:100%;height:auto;margin:auto}table{table-layout:fixed;width:100%;overflow-wrap:anywhere}";
-  const html = input.replace("</head>", `<style>${css}</style></head>`);
+  const {html,imagePage}=chapterPresentation(input);
   return new Promise((resolve, reject) => {
     const frame = document.createElement("iframe");
     // Scripts remain disabled. Same-origin access is needed only to measure the
@@ -177,7 +198,7 @@ function measureChapter(input: string, signal: AbortSignal): Promise<Omit<Docume
         await Promise.all(Array.from(content.images, image => image.decode().catch(() => undefined)));
         await content.fonts.ready;
         if (finished) return;
-        const height = Math.max(1200, content.documentElement.scrollHeight, content.body.scrollHeight);
+        const height = Math.max(imagePage?1:1200, content.documentElement.scrollHeight, content.body.scrollHeight);
         finished = true; cleanup(); resolve({ html, width, height });
       })().catch(reason => fail(reason instanceof Error ? reason : new Error("章节排版失败。")));
     };

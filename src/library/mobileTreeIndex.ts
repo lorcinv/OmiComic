@@ -22,7 +22,7 @@ async function read(path:string):Promise<Entry>{
     if(active>=2)await new Promise<void>(resolve=>waiting.push(resolve));else active++;
     try{
       const result=await window.omicomic.listDirectory(path);if(!result.ok)throw new Error(result.error.message);
-      const entry:Entry={folders:result.data.items.filter(item=>item.type==='folder').map(({path,name})=>({path,name})),hasBooks:result.data.items.some(item=>['archive','pdf','epub'].includes(item.type))};
+      const entry:Entry={folders:result.data.items.filter(item=>item.type==='folder').map(({path,name})=>({path,name})),hasBooks:result.data.items.some(item=>['archive','pdf','epub','mobi'].includes(item.type))};
       if(generation===epoch){entries.set(path,entry);persist();}return entry;
     }finally{const next=waiting.shift();if(next)next();else active--;}
   })();pending.set(path,promise);try{return await promise;}finally{if(pending.get(path)===promise)pending.delete(path);}

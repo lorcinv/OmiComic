@@ -8,6 +8,7 @@ export default function ResourcePlaceholder({ type }: { type: 资源类型 }) {
     archive: "M14 8h26l10 10v38H14Zm26 0v12h10M30 9v5m5 0v5m-5 0v5m5 0v5m-5 0v5m5 0v5M29 43h8v8h-8Z",
     pdf: "M14 8h26l10 10v38H14Zm26 0v12h10M23 44c9-7 16-22 10-21-6 1 0 19 11 19 6 0-3-8-13-2-11 6-12 9-8 4Z",
     epub: "M9 14c10-3 16-1 23 4 7-5 13-7 23-4v37c-10-3-16-1-23 4-7-5-13-7-23-4Zm23 4v37M16 25l9 2m-9 8 9 2m14-10 9-2m-9 12 9-2",
+    mobi: "M12 9h36v46H12ZM20 20h20M20 29h20M20 38h14M17 9v46",
     unknown: "M14 8h26l10 10v38H14Zm26 0v12h10M23 32h18M23 40h18M23 48h10",
   };
   return <svg className={`resource-placeholder-icon is-${type}`} viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[type]} /></svg>;

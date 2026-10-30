@@ -11,7 +11,7 @@ vi.mock('../src/reader/pdfRuntime', () => {
 });
 afterEach(() => { vi.clearAllMocks(); vi.resetModules(); });
 
-async function source(type: 'pdf' | 'epub') {
+async function source(type: 'pdf' | 'epub' | 'mobi') {
   installMock({ count: 1 });
   const { DocumentSource } = await import('../src/reader/documentSource');
   const path = `/comics/book.${type}`;
@@ -39,7 +39,7 @@ it('PDF still initializes the range reader and releases its worker on close', as
   expect(pdf.destroy).toHaveBeenCalledOnce();
 });
 
-it.each(['pdf', 'epub'] as const)('cancelling a slow %s open releases a session that appears after the early close', async type => {
+it.each(['pdf', 'epub', 'mobi'] as const)('cancelling a slow %s open releases a session that appears after the early close', async type => {
   const book = await source(type);
   const sessions = new Set<string>();
   let finish!: () => void;

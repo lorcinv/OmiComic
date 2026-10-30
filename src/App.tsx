@@ -327,7 +327,7 @@ function App() {
     const request = ++阅读打开请求.current;
     等待阅读画面.current?.finish(false);
     const first=资源.pages[起始页];
-    if(hasAndroidRenderer()&&first&&!/\.gif$/i.test(first.name)&&资源.sourceType!=='pdf'&&资源.sourceType!=='epub'){
+    if(hasAndroidRenderer()&&first&&!/\.gif$/i.test(first.name)&&资源.sourceType!=='pdf'&&(资源.sourceType!=='epub' && 资源.sourceType!=='mobi')){
       // Start native decoding alongside module/settings preparation, not afterwards.
       void androidCall('readerPrepare',{sourcePath:first.sourcePath,archiveInnerPath:first.archiveInnerPath,type:first.type,width:Math.round(innerWidth*devicePixelRatio),height:Math.round(innerHeight*devicePixelRatio)}).catch(()=>undefined);
     }
@@ -387,7 +387,7 @@ function App() {
     // Warm the first raster before replacing the current reader. The transition
     // retains its rendered frame until the replacement DOM has also decoded.
     const page=资源.pages[起始页];
-    if(page && 资源.sourceType!=='pdf' && 资源.sourceType!=='epub'){
+    if(page && 资源.sourceType!=='pdf' && (资源.sourceType!=='epub' && 资源.sourceType!=='mobi')){
       try{
         const result=await window.omicomic.getPageImage({sourcePath:page.sourcePath,virtualPath:page.virtualPath,archiveInnerPath:page.archiveInnerPath,type:page.type});
         if(result.ok){if(hasAndroidRenderer())await androidCall('readerPrepare',{url:result.data.url});else{const image=new Image();image.src=result.data.url;await image.decode();}}

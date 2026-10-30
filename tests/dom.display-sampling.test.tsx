@@ -59,17 +59,27 @@ describe('reader display sampling during panorama motion', () => {
     vi.stubGlobal('Worker', class { onmessage?: (event: { data: unknown }) => void; constructor() { worker = this; } postMessage(data: { width: number }) { posted.push(data); } terminate() {} });
     vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ close: vi.fn() })));
     const flush = async () => { for (let n = 0; n < 5; n++) await Promise.resolve(); };
+    const cancels:Array<()=>void>=[];
     try {
       const release = holdDisplaySampling(), source = document.createElement('canvas');
-      queueDisplaySampling(source, 1, 1, vi.fn(), false);
-      queueDisplaySampling(source, 2, 2, vi.fn(), false);
-      queueDisplaySampling(source, 3, 3, vi.fn(), true);
+      cancels.push(queueDisplaySampling(source, 1, 1, vi.fn(), false));
+      cancels.push(queueDisplaySampling(source, 2, 2, vi.fn(), false));
+      cancels.push(queueDisplaySampling(source, 3, 3, vi.fn(), true));
       release(); vi.advanceTimersByTime(160); await flush();
       expect(posted.map(task => task.width)).toEqual([3]);
       worker!.onmessage!({ data: { id: (posted[0] as any).id, bitmap: { close: vi.fn() } } }); await flush();
       expect(posted.map(task => task.width)).toEqual([3, 1]);
-    } finally { vi.advanceTimersByTime(5000); vi.useRealTimers(); vi.unstubAllGlobals(); }
+    } finally { for(const cancel of cancels)cancel();vi.advanceTimersByTime(5000); vi.useRealTimers(); vi.unstubAllGlobals(); }
   });
+});
+
+it('yields a display frame between URL uploads while a drag is held', () => {
+  vi.useFakeTimers({toFake:['setTimeout','clearTimeout','performance']});
+  let worker:any;vi.stubGlobal('Worker',class{posted:any[]=[];onmessage:any;constructor(){worker=this;}postMessage(value:any){this.posted.push(value);}terminate(){}});
+  const source=document.createElement('img');source.src='data:image/png;base64,AA==';const release=holdDisplaySampling();
+  const one=queueDisplaySampling(source,400,600,vi.fn()),two=queueDisplaySampling(source,401,601,vi.fn());
+  try{expect(worker.posted).toHaveLength(1);worker.onmessage({data:{id:worker.posted[0].id,bitmap:{close:vi.fn()}}});expect(worker.posted).toHaveLength(1);vi.advanceTimersByTime(15);expect(worker.posted).toHaveLength(1);vi.advanceTimersByTime(1);expect(worker.posted).toHaveLength(2);}
+  finally{one();two();release();vi.advanceTimersByTime(5000);vi.useRealTimers();vi.unstubAllGlobals();}
 });
 
 describe('reader display sampling dimensions', () => {

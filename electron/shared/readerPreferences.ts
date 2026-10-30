@@ -56,8 +56,8 @@ export function resolvePageIndex(pages: IdentifiedPage[], identity: string | und
 }
 export function bookmarkMatches(bookmark: { pageId?: string; pageName?: string; archiveInnerPath?: string; sourceType: string; pageIndex: number }, index: number, identity?: string): boolean {
   if (!identity) return bookmark.pageIndex === index;
-  if (!bookmark.pageId && (bookmark.sourceType === 'pdf' || bookmark.sourceType === 'epub')) return bookmark.pageIndex === index;
+  if (!bookmark.pageId && (bookmark.sourceType === 'pdf' || (bookmark.sourceType === 'epub' || bookmark.sourceType==='mobi'))) return bookmark.pageIndex === index;
   const legacyName = bookmark.archiveInnerPath ?? bookmark.pageName;
-  const legacyId = legacyName ? `${bookmark.sourceType === "archive" ? "archive-image" : bookmark.sourceType === "pdf" ? "pdf-page" : bookmark.sourceType === "epub" ? "epub-chapter" : "folder-image"}:${legacyName.replace(/\\/g, "/")}` : undefined;
+  const legacyId = legacyName ? `${bookmark.sourceType === "archive" ? "archive-image" : bookmark.sourceType === "pdf" ? "pdf-page" : (bookmark.sourceType === "epub" || bookmark.sourceType==="mobi") ? "epub-chapter" : "folder-image"}:${legacyName.replace(/\\/g, "/")}` : undefined;
   return bookmark.pageId || legacyId ? (bookmark.pageId ?? legacyId) === identity : bookmark.pageIndex === index;
 }

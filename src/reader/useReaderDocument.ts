@@ -3,7 +3,7 @@ import type { 阅读资源结果 } from "../types";
 import type { DocumentSource } from "./documentSource";
 
 export function useReaderDocument(input: 阅读资源结果 | null) {
-  const isDocument = input?.sourceType === "pdf" || input?.sourceType === "epub";
+  const isDocument = input?.sourceType === "pdf" || (input?.sourceType === "epub" || input?.sourceType==="mobi");
   const [state, setState] = useState<{ input: 阅读资源结果; resource?: 阅读资源结果; source?: DocumentSource; error?: string }>();
   useEffect(() => {
     if (!input || !isDocument) return;

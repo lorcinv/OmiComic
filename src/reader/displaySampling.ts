@@ -1,25 +1,26 @@
 type Source = HTMLImageElement | HTMLCanvasElement;
 type Task = { id: number; source: Source; url: string; width: number; height: number; urgent: boolean; cancelled: boolean; finish: (bitmap: ImageBitmap) => void; failed?: () => void };
-let worker: Worker | null = null, active: Task | null = null, sequence = 0, timer = 0;
+let worker: Worker | null = null, active: Task | null = null, sequence = 0, timer = 0, resume = 0;
 const queue: Task[] = [];
 
 // Decode image URLs in the worker even during long drags. Layout reads, canvas
 // snapshots and parent cache accounting still wait for motion to settle.
 const REST_MS = 160;
-let holds = 0, lastMotion = 0, restTimer = 0;
+let holds = 0, restAt = 0, restTimer = 0;
 const resting = new Set<() => void>();
 function settle() {
   restTimer = 0;
-  const wait = lastMotion + REST_MS - performance.now();
+  const wait = restAt - performance.now();
   if (wait > 0) { restTimer = window.setTimeout(settle, wait); return; }
   if (holds) return;
+  restAt = 0;
   const runs = [...resting]; resting.clear();
   for (const run of runs) run();
   next();
 }
 export function displaySamplingMoving() { return holds > 0 || restTimer !== 0; }
-export function noteDisplaySamplingMotion() {
-  lastMotion = performance.now();
+export function noteDisplaySamplingMotion(quietMs = REST_MS) {
+  restAt = Math.max(restAt, performance.now() + quietMs);
   if (!restTimer) restTimer = window.setTimeout(settle, REST_MS);
 }
 export function holdDisplaySampling() {
@@ -43,7 +44,7 @@ export function displaySamplingSize(width: number, height: number, shownWidth: n
 }
 
 function next() {
-  if (active) return;
+  if (active || resume) return;
   const index = queue.findIndex(task => !displaySamplingMoving() || Boolean(task.url));
   const task = index < 0 ? undefined : queue.splice(index, 1)[0];
   if (!task) {
@@ -52,7 +53,14 @@ function next() {
   }
   if (task.cancelled) { next(); return; }
   active = task; clearTimeout(timer);
-  const done = () => { if (active !== task) return; clearTimeout(timer); active = null; next(); };
+  const done = () => {
+    if (active !== task) return;
+    clearTimeout(timer); active = null;
+    // Let the completed page paint before another offscreen upload competes
+    // with the compositor. Long drags still prepare the approaching pages.
+    if (displaySamplingMoving()) resume = window.setTimeout(() => { resume = 0; next(); }, 16);
+    else next();
+  };
   worker ??= new Worker(new URL('./displaySampling.worker.ts', import.meta.url), { type: 'module' });
   worker.onmessage = (event: MessageEvent<{ id: number; bitmap?: ImageBitmap }>) => {
     const bitmap = event.data.bitmap;

@@ -4,7 +4,7 @@ import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 import { EPUBDocumentSource } from "./epubService";
-import { readThumbnailDisk, writeThumbnailDisk, clearThumbnailDiskCache } from './thumbnailDiskCache';
+import { readThumbnailDisk, writeThumbnailDisk, clearThumbnailDiskCache, thumbnailDependencies, validThumbnailDependencies } from './thumbnailDiskCache';
 import {
   读取压缩包单张图片,
   读取压缩包封面列表,
@@ -25,7 +25,7 @@ const 缩略图缓存上限 = 240;
 const 缩略图候选最大数量 = 8;
 const 封面关键词 = ["cover", "folder", "front"] as const;
 
-export type 缩略图资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
+export type 缩略图资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
 
 export interface 缩略图输入 {
   path: string;
@@ -98,7 +98,7 @@ async function 使用缩略图缓存(
     return loader();
   }
   const 已缓存 = 缩略图缓存.get(key);
-  if (已缓存?.signature === signature) {
+  if (已缓存?.signature === signature && await validThumbnailDependencies(已缓存.result)) {
     thumbnailMetrics.memoryHits++;
     缩略图缓存.delete(key);
     缩略图缓存.set(key, 已缓存);
@@ -484,6 +484,10 @@ export async function 获取图片缩略图(图片路径: string): Promise<缩�
   }
 }
 
+async function 记录封面来源(result: 缩略图结果, paths: string[]): Promise<缩略图结果> {
+  thumbnailDependencies.set(result, await Promise.all([...new Set(paths)].map(async path => ({ path, signature: await 获取路径签名(path).catch(() => '') }))));
+  return result;
+}
 export async function 获取文件夹封面缩略图(文件夹路径: string, budget = { remaining: 32, deadline: Date.now() + 5000 }, depth = 0): Promise<缩略图结果> {
   try {
     if (depth > 6 || budget.remaining-- <= 0 || Date.now() > budget.deadline) return { url: null };
@@ -511,7 +515,7 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
           continue;
         }
         const url = await 读取图片为DataUrl(封面.path, 封面.name);
-        if (url) return { url, itemCount, childFolderCount: 子目录数, folderSummary };
+        if (url) return 记录封面来源({ url, itemCount, childFolderCount: 子目录数, folderSummary }, [封面.path]);
       } catch {
         continue;
       }
@@ -519,7 +523,7 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
     for (const 封面 of 备用候选列表.slice(0, 缩略图候选最大数量)) {
       try {
         const url = await 读取图片为DataUrl(封面.path, 封面.name);
-        if (url) return { url, itemCount, childFolderCount: 子目录数, folderSummary };
+        if (url) return 记录封面来源({ url, itemCount, childFolderCount: 子目录数, folderSummary }, [封面.path]);
       } catch {
         continue;
       }
@@ -534,7 +538,7 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
       const cover = child.isDirectory()
         ? await 获取文件夹封面缩略图(filePath, budget, depth + 1)
         : (budget.remaining--, await 获取缩略图({ path: filePath, type: path.extname(child.name).toLowerCase() === ".pdf" ? "pdf" : path.extname(child.name).toLowerCase() === ".epub" ? "epub" : "archive" }));
-      if (cover.url || cover.pdfPath) return { ...cover, itemCount, childFolderCount: 子目录数, folderSummary };
+      if (cover.url || cover.pdfPath) return 记录封面来源({ ...cover, itemCount, childFolderCount: 子目录数, folderSummary }, [filePath, ...(thumbnailDependencies.get(cover) ?? []).map(entry => entry.path)]);
     }
     return { url: null, itemCount, childFolderCount: 子目录数, folderSummary };
   } catch {
@@ -572,7 +576,7 @@ export async function 获取压缩包封面缩略图(压缩包路径: string): P
 
 export async function 获取缩略图(输入: 缩略图输入): Promise<缩略图结果> {
   if (输入.type === "image") return 使用缩略图缓存(`image:${输入.path}`, 输入.path, () => 获取图片缩略图(输入.path));
-  if (输入.type === "folder") return 获取文件夹封面缩略图(输入.path);
+  if (输入.type === "folder") return 使用缩略图缓存(`folder:${输入.path}`, 输入.path, () => 获取文件夹封面缩略图(输入.path));
   if (输入.type === "archive") return 使用缩略图缓存(`archive:${输入.path}`, 输入.path, () => 获取压缩包封面缩略图(输入.path));
   if (输入.type === "pdf") return { url: null, pdfPath: 输入.path, sourceVersion: await 获取路径签名(输入.path) };
   if (输入.type === "epub") return 使用缩略图缓存(`epub:${输入.path}`, 输入.path, () => 读取EPUB封面(输入.path));

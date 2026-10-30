@@ -236,7 +236,7 @@ final class LocalLibrary {
   }
   private String extension(String name){int i=name.lastIndexOf('.');return i<0?"":name.substring(i+1).toLowerCase(Locale.ROOT);}
   private boolean image(String name){return Arrays.asList("jpg","jpeg","png","webp","gif","bmp").contains(extension(name));}
-  private String type(Entry e){if(e.directory)return "folder";String ext=extension(e.name);if(image(e.name))return "image";if(ext.equals("pdf")||ext.equals("epub"))return ext;if(Arrays.asList("zip","cbz","rar","cbr","7z","cb7").contains(ext))return "archive";return "unknown";}
+  private String type(Entry e){if(e.directory)return "folder";String ext=extension(e.name);if(image(e.name))return "image";if(ext.equals("pdf")||ext.equals("epub")||ext.equals("mobi"))return ext;if(Arrays.asList("zip","cbz","rar","cbr","7z","cb7").contains(ext))return "archive";return "unknown";}
   private JSONObject item(Entry e)throws Exception{return new JSONObject().put("id",e.path).put("path",e.path).put("name",e.name).put("type",type(e)).put("extension",extension(e.name)).put("size",e.size).put("modifiedAt",e.modified);}
   private JSONObject directory(String path)throws Exception{
     Entry e=resolve(path);if(!e.directory)throw new IOException("这不是一个目录。");JSONArray items=new JSONArray();
@@ -425,9 +425,9 @@ final class LocalLibrary {
       key="folder:"+(type.equals("folder")?path:parent(path));
     }else if(type.equals("archive")){
       for(String name:archiveImages(path))pages.put(new JSONObject().put("index",pages.length()).put("name",NativeArchives.displayName(name)).put("sourcePath",path).put("archiveInnerPath",name).put("type","archive-image").put("modifiedAt",nativeArchives.modifiedAt(identity(e),name)));key="archive:"+path;
-    }else if(type.equals("pdf")||type.equals("epub"))key=type+":"+path;
+    }else if(type.equals("pdf")||type.equals("epub")||type.equals("mobi"))key=type+":"+path;
     else throw new IOException("不支持此文件格式。");
-    if(pages.length()==0&&!type.equals("pdf")&&!type.equals("epub"))throw new IOException("NO_IMAGES:未在该文件夹中找到可阅读图片。");
+    if(pages.length()==0&&!type.equals("pdf")&&!type.equals("epub")&&!type.equals("mobi"))throw new IOException("NO_IMAGES:未在该文件夹中找到可阅读图片。");
     synchronized(pageCounts){pageCounts.put(identity(e),pages.length());while(pageCounts.size()>256)pageCounts.remove(pageCounts.keySet().iterator().next());}
     return new JSONObject().put("key",key).put("resourceKey",key).put("title",title).put("sourcePath",source).put("sourceType",type).put("pages",pages).put("total",pages.length());
   }
@@ -591,7 +591,7 @@ final class LocalLibrary {
           List<Entry> children=children(next.uri,next.path);
           if(next.path.equals(root.path)){
             int folders=0,books=0;
-            for(Entry child:children){if(child.directory)folders++;else if(Arrays.asList("archive","pdf","epub").contains(type(child)))books++;}
+            for(Entry child:children){if(child.directory)folders++;else if(Arrays.asList("archive","pdf","epub","mobi").contains(type(child)))books++;}
             scan.count=folders>0||books>1?folders+books:null;
             if(scan.count==null)for(Entry child:children)if(!child.directory&&!type(child).equals("unknown"))scan.byteSize+=child.size;
           }
@@ -619,7 +619,7 @@ final class LocalLibrary {
     JSONObject result=new JSONObject().put("url",JSONObject.NULL).put("itemCount",count);
     String type=type(entry);
     if(type.equals("pdf"))return result.put("pdfPath",entry.path).put("sourceVersion",identity(entry));
-    if(type.equals("unknown"))return result;
+    if(type.equals("unknown")||type.equals("mobi"))return result;
     return result.put("url",registerMedia(entry,null,true));
   }
   private void refreshThumbnails(){
@@ -694,7 +694,10 @@ final class LocalLibrary {
   }
   private JSONObject openDocument(JSONObject input)throws Exception{
     if(documents.size()>=6)throw new IOException("打开的文档过多，请先返回资源库。");
-    Doc d=new Doc();d.path=input.getString("path");d.source=source(resolve(d.path),!input.optString("purpose").equals("thumbnail"));JSONArray chapters=new JSONArray();
+    Doc d=new Doc();d.path=input.getString("path");Entry documentEntry=resolve(d.path);boolean mobi=input.getString("type").equals("mobi");
+    if(mobi&&documentEntry.size>64L*1024*1024)throw new IOException("MOBI 超过本版 64 MB 上限。");
+    if(mobi){d.source=SeekableSource.open(resolver,documentEntry.uri);if(d.source==null)throw new IOException("请先将 MOBI 保存到手机本地目录再打开。");}
+    else d.source=source(documentEntry,!input.optString("purpose").equals("thumbnail"));JSONArray chapters=new JSONArray();
     try {
     if(input.getString("type").equals("epub")){
       String opf=null;for(Tag tag:xml(NativeArchives.entry(d.source,"META-INF/container.xml",2*1024*1024)))if(tag.name.equals("rootfile")){opf=tag.get("full-path");break;}
@@ -707,6 +710,7 @@ final class LocalLibrary {
       }
       if(d.chapters.isEmpty())throw new IOException("EPUB 没有可阅读章节。");
     }
+    if(mobi){long length=d.source.size();if(length<78||length>64L*1024*1024)throw new IOException("MOBI 文件为空或超过本版 64 MB 上限。");byte[] header=d.source.range(0,78);if(!new String(header,60,8,StandardCharsets.US_ASCII).equals("BOOKMOBI"))throw new IOException("文件不是有效的 MOBI。");}
     String id=input.getString("id");closeDocument(id);documents.put(id,d);return new JSONObject().put("size",d.source.size()).put("chapters",chapters);
     }catch(Exception error){d.source.close();throw error;}
   }

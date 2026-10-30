@@ -55,7 +55,7 @@ export async function collectRandomComics(root: string,
       for (const file of response.data.items) {
         if (file.hasError) continue;
         if (file.type === 'folder') queue.push({ path: file.path, entry: file });
-        else if (['archive', 'pdf', 'epub'].includes(file.type)) result.push({ key: `${file.type}:${file.path}`, file });
+        else if (['archive', 'pdf', 'epub', 'mobi'].includes(file.type)) result.push({ key: `${file.type}:${file.path}`, file });
       }
     }
     progress(scanned);

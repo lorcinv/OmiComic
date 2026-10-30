@@ -8,7 +8,7 @@ if (-not (Test-Path -LiteralPath $omiExecutable) -or -not (Test-Path -LiteralPat
 # 只注册当前用户的“打开方式”候选项；不修改 Windows 的默认文件关联。
 $omiCommand = '"{0}" "{1}" "%1"' -f $omiExecutable, $omiRepository
 $omiProgId = 'OmiComic.LocalDocument'
-$omiExtensions = '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.zip', '.cbz', '.rar', '.cbr', '.7z', '.cb7', '.pdf', '.epub'
+$omiExtensions = '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.zip', '.cbz', '.rar', '.cbr', '.7z', '.cb7', '.pdf', '.epub', '.mobi'
 $omiClasses = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\Classes')
 try {
     foreach ($omiApplicationKey in @($omiProgId, 'Applications\OmiComic.Local.exe')) {

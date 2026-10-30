@@ -71,7 +71,8 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
           if(!hit||!(node.contains(hit)||hit===node.closest('button')))return;
           previews.push({url:node.dataset.nativePreview!,rect:nativeRasterRectangle(r,window.devicePixelRatio||1),clip:rectangle(new DOMRect(left,top,right-left,bottom-top))});
         });
-        const message={session,viewportWidth:window.innerWidth,clip:rectangle(clip),slots,previews,nativeExpected:nodes.length>0};
+        const zoom=Number(element.dataset.readerZoom)||1;
+        const message={session,viewportWidth:window.innerWidth,clip:rectangle(clip),slots,previews,nativeExpected:nodes.length>0,panorama:element.classList.contains('is-panorama'),zoom,restoring:element.hasAttribute('data-reader-restoring')};
         const key=JSON.stringify(message);if(key!==last){last=key;androidNotify('readerFrame',{...message,sequence:++geometrySequence});}
       }
       frame=requestAnimationFrame(paint);

@@ -8,8 +8,8 @@ import org.json.*;
 
 /** Persistent URI lookup and bounded directory snapshots. Derived data, never an authority for grants. */
 final class DirectoryIndex extends SQLiteOpenHelper {
-  private static final java.util.regex.Pattern CATALOG_FILE=java.util.regex.Pattern.compile(".*\\.(zip|cbz|rar|cbr|7z|cb7|pdf|epub)$",java.util.regex.Pattern.CASE_INSENSITIVE);
-  DirectoryIndex(Context context){super(context,"directory-index.db",null,3);setWriteAheadLoggingEnabled(true);}
+  private static final java.util.regex.Pattern CATALOG_FILE=java.util.regex.Pattern.compile(".*\\.(zip|cbz|rar|cbr|7z|cb7|pdf|epub|mobi)$",java.util.regex.Pattern.CASE_INSENSITIVE);
+  DirectoryIndex(Context context){super(context,"directory-index.db",null,4);setWriteAheadLoggingEnabled(true);}
   @Override public void onCreate(SQLiteDatabase db){
     db.execSQL("CREATE TABLE entries(path TEXT PRIMARY KEY, uri TEXT NOT NULL, record TEXT NOT NULL)");
     db.execSQL("CREATE TABLE directories(path TEXT PRIMARY KEY, version TEXT NOT NULL, saved INTEGER NOT NULL, listing TEXT NOT NULL)");
@@ -20,7 +20,7 @@ final class DirectoryIndex extends SQLiteOpenHelper {
     db.execSQL("CREATE TABLE IF NOT EXISTS catalog_entries(path TEXT PRIMARY KEY, parent TEXT NOT NULL, uri TEXT NOT NULL, record TEXT NOT NULL)");
     db.execSQL("CREATE INDEX IF NOT EXISTS catalog_parent ON catalog_entries(parent)");
   }
-  @Override public void onUpgrade(SQLiteDatabase db,int old,int next){if(old<2)createCatalog(db);else if(old<3)db.execSQL("ALTER TABLE catalog_directories ADD COLUMN status TEXT NOT NULL DEFAULT 'complete'");}
+  @Override public void onUpgrade(SQLiteDatabase db,int old,int next){if(old<2)createCatalog(db);else if(old<3)db.execSQL("ALTER TABLE catalog_directories ADD COLUMN status TEXT NOT NULL DEFAULT 'complete'");if(old<4){db.execSQL("DELETE FROM directories");db.execSQL("UPDATE catalog_directories SET saved=0,status='pending'");}}
   String uri(String path){
     try{SQLiteDatabase db=getReadableDatabase();for(String table:new String[]{"entries","catalog_entries"})try(Cursor c=db.query(table,new String[]{"uri"},"path=?",new String[]{path},null,null,null)){if(c.moveToFirst())return c.getString(0);}
       try(Cursor c=db.query("catalog_directories",new String[]{"folder"},"path=?",new String[]{path},null,null,null)){if(c.moveToFirst())return new JSONObject(c.getString(0)).getString("uri");}

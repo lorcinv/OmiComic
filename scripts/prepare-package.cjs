@@ -39,7 +39,7 @@ async function main() {
   const licenses = path.join(stage, 'licenses');
   await fs.cp(path.join(root, 'licenses'), licenses, { recursive: true });
   // Include the complete license texts of bundled runtime packages, not development tools.
-  const packages = new Set(['react', 'react-dom', 'scheduler', 'pdfjs-dist']);
+  const packages = new Set(['react', 'react-dom', 'scheduler', 'pdfjs-dist', '@lingo-reader/mobi-parser', '@lingo-reader/shared', 'fflate', 'events', 'path-browserify', 'sax']);
   for (const input of Object.keys(result.metafile.inputs)) {
     const match = input.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);
     if (match) packages.add(match[1]);

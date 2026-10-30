@@ -52,7 +52,7 @@ function merge(store: Store, result: LibraryCatalog) {
     }
   }
   for (const item of result.items) {
-    if (!['folder','archive','pdf','epub'].includes(item.type)) continue;
+    if (!['folder','archive','pdf','epub','mobi'].includes(item.type)) continue;
     const id = canonical(item.path), old = store.records.get(id);
     // Unknown catalog versions preserve metadata obtained from foreground reads.
     const next = old ? { ...old, ...item } : item;
@@ -72,7 +72,7 @@ export function observeLibraryDirectory(root: string, directory: 目录结果) {
   const store = storeFor(root);
   const folder: 文件条目 = { id: directory.path, path: directory.path, name: directory.path.split(/[\\/]/).filter(Boolean).at(-1) ?? directory.path,
     type: 'folder', extension: '', containsImages: directory.items.some(item => item.type === 'image') };
-  const live = new Set(directory.items.filter(item => ['folder','archive','pdf','epub'].includes(item.type)).map(item => canonical(item.path)));
+  const live = new Set(directory.items.filter(item => ['folder','archive','pdf','epub','mobi'].includes(item.type)).map(item => canonical(item.path)));
   const parent = canonical(directory.path).replace(/\/$/, '') + '/';
   const removedPaths = [...store.records.values()].filter(item => {
     const relative = canonical(item.path).slice(parent.length);

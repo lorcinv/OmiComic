@@ -2,7 +2,7 @@ import { promises as fs, type Dirent, type Stats } from "node:fs";
 import path from "node:path";
 export const directoryMetrics = { stat: 0, readdir: 0 };
 
-export type DirectoryResourceType = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
+export type DirectoryResourceType = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
 export interface DirectoryEntry {
   id: string; name: string; path: string; type: DirectoryResourceType; extension: string;
   size?: number; modifiedAt?: number; hasError?: boolean; errorMessage?: string;
@@ -72,7 +72,7 @@ function classify(entry: Dirent): DirectoryResourceType {
   const extension = path.extname(entry.name).slice(1).toLowerCase();
   if (imageExtensions.has(extension)) return "image";
   if (archiveExtensions.has(extension)) return "archive";
-  if (extension === "pdf" || extension === "epub") return extension;
+  if (extension === "pdf" || (extension === "epub" || extension==="mobi")) return extension;
   return "unknown";
 }
 

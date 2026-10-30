@@ -32,11 +32,11 @@ $version = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | Conver
 $licenseTarget = Join-Path $assetTarget 'licenses'
 New-Item -ItemType Directory -Force -Path $licenseTarget | Out-Null
 $noticeLines = @('OmiComic Android third-party notices', 'Android System WebView is provided by the device.', '')
-foreach ($packageName in @('react','react-dom','scheduler','pdfjs-dist')) {
+foreach ($packageName in @('react','react-dom','scheduler','pdfjs-dist','@lingo-reader/mobi-parser','@lingo-reader/shared','fflate','events','path-browserify','sax')) {
   $packageDir = Join-Path (Join-Path $projectRoot 'node_modules') $packageName
   $packageInfo = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $packageDir 'package.json') | ConvertFrom-Json
   $noticeLines += ($packageName + ' ' + $packageInfo.version + ' - ' + $packageInfo.license)
-  Get-ChildItem -LiteralPath $packageDir -File | Where-Object { $_.Name -match '^(LICENSE|NOTICE|COPYING)(\.|$)' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $licenseTarget ($packageName + '-' + $_.Name)) }
+  Get-ChildItem -LiteralPath $packageDir -File | Where-Object { $_.Name -match '^(LICENSE|NOTICE|COPYING)(\.|$)' } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $licenseTarget ($packageName.Replace('/', '-') + '-' + $_.Name)) }
 }
 $noticeLines += 'core-js 3.50.0 (bundled by PDF.js legacy) - MIT'
 $noticeLines += 'libarchive-android 1.1.7 - Apache-2.0; bundled libarchive and compression libraries: see libarchive-NOTICES.txt'

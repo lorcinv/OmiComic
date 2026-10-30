@@ -7,9 +7,9 @@ export interface 应用信息 {
   platform: string;
 }
 
-export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
+export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
 export type 阅读页类型 = "folder-image" | "archive-image" | "pdf-page" | "epub-chapter";
-export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
+export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 每页数量 = 50 | 100 | 150 | 200 | 500;
 export type 排序方式 = "name-asc" | "name-desc" | "time-asc" | "time-desc" | "type";
@@ -350,7 +350,7 @@ contextBridge.exposeInMainWorld("omicomic", {
   chooseExternalFiles: (): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:选择"),
   removeTemporaryOpened: (key: string): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:移除引用", key),
   promoteTemporaryOpened: (key: string): Promise<操作结果<OmiComicAppData>> => ipcRenderer.invoke("外部文件:加入资源库", key),
-  openDocument: (input: { path: string; type: "pdf" | "epub"; id: string; purpose?: "reader" | "thumbnail" }) => ipcRenderer.invoke("document:open", input),
+  openDocument: (input: { path: string; type: "pdf" | "epub" | "mobi"; id: string; purpose?: "reader" | "thumbnail" }) => ipcRenderer.invoke("document:open", input),
   readDocumentRange: (id: string, begin: number, end: number) => ipcRenderer.invoke("document:range", id, begin, end),
   readDocumentChapter: (id: string, index: number) => ipcRenderer.invoke("document:chapter", id, index),
   closeDocument: (id: string) => ipcRenderer.invoke("document:close", id),

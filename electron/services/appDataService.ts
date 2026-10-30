@@ -10,8 +10,8 @@ import { constants as 文件权限 } from "node:fs";
 import path from "node:path";
 import { 路径位于目录, 外部资源授权路径 } from "./externalPaths";
 
-export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
-export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
+export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi";
+export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 主题配色 = "mist" | "nord" | "sand" | "night";
 export type 每页数量 = 50 | 100 | 150 | 200 | 500;
@@ -260,7 +260,7 @@ const 书架备注悬停延迟选项 = new Set<number>([0, 500, 1000, 1500, 2000
 const 最近打开记录上限选项 = new Set<number>([50, 100, 150, 200]);
 const 标签搜索模式选项 = new Set<string>(["fuzzy", "exact"]);
 const 主题配色选项 = new Set<string>(["mist", "nord", "sand", "night"]);
-const 资源类型选项 = new Set<string>(["folder", "image", "archive", "pdf", "epub", "unknown"]);
+const 资源类型选项 = new Set<string>(["folder", "image", "archive", "pdf", "epub", "mobi", "unknown"]);
 
 const 默认设置: AppSettings = {
   showHomePage: true,
@@ -367,7 +367,7 @@ function 修正外部阅读授权(输入: unknown): OmiComicAppData["externalRea
   if (!Array.isArray(输入)) return [];
   return 输入.filter((项): 项 is OmiComicAppData["externalReadGrants"][number] => 是对象(项)
     && typeof 项.sourcePath === "string" && path.isAbsolute(项.sourcePath)
-    && ["folder", "image", "archive", "pdf", "epub"].includes(String(项.sourceType)))
+    && ["folder", "image", "archive", "pdf", "epub", "mobi"].includes(String(项.sourceType)))
     .map(({ sourcePath, sourceType }) => ({ sourcePath, sourceType }));
 }
 
@@ -618,7 +618,7 @@ function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
       || !sourcePath
       || !title
       || totalPages <= 0
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && (sourceType !== "epub" && sourceType!=="mobi"))
     ) {
       continue;
     }
@@ -680,7 +680,7 @@ function 修正最近打开(
       || totalPages <= 0
       || 已加入.has(resourceKey)
       || 已移除资源Key集合.has(resourceKey)
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && (sourceType !== "epub" && sourceType!=="mobi"))
     ) {
       continue;
     }
@@ -751,7 +751,7 @@ function 修正收藏列表(输入: unknown): FavoriteItem[] {
       || !sourcePath
       || !title
       || 已加入.has(resourceKey)
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && (sourceType !== "epub" && sourceType!=="mobi"))
     ) {
       continue;
     }
@@ -796,7 +796,7 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
       Math.max(0, Math.floor(读取数字(项目.pageIndex) ?? 0)),
       Math.max(0, totalPages - 1),
     );
-    const legacyIdentity = sourceType === "pdf" || sourceType === "epub" ? pageIndex : 读取字符串(项目.archiveInnerPath) ?? 读取字符串(项目.pageName) ?? pageIndex;
+    const legacyIdentity = sourceType === "pdf" || (sourceType === "epub" || sourceType==="mobi") ? pageIndex : 读取字符串(项目.archiveInnerPath) ?? 读取字符串(项目.pageName) ?? pageIndex;
     const identityKey = `${resourceKey}:${读取字符串(项目.pageId) ?? legacyIdentity}`;
     if (
       !resourceKey
@@ -804,7 +804,7 @@ function 修正书签列表(输入: unknown): BookmarkItem[] {
       || !title
       || totalPages <= 0
       || 已加入.has(identityKey)
-      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && sourceType !== "epub")
+      || (sourceType !== "folder" && sourceType !== "image" && sourceType !== "archive" && sourceType !== "pdf" && (sourceType !== "epub" && sourceType!=="mobi"))
     ) {
       continue;
     }
@@ -1535,7 +1535,7 @@ export async function 更新资源整理信息(输入: ResourceMetaInput): Promi
         ...收藏,
         title: 输入.title || 收藏.title,
         sourcePath: 输入.sourcePath || 收藏.sourcePath,
-        sourceType: 输入.sourceType === "folder" || 输入.sourceType === "archive" || 输入.sourceType === "pdf" || 输入.sourceType === "epub"
+        sourceType: 输入.sourceType === "folder" || 输入.sourceType === "archive" || 输入.sourceType === "pdf" || (输入.sourceType === "epub" || 输入.sourceType==="mobi")
           ? 输入.sourceType
           : 收藏.sourceType,
         note: 整理信息.note,

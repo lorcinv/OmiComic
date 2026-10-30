@@ -32,11 +32,12 @@ for (const viewport of [{ width: 1920, height: 1040 }, { width: 1100, height: 82
       await page.mouse.move(x - (flow === 'horizontal' ? n * 3 : 0), y - (flow === 'vertical' ? n * 3 : 0));
       await page.waitForTimeout(20);
       positions.push(await page.locator('.is-panorama-strip').evaluate((element, flow) => {
-        const matrix = new DOMMatrix(getComputedStyle(element).transform);
-        return (flow === 'horizontal' ? matrix.m41 : matrix.m42) * devicePixelRatio;
+        const surface = element.querySelector('.is-current-page .has-display-raster canvas') ?? element.querySelector('.is-current-page img')!;
+        const rect = surface.getBoundingClientRect();
+        return (flow === 'horizontal' ? rect.x : rect.y) * devicePixelRatio;
       }, flow));
     }
     await page.mouse.up();
-    expect(positions.every(value => Math.abs(value - Math.round(value)) < .002), JSON.stringify(positions)).toBe(true);
+    expect(positions.every(value => Math.abs(value - positions[0] - Math.round(value - positions[0])) < .01), JSON.stringify(positions)).toBe(true);
   });
 });

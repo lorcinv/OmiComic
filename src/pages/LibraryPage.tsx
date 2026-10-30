@@ -501,7 +501,8 @@ const 类型顺序: Record<资源类型, number> = {
   archive: 2,
   pdf: 3,
   epub: 4,
-  unknown: 5,
+  mobi: 5,
+  unknown: 6,
 };
 
 const 类型信息: Record<资源类型, { label: string; icon: ReturnType<typeof ResourcePlaceholder> }> = {
@@ -510,6 +511,7 @@ const 类型信息: Record<资源类型, { label: string; icon: ReturnType<typeo
   archive: { label: "压缩包", icon: <ResourcePlaceholder type="archive" /> },
   pdf: { label: "PDF", icon: <ResourcePlaceholder type="pdf" /> },
   epub: { label: "EPUB", icon: <ResourcePlaceholder type="epub" /> },
+  mobi: { label: "MOBI", icon: <ResourcePlaceholder type="mobi" /> },
   unknown: { label: "未知文件", icon: <ResourcePlaceholder type="unknown" /> },
 };
 
@@ -537,7 +539,7 @@ function 格式化日期时间(时间戳: number): string {
 }
 
 function 支持真实缩略图(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || (类型 === "epub" || 类型==="mobi");
 }
 
 function 获取父目录路径(文件路径: string): string {
@@ -556,20 +558,20 @@ function 获取文件资源Key(文件: 文件条目): string | null {
   if (文件.type === "image") return `folder:${获取父目录路径(文件.path)}`;
   if (文件.type === "archive") return `archive:${文件.path}`;
   if (文件.type === "pdf") return `pdf:${文件.path}`;
-  if (文件.type === "epub") return `epub:${文件.path}`;
+  if ((文件.type === "epub" || 文件.type==="mobi")) return `epub:${文件.path}`;
   if (文件.type === "unknown") return `file:${文件.path}`;
   return null;
 }
 
 function 支持收藏(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || (类型 === "epub" || 类型==="mobi");
 }
 
 function 获取文件收藏输入(文件: 文件条目): Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex"> | null {
   if (!支持收藏(文件.type)) return null;
   const resourceKey = 获取文件资源Key(文件);
   if (!resourceKey) return null;
-  const sourceType = 文件.type === "pdf" || 文件.type === "epub" || 文件.type === "archive" ? 文件.type : "folder";
+  const sourceType = 文件.type === "pdf" || (文件.type === "epub" || 文件.type==="mobi") || 文件.type === "archive" ? 文件.type : "folder";
 
   return {
     resourceKey,
@@ -826,15 +828,15 @@ function 获取可阅读页数Key(文件: 文件条目): string | null {
 }
 
 function 支持可阅读页数统计(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || (类型 === "epub" || 类型==="mobi");
 }
 
 function 可作为阅读资源(类型: 资源类型): boolean {
-  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || 类型 === "epub";
+  return 类型 === "folder" || 类型 === "image" || 类型 === "archive" || 类型 === "pdf" || (类型 === "epub" || 类型==="mobi");
 }
 
-function 获取文件阅读类型(文件: 文件条目): "folder" | "image" | "archive" | "pdf" | "epub" | null {
-  if (文件.type === "folder" || 文件.type === "image" || 文件.type === "archive" || 文件.type === "pdf" || 文件.type === "epub") return 文件.type;
+function 获取文件阅读类型(文件: 文件条目): "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | null {
+  if (文件.type === "folder" || 文件.type === "image" || 文件.type === "archive" || 文件.type === "pdf" || (文件.type === "epub" || 文件.type==="mobi")) return 文件.type;
   return null;
 }
 
@@ -1630,9 +1632,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 目录查询来源 = useMemo(() => (目录穿透搜索 || 随机模式) ? 全库索引.items : 当前目录?.items ?? [],
     [目录穿透搜索, 随机模式, 全库索引.items, 当前目录]);
   const 目录查询条件 = useMemo(() => (文件: 文件条目) => {
-    if (!['folder','image','archive','pdf','epub'].includes(文件.type)) return false;
+    if (!['folder','image','archive','pdf','epub','mobi'].includes(文件.type)) return false;
     if ((目录穿透搜索 || 随机模式) && 文件.path === 当前根目录 && !文件.containsImages) return false;
-    if (随机模式 && !(文件.type === 'folder' ? 文件.containsImages : ['archive','pdf','epub'].includes(文件.type))) return false;
+    if (随机模式 && !(文件.type === 'folder' ? 文件.containsImages : ['archive','pdf','epub','mobi'].includes(文件.type))) return false;
     if (隐藏已加入书架资源 && 当前目录?.path === 当前根目录) {
       const resourceKey = 获取文件资源Key(文件);
       if (resourceKey && 已加入书架资源集合.resourceKeys.has(resourceKey)) return false;
@@ -2509,11 +2511,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   ), [筛选后收藏列表]);
   const 虚拟文件夹阅读队列 = useMemo<阅读相邻资源项[]>(() => (
     筛选后虚拟文件夹项目
-      .filter((项目) => 项目.sourceType === "folder" || 项目.sourceType === "image" || 项目.sourceType === "archive" || 项目.sourceType === "pdf" || 项目.sourceType === "epub")
+      .filter((项目) => 项目.sourceType === "folder" || 项目.sourceType === "image" || 项目.sourceType === "archive" || 项目.sourceType === "pdf" || (项目.sourceType === "epub" || 项目.sourceType==="mobi"))
       .map((项目) => ({
         key: 项目.resourceKey,
         path: 项目.sourcePath,
-        type: 项目.sourceType as "folder" | "image" | "archive" | "pdf" | "epub",
+        type: 项目.sourceType as "folder" | "image" | "archive" | "pdf" | "epub" | "mobi",
         title: 项目.title,
       }))
   ), [筛选后虚拟文件夹项目]);
@@ -2906,7 +2908,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       // A details panel can stay mounted behind the reader. Refresh only its
       // page manifest on return, preserving the selected physical thumbnail.
       const preview = 资源详情阅读资源, sequence = 资源详情加载序号.current;
-      if (preview && 资源信息目标 && preview.sourceType !== 'pdf' && preview.sourceType !== 'epub') {
+      if (preview && 资源信息目标 && preview.sourceType !== 'pdf' && (preview.sourceType !== 'epub' && preview.sourceType!=='mobi')) {
         const selected = preview.pages[资源详情所选页];
         const refreshed = await window.omicomic.getResourcePages({ path: preview.sourcePath, type: preview.sourceType });
         if (!已取消 && sequence === 资源详情加载序号.current && refreshed.ok) {
@@ -4194,7 +4196,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       && 文件.type !== "image"
       && 文件.type !== "archive"
       && 文件.type !== "pdf"
-      && 文件.type !== "epub"
+      && (文件.type !== "epub" && 文件.type!=="mobi")
     ) return;
 
     设置错误信息(null);
@@ -4322,7 +4324,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       设置错误信息("书架中的资源原路径已失效或不可读取，不会进入阅读器。此记录不会自动删除，可右键从当前书架移除。");
       return;
     }
-    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive" && 项目.sourceType !== "pdf" && 项目.sourceType !== "epub") return;
+    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive" && 项目.sourceType !== "pdf" && (项目.sourceType !== "epub" && 项目.sourceType!=="mobi")) return;
 
     设置错误信息(null);
     try {
@@ -4374,7 +4376,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         return;
       }
 
-      const 起始页 = 结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Math.max(0, 项目.pageIndex) : resolvePageIndex(结果.data.pages, 项目.pageId, 项目.archiveInnerPath ?? 项目.pageName, 项目.pageIndex);
+      const 起始页 = 结果.data.sourceType === "pdf" || (结果.data.sourceType === "epub" || 结果.data.sourceType==="mobi") ? Math.max(0, 项目.pageIndex) : resolvePageIndex(结果.data.pages, 项目.pageId, 项目.archiveInnerPath ?? 项目.pageName, 项目.pageIndex);
       if (项目.pageIndex >= 结果.data.total && !项目.pageId && !项目.pageName) {
         设置错误信息("书签页码已超出当前资源页数，已跳转到最后一页。");
       }
@@ -4896,7 +4898,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     设置中键拖拽悬浮卡片({
       kind: "resource",
       title: 项目.title,
-      subtitle: 项目.pageName ?? `第 ${项目.pageIndex + 1} / ${项目.totalPages} ${项目.sourceType === "epub" ? "章" : "页"}`,
+      subtitle: 项目.pageName ?? `第 ${项目.pageIndex + 1} / ${项目.totalPages} ${(项目.sourceType === "epub" || 项目.sourceType==="mobi") ? "章" : "页"}`,
       icon,
       typeLabel,
       thumbnailUrl,
@@ -5175,7 +5177,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 转为收藏输入(项目: VirtualFolderItemInput): 收藏输入 | null {
-    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive" && 项目.sourceType !== "pdf" && 项目.sourceType !== "epub") return null;
+    if (项目.sourceType !== "folder" && 项目.sourceType !== "image" && 项目.sourceType !== "archive" && 项目.sourceType !== "pdf" && (项目.sourceType !== "epub" && 项目.sourceType!=="mobi")) return null;
     return {
       resourceKey: 项目.resourceKey,
       sourcePath: 项目.sourcePath,
@@ -5795,7 +5797,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 本次加载序号 = ++资源详情加载序号.current;
     const 路径 = 目标.kind === "bookmark" ? 目标.item.sourcePath : 目标.input.sourcePath;
     const 类型 = 目标.kind === "bookmark" ? 目标.item.sourceType : 目标.fileType;
-    if (类型 !== "folder" && 类型 !== "image" && 类型 !== "archive" && 类型 !== "pdf" && 类型 !== "epub") {
+    if (类型 !== "folder" && 类型 !== "image" && 类型 !== "archive" && 类型 !== "pdf" && (类型 !== "epub" && 类型!=="mobi")) {
       设置资源详情加载状态("error");
       return;
     }
@@ -5808,7 +5810,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           return;
         }
         设置资源详情阅读资源(结果.data);
-        设置资源详情所选页((原页) => Math.min(Math.max(原页, 0), (结果.data.sourceType === "pdf" || 结果.data.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1))));
+        设置资源详情所选页((原页) => Math.min(Math.max(原页, 0), (结果.data.sourceType === "pdf" || (结果.data.sourceType === "epub" || 结果.data.sourceType==="mobi") ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1))));
         设置资源详情加载状态("loaded");
       })
       .catch(() => {
@@ -5846,7 +5848,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 打开资源详情阅读器(页码 = 资源详情所选页): void {
     if (!资源详情阅读资源) return;
-    const 起始页 = Math.min(Math.max(页码, 0), (资源详情阅读资源.sourceType === "pdf" || 资源详情阅读资源.sourceType === "epub" ? Number.MAX_SAFE_INTEGER : Math.max(0, 资源详情阅读资源.total - 1)));
+    const 起始页 = Math.min(Math.max(页码, 0), (资源详情阅读资源.sourceType === "pdf" || (资源详情阅读资源.sourceType === "epub" || 资源详情阅读资源.sourceType==="mobi") ? Number.MAX_SAFE_INTEGER : Math.max(0, 资源详情阅读资源.total - 1)));
     void 保存资源当前进度(资源详情阅读资源, 起始页);
     打开阅读器(资源详情阅读资源, 起始页);
   }
@@ -6831,7 +6833,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 信息 = 类型信息[类型];
     const 当前标签 = 解析标签输入(整理标签输入);
     const 进度文本 = 是书签
-      ? `第 ${资源信息目标.item.pageIndex + 1} / ${资源信息目标.item.totalPages} ${资源信息目标.item.sourceType === "epub" ? "章" : "页"}`
+      ? `第 ${资源信息目标.item.pageIndex + 1} / ${资源信息目标.item.totalPages} ${(资源信息目标.item.sourceType === "epub" || 资源信息目标.item.sourceType==="mobi") ? "章" : "页"}`
       : 资源信息目标.progressText;
     const 已保存备注 = 是书签
       ? 获取整理备注(资源信息目标.item)
@@ -7224,7 +7226,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 定位续读页面(资源: 阅读资源结果, 进度: ReadingProgress | null, fallback: number): number {
-    if (资源.sourceType === 'pdf' || 资源.sourceType === 'epub') return Math.max(0, fallback);
+    if (资源.sourceType === 'pdf' || (资源.sourceType === 'epub' || 资源.sourceType==='mobi')) return Math.max(0, fallback);
     return resolvePageIndex(资源.pages, 进度?.currentPageId, 进度?.currentPageName, fallback);
   }
 
@@ -7404,7 +7406,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 标题 = 是书签 ? (资源信息目标.item.bookmarkTitle ?? 资源信息目标.item.title) : 资源信息目标.input.title;
     const 路径 = 是书签 ? 资源信息目标.item.sourcePath : 资源信息目标.input.sourcePath;
     const 类型 = 资源信息目标.fileType;
-    const 阅读单位 = t(类型 === "epub" ? "章" : "页");
+    const 阅读单位 = t((类型 === "epub" || 类型==="mobi") ? "章" : "页");
     const 信息 = 类型信息[类型];
     const 当前标签 = 解析标签输入(整理标签输入);
     const 资源Key = 是书签 ? 资源信息目标.item.resourceKey : 资源信息目标.input.resourceKey;
@@ -7431,7 +7433,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           <div className="resource-detail-compact-bar" aria-hidden={!资源详情顶部折叠}>
             <div className="resource-detail-compact-copy">
               <strong title={标题}>{标题}</strong>
-              <span>{总页数 > 0 ? tr`第 ${当前页索引 + 1} / ${总页数} ${t(阅读单位)} · ${Math.round(进度百分比)}%` : (类型 === "pdf" || 类型 === "epub" ? t("打开后继续阅读") : t("正在读取页面清单"))}</span>
+              <span>{总页数 > 0 ? tr`第 ${当前页索引 + 1} / ${总页数} ${t(阅读单位)} · ${Math.round(进度百分比)}%` : (类型 === "pdf" || (类型 === "epub" || 类型==="mobi") ? t("打开后继续阅读") : t("正在读取页面清单"))}</span>
             </div>
             <button
               type="button"
@@ -7472,7 +7474,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               <div className="resource-detail-reading-status">
                 <div className="resource-detail-progress-copy">
                   <span>{t("阅读进度")}</span>
-                  <strong>{总页数 > 0 ? tr`第 ${当前页索引 + 1} ${t(阅读单位)} / 共 ${总页数} ${t(阅读单位)}` : (类型 === "pdf" || 类型 === "epub" ? t("打开后继续阅读") : t("等待页面清单"))}</strong>
+                  <strong>{总页数 > 0 ? tr`第 ${当前页索引 + 1} ${t(阅读单位)} / 共 ${总页数} ${t(阅读单位)}` : (类型 === "pdf" || (类型 === "epub" || 类型==="mobi") ? t("打开后继续阅读") : t("等待页面清单"))}</strong>
                   <em>{Math.round(进度百分比)}%</em>
                 </div>
                 <span className="resource-detail-progress-track" aria-hidden="true">
@@ -7508,7 +7510,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             <div className="resource-detail-section-heading">
               <div className="resource-detail-preview-title">
                 <h3 id="resource-preview-heading">{t("缩略预览")}</h3>
-                {!手机布局 ? (总页数 > 0 && <p>{tr`共 ${总页数} ${t(阅读单位)}`}</p>) : <p>{类型 === "pdf" || 类型 === "epub"
+                {!手机布局 ? (总页数 > 0 && <p>{tr`共 ${总页数} ${t(阅读单位)}`}</p>) : <p>{类型 === "pdf" || (类型 === "epub" || 类型==="mobi")
                   ? (总页数 > 0 ? tr`共 ${总页数} ${t(阅读单位)} · 使用上方按钮继续阅读` : t("使用上方按钮开始阅读"))
                   : 总页数 > 0 ? tr`共 ${总页数} 页 · ${t(singleTapNavigation() ? "点击从该页阅读" : "单击选择，双击从该页阅读")}` : t("正在读取页面清单")}</p>}
               </div>
@@ -7549,7 +7551,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 {手机布局 && 资源详情阅读资源 && 资源详情阅读资源.pages.length > 0 && (
                   <span>{t("已选择第 ")}{Math.min(资源详情所选页 + 1, Math.max(1, 总页数))}{t(" 页")}</span>
                 )}
-                {类型 !== "pdf" && 类型 !== "epub" && <CardScaleControl
+                {类型 !== "pdf" && (类型 !== "epub" && 类型!=="mobi") && <CardScaleControl
                   className="resource-detail-size-control" label={t("缩略预览大小")} scope="detail"
                   motion={缩放动效.detail}
                   value={详情缩略图缩放} onChange={value => 调整卡片缩放(value, "detail")} onCommit={保存缩放设置}
@@ -7573,7 +7575,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   <span>{整理错误 ?? t("请返回后重新打开资源信息。")}</span>
                 </div>
               )}
-              {资源详情加载状态 === "loaded" && 资源详情阅读资源 && (类型 === "pdf" || 类型 === "epub") && (
+              {资源详情加载状态 === "loaded" && 资源详情阅读资源 && (类型 === "pdf" || (类型 === "epub" || 类型==="mobi")) && (
                 <div className="resource-detail-preview-empty"><strong>{信息.label}{t(" 文档")}</strong><span>{t("使用上方阅读按钮打开，沿用当前阅读模式。")}</span></div>
               )}
               {资源详情阅读资源?.pages.slice(资源详情预览页 * 48, (资源详情预览页 + 1) * 48).map((页面) => (
@@ -8483,7 +8485,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       ? { status: "loaded" as const, url: 项目.thumbnailUrl }
                       : { status: "idle" as const, url: null }
                   );
-                  const 页码文本 = `第 ${项目.pageIndex + 1} / ${项目.totalPages} ${项目.sourceType === "epub" ? "章" : "页"}`;
+                  const 页码文本 = `第 ${项目.pageIndex + 1} / ${项目.totalPages} ${(项目.sourceType === "epub" || 项目.sourceType==="mobi") ? "章" : "页"}`;
                   const 标签列表 = 获取整理标签(项目);
                   const 书签备注 = 获取整理备注(项目);
                   const 路径失效 = 路径是否失效(文件.path);
@@ -8637,11 +8639,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       url: null,
                     };
                     const 收藏输入: Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex"> | null =
-                      文件.type === "folder" || 文件.type === "archive" || 文件.type === "image" || 文件.type === "pdf" || 文件.type === "epub"
+                      文件.type === "folder" || 文件.type === "archive" || 文件.type === "image" || 文件.type === "pdf" || (文件.type === "epub" || 文件.type==="mobi")
                         ? {
                             resourceKey: 项目.resourceKey,
                             sourcePath: 项目.sourcePath,
-                            sourceType: 文件.type === "pdf" || 文件.type === "epub" || 文件.type === "archive" ? 文件.type : "folder",
+                            sourceType: 文件.type === "pdf" || (文件.type === "epub" || 文件.type==="mobi") || 文件.type === "archive" ? 文件.type : "folder",
                             title: 项目.title,
                           }
                         : null;

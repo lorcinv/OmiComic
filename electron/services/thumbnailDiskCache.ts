@@ -9,6 +9,15 @@ const pendingWrites = new Set<Promise<void>>();
 const limit = 128 * 1024 * 1024, entryLimit = 16 * 1024 * 1024;
 const cacheName = /^[a-f0-9]{64}\.json$/;
 export const thumbnailDiskMetrics = { hits: 0, writes: 0, bytes: 0 };
+export const thumbnailDependencies = new WeakMap<缩略图结果, Array<{ path: string; signature: string }>>();
+export async function validThumbnailDependencies(result: 缩略图结果) {
+  const dependencies = thumbnailDependencies.get(result);
+  if (!dependencies) return true;
+  return (await Promise.all(dependencies.map(async entry => {
+    try { const stat = await fs.stat(entry.path); return entry.signature === `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}:${stat.isDirectory() ? 'd' : 'f'}`; }
+    catch { return false; }
+  }))).every(Boolean);
+}
 export function configureThumbnailDiskCache(folder: string) { directory = folder; generation++; }
 const fileFor = (key: string, version: string) => path.join(directory!, createHash('sha256').update('cover-v1\n' + key + '\n' + version).digest('hex') + '.json');
 export async function readThumbnailDisk(key: string, version: string): Promise<缩略图结果 | undefined> {
@@ -18,7 +27,16 @@ export async function readThumbnailDisk(key: string, version: string): Promise<�
     if (stat.size > entryLimit) return;
     const saved = JSON.parse(await fs.readFile(file, 'utf8')) as 缩略图结果;
     if (typeof saved.url !== 'string' || !/^data:image\/(png|jpeg|gif|webp|bmp);base64,/.test(saved.url)) return;
-    thumbnailDiskMetrics.hits++; return { url: saved.url };
+    const result: 缩略图结果 = { url: saved.url };
+    const record = saved as 缩略图结果 & { dependencies?: Array<{ path: string; signature: string }> };
+    if (record.dependencies) {
+      if (!Array.isArray(record.dependencies) || record.dependencies.length > 16 || record.dependencies.some(d => !d || typeof d.path !== 'string' || !path.isAbsolute(d.path) || typeof d.signature !== 'string')) return;
+      thumbnailDependencies.set(result, record.dependencies);
+      if (!await validThumbnailDependencies(result)) return;
+    }
+    for (const key of ['itemCount','childFolderCount'] as const) if (Number.isSafeInteger(saved[key]) && saved[key]! >= 0) result[key] = saved[key];
+    if (saved.folderSummary && ['folders','books','images','unsupported'].every(key => Number.isSafeInteger((saved.folderSummary as Record<string,number>)[key]) && (saved.folderSummary as Record<string,number>)[key] >= 0)) result.folderSummary = saved.folderSummary;
+    thumbnailDiskMetrics.hits++; return result;
   } catch { return; }
 }
 export function writeThumbnailDisk(key: string, version: string, result: 缩略图结果) {
@@ -28,7 +46,7 @@ export function writeThumbnailDisk(key: string, version: string, result: 缩略�
 }
 async function write(key: string, version: string, result: 缩略图结果) {
   if (!directory || !result.url?.startsWith('data:image/')) return;
-  const text = JSON.stringify({ url: result.url }), bytes = Buffer.byteLength(text);
+  const text = JSON.stringify({ url: result.url, itemCount: result.itemCount, childFolderCount: result.childFolderCount, folderSummary: result.folderSummary, dependencies: thumbnailDependencies.get(result) }), bytes = Buffer.byteLength(text);
   if (bytes > entryLimit) return;
   const epoch = generation, folder = directory, file = fileFor(key, version), temporary = file + '.' + randomUUID() + '.tmp';
   try {

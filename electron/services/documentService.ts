@@ -3,8 +3,9 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocumentSource } from "./pdfService";
 import { EPUBDocumentSource, type EPUBChapter } from "./epubService";
+import { MobiBinarySource } from './mobiBinarySource';
 
-type Source = PDFDocumentSource | EPUBDocumentSource;
+type Source = PDFDocumentSource | EPUBDocumentSource | MobiBinarySource;
 interface Session { owner: number; purpose: "reader" | "thumbnail"; closed: boolean; source?: Source; cleanup?: () => void }
 const sessions = new Map<string, Session>();
 const closedRequests = new Map<string, number>();
@@ -21,7 +22,7 @@ export function registerDocumentIpc(findRoot: (filePath: string) => string | nul
     } catch (error) { return { ok: false, error: { code: "DOCUMENT_READ_FAILED", message: error instanceof Error ? error.message : "文档读取失败。" } }; }
   });
   handle("document:open", async (event, input: unknown) => {
-    if (!input || typeof input !== "object" || !("path" in input) || typeof input.path !== "string" || !("type" in input) || !["pdf", "epub"].includes(String(input.type)) || !("id" in input)) throw new Error("文档参数无效。");
+    if (!input || typeof input !== "object" || !("path" in input) || typeof input.path !== "string" || !("type" in input) || !["pdf", "epub", "mobi"].includes(String(input.type)) || !("id" in input)) throw new Error("文档参数无效。");
     const id = key(event, input.id);
     for (const [old, time] of closedRequests) if (time < Date.now() - 60000) closedRequests.delete(old);
     if (closedRequests.has(id)) throw new Error("文档会话已取消。");
@@ -46,10 +47,10 @@ export function registerDocumentIpc(findRoot: (filePath: string) => string | nul
       const info = await stat(realTarget);
       if (!info.isFile() || info.size > 2 * 1024 ** 3) throw new Error("文档超过 2 GB 安全上限。");
       if (session.closed) throw new Error("文档会话已取消。");
-      const source = input.type === "pdf" ? await PDFDocumentSource.open(realTarget) : new EPUBDocumentSource(realTarget);
+      const source = input.type === "pdf" ? await PDFDocumentSource.open(realTarget) : input.type==='mobi'?await MobiBinarySource.open(realTarget):new EPUBDocumentSource(realTarget);
       session.source = source;
       if (session.closed) { await source.close(); throw new Error("文档会话已取消。"); }
-      if (source instanceof PDFDocumentSource) return { size: source.size, chapters: [] };
+      if (source instanceof PDFDocumentSource || source instanceof MobiBinarySource) return { size: source.size, chapters: [] };
       const chapters = await source.request<EPUBChapter[]>("index");
       return { size: info.size, chapters };
     } catch (error) { if (sessions.get(id) === session) sessions.delete(id); await close(session); event.sender.removeListener("destroyed", onDestroyed); throw error; }
@@ -61,7 +62,7 @@ export function registerDocumentIpc(findRoot: (filePath: string) => string | nul
   };
   handle("document:range", async (event, id, begin, end) => {
     const document = source(event, id);
-    if (!(document instanceof PDFDocumentSource)) throw new Error("该文档不是 PDF。");
+    if (!(document instanceof PDFDocumentSource || document instanceof MobiBinarySource)) throw new Error("该文档不支持范围读取。");
     return document.range(begin, end);
   });
   handle("document:chapter", async (event, id, index) => {

@@ -6,7 +6,7 @@
 
 **整理你的漫画，接着上次阅读。**
 
-OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android 双端漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF 和 EPUB 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
+OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android 双端漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和传统无 DRM 的 MOBI 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
 
 ## 视频演示
 
@@ -18,16 +18,16 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.49 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.49/OmiComic-Portable-1.1.49-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.49/OmiComic-Setup-1.1.49-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.49 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.49/OmiComic-1.1.49-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.55 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Portable-1.1.55-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Setup-1.1.55-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.55 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-1.1.55-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.49：继续优化两端打开漫画时的加载流程，修复 PC 重新进入阅读时的加载闪现、首次随机数量不足，并调整拖入提示。[更新说明](docs/releases/v1.1.49.md)。
+1.1.55：累计整理 1.1.50–1.1.55 的阅读改进，扩大 PC 横向点击翻页范围，优化双端缩放还原、手机拖拽及 PC 翻页响应，补齐内置操作说明。[逐版更新说明](docs/releases/v1.1.55.md)。
 
 ## 功能
 
-- 直接阅读图片文件夹、单张图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF 和 EPUB。
+- 直接阅读图片文件夹、单张图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和传统无 DRM 的 MOBI。
 - 用书架、分类、标签、收藏和搜索整理漫画，用书签标记喜欢的页面。
 - 单页、双页、全景、沉浸和自动阅读，按内容与习惯选择阅读方式。
 - 自动保存阅读进度，首页快速继续阅读。

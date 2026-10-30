@@ -6,7 +6,7 @@
 
 **漫画を整理して、前回の続きから。**
 
-OmiComic は、ローカルでの高速起動とすっきりした読書体験を重視した、Windows・Android 両対応の漫画リーダーです。画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB に対応し、本棚、カテゴリー、タグ、お気に入りでローカルの漫画を整理できます。
+OmiComic は、ローカルでの高速起動とすっきりした読書体験を重視した、Windows・Android 両対応の漫画リーダーです。画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、従来形式の DRM なし MOBI に対応し、本棚、カテゴリー、タグ、お気に入りでローカルの漫画を整理できます。
 
 ## 紹介動画
 
@@ -18,16 +18,16 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.47 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Portable-1.1.47-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Setup-1.1.47-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.47 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-1.1.47-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.55 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Portable-1.1.55-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Setup-1.1.55-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.55 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-1.1.55-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.47 は PC・Android 共通更新です。表紙の読み込み順を改善し、PC の表紙キャッシュを再起動後も利用します。段階的な検索では既存項目の重複処理を削減しました。[更新内容](docs/releases/v1.1.47.md)。
+1.1.55 は 1.1.50–1.1.55 の読書改善をまとめ、PC 横向きのクリック範囲、両環境のズーム復元、スマートフォンのドラッグ、PC のページ応答を改善しました。操作ガイドにも追加機能を反映しています。[バージョン別更新内容](docs/releases/v1.1.55.md)。
 
 ## 機能
 
-- 画像フォルダー、単一画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB に対応。
+- 画像フォルダー、単一画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、従来形式の DRM なし MOBI に対応。
 - 本棚、カテゴリー、タグ、お気に入り、検索で整理。気になるページにはしおりを残せます。
 - 単ページ、見開き、パノラマ、没入、自動読書から読み方を選択。
 - 読書進捗を自動保存し、ホーム画面からすぐに再開。

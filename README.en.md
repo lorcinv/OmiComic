@@ -6,7 +6,7 @@
 
 **Organize your comics. Pick up where you left off.**
 
-OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB, with bookshelves, categories, tags and favorites to organize your local collection.
+OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI, with bookshelves, categories, tags and favorites to organize your local collection.
 
 ## Video demo
 
@@ -18,16 +18,16 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.47 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Portable-1.1.47-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-Setup-1.1.47-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.47 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.47/OmiComic-1.1.47-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.55 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Portable-1.1.55-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Setup-1.1.55-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.55 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-1.1.55-android.apk) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.47 updates PC and Android together: faster cover scheduling, a persistent PC cover cache and less repeated work during incremental search. [Release notes](docs/releases/v1.1.47.md).
+1.1.55 includes the 1.1.50–1.1.55 reader updates: wider PC horizontal click zones, smoother zoom/reset on both platforms, mobile page dragging and faster PC page turns. The offline guide now covers the added controls. [Version-by-version notes](docs/releases/v1.1.55.md).
 
 ## Features
 
-- Read image folders, individual images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB.
+- Read image folders, individual images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI.
 - Organize comics with bookshelves, categories, tags, favorites and search. Bookmark pages you want to return to.
 - Choose single-page, double-page, panorama, immersive or automatic reading.
 - Reading progress is saved automatically, with quick access from the home screen.

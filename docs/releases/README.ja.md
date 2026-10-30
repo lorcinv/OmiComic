@@ -4,10 +4,17 @@
 
 過去のバージョンのダウンロードと更新履歴。
 
-[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.40)
+[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.55)
 
 | バージョン | 対応環境 | リリース |
 | --- | --- | --- |
+| v1.1.55 | PC · Windows x64 / Android 1.1.55 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.55) |
+| v1.1.50 | PC · Windows x64 / Android 1.1.50 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.50) |
+| v1.1.49 | PC · Windows x64 / Android 1.1.49 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.49) |
+| v1.1.48 | PC · Windows x64 / Android 1.1.48 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.48) |
+| v1.1.47 | PC · Windows x64 / Android 1.1.47 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.47) |
+| v1.1.46 | PC · Windows x64 1.1.45 / Android 1.1.46 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.46) |
+| v1.1.45 | PC · Windows x64 / Android 1.1.45 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.45) |
 | v1.1.40 | PC · Windows x64 / Android 1.1.40 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.40) |
 | v1.1.39 | PC · Windows x64 1.1.39 / Android 1.1.38 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.39) |
 | v1.1.38 | PC · Windows x64 1.1.38 / Android 1.1.38 | [リリース](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.38) |

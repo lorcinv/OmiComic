@@ -53,7 +53,7 @@ html[data-mobile-navigation="home-collapse"]::view-transition-old(root) { z-inde
 @keyframes mobile-home-expand { from { clip-path:circle(0 at var(--mobile-home-x) var(--mobile-home-y)); } to { clip-path:circle(var(--mobile-home-radius) at var(--mobile-home-x) var(--mobile-home-y)); } }
 @keyframes mobile-home-collapse { from { clip-path:circle(var(--mobile-home-radius) at var(--mobile-home-x) var(--mobile-home-y)); } to { clip-path:circle(0 at var(--mobile-home-x) var(--mobile-home-y)); } }
 .app-content:has(.mobile-reader-preparing) { position: relative; }
-.page-panel.mobile-reader-preparing { display: block; position: absolute; inset: 0; visibility: hidden; opacity: 0; pointer-events: none; z-index: -1; }
+.app-content > .page-panel.mobile-reader-preparing { display: block; position: absolute; inset: 0; visibility: hidden; opacity: 0; pointer-events: none; z-index: -1; }
 
 html.is-home-library-transition .omi-page-brand {
   view-transition-name: omi-page-brand;

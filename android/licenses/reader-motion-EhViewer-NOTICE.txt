@@ -1,0 +1,12 @@
+Reader motion timing adapted from EhViewer
+Copyright 2016 Hippo Seven
+Licensed under the Apache License, Version 2.0.
+
+Upstream: https://github.com/EhViewer-NekoInverter/EhViewer
+Revision: 9e1021640472ee45f35c0bb1950723db08549b9e
+Source: app/src/main/java/com/hippo/glgallery/PagerLayoutManager.java
+        app/src/main/java/com/hippo/yorozuya/AnimationUtils.java
+
+The TypeScript adaptation uses the 300 ms LinearOutSlowIn scale restoration
+and quintic page-settle easing with OmiComic's existing retained surfaces.
+The corresponding license is reader-motion-Apache-2.0.txt.

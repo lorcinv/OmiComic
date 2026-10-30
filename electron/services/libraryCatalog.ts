@@ -27,7 +27,7 @@ function excluded(target: string, hidden: Set<string>) {
     if (path.dirname(value) === value) return false;
   }
 }
-function blockFile(directory: string) { return path.join(storage!, createHash('sha256').update(key(directory)).digest('hex') + '.json'); }
+function blockFile(directory: string) { return path.join(storage!, createHash('sha256').update('formats-1152:'+key(directory)).digest('hex') + '.json'); }
 function retain(block: Block) {
   hot.delete(key(block.path)); hot.set(key(block.path), block);
   let count = 0; for (const value of hot.values()) count += value.items.length;
@@ -42,7 +42,7 @@ async function savedBlock(directory: string): Promise<Block | undefined> {
   try {
     const text = await fs.readFile(blockFile(directory), 'utf8'), block = JSON.parse(text) as Block;
     if (key(block.path) !== key(directory) || !Array.isArray(block.items) || !block.folder
-      || block.items.some(item => key(path.dirname(item.path)) !== key(directory) || !['folder','archive','pdf','epub'].includes(item.type))) return;
+      || block.items.some(item => key(path.dirname(item.path)) !== key(directory) || !['folder','archive','pdf','epub','mobi'].includes(item.type))) return;
     catalogMetrics.diskHits++; retain(block); return block;
   } catch { /* Missing or damaged derived blocks are rebuilt individually. */ }
 }
@@ -76,7 +76,7 @@ export async function observeCatalogDirectory(directory: string, entries: Direct
   const folder: CatalogEntry = { ...previous?.folder, id: directory, path: directory,
     name: path.basename(directory), extension: '', type: 'folder', containsImages: entries.some(item => item.type === 'image') };
   await saveBlock({ path: directory, saved: Date.now(), folder,
-    items: entries.filter(item => ['folder','archive','pdf','epub'].includes(item.type)) });
+    items: entries.filter(item => ['folder','archive','pdf','epub','mobi'].includes(item.type)) });
 }
 export function cancelLibraryCatalogScans(root?: string) {
   // Completed blocks and queues survive cancellation.
@@ -93,7 +93,7 @@ export async function invalidateCatalogDirectories(root: string, paths: string[]
   }
 }
 const extensions = new Map<string, DirectoryEntry['type']>([
-  ...['zip','cbz','rar','cbr','7z','cb7'].map(extension => [extension, 'archive'] as const), ['pdf','pdf'], ['epub','epub'],
+  ...['zip','cbz','rar','cbr','7z','cb7'].map(extension => [extension, 'archive'] as const), ['pdf','pdf'], ['epub','epub'], ['mobi','mobi'],
 ]);
 async function discover(job: Job, metadata: boolean, root: string): Promise<Block> {
   if (!within(await fs.realpath(root), await fs.realpath(job.path))) throw new Error('资源库目录超出授权范围。');

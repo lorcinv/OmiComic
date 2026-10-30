@@ -28,6 +28,7 @@
   !insertmacro ${ACTION} "cb7"
   !insertmacro ${ACTION} "pdf"
   !insertmacro ${ACTION} "epub"
+  !insertmacro ${ACTION} "mobi"
 !macroend
 
 !macro customInstall

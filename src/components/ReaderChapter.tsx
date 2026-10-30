@@ -6,9 +6,10 @@ interface Props {
   width: number;
   height: number;
   style: CSSProperties;
+  onPrepared?: ()=>void;
 }
 
-function ReaderChapter({ html, title, width, height, style }: Props) {
+function ReaderChapter({ html, title, width, height, style, onPrepared }: Props) {
   const shownWidth = typeof style.width === "string" && style.width.endsWith("px")
     ? Number.parseFloat(style.width) : width;
   const scale = shownWidth / width;
@@ -17,13 +18,14 @@ function ReaderChapter({ html, title, width, height, style }: Props) {
       onLoad={event => {
         const chapter = event.currentTarget.contentDocument;
         if (!chapter) return;
+        if(onPrepared)void Promise.all([...chapter.images].map(image=>image.decode().catch(()=>undefined))).then(onPrepared);
         if (document.documentElement.dataset.omiLayout === 'desktop') {
           const selectionStyle = chapter.createElement('style');
           selectionStyle.textContent = '* { user-select: none !important; -webkit-user-select: none !important; }';
           chapter.head.append(selectionStyle);
         }
         for (const name of ['pointerdown', 'wheel', 'keydown']) chapter.addEventListener(name, () => window.dispatchEvent(new Event('omi-pause')), { passive: true });
-        if (document.documentElement.dataset.colorTheme !== "night") return;
+        if (chapter.body.dataset.omiImagePage==='true'||document.documentElement.dataset.colorTheme !== "night") return;
         const palette = getComputedStyle(document.documentElement);
         chapter.documentElement.style.colorScheme = "dark";
         chapter.body.style.backgroundColor = palette.getPropertyValue("--面板色");

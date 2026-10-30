@@ -25,7 +25,7 @@ export async function 识别外部资源(输入: string): Promise<{ path: string
   const 扩展名 = path.extname(目标路径).slice(1).toLowerCase();
   const type = ["jpg", "jpeg", "png", "webp", "bmp", "gif"].includes(扩展名) ? "image"
     : ["zip", "cbz", "rar", "cbr", "7z", "cb7"].includes(扩展名) ? "archive"
-      : 扩展名 === "pdf" || 扩展名 === "epub" ? 扩展名 : null;
-  if (!type) throw new Error("该文件格式暂不支持，支持图片、漫画压缩包、PDF 和 EPUB。");
+      : 扩展名 === "pdf" || (扩展名 === "epub" || 扩展名==="mobi") ? 扩展名 : null;
+  if (!type) throw new Error("该文件格式暂不支持，支持图片、漫画压缩包、PDF、EPUB 和 MOBI。");
   return { path: 目标路径, type };
 }

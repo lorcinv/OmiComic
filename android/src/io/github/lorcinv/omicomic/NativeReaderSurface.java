@@ -50,7 +50,7 @@ final class NativeReaderSurface extends View {
   private final Map<String,Long> adjusting=new HashMap<>();
   private final Set<String> failedTiles=new HashSet<>();
   private long adjustedBytes;
-  private long cancelledLoads,retiredBytes,previewHits,coalescedFrames,frameSequence;
+  private long cancelledLoads,retiredBytes,previewHits,coalescedFrames,frameSequence,movingRetainedFrames;
   private JSONObject queuedGeometry;
   private boolean frameScheduled;
   private final View previewOverlay;
@@ -59,15 +59,16 @@ final class NativeReaderSurface extends View {
   private long rasterDiskHits;
   private long rasterSourceSkips;
   private long refinements,refinementFailures,refinementCancellations;
-  private final ExecutorService displayWorker=Executors.newSingleThreadExecutor(work->new Thread(()->{android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);work.run();},"Omi-display-sampling"));
-  private final LinkedHashMap<String,Bitmap> displayRasters=new LinkedHashMap<>(8,.75f,true);
-  private final LinkedHashMap<String,DisplayRequest> displayPending=new LinkedHashMap<>();
-  private final Set<String> visibleDisplay=new HashSet<>();
-  private final LinkedHashSet<String> displayFailed=new LinkedHashSet<>();
-  private DisplayRequest displayActive;
-  private long displayBytes,displayBuilds,displayHits,displayBuildMs,displayBackoffUntil,tileFilterBuilds;
-  private static final class DisplayRequest {String key,url;Bitmap source;int width,height;long generation;volatile boolean cancelled;}
+  // Retain compatible diagnostics; fit-size pages use decoded mipmaps directly.
+  private long displayBytes,displayBuilds,displayHits,displayBuildMs,tileFilterBuilds;
   private List<String> previewRasterUrls=new ArrayList<>();
+  private Map<String,TilePlan> completeTilePlans=new HashMap<>(),restoreTilePlans=new HashMap<>();
+  private boolean wasRestoring;
+  private long restoreFadeStart,restoreQualityFrames,restoreFadeFrames;
+  private static final long ZOOM_QUIET_MS=320,QUALITY_FADE_MS=180;
+  private final Map<String,TilePresentation> tilePresentations=new HashMap<>();
+  private float lastQualityZoom=1;
+  private long lastZoomTime,qualityBlendFrames;
 
   private static final class Raster {
     final String url;final Bitmap bitmap;final int width,height,sample,orientation;final Matrix toOriginal;final long created=SystemClock.uptimeMillis();boolean preview;
@@ -75,9 +76,10 @@ final class NativeReaderSurface extends View {
     Raster(String url,Bitmap bitmap,int w,int h,int sample,int orientation){this.url=url;this.bitmap=bitmap;this.orientation=orientation;width=orientation>=5?h:w;height=orientation>=5?w:h;this.sample=sample;Matrix transform=orientationMatrix(orientation);RectF area=new RectF(0,0,w,h);transform.mapRect(area);transform.postTranslate(-area.left,-area.top);toOriginal=new Matrix();transform.invert(toOriginal);}
   }
   private static final class Slot {String url;RectF rect,clip;float alpha;Raster raster;}
-  private static final class Frame {RectF clip;List<Slot> slots=new ArrayList<>();}
+  private static final class Frame {RectF clip;boolean panorama,restoring;float zoom=1;List<Slot> slots=new ArrayList<>();}
   private static final class Tile {Bitmap bitmap;Rect source;}
   private static final class TilePlan {Slot slot;int sample,filterBucket;List<Rect> regions=new ArrayList<>();List<String> keys=new ArrayList<>();long bytes;}
+  private static final class TilePresentation {TilePlan current,previous;long started;}
   private static final class PendingRaster {
     volatile long generation,seek;volatile String key="";final CompletableFuture<Raster> future=new CompletableFuture<>();
     PendingRaster(long generation,long seek){this.generation=generation;this.seek=seek;}
@@ -104,8 +106,7 @@ final class NativeReaderSurface extends View {
   void configure(JSONObject args){
     long next=args.optLong("session",session);
     if(next!=session){
-      clearDisplaySampling();
-      current=null;pendingFrame=null;queuedGeometry=null;frameSequence=0;
+      current=null;pendingFrame=null;queuedGeometry=null;frameSequence=0;completeTilePlans.clear();restoreTilePlans.clear();tilePresentations.clear();lastQualityZoom=1;lastZoomTime=0;wasRestoring=false;restoreFadeStart=0;
       synchronized(cacheLock){
         session=next;generation++;seekGeneration=0;workingKeys.clear();pageKeys.clear();pinned.clear();visibleTiles.clear();failedTiles.clear();tilesPending.clear();tiles.clear();tileBytes=0;previewRestoring.clear();previewRestoreFailed.clear();
         // Keep a small recent working set (including the just-warmed first
@@ -123,16 +124,23 @@ final class NativeReaderSurface extends View {
     int workers=Math.max(1,concurrency-1);prefetch.setCorePoolSize(Math.min(prefetch.getCorePoolSize(),workers));prefetch.setMaximumPoolSize(workers);prefetch.setCorePoolSize(workers);
     try{background=Color.parseColor(args.optString("background","#efefed"));}catch(Exception ignored){}
     JSONObject value=args.optJSONObject("effects");String key=value==null?"":value.toString();
-    if(!key.equals(effectsKey)){effectsKey=key;effects=value==null?new JSONObject():value;adjusted.clear();adjustedBytes=0;}
+    if(!key.equals(effectsKey)){effectsKey=key;effects=value==null?new JSONObject():value;adjusted.clear();adjustedBytes=0;tilePresentations.clear();}
     boolean wasActive=active;active=args.optBoolean("active");
     boolean wasReading=readerOpen;readerOpen=args.optBoolean("reading",active);
     synchronized(cacheLock){if(readerOpen&&!wasReading)library.beginReaderSession();else if(!readerOpen&&wasReading)library.endReaderSession();}
-    if(!active){clearDisplaySampling();current=null;pendingFrame=null;queuedGeometry=null;previews.clear();synchronized(cacheLock){if(wasActive){generation++;warmGeneration++;cache.clear();previewCache.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;adjusted.clear();adjusting.clear();adjustedBytes=0;}workingKeys.clear();pinned.clear();visibleTiles.clear();previewRestoring.clear();previewRestoreFailed.clear();}}
+    if(!active){current=null;pendingFrame=null;queuedGeometry=null;previews.clear();completeTilePlans.clear();restoreTilePlans.clear();tilePresentations.clear();lastQualityZoom=1;lastZoomTime=0;wasRestoring=false;restoreFadeStart=0;synchronized(cacheLock){if(wasActive){generation++;warmGeneration++;cache.clear();previewCache.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;adjusted.clear();adjusting.clear();adjustedBytes=0;}workingKeys.clear();pinned.clear();visibleTiles.clear();previewRestoring.clear();previewRestoreFailed.clear();}}
     synchronized(cacheLock){trim();}invalidate();
   }
   void seek(JSONObject args){
     synchronized(cacheLock){
       if(args.optLong("session",-1)!=session)return;
+      if(args.optBoolean("prioritizeOnly")){
+        // Panorama keeps a continuous load generation. Only rank its near pages
+        // for eviction/writes; do not cancel the already decoding neighbours.
+        workingKeys.clear();JSONArray keep=args.optJSONArray("keep");
+        if(keep!=null)for(int i=0;i<keep.length()&&i<48;i++)workingKeys.put(keep.optString(i),i);
+        lastNavigation=SystemClock.uptimeMillis();return;
+      }
       long next=Math.max(seekGeneration,args.optLong("seek",0));if(next==seekGeneration)return;
       seekGeneration=next;lastNavigation=SystemClock.uptimeMillis();workingKeys.clear();
       JSONArray keep=args.optJSONArray("keep");if(keep!=null)for(int i=0;i<keep.length()&&i<48;i++)workingKeys.put(keep.optString(i),i);
@@ -169,15 +177,15 @@ final class NativeReaderSurface extends View {
         if(url.isEmpty())url=((JSONObject)library.call("getPageImage",args)).getString("url");
         synchronized(cacheLock){requestSeek(expected,expectedSeek,key);library.beginReaderSession();if(!key.isEmpty()){pageKeys.put(url,key);while(pageKeys.size()>512)pageKeys.remove(pageKeys.keySet().iterator().next());}}
         Raster raster=load(url,targetW,targetH,expected,requestSeek(expected,expectedSeek,key),key,speculative);
-        if(speculative&&raster.preview){
-          // A speculative reply means clear pixels are ready. Never block the
+        if(raster.preview){
+          // A prepared reply means clear pixels are ready. Never block the
           // foreground executor waiting for a refinement queued on itself.
           CompletableFuture<Raster> ready;synchronized(cacheLock){
-            Raster latest=cache.get(raster.url);if(latest!=null&&!latest.preview){prepared(reply,latest,expected,expectedSeek,key,true);return;}
+            Raster latest=cache.get(raster.url);if(latest!=null&&!latest.preview){prepared(reply,latest,expected,expectedSeek,key,speculative);return;}
             promote(raster,null,raster.orientation>=5?raster.height:raster.width,raster.orientation>=5?raster.width:raster.height,raster.fullSample);ready=raster.clearFuture;
           }
           if(ready==null)throw new IOException("清晰图预读暂未完成。");
-          ready.whenComplete((full,error)->{if(error!=null)reply.complete(null,new IOException("清晰图预读已取消或失败。",error));else prepared(reply,full,expected,expectedSeek,key,true);});
+          ready.whenComplete((full,error)->{if(error!=null)reply.complete(null,new IOException("清晰图预读已取消或失败。",error));else prepared(reply,full,expected,expectedSeek,key,speculative);});
         }else prepared(reply,raster,expected,expectedSeek,key,speculative);
       }catch(Exception error){reply.complete(null,error);}catch(OutOfMemoryError memory){reply.complete(null,new IOException("图片过大，请降低阅读图片缓存后重试。"));}
     });
@@ -429,7 +437,7 @@ final class NativeReaderSurface extends View {
   private void applyFrame(JSONObject args){
     try{
       float factor=getWidth()/(float)args.getDouble("viewportWidth");
-      Frame next=new Frame();next.clip=rect(args.getJSONArray("clip"),factor);
+      Frame next=new Frame();next.clip=rect(args.getJSONArray("clip"),factor);next.panorama=args.optBoolean("panorama");next.restoring=args.optBoolean("restoring");next.zoom=(float)Math.max(.5,Math.min(6,args.optDouble("zoom",1)));
       List<Slot> nextPreviews=new ArrayList<>();JSONArray previewRects=args.optJSONArray("previews");
       if(previewRects!=null)for(int i=0;i<previewRects.length()&&i<12;i++){JSONObject item=previewRects.getJSONObject(i);Slot p=new Slot();p.url=item.getString("url");p.rect=rect(item.getJSONArray("rect"),factor);p.clip=rect(item.getJSONArray("clip"),factor);nextPreviews.add(p);}
       previews=nextPreviews;previewOverlay.invalidate();
@@ -437,12 +445,31 @@ final class NativeReaderSurface extends View {
       if(slots.length()==0&&args.optBoolean("nativeExpected")&&current!=null)return;
       synchronized(cacheLock){
         pinned.clear();if(current!=null)for(Slot slot:current.slots)pinned.add(slot.url);
-        for(int i=0;i<slots.length()&&i<48;i++){JSONObject item=slots.getJSONObject(i);Slot slot=new Slot();slot.url=item.getString("url");slot.rect=rect(item.getJSONArray("rect"),factor);slot.alpha=(float)item.optDouble("alpha",1);slot.raster=cache.get(slot.url);next.slots.add(slot);pinned.add(slot.url);}
+        for(int i=0;i<slots.length()&&i<48;i++){JSONObject item=slots.getJSONObject(i);Slot slot=new Slot();slot.url=item.getString("url");slot.rect=rasterRect(item.getJSONArray("rect"),factor);slot.alpha=(float)item.optDouble("alpha",1);slot.raster=cache.get(slot.url);next.slots.add(slot);pinned.add(slot.url);}
       }
       pendingFrame=next;commitFrame();
     }catch(Exception invalid){android.util.Log.w("OmiComic","Invalid reader geometry",invalid);}
   }
   private static RectF rect(JSONArray a,float scale)throws JSONException{return new RectF((float)a.getDouble(0)*scale,(float)a.getDouble(1)*scale,(float)a.getDouble(2)*scale,(float)a.getDouble(3)*scale);}
+  private static RectF rasterRect(JSONArray a,float scale)throws JSONException{RectF r=rect(a,scale);float left=Math.round(r.left),top=Math.round(r.top);return new RectF(left,top,left+Math.round(r.width()),top+Math.round(r.height()));}
+  private void followPendingPanorama(){
+    if(current==null||pendingFrame==null||!pendingFrame.panorama)return;
+    Map<String,Slot> latest=new HashMap<>();for(Slot slot:pendingFrame.slots)latest.put(slot.url,slot);
+    Slot before=null,after=null;
+    for(Slot slot:current.slots){Slot next=latest.get(slot.url);if(next!=null&&slot.raster!=null){before=slot;after=next;break;}}
+    if(before==null)return;
+    float dx=after.rect.left-before.rect.left,dy=after.rect.top-before.rect.top;
+    Frame following=new Frame();following.clip=pendingFrame.clip;following.panorama=true;following.zoom=pendingFrame.zoom;following.restoring=pendingFrame.restoring;Set<String> drawn=new HashSet<>();
+    // Retain decoded pixels while following the latest finger position. Waiting
+    // for a new neighbour must never freeze or replay the whole strip's pose.
+    for(Slot old:current.slots){
+      Slot next=latest.get(old.url),slot=new Slot();slot.url=old.url;slot.raster=next!=null&&next.raster!=null?next.raster:old.raster;
+      slot.rect=next==null?new RectF(old.rect):new RectF(next.rect);if(next==null)slot.rect.offset(dx,dy);slot.alpha=next==null?old.alpha:next.alpha;
+      if(slot.raster!=null&&RectF.intersects(slot.rect,following.clip)){following.slots.add(slot);drawn.add(slot.url);}
+    }
+    for(Slot slot:pendingFrame.slots)if(slot.raster!=null&&!drawn.contains(slot.url))following.slots.add(slot);
+    if(!following.slots.isEmpty()){current=following;movingRetainedFrames++;}
+  }
   private void commitFrame(){
     if(pendingFrame==null)return;
     boolean complete=true;
@@ -454,74 +481,64 @@ final class NativeReaderSurface extends View {
       }
     }
     if(complete){current=pendingFrame;pendingFrame=null;synchronized(cacheLock){pinned.clear();for(Slot slot:current.slots){pinned.add(slot.url);rememberVisibleRaster(slot.raster);}trim();}refineVisiblePages();}
-    else retainedFrames++;
+    else {retainedFrames++;followPendingPanorama();}
     invalidate();
   }
   @Override protected void onDraw(Canvas canvas){
     super.onDraw(canvas);if(!active)return;canvas.drawColor(background);
     Frame frame=current;if(frame==null||frame.slots.isEmpty()){emptyFrames++;return;}drawnFrames++;
+    long now=SystemClock.uptimeMillis();
+    if(Math.abs(frame.zoom-lastQualityZoom)>.0001f){lastQualityZoom=frame.zoom;lastZoomTime=now;}
+    // Geometry continues every frame, but quality work belongs to a completed
+    // zoom gesture. Keep the last complete level through pauses and restore.
+    boolean holdQuality=frame.restoring||now-lastZoomTime<ZOOM_QUIET_MS;
+    if(holdQuality)postInvalidateDelayed(ZOOM_QUIET_MS);
+    if(frame.restoring&&!wasRestoring)restoreTilePlans=new HashMap<>(completeTilePlans);
+    if(frame.restoring&&!restoreTilePlans.isEmpty())restoreQualityFrames++;
+    wasRestoring=frame.restoring;
     List<TilePlan> plans=new ArrayList<>();Set<String> wanted=new HashSet<>();visibleAdjustments.clear();
-    for(Slot slot:frame.slots){TilePlan plan=tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size()));plans.add(plan);if(plan!=null)wanted.addAll(plan.keys);if(slot.raster!=null)visibleAdjustments.add(slot.raster.url+":"+slot.raster.sample+effectsKey);}
+    Set<String> pageUrls=new HashSet<>();
+    for(Slot slot:frame.slots){
+      pageUrls.add(slot.url);
+      TilePresentation shown=tilePresentations.get(slot.url);
+      if(shown==null){shown=new TilePresentation();tilePresentations.put(slot.url,shown);}
+      if(shown.started>0&&now-shown.started>=QUALITY_FADE_MS){shown.previous=null;shown.started=0;}
+      // Both quality levels share the existing tile budget. Do not prepare a
+      // third level while the preceding blend is still on screen.
+      TilePlan plan=holdQuality?null:shown.started>0?shown.current:frame.zoom>1.01f?tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size())):null;
+      if(!holdQuality&&plan==null&&frame.zoom>1.01f)plan=shown.current;
+      plans.add(plan);if(plan!=null)wanted.addAll(plan.keys);if(slot.raster!=null)visibleAdjustments.add(slot.raster.url+":"+slot.raster.sample+effectsKey);
+      if(shown.current!=null)wanted.addAll(shown.current.keys);
+      if(shown.previous!=null)wanted.addAll(shown.previous.keys);
+    }
+    tilePresentations.keySet().retainAll(pageUrls);completeTilePlans.keySet().retainAll(pageUrls);
     for(String key:wanted)visibleAdjustments.add(key+effectsKey);
     synchronized(cacheLock){visibleTiles.clear();visibleTiles.addAll(wanted);trim();}
-    Set<String> displayed=new HashSet<>();
     canvas.save();canvas.clipRect(frame.clip);
     for(int i=0;i<frame.slots.size();i++){Slot slot=frame.slots.get(i);
       Raster raster=slot.raster;if(raster==null)continue;
       paint.setAlpha(Math.round(slot.alpha*255));
-      Bitmap base=adjust(raster.url+":"+raster.sample,raster.bitmap);drawDisplayRaster(canvas,base,slot,displayed);
-      drawTiles(canvas,plans.get(i));
+      // Decode-time low-pass plus mipmaps is the final fit-size presentation.
+      // Never replace a visible page with a second, asynchronously filtered copy.
+      Bitmap base=adjust(raster.url+":"+raster.sample,raster.bitmap);canvas.drawBitmap(base,null,slot.rect,paint);
+      TilePresentation shown=tilePresentations.get(slot.url);TilePlan target=plans.get(i);
+      if(!holdQuality&&shown.started==0&&!sameTiles(shown.current,target)&&tilesReady(target,true)){
+        shown.previous=shown.current;shown.current=target;shown.started=now;
+      }
+      float mix=shown.started==0?1:Math.min(1,(now-shown.started)/(float)QUALITY_FADE_MS);mix=mix*mix*(3-2*mix);
+      if(shown.started>0){qualityBlendFrames++;if(Math.abs(frame.zoom-1)<.001f)restoreFadeFrames++;postInvalidateOnAnimation();}
+      if(shown.previous!=null){paint.setAlpha(Math.round(slot.alpha*(shown.current==null?1-mix:1)*255));drawTiles(canvas,atSlot(shown.previous,slot),false);}
+      if(shown.current!=null){paint.setAlpha(Math.round(slot.alpha*mix*255));drawTiles(canvas,atSlot(shown.current,slot),false);completeTilePlans.put(slot.url,shown.current);}
+      else completeTilePlans.remove(slot.url);
     }
     canvas.restore();
-    synchronized(cacheLock){visibleDisplay.clear();visibleDisplay.addAll(displayed);trimDisplayRasters();}
+    if(!holdQuality)restoreTilePlans.clear();
   }
-  private void drawDisplayRaster(Canvas canvas,Bitmap source,Slot slot,Set<String> displayed){
-    int width=Math.max(1,Math.round(slot.rect.width())),height=Math.max(1,Math.round(slot.rect.height()));
-    if(width>=source.getWidth()||height>=source.getHeight()||(long)width*height>4000000L||SystemClock.uptimeMillis()<displayBackoffUntil){canvas.drawBitmap(source,null,slot.rect,paint);return;}
-    String key=slot.url+":"+source.getGenerationId()+":"+width+":"+height;displayed.add(key);
-    Bitmap ready;synchronized(cacheLock){ready=displayRasters.get(key);}
-    if(ready!=null){
-      displayHits++;float left=Math.round(slot.rect.left),top=Math.round(slot.rect.top);
-      canvas.drawBitmap(ready,null,new RectF(left,top,left+width,top+height),paint);return;
-    }
-    canvas.drawBitmap(source,null,slot.rect,paint);
-    if(displayFailed.contains(key)||(displayActive!=null&&!displayActive.cancelled&&displayActive.key.equals(key)))return;
-    DisplayRequest old=displayPending.get(slot.url);if(old!=null&&old.key.equals(key))return;
-    if(old!=null)old.cancelled=true;
-    if(displayActive!=null&&displayActive.url.equals(slot.url))displayActive.cancelled=true;
-    DisplayRequest request=new DisplayRequest();request.key=key;request.url=slot.url;request.source=source;request.width=width;request.height=height;request.generation=generation;
-    displayPending.put(slot.url,request);
-    while(displayPending.size()>4){String first=displayPending.keySet().iterator().next();displayPending.remove(first).cancelled=true;}
-    nextDisplaySampling();
+  private static boolean sameTiles(TilePlan left,TilePlan right){return left==right||left!=null&&right!=null&&left.keys.equals(right.keys);}
+  private TilePlan atSlot(TilePlan old,Slot slot){
+    TilePlan plan=new TilePlan();plan.slot=slot;plan.sample=old.sample;plan.filterBucket=old.filterBucket;plan.regions=old.regions;plan.keys=old.keys;plan.bytes=old.bytes;return plan;
   }
-  private void nextDisplaySampling(){
-    if(displayActive!=null||displayPending.isEmpty()||stopped)return;
-    String first=displayPending.keySet().iterator().next();final DisplayRequest request=displayPending.remove(first);displayActive=request;
-    displayWorker.execute(()->{
-      Bitmap result=null;boolean failed=false;long started=SystemClock.uptimeMillis();
-      try{result=DisplayResampler.resize(request.source,request.width,request.height,()->{if(stopped||request.cancelled||request.generation!=generation||Thread.currentThread().isInterrupted())throw new IOException("Display sampling cancelled");});}
-      catch(IOException|RuntimeException ignored){failed=true;}catch(OutOfMemoryError ignored){failed=true;}
-      final Bitmap sampled=result;final boolean error=failed;final long elapsed=SystemClock.uptimeMillis()-started;
-      post(()->{
-        if(displayActive==request)displayActive=null;
-        if(!stopped&&active&&!request.cancelled&&request.generation==generation){
-          if(sampled!=null){synchronized(cacheLock){Bitmap prior=displayRasters.put(request.key,sampled);displayBytes+=sampled.getAllocationByteCount()-(prior==null?0:prior.getAllocationByteCount());displayBuilds++;displayBuildMs+=elapsed;trimDisplayRasters();trim();}invalidate();}
-          else if(error){displayFailed.add(request.key);while(displayFailed.size()>64)displayFailed.remove(displayFailed.iterator().next());}
-        }else if(sampled!=null)sampled.recycle();
-        nextDisplaySampling();
-      });
-    });
-  }
-  private void trimDisplayRasters(){
-    long limit=Math.min(24L*1024*1024,Math.max(4L*1024*1024,budget/4));
-    Iterator<Map.Entry<String,Bitmap>> old=displayRasters.entrySet().iterator();
-    while(displayBytes>limit&&old.hasNext()){Map.Entry<String,Bitmap> e=old.next();if(visibleDisplay.contains(e.getKey()))continue;displayBytes-=e.getValue().getAllocationByteCount();old.remove();}
-  }
-  private void clearDisplaySampling(){
-    if(displayActive!=null)displayActive.cancelled=true;
-    for(DisplayRequest request:displayPending.values())request.cancelled=true;
-    displayPending.clear();displayFailed.clear();synchronized(cacheLock){displayRasters.clear();visibleDisplay.clear();displayBytes=0;}
-  }
+  private boolean tilesReady(TilePlan plan,boolean requestMissing){return plan==null||drawTiles(null,plan,requestMissing);}
   private TilePlan tilePlan(Slot slot,RectF clip,long allocation){
     Raster raster=slot.raster;
     if(raster==null||raster.preview||raster.sample<=1||slot.rect.width()<=0||slot.rect.height()<=0)return null;
@@ -544,23 +561,29 @@ final class NativeReaderSurface extends View {
       Rect region=new Rect(x,y,Math.min(raster.width,x+unit),Math.min(raster.height,y+unit));plan.regions.add(region);plan.keys.add(raster.url+":"+sample+":"+x+":"+y+":"+plan.filterBucket);
       plan.bytes+=(long)((region.width()+sample-1)/sample)*((region.height()+sample-1)/sample)*4;
     }
-    if(plan.bytes<=allocation)return plan;
+    long retained=0;TilePresentation shown=tilePresentations.get(slot.url);
+    if(shown!=null&&shown.current!=null)for(int i=0;i<shown.current.keys.size();i++){
+      if(plan.keys.contains(shown.current.keys.get(i)))continue;
+      Rect region=shown.current.regions.get(i);int previousSample=shown.current.sample;
+      retained+=(long)((region.width()+previousSample-1)/previousSample)*((region.height()+previousSample-1)/previousSample)*4;
+    }
+    if(plan.bytes+retained<=allocation)return plan;
     sample*=2;
     }
     return null;
   }
-  private void drawTiles(Canvas canvas,TilePlan plan){
-    if(plan==null)return;Slot slot=plan.slot;Raster raster=slot.raster;
+  private boolean drawTiles(Canvas canvas,TilePlan plan,boolean requestMissing){
+    if(plan==null)return false;Slot slot=plan.slot;Raster raster=slot.raster;
     List<Rect> missing=new ArrayList<>();List<String> keys=new ArrayList<>();List<Tile> ready=new ArrayList<>();boolean complete=true;
-    synchronized(cacheLock){for(int i=0;i<plan.keys.size();i++){String key=plan.keys.get(i);Tile tile=tiles.get(key);ready.add(tile);if(tile==null){complete=false;if(!tilesPending.containsKey(key)&&!failedTiles.contains(key)){tilesPending.put(key,generation);missing.add(plan.regions.get(i));keys.add(key);}}}}
+    synchronized(cacheLock){for(int i=0;i<plan.keys.size();i++){String key=plan.keys.get(i);Tile tile=tiles.get(key);ready.add(tile);if(tile==null){complete=false;if(requestMissing&&!tilesPending.containsKey(key)&&!failedTiles.contains(key)){tilesPending.put(key,generation);missing.add(plan.regions.get(i));keys.add(key);}}}}
     List<Bitmap> processed=new ArrayList<>();
     if(complete)for(int i=0;i<ready.size();i++){String key=plan.keys.get(i);processed.add(adjust(key,ready.get(i).bitmap));if(NativeImageAdjustments.changed(effects)&&!adjusted.containsKey(key+effectsKey))complete=false;}
     // Replace the visible region as one complete quality level, never a mosaic
     // of old/new tiles. The filtered base stays intact while any tile is missing.
-    if(complete)for(int i=0;i<ready.size();i++){
+    if(complete&&canvas!=null)for(int i=0;i<ready.size();i++){
       Rect region=plan.regions.get(i);RectF dst=new RectF(slot.rect.left+(float)region.left/raster.width*slot.rect.width(),slot.rect.top+(float)region.top/raster.height*slot.rect.height(),slot.rect.left+(float)region.right/raster.width*slot.rect.width(),slot.rect.top+(float)region.bottom/raster.height*slot.rect.height());canvas.drawBitmap(processed.get(i),null,dst,paint);
     }
-    if(missing.isEmpty())return;
+    if(missing.isEmpty()||!requestMissing)return complete;
     final int resolution=plan.sample,filterBucket=plan.filterBucket;final long expected=generation;
     prefetch.execute(2,()->{
       BitmapRegionDecoder decoder=null;
@@ -595,6 +618,7 @@ final class NativeReaderSurface extends View {
       }catch(Exception|OutOfMemoryError ignored){synchronized(cacheLock){if(expected==generation){if(failedTiles.size()>1024)failedTiles.clear();failedTiles.addAll(keys);}}/* Keep the base without retrying unsupported tiles every frame. */}
       finally{if(decoder!=null)decoder.recycle();synchronized(cacheLock){for(String key:keys)if(Objects.equals(tilesPending.get(key),expected))tilesPending.remove(key);}}
     });
+    return complete;
   }
   private void drawPreviews(Canvas canvas){
     previewRasterUrls.clear();
@@ -654,7 +678,7 @@ final class NativeReaderSurface extends View {
     }
     return source;
   }
-  void trimMemory(){clearDisplaySampling();displayBackoffUntil=SystemClock.uptimeMillis()+2000;synchronized(cacheLock){Iterator<Map.Entry<String,Raster>> it=cache.entrySet().iterator();while(it.hasNext()){Map.Entry<String,Raster> e=it.next();if(!pinned.contains(e.getKey())){bytes-=e.getValue().bitmap.getAllocationByteCount();it.remove();}}tiles.clear();tileBytes=0;}adjusted.clear();adjustedBytes=0;}
+  void trimMemory(){synchronized(cacheLock){Iterator<Map.Entry<String,Raster>> it=cache.entrySet().iterator();while(it.hasNext()){Map.Entry<String,Raster> e=it.next();if(!pinned.contains(e.getKey())){bytes-=e.getValue().bitmap.getAllocationByteCount();it.remove();}}tiles.clear();tileBytes=0;}tilePresentations.clear();completeTilePlans.clear();restoreTilePlans.clear();adjusted.clear();adjustedBytes=0;}
   JSONObject stats()throws JSONException{synchronized(cacheLock){return new JSONObject().put("active",active).put("drawnFrames",drawnFrames).put("emptyFrames",emptyFrames).put("retainedFrames",retainedFrames).put("bitmapDecodes",bitmapDecodes).put("bitmapHits",bitmapHits).put("tileDecodes",tileDecodes).put("decodeMs",decodeMs).put("readMs",readMs).put("bitmapBytes",bytes).put("tileBytes",tileBytes).put("displayRasterBytes",displayBytes).put("displayRasterBuilds",displayBuilds).put("displayRasterHits",displayHits).put("displayRasterBuildMs",displayBuildMs).put("tileFilterBuilds",tileFilterBuilds).put("budget",budget).put("visiblePages",current==null?0:current.slots.size()).put("previewHits",previewHits).put("sharedPreviewDraws",sharedPreviewDraws).put("rasterDiskHits",rasterDiskHits).put("rasterSourceSkips",rasterSourceSkips).put("refinements",refinements).put("refinementFailures",refinementFailures).put("refinementCancellations",refinementCancellations).put("previewRestores",previewRestores).put("previewSlots",previews.size()).put("previewRasterUrls",new JSONArray(previewRasterUrls)).put("tileBudget",tileBudget()).put("cancelledLoads",cancelledLoads).put("retiredBytes",retiredBytes).put("coalescedFrames",coalescedFrames).put("retainedLoads",retainedLoads).put("clearPrefetches",clearPrefetches).put("rasterWriteCount",rasterWriteCount).put("deferredRasterWrites",deferredRasterWrites).put("pendingRasterWrites",pendingWrites.size());}}
-  void close(){clearDisplaySampling();displayWorker.shutdownNow();synchronized(cacheLock){stopped=true;generation++;warmGeneration++;pendingWrites.clear();workingKeys.clear();pageKeys.clear();}library.setReaderPreviewSource(null);foreground.getQueue().clear();prefetch.getQueue().clear();foreground.shutdownNow();prefetch.shutdownNow();rasterWrites.shutdownNow();current=null;pendingFrame=null;queuedGeometry=null;synchronized(cacheLock){cache.clear();previewCache.clear();previewRestoring.clear();previewRestoreFailed.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;}adjusted.clear();}
+  void close(){synchronized(cacheLock){stopped=true;generation++;warmGeneration++;pendingWrites.clear();workingKeys.clear();pageKeys.clear();}library.setReaderPreviewSource(null);foreground.getQueue().clear();prefetch.getQueue().clear();foreground.shutdownNow();prefetch.shutdownNow();rasterWrites.shutdownNow();current=null;pendingFrame=null;queuedGeometry=null;synchronized(cacheLock){cache.clear();previewCache.clear();previewRestoring.clear();previewRestoreFailed.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;}adjusted.clear();}
 }

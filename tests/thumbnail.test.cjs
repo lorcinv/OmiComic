@@ -45,18 +45,37 @@ function decoder(onDecode = () => {}) {
   } };
 }
 
+test('folder covers reuse memory and disk pixels and invalidate a changed nested source', async t => {
+  const file=await source(t),root=path.join(path.dirname(file),'Books'),nested=path.join(root,'Chapter'),page=path.join(nested,'001.png');
+  await fs.mkdir(nested,{recursive:true});await fs.writeFile(page,image(1000,1500));
+  const disk=require('../dist-electron/services/thumbnailDiskCache');disk.configureThumbnailDiskCache(path.join(path.dirname(file),'cover-cache'));
+  t.after(()=>disk.configureThumbnailDiskCache(undefined));
+  let decoded=0;
+  const native={createFromBuffer(){decoded++;return {isEmpty:()=>false,getSize:()=>({width:1000,height:1500}),resize:()=>({toDataURL:()=> 'data:image/png;base64,AA=='})};}};
+  let service=serviceWith({},native);const input={path:root,type:'folder'};
+  const first=await service.获取缩略图(input);assert.equal(decoded,1);assert.equal(first.childFolderCount,1);
+  assert.deepEqual(await service.获取缩略图(input),first);assert.equal(decoded,1);
+  const stat=await fs.stat(root),signature=`${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}:d`;
+  await disk.writeThumbnailDisk(`folder:${root}`,signature,first);
+  service=serviceWith({},native);assert.deepEqual(await service.获取缩略图(input),first);assert.equal(decoded,1);
+  await fs.writeFile(page,image(1000,1500,40));
+  assert.equal((await service.获取缩略图(input)).url,first.url);assert.equal(decoded,2);
+  await service.clearThumbnailCache();
+});
+
 test('persistent file covers survive a service restart, reject changed versions and recover from corrupt cache',async t=>{
  const file=await source(t),folder=path.join(path.dirname(file),'covers');
  const disk=require('../dist-electron/services/thumbnailDiskCache');disk.configureThumbnailDiskCache(folder);
+ const priorWrites=disk.thumbnailDiskMetrics.writes;
  let reads=0;
  const archive={读取压缩包图片列表:async()=>[{virtualPath:'1.png',size:24}],读取压缩包单张图片:async()=>{reads++;return image(100,100);}};
  const decode={createFromBuffer:()=>({isEmpty:()=>false,getSize:()=>({width:100,height:100}),toDataURL:()=> 'data:image/png;base64,AAAA'})};
  let service=serviceWith(archive,decode);const input={path:file,type:'archive'};
  await service.获取缩略图(input);
- const wait=async count=>{const until=Date.now()+3000;while(disk.thumbnailDiskMetrics.writes<count){assert.ok(Date.now()<until);await new Promise(resolve=>setTimeout(resolve,10));}};
+ const wait=async count=>{const until=Date.now()+3000;while(disk.thumbnailDiskMetrics.writes<priorWrites+count){assert.ok(Date.now()<until);await new Promise(resolve=>setTimeout(resolve,10));}};
  await wait(1);service=serviceWith(archive,decode);
  assert.equal((await service.获取缩略图(input)).url,'data:image/png;base64,AAAA');assert.equal(reads,1);
- assert.equal(disk.thumbnailDiskMetrics.writes,1,'a disk hit does not rewrite the same cover');
+ assert.equal(disk.thumbnailDiskMetrics.writes-priorWrites,1,'a disk hit does not rewrite the same cover');
  assert.ok(disk.thumbnailDiskMetrics.hits>0);
  await fs.appendFile(file,'new-version');service=serviceWith(archive,decode);await service.获取缩略图(input);assert.equal(reads,2);
  await wait(2);for(const name of await fs.readdir(folder))if(name.endsWith('.json'))await fs.writeFile(path.join(folder,name),'broken');

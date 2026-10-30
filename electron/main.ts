@@ -108,7 +108,7 @@ function 接收启动参数(参数: string[], 工作目录: string): void {
     .map(项 => path.resolve(工作目录, 项)));
 }
 
-type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
+type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
 
 interface 可阅读页数输入 {
   path: string;
@@ -266,7 +266,7 @@ function 是资源整理信息输入(输入: unknown): 输入 is {
       || 输入.sourceType === "image"
       || 输入.sourceType === "archive"
       || 输入.sourceType === "pdf"
-      || 输入.sourceType === "epub"
+      || (输入.sourceType === "epub" || 输入.sourceType==="mobi")
       || 输入.sourceType === "unknown"
     );
 }
@@ -291,7 +291,7 @@ function 是虚拟文件夹项目输入(输入: unknown): 输入 is {
       || 输入.sourceType === "image"
       || 输入.sourceType === "archive"
       || 输入.sourceType === "pdf"
-      || 输入.sourceType === "epub"
+      || (输入.sourceType === "epub" || 输入.sourceType==="mobi")
       || 输入.sourceType === "unknown"
     );
 }
@@ -425,7 +425,7 @@ async function 读取原始阅读资源(输入: unknown): Promise<操作结果<�
         && 输入.type !== "image"
         && 输入.type !== "archive"
         && 输入.type !== "pdf"
-        && 输入.type !== "epub"
+        && (输入.type !== "epub" && 输入.type!=="mobi")
       )
     ) {
       return {
@@ -442,7 +442,7 @@ async function 读取原始阅读资源(输入: unknown): Promise<操作结果<�
       };
     }
 
-    if (输入.type === "pdf" || 输入.type === "epub") {
+    if (输入.type === "pdf" || (输入.type === "epub" || 输入.type==="mobi")) {
       // The document worker discovers pages lazily; never parse a large document on the main thread.
       return { ok: true, data: {
         key: `${输入.type}:${资源路径}`, resourceKey: `${输入.type}:${资源路径}`,
@@ -587,7 +587,7 @@ async function 读取阅读资源(输入: unknown, overrideSort?: PageSort): Pro
   const data = await 读取应用数据();
   const progress = data.readingProgress[result.data.resourceKey] ?? null;
   result.data.readerInit = { settings: data.settings, progress };
-  if (result.data.sourceType === "pdf" || result.data.sourceType === "epub") return result;
+  if (result.data.sourceType === "pdf" || (result.data.sourceType === "epub" || result.data.sourceType==="mobi")) return result;
   const mode = overrideSort ?? normalizePageSort(progress?.readerViewState?.pageSort);
   if ((mode.startsWith("time") || progress?.readerViewState?.pageSort?.startsWith("time")) && result.data.sourceType !== "archive") {
     let cursor = 0;
@@ -710,7 +710,7 @@ function 注册安全通道(): void {
   ipcMain.handle("外部文件:选择", async 事件 => {
     try {
       const 选项 = { title: "直接打开文件", properties: ["openFile", "multiSelections"] as Array<"openFile" | "multiSelections">,
-        filters: [{ name: "漫画、图片与文档", extensions: ["jpg", "jpeg", "png", "webp", "bmp", "gif", "zip", "cbz", "rar", "cbr", "7z", "cb7", "pdf", "epub"] }] };
+        filters: [{ name: "漫画、图片与文档", extensions: ["jpg", "jpeg", "png", "webp", "bmp", "gif", "zip", "cbz", "rar", "cbr", "7z", "cb7", "pdf", "epub", "mobi"] }] };
       const 窗口 = BrowserWindow.fromWebContents(事件.sender);
       const 结果 = 窗口 ? await dialog.showOpenDialog(窗口, 选项) : await dialog.showOpenDialog(选项);
       if (!结果.canceled) 接收外部文件(结果.filePaths);
@@ -981,7 +981,7 @@ function 注册安全通道(): void {
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
         && 输入.sourceType !== "pdf"
-        && 输入.sourceType !== "epub"
+        && (输入.sourceType !== "epub" && 输入.sourceType!=="mobi")
       )
     ) {
       return {
@@ -1058,7 +1058,7 @@ function 注册安全通道(): void {
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
         && 输入.sourceType !== "pdf"
-        && 输入.sourceType !== "epub"
+        && (输入.sourceType !== "epub" && 输入.sourceType!=="mobi")
       )
     ) {
       return {
@@ -1630,7 +1630,7 @@ function 注册安全通道(): void {
         && 输入.item.sourceType !== "image"
         && 输入.item.sourceType !== "archive"
         && 输入.item.sourceType !== "pdf"
-        && 输入.item.sourceType !== "epub"
+        && (输入.item.sourceType !== "epub" && 输入.item.sourceType!=="mobi")
         && 输入.item.sourceType !== "unknown"
       )
     ) {
@@ -1752,7 +1752,7 @@ function 注册安全通道(): void {
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
         && 输入.sourceType !== "pdf"
-        && 输入.sourceType !== "epub"
+        && (输入.sourceType !== "epub" && 输入.sourceType!=="mobi")
       )
     ) {
       return {
@@ -1891,7 +1891,7 @@ function 注册安全通道(): void {
         && 输入.sourceType !== "image"
         && 输入.sourceType !== "archive"
         && 输入.sourceType !== "pdf"
-        && 输入.sourceType !== "epub"
+        && (输入.sourceType !== "epub" && 输入.sourceType!=="mobi")
       )
     ) {
       return {
@@ -1910,7 +1910,7 @@ function 注册安全通道(): void {
 
     // Document cards retain their format placeholder; opening the bookmark uses
     // the same on-demand page/chapter source as ordinary reading.
-    if (输入.sourceType === "pdf" || 输入.sourceType === "epub") {
+    if (输入.sourceType === "pdf" || (输入.sourceType === "epub" || 输入.sourceType==="mobi")) {
       return { ok: true, data: { dataUrl: "" } };
     }
     const 预览输入: 书签页预览输入 = {
@@ -1989,7 +1989,7 @@ function 注册安全通道(): void {
     try {
       const hidden = (await 读取应用数据()).excludedResourcePaths ?? [];
       const catalog = options.incremental ? await scanLibraryCatalogBatch(target, root, { ...options, excludedPaths: hidden }) : await scanLibraryCatalog(target, root, refresh === true);
-      return { ok: true, data: options.incremental ? catalog : { ...catalog, items: catalog.items.filter(item => !hidden.some(p => withinPath(item.path, p)) && (booksOnly !== true || (item.type === 'folder' ? item.containsImages : ['archive','pdf','epub'].includes(item.type)))) } };
+      return { ok: true, data: options.incremental ? catalog : { ...catalog, items: catalog.items.filter(item => !hidden.some(p => withinPath(item.path, p)) && (booksOnly !== true || (item.type === 'folder' ? item.containsImages : ['archive','pdf','epub','mobi'].includes(item.type)))) } };
     } catch (error) { return { ok: false, error: { code: "LIBRARY_SCAN_FAILED", message: error instanceof Error ? error.message : "资源库索引读取失败。" } }; }
   });
 
@@ -2189,7 +2189,7 @@ function 注册安全通道(): void {
         && 输入.type !== "image"
         && 输入.type !== "archive"
         && 输入.type !== "pdf"
-        && 输入.type !== "epub"
+        && (输入.type !== "epub" && 输入.type!=="mobi")
         && 输入.type !== "unknown"
       )
     ) {
@@ -2285,7 +2285,7 @@ function 注册安全通道(): void {
         && 输入.type !== "image"
         && 输入.type !== "archive"
         && 输入.type !== "pdf"
-        && 输入.type !== "epub"
+        && (输入.type !== "epub" && 输入.type!=="mobi")
         && 输入.type !== "unknown"
       )
     ) {
@@ -2303,7 +2303,7 @@ function 注册安全通道(): void {
       };
     }
 
-    if (输入.type === "pdf" || 输入.type === "epub" || 输入.type === "unknown") {
+    if (输入.type === "pdf" || (输入.type === "epub" || 输入.type==="mobi") || 输入.type === "unknown") {
       return { ok: true, data: null };
     }
 

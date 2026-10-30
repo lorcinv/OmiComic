@@ -1,6 +1,6 @@
 import type { NativeCall } from "./bridge";
 
-export async function sanitizeAndroidChapter(payload: string, native: NativeCall): Promise<string> {
+export async function sanitizeAndroidChapter(payload: string, native: NativeCall, imageSource:'https://omi.local'|'data:'='https://omi.local'): Promise<string> {
   const { html, path, entry } = JSON.parse(payload) as { html: string; path: string; entry: string };
   const source = new DOMParser().parseFromString(html, "text/html");
   const output = document.implementation.createHTMLDocument("");
@@ -22,7 +22,7 @@ export async function sanitizeAndroidChapter(payload: string, native: NativeCall
     parent.appendChild(target);
   }
   for (const child of [...source.body.childNodes]) await append(child,output.body);
-  const csp = output.createElement("meta"); csp.httpEquiv="Content-Security-Policy";csp.content="default-src 'none'; img-src https://omi.local; style-src 'unsafe-inline';";output.head.append(csp);
+  const csp = output.createElement("meta"); csp.httpEquiv="Content-Security-Policy";csp.content=`default-src 'none'; img-src ${imageSource}; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none';`;output.head.append(csp);
   const style=output.createElement("style");style.textContent="html{color-scheme:light}body{box-sizing:border-box;margin:0;padding:48px;max-width:900px;font:20px/1.85 sans-serif;color:#343d48;background:#f5f4f1;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px}pre{white-space:pre-wrap}";output.head.append(style);
   return "<!doctype html>"+output.documentElement.outerHTML;
 }

@@ -75,7 +75,7 @@ export default function BookReaderSettings({ preferred, onSaved }: {
       }
     }).catch(reason => { if (alive.current) setError(reason instanceof Error ? reason.message : '保存失败，请重试。'); }).finally(() => { if (alive.current) setPending(count => count - 1); });
   }
-  const document = resource?.sourceType === 'pdf' || resource?.sourceType === 'epub';
+  const document = resource?.sourceType === 'pdf' || (resource?.sourceType === 'epub' || resource?.sourceType==='mobi');
   const noTimes = window.document.documentElement.dataset.platform === 'android' && !resource?.pages.some(page => typeof page.modifiedAt === 'number' && Number.isFinite(page.modifiedAt));
   return <div className="book-reader-settings" aria-busy={loading || pending > 0}>
     {loading ? (mobile ? null : <p role="status">{t("正在读取阅读设置…")}</p>) : !books.length ? <p>{t("打开漫画后，可在这里设置。")}</p> : resource && <>

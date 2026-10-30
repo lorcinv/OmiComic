@@ -9,7 +9,7 @@ const defaults: AppSettings = {
   showHomePage: true,
   language: 'zh-CN',
   mobileReaderAutoHide: true,
-  mobileLibraryLayout: "grid", mobileGridColumns: 2, mobileListCoverSize: 82, readerVolumeKeys: false, readerVolumeKeysReversed: false,
+  mobileLibraryLayout: "grid", mobileGridColumns: 2, mobileListCoverSize: 82, readerVolumeKeys: false, readerVolumeKeysReversed: false, mobilePanoramaTapPaging:false,
   colorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
   pageSize: 50, sortMode: "name-asc", sortDirection: "asc", folderFirst: true,
   hideBookshelfItemsInLibrary: true, showProgressBar: true, showProgressText: true,
@@ -164,7 +164,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     getResourcePages: async input=>{
       const result = await call<阅读资源结果>('getResourcePages', input);
       if (result.ok) result.data.readerInit = structuredClone({ settings: data.settings, progress: data.readingProgress[result.data.resourceKey] ?? null });
-      if (result.ok && result.data.sourceType !== 'pdf' && result.data.sourceType !== 'epub') result.data.pages = sortReaderPages(result.data.pages, normalizePageSort(data.readingProgress[result.data.resourceKey]?.readerViewState?.pageSort));
+      if (result.ok && result.data.sourceType !== 'pdf' && (result.data.sourceType !== 'epub' && result.data.sourceType!=='mobi')) result.data.pages = sortReaderPages(result.data.pages, normalizePageSort(data.readingProgress[result.data.resourceKey]?.readerViewState?.pageSort));
       return result;
     },
     setReaderPageSort: input=>write(async d=>{

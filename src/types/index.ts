@@ -1,9 +1,9 @@
 import type { ReaderPreferences, PageSort, ImageAdjustments } from "../../electron/shared/readerPreferences";
 export type 页面名称 = "首页" | "资源库" | "阅读器";
 
-export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "unknown";
+export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
 export type 阅读页类型 = "folder-image" | "archive-image" | "pdf-page" | "epub-chapter";
-export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub";
+export type 阅读资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi";
 export type 卡片尺寸 = "small" | "medium" | "large";
 export type 主题配色 = "mist" | "nord" | "sand" | "night";
 export type 每页数量 = 50 | 100 | 150 | 200 | 500;
@@ -49,6 +49,7 @@ export interface AppSettings {
   mobileImageAdjustments?: ImageAdjustments;
   readerVolumeKeys?: boolean;
   readerVolumeKeysReversed?: boolean;
+  mobilePanoramaTapPaging?: boolean;
   readerVolumePanoramaPages?: number;
   mobileReaderPreviews?: boolean;
   mobileReaderAutoHide?: boolean;
@@ -405,7 +406,7 @@ export interface OmiComicApi {
   chooseExternalFiles(): Promise<操作结果<null>>;
   removeTemporaryOpened(resourceKey: string): Promise<操作结果<null>>;
   promoteTemporaryOpened(resourceKey: string): Promise<操作结果<OmiComicAppData>>;
-  openDocument(input: { path: string; type: "pdf" | "epub"; id: string; purpose?: "reader" | "thumbnail" }): Promise<操作结果<{ size: number; chapters: { name: string; index: number }[] }>>;
+  openDocument(input: { path: string; type: "pdf" | "epub" | "mobi"; id: string; purpose?: "reader" | "thumbnail" }): Promise<操作结果<{ size: number; chapters: { name: string; index: number }[] }>>;
   readDocumentRange(id: string, begin: number, end: number): Promise<操作结果<Uint8Array>>;
   readDocumentChapter(id: string, index: number): Promise<操作结果<string>>;
   closeDocument(id: string): Promise<操作结果<null>>;

@@ -5631,11 +5631,11 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 }
 
 .reader-page-spread.is-horizontal-strip.is-panorama-strip {
-  transform: translate3d(var(--reader-panorama-translate, 0px), -50%, 0);
+  transform: translate3d(var(--reader-panorama-translate, 0px), calc(-50% + var(--reader-panorama-cross-shift, 0px)), 0);
 }
 
 .reader-page-spread.is-vertical-strip.is-panorama-strip {
-  transform: translate3d(-50%, var(--reader-panorama-translate, 0px), 0);
+  transform: translate3d(calc(-50% + var(--reader-panorama-cross-shift, 0px)), var(--reader-panorama-translate, 0px), 0);
 }
 
 .reader-stage.is-panorama-animated .reader-page-spread.is-panorama-strip,
@@ -5730,6 +5730,11 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
   padding-inline: 0;
 }
 
+.reader-stage.is-free-zoomed:not(.is-panorama) {
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
 .reader-stage:not(.is-panorama) .reader-page-spread {
   flex: 0 0 auto;
   width: max-content;
@@ -5747,15 +5752,22 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 .reader-stage.is-panorama { overflow: hidden; }
 
 .reader-filter-definitions { position: absolute; pointer-events: none; }
-.reader-effects { position: relative; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; }
+.reader-effects { position: relative; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; overflow: clip; }
 .reader-effects-original { display: flex; flex: 0 0 auto; align-items: center; justify-content: center; }
 .reader-effects.has-processed-image > .reader-effects-original { visibility: hidden; }
 .reader-effects > .reader-processed-image { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
 .reader-effects > .reader-display-raster { position:absolute; inset:0; display:block; width:100%; height:100%; visibility:hidden; pointer-events:none; }
 .reader-effects.has-display-raster > :is(.reader-effects-original,.reader-processed-image) { visibility:hidden; }
 .reader-effects.has-display-raster > .reader-display-raster { visibility:visible; }
+.reader-effects.is-display-pending > :is(.reader-effects-original,.reader-processed-image) { visibility:hidden; }
 .reader-processing-status { position: absolute; bottom: 8px; left: 8px; max-width: calc(100% - 16px); padding: 4px 8px; border-radius: 8px; font-size: calc(11px * var(--desktop-font-scale, 1)); background: var(--面板色); color: var(--次文字); pointer-events: none; }
 .reader-extra-tools { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.reader-tool-panel.reader-zoom-panel { width: min(300px, calc(100vw - 16px)); }
+.reader-swipe-preview { position:absolute;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:1; }
+.reader-swipe-group { display:flex;gap:0;align-items:center;justify-content:center;flex:none; }
+.reader-zoom-ticks { display:grid;grid-template-columns:repeat(3,1fr);font-size:12px;color:var(--次文字);font-variant-numeric:tabular-nums;margin-top:8px;margin-bottom:16px; }
+.reader-zoom-ticks span:nth-child(2) { text-align:center; }
+.reader-zoom-ticks span:last-child { text-align:right; }
 .reader-extra-tools button { display: inline-flex; gap: 5px; align-items: center; justify-content: center; min-width: 34px; }
 .reader-extra-tools svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .reader-extra-tools .reader-play-icon { fill: currentColor; stroke: none; }

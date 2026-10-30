@@ -145,7 +145,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
       if (!resource.ok) throw new Error(resource.error.message);
       const progress = resource.data.readerInit ? { ok: true as const, data: resource.data.readerInit.progress }
         : await window.omicomic.getReadingProgress(book.resourceKey);
-      const isDocument = resource.data.sourceType === "pdf" || resource.data.sourceType === "epub";
+      const isDocument = resource.data.sourceType === "pdf" || (resource.data.sourceType === "epub" || resource.data.sourceType==="mobi");
       if (!isDocument && !resource.data.pages.length) throw new Error("这本漫画中没有可阅读的图片，请在资源库中检查文件。");
       if (!progress.ok) throw new Error(progress.error.message);
       const saved = progress.data?.currentPageIndex ?? book.currentPageIndex;
@@ -182,7 +182,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
               <div className="omi-home__books">
                 {books.map((book, index) => {
                   const total = Math.max(0, book.totalPages);
-                  const unit = book.sourceType === "epub" ? "章" : "页";
+                  const unit = (book.sourceType === "epub" || book.sourceType==="mobi") ? "章" : "页";
                   const page = total ? Math.min(Math.max(1, book.currentPageIndex + 1), total) : 0;
                   const progress = total ? page / total * 100 : 0;
                   const percent = progress > 0 && progress < 1 ? "<1" : Math.round(progress);

@@ -1,5 +1,7 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "全景点击翻页": ["Tap to turn pages in panorama", "パノラマでタップしてページ送り"],
+  "缩放比例": ["Zoom level", "拡大率"],
   "松开添加到资源库": ["Drop to add to library", "ドロップしてライブラリに追加"],
   "每次拖入一个文件夹": ["Drag one folder at a time", "フォルダーを一つずつドラッグ"],
   "请每次拖入一个文件夹。": ["Please drop one folder at a time.", "フォルダーを一つずつドロップしてください。"],

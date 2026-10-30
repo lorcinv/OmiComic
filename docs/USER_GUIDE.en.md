@@ -33,7 +33,7 @@ Reading progress is saved automatically. If Show home screen is off, use Recent 
 <details>
 <summary>Which comic and image formats are supported?</summary>
 
-Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z/CB7, PDF and EPUB. Archives can be read without extracting them first. EPUB progress is shown by chapter.
+Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI. Archives do not need extracting; EPUB/MOBI progress is shown by chapter. Initial MOBI support is limited to 64 MB files and 8 MB text, excluding KF8/dual-format, DRM and HUFF/CDIC compression. Convert unsupported files to EPUB first.
 
 </details>
 
@@ -138,11 +138,25 @@ No. Removing a favorite, shelf item, bookmark or history entry only removes that
 <details>
 <summary>How do I zoom and pan?</summary>
 
-Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow.
+Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow and remains scrollable when reduced. Free zoom ranges from 50% to 600%; 100% is the default size of the current fit mode, rather than the original pixel ratio.
 
-**Windows**: Ctrl+wheel zooms, left-drag pans, and double-click resets free zoom. F toggles immersive reading; move to the top or bottom for tools.
+**Windows**: Open Zoom to the right of Image adjustments for a slider centered on 100% and Reset size below it. Ctrl+wheel zooms; left-drag pans; double-click the center to reset. Reset animates smoothly and can be interrupted by a new zoom or drag. F toggles immersive reading; move to the top or bottom for tools.
 
-**Android**: Pinch to zoom, drag to pan, and double-tap to reset. Comics open fitted to the window.
+**Android**: Pinch in or out and double-tap the center to reset smoothly; there is no separate zoom control on phones. In normal single/double-page view, the next page/spread follows your drag; release to turn or return. When zoomed in, pan the image first, then keep dragging past its edge to reach the next page/spread. Dragging between pages also works when zoomed out. Panorama keeps continuous scrolling.
+
+</details>
+
+<details>
+<summary>Where can I click to turn pages on PC? · Windows</summary>
+
+In horizontal reading, click the left 40% or right 40% of the reading area, including the image sides, to turn pages. The middle 20% keeps existing actions such as revealing tools. Left is previous and right is next by default; right-to-left reading reverses them. This applies to normal single/double pages and horizontal panorama. Vertical reading keeps the top and bottom 25% click zones. A drag that moves beyond the click threshold does not also turn a page.
+
+</details>
+
+<details>
+<summary>How do EPUB and MOBI navigation work?</summary>
+
+EPUB and MOBI progress is chapter-based. Use Previous/Next and the progress bar to switch chapters, then scroll within each chapter. Image-only EPUB chapters add no text margins or separate page number; text chapters keep normal reading margins. MOBI currently uses a format placeholder cover. See supported formats for the limits of traditional DRM-free MOBI.
 
 </details>
 
@@ -200,10 +214,11 @@ No. Brightness, contrast, gamma and color effects change display only; Reset res
 <summary>Touch and volume keys · Android</summary>
 
 - **Tap center**: Show / hide the toolbar.
-- **Swipe / pinch**: Turn pages or scroll / zoom.
+- **Swipe / pinch**: Drag horizontally to the next page/spread in normal view. When zoomed in, pan to the image edge and keep dragging to turn; dragging also works when zoomed out. Panorama scrolls continuously. Pinch in/out and double-tap the center to reset smoothly.
 - **Long-press card**: Open actions, selection or ordering.
 - **Drag progress**: Jump live; tap preview thumbnails to refine.
 - **Volume + / −**: Enable volume-key paging in Default reading for previous / next page; direction can be reversed.
+- **Panorama tap paging**: Off by default. Enable it below Volume-key paging and Reverse volume-key direction in Default reading or reader settings. Tap top/bottom or left/right edges to turn; tap the center for tools, or double-tap the center to reset size.
 - **Back key / gesture**: Exit random mode first; later Back actions dismiss the keyboard, menus or search as applicable, then navigate back.
 
 </details>

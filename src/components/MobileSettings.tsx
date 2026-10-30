@@ -70,6 +70,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {select('doublePageDirection',t("默认翻页方向"),[{value:'left-to-right',label:'从左到右'},{value:'right-to-left',label:'从右到左'}])}
         {toggle('doublePageFirstSingle',t("封面单独显示"))}{toggle('smartDetectSpreadPage',t("智能识别跨页图"))}
         {toggle('readerVolumeKeys',t("音量键翻页"))}{toggle('readerVolumeKeysReversed',t("反转音量键翻页方向"))}
+        {toggle('mobilePanoramaTapPaging',t('全景点击翻页'))}
         {range('readerVolumePanoramaPages',t("全景音量键翻页间隔"),.25,2,.25,1,' 页')}
       </>}
       {category==='book' && <>
