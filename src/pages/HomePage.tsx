@@ -2,6 +2,7 @@ import { t, tr } from '../i18n';
 import MobileIcon from "../components/MobileIcon";
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail } from "../reader/thumbnailClient";
+import { warmReader } from '../reader/loadReader';
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { OmiComicAppData, RecentOpenedItem, 阅读资源结果, 阅读打开上下文 } from "../types";
@@ -140,6 +141,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
     setHeldBook(null); cancelHold();
     setError(null);
     try {
+      warmReader();
       const resource = await window.omicomic.getResourcePages({ path: book.sourcePath, type: book.sourceType });
       if (request !== openRequest.current) return;
       if (!resource.ok) throw new Error(resource.error.message);

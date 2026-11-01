@@ -41,4 +41,16 @@ test('folder collection labels count child books, never loose image pages or unr
   assert.equal(inherited.childFolderCount, 1, 'the parent keeps its own folder count when borrowing a child cover');
   assert.ok(inherited.url, 'a collection still borrows the first child cover');
   assert.deepEqual(inherited.folderSummary,{folders:1,books:0,images:0,unsupported:0},'borrowed cover does not overwrite parent structure');
+  const empty = path.join(root, 'empty');await fs.mkdir(empty);
+  assert.equal((await service.获取文件夹封面缩略图(empty)).emptyFolder, true);
+  await fs.writeFile(path.join(empty, 'notes.txt'), 'metadata');
+  assert.equal((await service.获取文件夹封面缩略图(empty)).emptyFolder, true, 'unsupported files do not make a readable folder');
+  await fs.mkdir(path.join(empty, 'nested'));
+  assert.equal((await service.获取文件夹封面缩略图(empty)).emptyFolder, true, 'fully inspected empty branches can be hidden');
+  assert.notEqual((await service.获取文件夹封面缩略图(empty, {remaining:1,deadline:Date.now()+5000})).emptyFolder, true, 'bounded discovery never guesses that unvisited children are empty');
+  assert.notEqual((await service.获取文件夹封面缩略图(path.join(root, 'missing'))).emptyFolder, true, 'an unavailable folder is not empty');
+  await fs.writeFile(path.join(empty, 'nested', 'book.mobi'), 'unreadable document fixture');
+  assert.notEqual((await service.获取文件夹封面缩略图(empty)).emptyFolder, true, 'a document without a cover still keeps its parent visible');
+  await fs.writeFile(path.join(empty, 'page.png'), 'invalid image fixture');
+  assert.notEqual((await service.获取文件夹封面缩略图(empty)).emptyFolder, true, 'a failed image decode never hides the folder');
 });

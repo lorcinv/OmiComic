@@ -5,9 +5,10 @@ let composing = false, listening = false;
 export const queryMetrics = { slices: 0, cancelled: 0, maximumSliceMs: 0 };
 // Filtering and merge sorting yield between small pieces. A new generation
 // cancels the old job, including composition input and pending sort merges.
-export function useLibraryQuery<T>(items: T[], predicate: (item: T) => boolean, compare: (a: T, b: T) => number, signature: string, stable?: StableSearch<T>) {
-  type Result = { signature: string; items: T[] };
+export function useLibraryQueryResult<T>(items: T[], predicate: (item: T) => boolean, compare: (a: T, b: T) => number, signature: string, stable?: StableSearch<T>) {
+  type Result = { signature: string; items: T[]; query: object; complete: boolean };
   const [state, setState] = useState<Result | null>(null);
+  const query = useMemo(() => ({}), [items, predicate, compare, signature, stable]);
   // Keep the pinned search snapshot while random mode uses the ordinary query.
   const committed = useRef<ProgressiveSearch<T> | null>(null);
   const small = items.length <= 512 && !stable;
@@ -24,7 +25,8 @@ export function useLibraryQuery<T>(items: T[], predicate: (item: T) => boolean, 
         if (committed.current?.signature !== signature) committed.current = createProgressiveSearch<T>(signature);
         const current = committed.current;
         await updateProgressiveSearch(current, items, predicate, compare, stable,
-          () => live, matches => { if (live) setState({ signature, items: matches }); });
+          () => live, matches => { if (live) setState({ signature, items: matches, query, complete: false }); });
+        if (live) setState({ signature, items: current.items, query, complete: true });
         return;
       }
       const matches: T[] = []; let start = performance.now(), published = false;
@@ -32,7 +34,7 @@ export function useLibraryQuery<T>(items: T[], predicate: (item: T) => boolean, 
         if (predicate(items[index])) matches.push(items[index]);
         if ((index & 63) === 0 && performance.now() - start >= 5) {
           queryMetrics.slices++; queryMetrics.maximumSliceMs = Math.max(queryMetrics.maximumSliceMs, performance.now() - start);
-          if (!published && matches.length) { setState({ signature, items: matches.slice().sort(compare) }); published = true; }
+          if (!published && matches.length) { setState({ signature, items: matches.slice().sort(compare), query, complete: false }); published = true; }
           await pause(); start = performance.now();
         }
       }
@@ -48,11 +50,15 @@ export function useLibraryQuery<T>(items: T[], predicate: (item: T) => boolean, 
         }
         [source, target] = [target, source];
       }
-      if (live) setState({ signature, items: source });
+      if (live) setState({ signature, items: source, query, complete: true });
     })();
     return () => { live = false; queryMetrics.cancelled++; };
-  }, [items, predicate, compare, signature, small, stable]);
-  if (small) return immediate;
-  if (state?.signature === signature) return state.items;
-  return stable && committed.current?.signature === signature ? committed.current.items : [];
+  }, [items, predicate, compare, signature, small, stable, query]);
+  if (small) return { items: immediate, complete: true };
+  if (state?.signature === signature) return { items: state.items, complete: state.query === query && state.complete };
+  return { items: stable && committed.current?.signature === signature ? committed.current.items : [], complete: false };
+}
+
+export function useLibraryQuery<T>(items: T[], predicate: (item: T) => boolean, compare: (a: T, b: T) => number, signature: string, stable?: StableSearch<T>) {
+  return useLibraryQueryResult(items, predicate, compare, signature, stable).items;
 }

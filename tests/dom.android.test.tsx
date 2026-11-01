@@ -20,6 +20,14 @@ function nativeStore() {
 }
 
 describe('Android durable library adapter',()=>{
+  it('starts with single pages, left-to-right and panorama off, while retaining saved choices', async () => {
+    const store = nativeStore(), api = await createAndroidApi(store.native);
+    const initial = await api.getAppData(); if (!initial.ok) throw new Error();
+    expect(initial.data.settings).toMatchObject({ readerPageMode: 'single', doublePageDirection: 'left-to-right', readerDefaultPanorama: false });
+    await api.updateSettings({ readerPageMode: 'double', doublePageDirection: 'right-to-left', readerDefaultPanorama: true });
+    const restored = await (await createAndroidApi(store.native)).getAppData(); if (!restored.ok) throw new Error();
+    expect(restored.data.settings).toMatchObject({ readerPageMode: 'double', doublePageDirection: 'right-to-left', readerDefaultPanorama: true });
+  });
   it('defaults the home screen on for old data and persists an explicit opt-out', async () => {
     const store = nativeStore(), api = await createAndroidApi(store.native);
     const initial = await api.getAppData(); expect(initial.ok && initial.data.settings.showHomePage).toBe(true);

@@ -43,8 +43,13 @@ export function useCoverQueue(files:文件条目[], enabled:boolean,
   useEffect(()=>{
     const reset=(event:Event)=>{
       const path=(event as CustomEvent<string|undefined>).detail,s=state.current;
-      for(const key of s.done.keys())if(!path||key===path||key.startsWith(path+'/'))s.done.delete(key);
-      for(const [key,task] of s.active)if(!path||key===path||key.startsWith(path+'/')){task.controller.abort();s.active.delete(key);}
+      const target=path?.replace(/\\/g,'/').replace(/\/$/,'');
+      const affected=(key:string)=>{
+        const candidate=key.replace(/\\/g,'/').replace(/\/$/,'');
+        return !target||candidate===target||candidate.startsWith(target+'/')||target.startsWith(candidate+'/');
+      };
+      for(const key of s.done.keys())if(affected(key))s.done.delete(key);
+      for(const [key,task] of s.active)if(affected(key)){task.controller.abort();s.active.delete(key);}
       pump.current();
     };
     window.addEventListener('omi-thumbnail-invalidated',reset);return()=>window.removeEventListener('omi-thumbnail-invalidated',reset);

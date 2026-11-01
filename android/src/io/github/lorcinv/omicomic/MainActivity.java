@@ -140,11 +140,12 @@ public final class MainActivity extends Activity {
               if(method.equals("readerConfigure")){readerSurface.configure(args);if(id!=0)reply(id,true,null);return;}
               if(method.equals("readerFrame")){readerSurface.frame(args);return;}
               if(method.equals("readerSeek")){readerSurface.seek(args);return;}
-              if(method.equals("readerPrepare")){readerSurface.prepare(args,(value,error)->reply(id,value,error==null?null:explain(error)));return;}
+              if(method.equals("readerPrepare")){readerSurface.prepare(args,(value,error)->reply(id,value,error==null?null:explain(error),ReaderCancelledException.causedBy(error)?"READER_CANCELLED":null));return;}
               if(method.equals("readerStats")){reply(id,readerSurface.stats(),null);return;}
               if(method.equals("beginScene")){sceneTransition.begin(args.optLong("request"),()->reply(id,true,null));return;}
-              if(method.equals("commitScene")){long request=args.optLong("request");String direction=args.optString("direction","forward");JSONObject origin=args.optJSONObject("origin");float scale=web.getWidth()/(float)args.optDouble("viewportWidth",web.getWidth());float x=origin==null?36:(float)origin.optDouble("x")*scale,y=origin==null?40:(float)origin.optDouble("y")*scale;web.postVisualStateCallback(request,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){FrameCommit.after(web,()->{sceneTransition.commit(request,direction,x,y);reply(id,true,null);});}});return;}
+              if(method.equals("commitScene")){long request=args.optLong("request");String direction=args.optString("direction","forward");JSONObject origin=args.optJSONObject("origin");float scale=web.getWidth()/(float)args.optDouble("viewportWidth",web.getWidth());float x=origin==null?36:(float)origin.optDouble("x")*scale,y=origin==null?40:(float)origin.optDouble("y")*scale;web.postVisualStateCallback(request,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){readerSurface.afterFrameReady(()->FrameCommit.after(web,()->{sceneTransition.commit(request,direction,x,y);reply(id,true,null);}));}});return;}
               if(method.equals("cancelScene")){sceneTransition.cancel();if(id!=0)reply(id,true,null);return;}
+              if(method.equals("waitScene")){sceneTransition.afterFinished(args.optLong("request"),()->reply(id,true,null));return;}
               if(method.equals("chooseFolder")||method.equals("chooseFile")){choose(id,method.equals("chooseFolder"));return;}
               if(method.equals("close")){reply(id,null,null);finish();return;}
               if(method.equals("background")){reply(id,null,null);moveTaskToBack(true);return;}
@@ -214,7 +215,11 @@ public final class MainActivity extends Activity {
     return e.getMessage()==null?"本地文件操作失败。":e.getMessage();
   }
   private void reply(int id,Object data,String error){
+    reply(id,data,error,null);
+  }
+  private void reply(int id,Object data,String error,String code){
     try{JSONObject m=new JSONObject().put("id",id);if(error==null)m.put("data",data==null?JSONObject.NULL:data);else m.put("error",error);
+      if(code!=null)m.put("errorCode",code);
       // Large page indexes are serialized on their worker, not on the UI thread.
       String payload=m.toString();runOnUiThread(()->{try{if(channel!=null)channel.postMessage(new WebMessage(payload));}catch(Exception e){android.util.Log.e("OmiComic","Reply failed",e);}});
     }catch(JSONException e){android.util.Log.e("OmiComic","Reply failed",e);}

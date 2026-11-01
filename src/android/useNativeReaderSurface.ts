@@ -45,11 +45,13 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
     // fractions in a separate Canvas made fine line art shimmer while idle.
     const rectangle=(r:DOMRect)=>[r.left,r.top,r.right,r.bottom].map(n=>Math.round(n*(window.devicePixelRatio||1))/(window.devicePixelRatio||1));
     const paint=()=>{
-      if(element&&(dirty||settleFrames>0||element.hasAttribute('data-panorama-jump-phase'))){
+      if(element&&(dirty||settleFrames>0||element.hasAttribute('data-panorama-jump-phase')||element.hasAttribute('data-panorama-entry-phase'))){
         dirty=false;
         if(settleFrames>0)settleFrames--;
         const clip=element.getBoundingClientRect();
         const slots:Array<{url:string;rect:number[];alpha:number}>=[];
+        const expected:number[][]=[];
+        const visible=new Set<string>();
         const nodes=element.querySelectorAll<HTMLElement>('[data-native-image]');
         for(const node of nodes){
           if(getComputedStyle(node).visibility==='hidden')continue;
@@ -57,8 +59,14 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
           if(r.width<=0||r.height<=0||r.right<=clip.left||r.left>=clip.right||r.bottom<=clip.top||r.top>=clip.bottom)continue;
           let alpha=1;
           for(let parent:HTMLElement|null=node;parent&&parent!==element;parent=parent.parentElement)alpha*=Number(getComputedStyle(parent).opacity);
-          if(alpha>0)slots.push({url:node.dataset.nativeImage!,rect:nativeRasterRectangle(r,window.devicePixelRatio||1),alpha});
+          if(alpha>0){const rect=nativeRasterRectangle(r,window.devicePixelRatio||1);slots.push({url:node.dataset.nativeImage!,rect,alpha});expected.push(rect);const key=node.closest<HTMLElement>('[data-native-work-key]')?.dataset.nativeWorkKey;if(key)visible.add(key);}
         }
+        // Unprepared figures have no native URL yet. Their visible geometry
+        // still belongs to this frame; omitting it used to commit a blank edge.
+        element.querySelectorAll<HTMLElement>('.reader-page-loading').forEach(node=>{
+          const page=node.closest<HTMLElement>('.reader-page-frame');if(!page||getComputedStyle(page).visibility==='hidden')return;
+          const r=page.getBoundingClientRect();if(r.width>0&&r.height>0&&r.right>clip.left&&r.left<clip.right&&r.bottom>clip.top&&r.top<clip.bottom){expected.push(nativeRasterRectangle(r,window.devicePixelRatio||1));if(page.dataset.nativeWorkKey)visible.add(page.dataset.nativeWorkKey);}
+        });
         const previews:Array<{url:string;rect:number[];clip:number[]}>=[];
         scene?.querySelectorAll<HTMLElement>('[data-native-preview]').forEach(node=>{
           const r=node.getBoundingClientRect(),rail=node.closest('.mobile-reader-filmstrip')?.getBoundingClientRect();
@@ -72,7 +80,7 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
           previews.push({url:node.dataset.nativePreview!,rect:nativeRasterRectangle(r,window.devicePixelRatio||1),clip:rectangle(new DOMRect(left,top,right-left,bottom-top))});
         });
         const zoom=Number(element.dataset.readerZoom)||1;
-        const message={session,viewportWidth:window.innerWidth,clip:rectangle(clip),slots,previews,nativeExpected:nodes.length>0,panorama:element.classList.contains('is-panorama'),zoom,restoring:element.hasAttribute('data-reader-restoring')};
+        const message={session,viewportWidth:window.innerWidth,clip:rectangle(clip),slots,expected,visible:[...visible],previews,nativeExpected:expected.length>0,loading:expected.length>slots.length,panorama:element.classList.contains('is-panorama'),scrubbing:element.hasAttribute('data-reader-scrubbing'),zoom,restoring:element.hasAttribute('data-reader-restoring')};
         const key=JSON.stringify(message);if(key!==last){last=key;androidNotify('readerFrame',{...message,sequence:++geometrySequence});}
       }
       frame=requestAnimationFrame(paint);

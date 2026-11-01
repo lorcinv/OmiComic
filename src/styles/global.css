@@ -5757,9 +5757,12 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 .reader-effects.has-processed-image > .reader-effects-original { visibility: hidden; }
 .reader-effects > .reader-processed-image { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
 .reader-effects > .reader-display-raster { position:absolute; inset:0; display:block; width:100%; height:100%; visibility:hidden; pointer-events:none; }
+.reader-effects > .reader-viewport-raster { position:absolute;display:block;visibility:hidden;pointer-events:none; }
 .reader-effects.has-display-raster > :is(.reader-effects-original,.reader-processed-image) { visibility:hidden; }
 .reader-effects.has-display-raster > .reader-display-raster { visibility:visible; }
 .reader-effects.is-display-pending > :is(.reader-effects-original,.reader-processed-image) { visibility:hidden; }
+.reader-effects[data-viewport-ready="true"] > :is(.reader-effects-original,.reader-processed-image,.reader-display-raster) { visibility:hidden; }
+.reader-effects[data-viewport-ready="true"] > .reader-viewport-raster { visibility:visible; }
 .reader-processing-status { position: absolute; bottom: 8px; left: 8px; max-width: calc(100% - 16px); padding: 4px 8px; border-radius: 8px; font-size: calc(11px * var(--desktop-font-scale, 1)); background: var(--面板色); color: var(--次文字); pointer-events: none; }
 .reader-extra-tools { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .reader-tool-panel.reader-zoom-panel { width: min(300px, calc(100vw - 16px)); }
@@ -5842,6 +5845,11 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
   font-size: calc(12px * var(--desktop-font-scale, 1));
 }
 
+.reader-page-spread[data-reader-entry-pending],
+.reader-page-spread[data-reader-entry-pending] * {
+  visibility: hidden !important;
+}
+
 .reader-page-error {
   gap: 8px;
   border-color: var(--危险边框);
@@ -5852,6 +5860,8 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 .reader-page-error span {
   font-weight: 700;
 }
+
+.reader-page-error button { padding: 6px 14px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 
 .reader-page-error em {
   max-width: 100%;

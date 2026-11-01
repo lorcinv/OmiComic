@@ -35,7 +35,9 @@ for (const mode of ['single', 'double']) test(`warm ${mode} page turns publish p
       let blankFrames = 0;
       while (shown() === before && performance.now() - start < 6000) {
         await new Promise(requestAnimationFrame);
-        if (![...document.querySelectorAll('.reader-page-frame:not([aria-hidden="true"]) .reader-display-raster')].some(e => getComputedStyle(e).visibility === 'visible' && (e as HTMLCanvasElement).width > 0)) blankFrames++;
+        if (![...document.querySelectorAll('.reader-page-frame:not([aria-hidden="true"]) :is(.reader-display-raster,.reader-viewport-raster,img.reader-image)')].some(e => getComputedStyle(e).visibility === 'visible' && (e instanceof HTMLImageElement ? e.complete && e.naturalWidth > 0 : (e as HTMLCanvasElement).width > 0))) {
+          blankFrames++;
+        }
       }
       return { latency: performance.now() - start, before, after: shown(), blankFrames, jobs: (window as any).__samplingJobs.length - jobs };
     }, label);
@@ -44,10 +46,10 @@ for (const mode of ['single', 'double']) test(`warm ${mode} page turns publish p
   console.log(JSON.stringify({ mode, results }));
   await info.attach('page-latency', { body: JSON.stringify(results), contentType: 'application/json' });
   expect(results.every(r => r.before !== r.after && r.blankFrames === 0)).toBe(true);
-  if (!process.env.OMI_BASELINE) expect(Math.max(...results.map(r => r.latency))).toBeLessThan(160);
+  if (!process.env.OMI_BASELINE) { expect(Math.max(...results.map(r => r.latency))).toBeLessThan(160); expect(results.every(r=>r.jobs===0)).toBe(true); }
 });
 
-test('zoom samples settle once and quality replacement uses a visible transition', async ({ page }, info) => {
+test('zoom redraws source pixels directly without an asynchronous quality blend', async ({ page }, info) => {
   await open(page);
   const stage = page.locator('.reader-stage'), box = (await stage.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.keyboard.down('Control');
@@ -60,12 +62,12 @@ test('zoom samples settle once and quality replacement uses a visible transition
     const until = performance.now() + 950;
     while (performance.now() < until) {
       await new Promise(requestAnimationFrame);
-      frames.push({ visible: [...document.querySelectorAll('.reader-page-frame:not([aria-hidden="true"]) .reader-display-raster')].filter(e => getComputedStyle(e).visibility === 'visible').length, opacity: [...document.querySelectorAll('.reader-quality-transition')].map(e => Number(getComputedStyle(e).opacity)) });
+      frames.push({ visible: [...document.querySelectorAll('.reader-page-frame:not([aria-hidden="true"]) .reader-viewport-raster')].filter(e => getComputedStyle(e).visibility === 'visible').length, opacity: [...document.querySelectorAll('.reader-quality-transition')].map(e => Number(getComputedStyle(e).opacity)) });
     }
     return frames;
   });
   await page.waitForTimeout(900);
   console.log(JSON.stringify({ during, total: await page.evaluate(count => (window as any).__samplingJobs.length - count, count) }));
   await info.attach('zoom-jobs', { body: JSON.stringify(await page.evaluate(() => (window as any).__samplingJobs)), contentType: 'application/json' });
-  if (!process.env.OMI_BASELINE) { expect(during).toBe(0); expect(blends.every(f => f.visible > 0)).toBe(true); expect(blends.some(f => f.opacity.some(n => n > .05 && n < .95))).toBe(true); }
+  if (!process.env.OMI_BASELINE) { expect(during).toBe(0); expect(blends.every(f => f.visible > 0)).toBe(true); expect(blends.every(f => f.opacity.length === 0)).toBe(true); }
 });

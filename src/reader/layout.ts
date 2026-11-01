@@ -22,7 +22,7 @@ export function fitPage(size: PageSize, viewport: PageSize, mode: 阅读器缩�
 }
 
 export function fitSpread(pages: PageSize[], viewport: PageSize, mode: 阅读器缩放模式): PageSize[] {
-  if (pages.length < 2 || mode === "original") return pages.map(size => fitPage(size, viewport, mode));
+  if (pages.length < 2 || mode === "original" || viewport.width <= 0 || viewport.height <= 0) return pages.map(size => fitPage(size, viewport, mode));
   const widthFitHeight = viewport.width / pages.reduce((sum, size) => sum + size.width / size.height, 0);
   const height = mode === "fit-width" ? widthFitHeight : mode === "fit-height" ? viewport.height : Math.min(viewport.height, widthFitHeight);
   return pages.map(size => ({ width: height * size.width / size.height, height }));

@@ -18,9 +18,14 @@ export function clearResourceThumbnailCache(path?: string): void {
   desktopGeneration++;
   if (isAndroid()) clearMobilePagePreviews(path);
   if (!path) { androidCache.clear(); cache.clear(); }
-  else for (const key of androidCache.keys()) if (key === path || key.startsWith(path + '/')) androidCache.delete(key);
-  for (const [key, task] of androidTasks) if (!path || key === path || key.startsWith(path + '/')) { task.controller.abort(); androidTasks.delete(key); }
-  for (const key of androidChunks.keys()) if (!path || key === path || key.startsWith(path + '/')) androidChunks.delete(key);
+  const target=path?.replace(/\\/g,'/').replace(/\/$/,'');
+  const affected=(key:string)=>{
+    const candidate=key.replace(/\\/g,'/').replace(/\/$/,'');
+    return !target||candidate===target||candidate.startsWith(target+'/')||target.startsWith(candidate+'/');
+  };
+  for (const key of androidCache.keys()) if (affected(key)) androidCache.delete(key);
+  for (const [key, task] of androidTasks) if (affected(key)) { task.controller.abort(); androidTasks.delete(key); }
+  for (const key of androidChunks.keys()) if (affected(key)) androidChunks.delete(key);
   window.dispatchEvent(new CustomEvent('omi-thumbnail-invalidated',{detail:path}));
 }
 

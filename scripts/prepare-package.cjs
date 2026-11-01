@@ -31,7 +31,7 @@ async function main() {
   await fs.cp(path.join(root, 'dist'), path.join(stage, 'dist'), { recursive: true });
   const result = await build({
     absWorkingDir: root,
-    entryPoints: { main: 'electron/main.ts', preload: 'electron/preload.ts', epubWorker: 'electron/services/epubWorker.ts' },
+    entryPoints: { main: 'electron/main.ts', preload: 'electron/preload.ts', epubWorker: 'electron/services/epubWorker.ts', thumbnailPreload: 'electron/services/thumbnailPreload.ts' },
     outdir: path.join(stage, 'dist-electron'), bundle: true, platform: 'node', format: 'cjs',
     target: 'node24', external: ['electron'], minify: true, sourcemap: false, legalComments: 'eof',
     define: { __OMICOMIC_BUNDLED__: 'true' }, metafile: true,
@@ -61,6 +61,6 @@ async function main() {
   await fs.writeFile(path.join(stage, 'THIRD_PARTY_NOTICES.txt'), notices.join('\n'));
   await fs.mkdir(path.join(root, 'test-results'), { recursive: true });
   await fs.writeFile(path.join(root, 'test-results', 'package-bundle.json'), JSON.stringify(result.metafile));
-  console.log('Prepared a self-contained runtime: renderer, bundled main/preload/EPUB worker, and licenses.');
+  console.log('Prepared a self-contained runtime: renderer, bundled main/preload/EPUB worker/thumbnail decoder, and licenses.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

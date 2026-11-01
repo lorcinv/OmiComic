@@ -5,10 +5,27 @@ import java.io.*;
 import ar.com.hjg.pngj.*;
 import ar.com.hjg.pngj.chunks.*;
 
-/** Reduce line art before sampling it. A filtered Canvas cannot remove aliasing
- * already introduced by a PNG decoder which discards intermediate source rows. */
+/** Filter ordinary line art before sampling it; large pages use native sampled
+ * decoding to avoid a whole-source Java scan. Canvas filtering alone cannot
+ * remove aliasing already introduced by discarding intermediate PNG rows. */
 final class ReaderBitmapDecoder {
   interface Check {void run() throws IOException;}
+  /** Reader bodies keep native source pixels whenever the surface budget fits.
+   * Sampling here is a memory bound, not a second presentation/filter pass. */
+  static Bitmap decodeNative(byte[] data,int sample,Check check)throws IOException {
+    check.run();Bitmap bitmap=null;
+    try{
+      BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=Math.max(1,sample);options.inPreferredConfig=Bitmap.Config.ARGB_8888;
+      bitmap=BitmapFactory.decodeByteArray(data,0,data.length,options);
+      if(bitmap==null)throw new IOException("图片无法解码。");
+      check.run();bitmap.setDensity(Bitmap.DENSITY_NONE);bitmap.setHasMipMap(true);return bitmap;
+    }catch(IOException|RuntimeException|OutOfMemoryError error){if(bitmap!=null)bitmap.recycle();throw error;}
+  }
+  // Encoded size alone misses highly compressed long pages. Native sampling
+  // keeps the existing decode budget without scanning every pixel in Java.
+  static boolean useNativeSampling(long encodedBytes,int width,int height){
+    return encodedBytes>=5L*1024*1024||(long)width*height>16000000L||Math.max(width,height)>8192;
+  }
   // One native full-resolution strip at a time, across body and zoom workers.
   // Native filtering is faster for colour-profile/Adam7 PNGs, but needs a
   // bounded source strip in addition to the small output bitmap.
@@ -40,28 +57,63 @@ final class ReaderBitmapDecoder {
     finally{pngNative.unlock();}
   }
   private static Bitmap reducedRegion(BitmapRegionDecoder decoder,Rect rect,int sample,boolean png,Check check)throws IOException {
+    check.run();
     BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=png?1:sample;options.inPreferredConfig=Bitmap.Config.ARGB_8888;
     Bitmap bitmap=decoder.decodeRegion(rect,options);
-    if(png&&bitmap!=null&&sample>1){
-      try{Bitmap next=DisplayResampler.reduce(bitmap,Math.max(1,(bitmap.getWidth()+sample-1)/sample),Math.max(1,(bitmap.getHeight()+sample-1)/sample),check);if(next!=null&&next!=bitmap){bitmap.recycle();bitmap=next;}}
-      catch(IOException|RuntimeException|OutOfMemoryError error){bitmap.recycle();throw error;}
-    }
-    return bitmap;
+    try{
+      check.run();
+      if(png&&bitmap!=null&&sample>1){
+        Bitmap next=DisplayResampler.reduce(bitmap,Math.max(1,(bitmap.getWidth()+sample-1)/sample),Math.max(1,(bitmap.getHeight()+sample-1)/sample),check);if(next!=null&&next!=bitmap){bitmap.recycle();bitmap=next;}
+      }
+      return bitmap;
+    }catch(IOException|RuntimeException|OutOfMemoryError error){if(bitmap!=null)bitmap.recycle();throw error;}
   }
   static Bitmap decode(byte[] data,int sample,Check check)throws IOException {
     check.run();
+    BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;
+    BitmapFactory.decodeByteArray(data,0,data.length,bounds);
+    return decode(data,sample,check,bounds.outWidth,bounds.outHeight);
+  }
+  static Bitmap decode(byte[] data,int sample,Check check,int width,int height)throws IOException {
+    check.run();
     Bitmap bitmap=null;
-    if(sample>1&&data.length>33&&data[0]==(byte)137&&data[1]==80&&data[2]==78&&data[3]==71){
-      try{bitmap=png(data,sample,check);}
-      catch(IOException unsupported){check.run(); /* A current request may try Android's colour-aware decoder. */}
-      if(bitmap==null)bitmap=pngRegions(data,sample,check);
-    }
-    if(bitmap==null){
-      BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=sample;options.inPreferredConfig=Bitmap.Config.ARGB_8888;
-      bitmap=BitmapFactory.decodeByteArray(data,0,data.length,options);
-    }
-    if(bitmap==null)throw new IOException("图片无法解码。");
-    check.run();bitmap.setHasMipMap(true);return bitmap;
+    try{
+      if(sample>1&&!useNativeSampling(data.length,width,height)&&data.length>33&&data[0]==(byte)137&&data[1]==80&&data[2]==78&&data[3]==71){
+        try{
+          // Bound transient full pixels independently of the persistent cache.
+          // Native PNG parsing and PNGJ share the same streaming Lanczos filter.
+          // Small/flat pages benefit from the existing repeated-row cache.
+          if((long)width*height<=1000000L)bitmap=png(data,sample,check);
+          if(bitmap==null){
+            if((long)width*height*4<=Math.min(64L*1024*1024,Runtime.getRuntime().maxMemory()/8))bitmap=nativePng(data,sample,check);
+            else bitmap=png(data,sample,check);
+          }
+        }
+        catch(IOException unsupported){check.run(); /* A current request may try Android's colour-aware decoder. */}
+        if(bitmap==null)bitmap=pngRegions(data,sample,check);
+      }
+      if(bitmap==null){
+        BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=sample;options.inPreferredConfig=Bitmap.Config.ARGB_8888;
+        bitmap=BitmapFactory.decodeByteArray(data,0,data.length,options);
+      }
+      if(bitmap==null)throw new IOException("图片无法解码。");
+      check.run();bitmap.setHasMipMap(true);return bitmap;
+    }catch(IOException|RuntimeException|OutOfMemoryError error){if(bitmap!=null)bitmap.recycle();throw error;}
+  }
+  private static Bitmap nativePng(byte[] data,int sample,Check check)throws IOException {
+    try{while(!pngNative.tryLock(25,java.util.concurrent.TimeUnit.MILLISECONDS))check.run();}
+    catch(InterruptedException error){Thread.currentThread().interrupt();throw new IOException(error);}
+    Bitmap bitmap=null;
+    try{
+      check.run();BitmapFactory.Options options=new BitmapFactory.Options();options.inPreferredConfig=Bitmap.Config.ARGB_8888;
+      bitmap=BitmapFactory.decodeByteArray(data,0,data.length,options);if(bitmap==null)throw new IOException("PNG 图片无法读取。");
+      int width=(bitmap.getWidth()+sample-1)/sample,height=(bitmap.getHeight()+sample-1)/sample;
+      Bitmap next=DisplayResampler.reduce(bitmap,width,height,check);
+      if(next==null)throw new IOException("PNG 图片无法缩放。");
+      bitmap.recycle();bitmap=next;
+      check.run();bitmap.setDensity(Bitmap.DENSITY_NONE);return bitmap;
+    }catch(IOException|RuntimeException|OutOfMemoryError error){if(bitmap!=null)bitmap.recycle();throw error;}
+    finally{pngNative.unlock();}
   }
   private static Bitmap pngRegions(byte[] data,int sample,Check check)throws IOException {
     BitmapRegionDecoder decoder=null;Bitmap result=null;

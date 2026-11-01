@@ -1,5 +1,6 @@
 import { nativeImage } from "electron";
 import { safeRasterImage } from "./documentImageSafety";
+import { nativePageThumbnail } from './pagePreviewService';
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
@@ -40,6 +41,7 @@ export interface 缩略图结果 {
   pdfPath?: string;
   sourceVersion?: string;
   retryable?: boolean;
+  emptyFolder?: boolean;
 }
 
 export type 缩略图错误代码 =
@@ -438,12 +440,16 @@ async function 读取图片为DataUrl(图片路径: string, 显示名称 = 图�
   }
 
   const 图片数据 = await 文件系统.readFile(图片路径);
-  return 图片数据转缩略图DataUrl(图片数据, 显示名称);
+  return 图片数据转缩略图DataUrl(图片数据, 显示名称, 图片路径);
 }
 
-function 图片数据转缩略图DataUrl(图片数据: Buffer, 显示名称: string): string | null {
+async function 图片数据转缩略图DataUrl(图片数据: Buffer, 显示名称: string, 图片路径?: string): Promise<string | null> {
   if (图片数据.length > 缩略图最大字节数 || !safeRasterImage(图片数据, 缩略图最大像素数)) return null;
   thumbnailMetrics.decodes++;
+  try {
+    const image = await nativePageThumbnail(图片路径 ?? 显示名称, 图片路径 ? undefined : async () => 图片数据);
+    return image.url;
+  } catch { /* Retain static GIF and unsupported-codec compatibility below. */ }
   let 原图 = nativeImage.createFromBuffer(图片数据);
   if (原图.isEmpty() && path.extname(显示名称).slice(1).toLowerCase() === "gif") {
     const 静态首帧 = decodeGifFirstFrame(图片数据);
@@ -490,10 +496,10 @@ async function 记录封面来源(result: 缩略图结果, paths: string[]): Pro
 }
 export async function 获取文件夹封面缩略图(文件夹路径: string, budget = { remaining: 32, deadline: Date.now() + 5000 }, depth = 0): Promise<缩略图结果> {
   try {
-    if (depth > 6 || budget.remaining-- <= 0 || Date.now() > budget.deadline) return { url: null };
+    if (depth > 6 || budget.remaining-- <= 0 || Date.now() > budget.deadline) return { url: null, retryable: true };
     const 目录项 = await 文件系统.readdir(文件夹路径, { withFileTypes: true });
     const 子目录数 = 目录项.filter(item => item.isDirectory() && !item.isSymbolicLink()).length;
-    const 独立漫画数 = 目录项.filter(item => item.isFile() && (是支持的压缩包(item.name) || /\.(pdf|epub)$/i.test(item.name))).length;
+    const 独立漫画数 = 目录项.filter(item => item.isFile() && (是支持的压缩包(item.name) || /\.(pdf|epub|mobi)$/i.test(item.name))).length;
     const 图片数 = 目录项.filter(item => item.isFile() && 是支持的图片(item.name)).length;
     const folderSummary = { folders: 子目录数, books: 独立漫画数, images: 图片数,
       unsupported: 目录项.filter(item => item.isFile()).length - 独立漫画数 - 图片数 };
@@ -530,19 +536,21 @@ export async function 获取文件夹封面缩略图(文件夹路径: string, bu
     }
     // A collection directory borrows its first readable child's cover. Do not
     // follow symlinks/junctions out of the selected directory or scan an entire tree.
-    const children = 目录项.filter(item => !item.isSymbolicLink() && (item.isDirectory() || 是支持的压缩包(item.name) || /\.(pdf|epub)$/i.test(item.name)))
+    const children = 目录项.filter(item => !item.isSymbolicLink() && (item.isDirectory() || 是支持的压缩包(item.name) || /\.(pdf|epub|mobi)$/i.test(item.name)))
       .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || 自然排序器.compare(a.name, b.name));
+    let emptyFolder = 图片数 === 0 && 独立漫画数 === 0 && !目录项.some(item => item.isSymbolicLink());
     for (const child of children) {
-      if (budget.remaining <= 0 || Date.now() > budget.deadline) break;
+      if (budget.remaining <= 0 || Date.now() > budget.deadline) { emptyFolder = false; break; }
       const filePath = path.join(文件夹路径, child.name);
       const cover = child.isDirectory()
         ? await 获取文件夹封面缩略图(filePath, budget, depth + 1)
-        : (budget.remaining--, await 获取缩略图({ path: filePath, type: path.extname(child.name).toLowerCase() === ".pdf" ? "pdf" : path.extname(child.name).toLowerCase() === ".epub" ? "epub" : "archive" }));
+        : (budget.remaining--, await 获取缩略图({ path: filePath, type: path.extname(child.name).toLowerCase() === ".pdf" ? "pdf" : path.extname(child.name).toLowerCase() === ".epub" ? "epub" : path.extname(child.name).toLowerCase() === ".mobi" ? "mobi" : "archive" }));
       if (cover.url || cover.pdfPath) return 记录封面来源({ ...cover, itemCount, childFolderCount: 子目录数, folderSummary }, [filePath, ...(thumbnailDependencies.get(cover) ?? []).map(entry => entry.path)]);
+      emptyFolder = emptyFolder && cover.emptyFolder === true;
     }
-    return { url: null, itemCount, childFolderCount: 子目录数, folderSummary };
+    return { url: null, itemCount, childFolderCount: 子目录数, folderSummary, emptyFolder };
   } catch {
-    return { url: null };
+    return { url: null, retryable: true };
   }
 }
 
@@ -560,7 +568,7 @@ export async function 获取压缩包封面缩略图(压缩包路径: string): P
           缩略图最大字节数,
           'background', true,
         );
-        const 缩略图 = 图片数据转缩略图DataUrl(图片数据, 封面.virtualPath);
+        const 缩略图 = await 图片数据转缩略图DataUrl(图片数据, 封面.virtualPath);
         if (缩略图) return { url: 缩略图 };
       } catch (错误) {
         if (是压缩包服务错误(错误) && 错误.code === "ARCHIVE_ENCRYPTED") return { url: null };
@@ -592,7 +600,7 @@ async function 读取EPUB封面(filePath: string): Promise<缩略图结果> {
   try {
     source = new EPUBDocumentSource(filePath);
     const result = await source.request<{ bytes: Uint8Array; name: string } | null>("cover");
-    return { url: result ? 图片数据转缩略图DataUrl(Buffer.from(result.bytes), result.name) : null };
+    return { url: result ? await 图片数据转缩略图DataUrl(Buffer.from(result.bytes), result.name) : null };
   } catch { return { url: null }; }
   finally {
     await source?.close();

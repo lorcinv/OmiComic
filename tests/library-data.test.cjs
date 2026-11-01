@@ -33,6 +33,18 @@ function resource(dir, name, sourceType = 'archive') {
   return { resourceKey: `${sourceType}:${sourcePath}`, sourcePath, sourceType, title: name };
 }
 
+test('fresh desktop reading defaults use single LTR pages with panorama disabled and preserve explicit choices', async t => {
+  const f = await fixture(t), initial = await f.service.读取应用数据();
+  assert.equal(initial.settings.readerDefaultPanorama, false);
+  assert.equal(initial.settings.readerPageMode, 'single');
+  assert.equal(initial.settings.doublePageDirection, 'left-to-right');
+  await f.service.更新设置({ readerDefaultPanorama: true, readerPageMode: 'double', doublePageDirection: 'right-to-left' });
+  const next = await f.load().读取应用数据();
+  assert.equal(next.settings.readerDefaultPanorama, true);
+  assert.equal(next.settings.readerPageMode, 'double');
+  assert.equal(next.settings.doublePageDirection, 'right-to-left');
+});
+
 test('dropped directories persist atomically without changing the current directory or existing order', async t => {
   const f = await fixture(t), current = path.join(f.dir, 'Current'), incoming = path.join(f.dir, 'Incoming');
   await fs.mkdir(current); await fs.mkdir(incoming);
@@ -114,11 +126,11 @@ test('desktop typography migrates the old standard and persists custom numeric s
   assert.equal(settings.desktopGlobalFontSize, 24);
 });
 
-test('desktop performance scales by RAM and CPU without phone limits',()=>{
+test('desktop performance leaves room for decode buffers and GPU copies',()=>{
   const {desktopPerformance}=require('../dist-electron/shared/desktopPerformance.js');
-  assert.deepEqual(desktopPerformance('auto',32*1024**3,16),{readerMemoryCacheSizeMb:4096,readerPreloadPages:48,readerImageLoadConcurrency:12});
-  assert.deepEqual(desktopPerformance('high',32*1024**3,16),{readerMemoryCacheSizeMb:8192,readerPreloadPages:96,readerImageLoadConcurrency:16});
-  assert.deepEqual(desktopPerformance('auto',8*1024**3,4),{readerMemoryCacheSizeMb:1024,readerPreloadPages:20,readerImageLoadConcurrency:2});
+  assert.deepEqual(desktopPerformance('auto',32*1024**3,16),{readerMemoryCacheSizeMb:1024,readerPreloadPages:12,readerImageLoadConcurrency:4});
+  assert.deepEqual(desktopPerformance('high',32*1024**3,16),{readerMemoryCacheSizeMb:2048,readerPreloadPages:24,readerImageLoadConcurrency:6});
+  assert.deepEqual(desktopPerformance('auto',8*1024**3,4),{readerMemoryCacheSizeMb:256,readerPreloadPages:12,readerImageLoadConcurrency:2});
 });
 
 test('old restrictive PC preset upgrades once, while future custom values remain intentional', async t => {

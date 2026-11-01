@@ -1,5 +1,9 @@
 import { DISPLAY_TILE_LIMIT, samplingCrop, samplingTileSize, samplingWeights } from './displaySamplingKernel';
+import { preferNativeImageDisplay } from './largeImagePolicy';
+import { preferDesktopViewportDisplay } from './desktopDisplayPolicy';
 
+// CPU and GPU share the scale-aware Lanczos weights. Compute each tap once,
+// rather than evaluating trigonometry again for every source pixel/channel.
 // Crop without resizing. Each bounded tile filters at the final output scale,
 // preventing an earlier generic resize from baking moire into the result.
 const surface = new OffscreenCanvas(1, 1);
@@ -17,25 +21,22 @@ function pipeline() {
   void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}`);
   const fragment = shader(gl!.FRAGMENT_SHADER, `#version 300 es
   precision highp float; precision highp int;
-  uniform sampler2D image;
-  uniform vec2 sourceSize, outputSize, sourceOrigin, outputOrigin, scale;
+  uniform sampler2D image, weights;
+  uniform vec2 sourceSize, outputSize, sourceOrigin;
   uniform int vertical;
   out vec4 color;
-  float weight(float x){x=abs(x);if(x<0.00001)return 1.0;if(x>=3.0)return 0.0;float p=3.141592653589793*x;return sin(p)*sin(p/3.0)/(p*p/3.0);}
   void main(){
-    float ratio=vertical==1?scale.y:scale.x;
-    float position=vertical==1?outputOrigin.y+outputSize.y-gl_FragCoord.y:outputOrigin.x+gl_FragCoord.x;
-    float origin=vertical==1?sourceOrigin.y:sourceOrigin.x;
-    float center=position/ratio-0.5-origin,total=0.0;
+    int position=vertical==1?int(outputSize.y-gl_FragCoord.y):int(gl_FragCoord.x);
+    vec2 span=texelFetch(weights,ivec2(0,position),0).rg;
+    int origin=vertical==1?int(sourceOrigin.y):int(sourceOrigin.x);
     vec4 sum=vec4(0.0);
-    int radius=int(ceil(3.0/(ratio*0.9)))+1;
-    for(int i=-radius;i<=radius;i++){
-      int index=int(floor(center))+i;
-      float w=weight((float(index)-center)*ratio*0.9);
+    for(int i=0;i<int(span.y);i++){
+      int index=int(span.x)+i-origin;
+      float w=texelFetch(weights,ivec2(i+1,position),0).r;
       ivec2 p=vertical==1?ivec2(int(gl_FragCoord.x),clamp(index,0,int(sourceSize.y)-1)):ivec2(clamp(index,0,int(sourceSize.x)-1),int(gl_FragCoord.y));
-      sum+=texelFetch(image,p,0)*w;total+=w;
+      sum+=texelFetch(image,p,0)*w;
     }
-    color=sum/total;color.a=clamp(color.a,0.0,1.0);color.rgb=clamp(color.rgb,vec3(0.0),vec3(color.a));
+    color=sum;color.a=clamp(color.a,0.0,1.0);color.rgb=clamp(color.rgb,vec3(0.0),vec3(color.a));
   }`);
   const created = gl!.createProgram()!;
   gl!.attachShader(created, vertex); gl!.attachShader(created, fragment); gl!.linkProgram(created);
@@ -54,6 +55,25 @@ function texture(width: number, height: number, image?: ImageBitmap) {
   else gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, width, height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
   return t;
 }
+function weightTexture(source: number, target: number, start: number, count: number) {
+  const rows = samplingWeights(source, target, start, count);
+  const width = Math.max(...rows.map(row => row.weights.length)) + 1;
+  const data = new Float32Array(width * count * 2);
+  for (let y = 0; y < count; y++) {
+    const row = rows[y], at = y * width * 2;
+    data[at] = row.first; data[at + 1] = row.weights.length;
+    for (let i = 0; i < row.weights.length; i++) data[at + (i + 1) * 2] = row.weights[i];
+  }
+  const result = gl!.createTexture()!;
+  gl!.activeTexture(gl!.TEXTURE1); gl!.bindTexture(gl!.TEXTURE_2D, result);
+  gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.NEAREST);
+  gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.NEAREST);
+  gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
+  gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
+  gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RG32F, width, count, 0, gl!.RG, gl!.FLOAT, data);
+  gl!.activeTexture(gl!.TEXTURE0);
+  return result;
+}
 async function tiledResize(input: ImageBitmap, width: number, height: number) {
   const limit = Math.min(DISPLAY_TILE_LIMIT, gl!.getParameter(gl!.MAX_TEXTURE_SIZE));
   const fits = input.width <= limit && input.height <= limit;
@@ -68,22 +88,24 @@ async function tiledResize(input: ImageBitmap, width: number, height: number) {
       const x = samplingCrop(left, w, input.width, width), y = samplingCrop(top, h, input.height, height);
       const crop = x.first === 0 && y.first === 0 && x.length === input.width && y.length === input.height
         ? input : await createImageBitmap(input, x.first, y.first, x.length, y.length, { premultiplyAlpha: 'premultiply' });
-      let source: WebGLTexture | null = null, horizontal: WebGLTexture | null = null, frame: WebGLFramebuffer | null = null;
+      let source: WebGLTexture | null = null, horizontal: WebGLTexture | null = null, xs: WebGLTexture | null = null, ys: WebGLTexture | null = null, frame: WebGLFramebuffer | null = null;
       try {
         surface.width = w; surface.height = h;
         source = texture(crop.width, crop.height, crop); horizontal = texture(w, crop.height); frame = gl!.createFramebuffer();
+        xs = weightTexture(input.width, width, left, w); ys = weightTexture(input.height, height, top, h);
         gl!.useProgram(p); gl!.activeTexture(gl!.TEXTURE0); gl!.uniform1i(gl!.getUniformLocation(p, 'image'), 0);
-        gl!.uniform2f(gl!.getUniformLocation(p, 'scale'), width / input.width, height / input.height);
+        gl!.uniform1i(gl!.getUniformLocation(p, 'weights'), 1);
         gl!.uniform2f(gl!.getUniformLocation(p, 'sourceOrigin'), x.first, y.first);
-        gl!.uniform2f(gl!.getUniformLocation(p, 'outputOrigin'), left, top);
         gl!.bindFramebuffer(gl!.FRAMEBUFFER, frame);
         gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl!.COLOR_ATTACHMENT0, gl!.TEXTURE_2D, horizontal, 0);
         if (gl!.checkFramebufferStatus(gl!.FRAMEBUFFER) !== gl!.FRAMEBUFFER_COMPLETE) throw Error('Display sampling surface unavailable');
         gl!.bindTexture(gl!.TEXTURE_2D, source); gl!.viewport(0, 0, w, crop.height);
+        gl!.activeTexture(gl!.TEXTURE1); gl!.bindTexture(gl!.TEXTURE_2D, xs); gl!.activeTexture(gl!.TEXTURE0);
         gl!.uniform2f(gl!.getUniformLocation(p, 'sourceSize'), crop.width, crop.height);
         gl!.uniform2f(gl!.getUniformLocation(p, 'outputSize'), w, crop.height); gl!.uniform1i(gl!.getUniformLocation(p, 'vertical'), 0);
         gl!.drawArrays(gl!.TRIANGLES, 0, 3);
         gl!.bindFramebuffer(gl!.FRAMEBUFFER, null); gl!.bindTexture(gl!.TEXTURE_2D, horizontal); gl!.viewport(0, 0, w, h);
+        gl!.activeTexture(gl!.TEXTURE1); gl!.bindTexture(gl!.TEXTURE_2D, ys); gl!.activeTexture(gl!.TEXTURE0);
         gl!.uniform2f(gl!.getUniformLocation(p, 'sourceSize'), w, crop.height);
         gl!.uniform2f(gl!.getUniformLocation(p, 'outputSize'), w, h); gl!.uniform1i(gl!.getUniformLocation(p, 'vertical'), 1);
         gl!.drawArrays(gl!.TRIANGLES, 0, 3);
@@ -91,7 +113,7 @@ async function tiledResize(input: ImageBitmap, width: number, height: number) {
         const tile = surface.transferToImageBitmap();
         try { context.drawImage(tile, left, top); } finally { tile.close(); }
       } finally {
-        if (crop !== input) crop.close(); gl!.deleteTexture(source); gl!.deleteTexture(horizontal); gl!.deleteFramebuffer(frame);
+        if (crop !== input) crop.close(); gl!.deleteTexture(source); gl!.deleteTexture(horizontal); gl!.deleteTexture(xs); gl!.deleteTexture(ys); gl!.deleteFramebuffer(frame);
       }
     }
     return output.transferToImageBitmap();
@@ -106,7 +128,7 @@ function softwareResize(input: ImageBitmap, width: number, height: number) {
   const read = strip.getContext('2d', { willReadFrequently: true })!;
   const output = new OffscreenCanvas(width, height), context = output.getContext('2d')!;
   const line = context.createImageData(width, 1), rows = new Map<number, Float32Array>();
-  let stripTop = -1, data: Uint8ClampedArray<ArrayBufferLike> = new Uint8ClampedArray();
+  let stripTop = -stripHeight, data: Uint8ClampedArray<ArrayBufferLike> = new Uint8ClampedArray();
   try {
     for (let y = 0; y < height; y++) {
       const vertical = ys[y];
@@ -144,12 +166,18 @@ function softwareResize(input: ImageBitmap, width: number, height: number) {
     return output.transferToImageBitmap();
   } finally { strip.width = strip.height = output.width = output.height = 1; }
 }
-self.onmessage = async (event: MessageEvent<{ id: number; bitmap?: ImageBitmap; url?: string; width: number; height: number }>) => {
-  const { id, url, width, height } = event.data;
+self.onmessage = async (event: MessageEvent<{ id: number; bitmap?: ImageBitmap; url?: string; width: number; height: number; desktop?:boolean }>) => {
+  const { id, url, width, height, desktop } = event.data;
   let input = event.data.bitmap;
   try {
-    if (!input && url) { const response = await fetch(url); if (!response.ok) throw Error('Display source unavailable'); input = await createImageBitmap(await response.blob(), { premultiplyAlpha: 'premultiply' }); }
+    if (!input && url) {
+      const response = await fetch(url); if (!response.ok) throw Error('Display source unavailable');
+      const blob = await response.blob();
+      if (!desktop && preferNativeImageDisplay(0, 0, blob.size)) throw Error('Use native image display');
+      input = await createImageBitmap(blob, { premultiplyAlpha: 'premultiply' });
+    }
     if (!input || width < 1 || height < 1 || width * height > 4_000_000) throw Error('Invalid display size');
+    if (desktop ? preferDesktopViewportDisplay(input.width,input.height) : preferNativeImageDisplay(input.width, input.height)) throw Error('Use native image display');
     let sampled: ImageBitmap;
     if (gl && !gl.isContextLost()) { try { sampled = await tiledResize(input, width, height); } catch { sampled = softwareResize(input, width, height); } }
     else sampled = softwareResize(input, width, height);

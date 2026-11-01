@@ -8,7 +8,13 @@ const Module = require('node:module');
 function serviceWith(archive, nativeImage) {
   const original = Module._load;
   Module._load = function(id, ...args) {
-    if (id === 'electron') return { nativeImage };
+    if (id === 'electron') return { nativeImage, app: {getPath: () => os.tmpdir()} };
+    if (id === './thumbnailDecoder') return {decodeThumbnail:async(file,load)=>{
+      if(!nativeImage.createThumbnailFromPath)throw Error('Decoder not provided');
+      if(load)assert.ok((await load()).length>0);
+      const image=await nativeImage.createThumbnailFromPath(file,{width:360,height:360});
+      return {url:image.toDataURL(),width:360,height:360};
+    }};
     if (id === './archiveService') return {
       是压缩包服务错误: error => Boolean(error.code), ...archive,
       读取压缩包封面列表: archive.读取压缩包图片列表,
@@ -18,6 +24,7 @@ function serviceWith(archive, nativeImage) {
   try {
     const file = require.resolve('../dist-electron/services/thumbnailService');
     delete require.cache[file];
+    delete require.cache[require.resolve('../dist-electron/services/pagePreviewService')];
     return require(file);
   } finally { Module._load = original; }
 }
@@ -44,6 +51,23 @@ function decoder(onDecode = () => {}) {
       resize: options => ({ toDataURL: () => `resized:${options.width}x${options.height}` }), toDataURL: () => 'decoded' };
   } };
 }
+
+test('file and archive covers use the asynchronous bounded native decode lane', async t => {
+  const archive=await source(t),file=path.join(path.dirname(archive),'page.png'),data=image(3500,5200);
+  await fs.writeFile(file,data);let calls=0,active=0,peak=0;
+  const service=serviceWith({
+    读取压缩包图片列表:async()=>[{virtualPath:'001.png',size:data.length}],读取压缩包单张图片:async()=>data,
+  },{
+    createFromBuffer(){throw Error('Synchronous cover decode must not run');},
+    async createThumbnailFromPath(filename,size){
+      calls++;peak=Math.max(peak,++active);assert.deepEqual(size,{width:360,height:360});
+      if(filename===file)assert.deepEqual(await fs.readFile(filename),data);await new Promise(r=>setImmediate(r));active--;
+      return {isEmpty:()=>false,toDataURL:()=> 'data:image/png;base64,async'};
+    },
+  });
+  const results=await Promise.all([service.获取缩略图({path:file,type:'image'}),service.获取缩略图({path:archive,type:'archive'})]);
+  assert.ok(results.every(r=>r.url==='data:image/png;base64,async'));assert.equal(calls,2);assert.equal(peak,1);
+});
 
 test('folder covers reuse memory and disk pixels and invalidate a changed nested source', async t => {
   const file=await source(t),root=path.join(path.dirname(file),'Books'),nested=path.join(root,'Chapter'),page=path.join(nested,'001.png');

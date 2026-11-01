@@ -2,12 +2,12 @@ const assert=(value,message)=>{if(!value)throw new Error(message);};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const wait=async(predicate,label,timeout=20000)=>{const deadline=performance.now()+timeout;while(!await predicate()){if(performance.now()>deadline)throw new Error('Timeout: '+label);await pause(16);}};
 const api=window.omicomic,value=async promise=>{const result=await promise;assert(result.ok,JSON.stringify(result));return result.data;};
-const data=await value(api.getAppData()),root=data.library.roots.find(item=>item.name==='OmiSmoke');
+const data=await value(api.getAppData()),halftone=window.__omiFixture==='halftone-root',root=data.library.roots.find(item=>item.name===(halftone?'Halftone1149':'OmiSmoke'));
 assert(root,'Native112 fixture root missing');
-const base=root.path+'/Native112',book=await value(api.getResourcePages({path:base+'/Many.cbz',type:'archive'}));
+const base=root.path+(halftone?'':'/Native112'),book=await value(api.getResourcePages({path:base+'/Many.cbz',type:'archive'}));
 assert(book.total===2500,'Many.cbz fixture must contain 2500 pages');
 await value(api.updateSettings({
-  colorTheme:'mist',mobileLibraryLayout:'grid',mobileGridColumns:2,mobileReaderPreviews:true,mobilePreviewWidth:88,
+  colorTheme:'mist',mobileLibraryLayout:'grid',mobileGridColumns:2,mobileReaderPreviews:true,mobilePreviewWidth:88,mobileReaderAutoHide:false,
   readerMemoryCacheSizeMb:100,readerPreloadPages:3,readerPageMode:'single',readerDefaultPanorama:false,readerDefaultImmersive:false,
   doublePageDirection:'left-to-right',doublePageFirstSingle:false,
   mobileImageAdjustments:{enabled:true,brightness:100,contrast:100,gamma:1,warmth:0,grayscale:false,invert:false,sharpen:0,denoise:0},
@@ -17,8 +17,8 @@ await value(api.saveReadingProgress({resourceKey:book.resourceKey,sourcePath:boo
   readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:'horizontal',panorama:false,immersive:false}}));
 const visible=element=>element&&element.getBoundingClientRect().width>0&&getComputedStyle(element).visibility!=='hidden';
 const button=label=>[...document.querySelectorAll('button')].find(element=>visible(element)&&(element.getAttribute('aria-label')===label||element.textContent.trim()===label));
-const tap=async element=>{assert(element,'Missing tap target');element.scrollIntoView({block:'center'});await pause(250);const r=element.getBoundingClientRect();window.__omiTap={x:r.x+r.width/2,y:r.y+Math.min(50,r.height/2),viewport:innerWidth};await wait(()=>!window.__omiTap,'real tap');};
-await tap(button('打开资源库'));
+const tap=async element=>{assert(element,'Missing tap target');element.scrollIntoView({block:'center'});await pause(250);const r=element.getBoundingClientRect();window.__omiTap={x:r.x+r.width/2,y:r.y+(element.classList.contains('reader-stage')?r.height/2:Math.min(50,r.height/2)),viewport:innerWidth};await wait(()=>!window.__omiTap,'real tap');};
+if(button('打开资源库'))await tap(button('打开资源库'));
 const card=()=>[...document.querySelectorAll('.page-panel.is-visible .mobile-resource-card')].find(element=>element.querySelector('strong')?.textContent==='Many.cbz');
 await wait(card,'Many.cbz card');await tap(card());
 const shown=()=>document.querySelector('.page-panel.is-visible .reader-page-frame:not([aria-hidden="true"])');

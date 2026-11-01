@@ -15,7 +15,8 @@ test('details use the available workspace when maximizing and restoring the wind
   const columns: number[] = [];
   for (const viewport of [{ width: 1440, height: 900 }, { width: 2559, height: 1392 }, { width: 1920, height: 1080 }, { width: 1920, height: 640 }, { width: 960, height: 640 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
-    await expect(page.locator('.resource-detail-thumbnail')).toHaveCount(48);
+    await expect(page.locator('.resource-detail-thumbnail').first()).toBeVisible();
+    expect(await page.locator('.resource-detail-thumbnail').count()).toBeLessThan(48);
     const sizes: number[] = [];
     for (const size of [55, 75, 100]) {
       await setCardScale(page.getByRole('slider', { name: '缩略预览大小' }), size);
@@ -85,7 +86,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 640 
     await page.locator('.resource-card').filter({ hasText: 'Book' }).getByRole('button', { name: '打开资源信息' }).click();
     const detail = page.locator('.resource-detail-page');
     const grid = page.locator('.resource-detail-thumbnail-grid');
-    await expect(page.locator('.resource-detail-thumbnail')).toHaveCount(48);
+    await expect(page.locator('.resource-detail-thumbnail').first()).toBeVisible();
+    expect(await page.locator('.resource-detail-thumbnail').count()).toBeLessThan(48);
     await page.locator('.resource-detail-cover').hover();
     await page.mouse.wheel(0, 120);
     await expect(detail).toHaveClass(/is-header-collapsed/);
@@ -120,15 +122,16 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 640 
       await setCardScale(page.getByRole('slider', { name: '缩略预览大小' }), size);
       await expectFirstRowClear(page);
     }
-    await page.getByRole('button', { name: '下一组预览' }).click();
-    await expect(page.locator('.resource-detail-thumbnail').first()).toHaveAttribute('aria-label', /第 49 页/);
-    await expectFirstRowClear(page);
-    await page.locator('.resource-detail-thumbnail').first().click();
+    await grid.evaluate(element=>{element.scrollTop=element.scrollHeight*.55;});
+    await expect.poll(()=>page.locator('.resource-detail-thumbnail').first().getAttribute('aria-label')).not.toMatch(/第 1 页/);
+    await expect(page.getByRole('button',{name:'下一组预览'})).toHaveCount(0);
+    const label=await grid.locator('.resource-detail-thumbnail').evaluateAll(nodes=>{const root=nodes[0].parentElement!.getBoundingClientRect();return nodes.find(node=>{const rect=node.getBoundingClientRect();return rect.top>=root.top&&rect.top<root.bottom-40;})!.getAttribute('aria-label')!;});
+    await page.getByRole('button',{name:label,exact:true}).click({position:{x:20,y:30}});
     await expect(page.getByText(/已选择第 \d+ 页/)).toHaveCount(0);
     await expect(page.locator('.resource-detail-thumbnail.is-selected')).toHaveCount(0);
     await expect(page.locator('.resource-detail-thumbnail[aria-pressed]')).toHaveCount(0);
     await expect(page.locator('.reader-layout')).toHaveCount(0);
-    await page.getByRole('button', { name: '上一组预览' }).click();
+    await grid.evaluate(element=>{element.scrollTop=0;});
     await expectFirstRowClear(page);
     await page.screenshot({ path: `test-results/detail-preview-first-row-${viewport.width}.png` });
 
@@ -145,3 +148,15 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 640 
     await expect(detail).not.toHaveClass(/is-header-collapsed/);
   });
 }
+
+test('detail thumbnails scroll continuously beyond groups 48 and 96 with bounded mounted images',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await page.addInitScript(installMock,{count:224});
+  await page.goto('/');await page.getByRole('button',{name:'打开资源库',exact:true}).click();
+  await page.locator('.resource-card').filter({hasText:'Book'}).getByRole('button',{name:'打开资源信息'}).click();
+  const grid=page.locator('.resource-detail-thumbnail-grid');await expect(page.locator('.resource-detail-thumbnail').first()).toBeVisible();
+  await grid.hover();await page.mouse.wheel(0,120);await page.waitForTimeout(280);await page.mouse.wheel(0,100000);
+  await expect(page.getByRole('button',{name:/第 224 页：/})).toBeInViewport();
+  expect(await page.locator('.resource-detail-thumbnail').count()).toBeLessThan(48);
+  await page.mouse.wheel(0,-100000);await expect(page.getByRole('button',{name:/第 1 页：/})).toBeInViewport();
+  await expect(page.getByRole('button',{name:'下一组预览'})).toHaveCount(0);
+});

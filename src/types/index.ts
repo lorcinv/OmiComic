@@ -328,6 +328,7 @@ export interface 获取页面图片输入 {
   virtualPath?: string;
   archiveInnerPath?: string;
   readerSessionId?: number;
+  readerRequestId?: number;
   type: 阅读页类型;
 }
 
@@ -335,6 +336,7 @@ export interface 页面图片结果 {
   url: string;
   width?: number;
   height?: number;
+  encodedBytes?: number;
 }
 
 export interface 书签页预览输入 {
@@ -355,6 +357,7 @@ export interface 缩略图输入 {
 }
 
 export interface 缩略图结果 {
+  emptyFolder?: boolean;
   byteSize?: number;
   itemCount?: number;
   childFolderCount?: number;
@@ -475,6 +478,7 @@ export interface OmiComicApi {
   getResourcePages(input: 打开资源输入): Promise<操作结果<阅读资源结果>>;
   setReaderSession(id: number): Promise<操作结果<null>>;
   getPageImage(input: 获取页面图片输入): Promise<操作结果<页面图片结果>>;
+  cancelPageImage?(id: number): void;
   getBookmarkPagePreview(input: 书签页预览输入): Promise<操作结果<书签页预览结果>>;
   getThumbnail(input: 缩略图输入): Promise<操作结果<缩略图结果>>;
   refreshThumbnails?(): Promise<操作结果<null>>;

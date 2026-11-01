@@ -98,12 +98,12 @@ describe('Android page preview scheduling', () => {
     expect(PendingImage.all[1].src).toBe('');
     PendingImage.all[2].finish();await flush();await expect(near.promise).resolves.toContain('/18.png');
   });
-  it('defers distant archive reads until the native neighbours settle, including a failed neighbour',async()=>{
+  it('loads visible tiny previews without waiting for full native neighbours, including failed bodies',async()=>{
     vi.spyOn(HTMLElement.prototype,'clientWidth','get').mockReturnValue(390);
     const pages=Array.from({length:40},(_,index)=>page(index));
     const props={pages,current:20,width:88,nativeImage:'native-20',nativeRadius:2,onPage:()=>{}};
     const view=render(<MobileReaderPreviews {...props} nativeImages={{20:{url:'native-20',native:true}}}/>);
-    await flush();expect(reads).toEqual([]);
+    await flush();expect(reads).toEqual(['19.png','21.png']);
     const nativeImages=Object.fromEntries([18,19,20,21].map(index=>[index,{url:`native-${index}`,native:true}]));
     view.rerender(<MobileReaderPreviews {...props} nativeImages={{...nativeImages,22:{url:'',error:'unreadable'}}}/>);
     await flush();expect(reads).toContain('22.png');expect(reads.some(name=>/^(16|17|23|24)\.png$/.test(name))).toBe(true);

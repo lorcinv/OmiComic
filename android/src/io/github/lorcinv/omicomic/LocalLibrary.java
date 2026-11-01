@@ -451,8 +451,15 @@ final class LocalLibrary {
     try{return foregroundMedia(key);}finally{foregroundTasks.decrementAndGet();foregroundActivity();}
   }
   private WebResourceResponse foregroundMedia(String key)throws Exception{
-    awaitReaderCleanup();
     Media m;synchronized(media){m=media.get(key);}if(m==null)throw new FileNotFoundException();
+    // Persisted covers are independent of raw reader scratch cleanup. They must
+    // remain paintable while a closed book releases its archives/temporary data.
+    if(m.preview){
+      if(closed)throw new IOException("文件服务已关闭。");
+      byte[] saved=thumbnails.get(key+":native");if(saved==null)saved=thumbnails.get(key);
+      if(saved!=null)return mediaResponse("image/jpeg",saved);
+    }
+    awaitReaderCleanup();
     if(m.preview){
       // A warm preview must not wait behind a cold solid-archive decoder.
       fileAccess.readLock().lock();try{
@@ -489,9 +496,12 @@ final class LocalLibrary {
     if(saved!=null)return new ReaderPreview(saved,true);
     saved=thumbnails.get(key);return saved==null?null:new ReaderPreview(saved,false);
   }
-  byte[] readerRaster(String url,int sample){return readerRasters.get("filtered-raster-v3:"+Uri.parse(url).getLastPathSegment()+":"+sample);}
-  boolean hasReaderRaster(String url,int sample){return readerRasters.contains("filtered-raster-v3:"+Uri.parse(url).getLastPathSegment()+":"+sample);}
-  void saveReaderRaster(String url,int sample,byte[] data){readerRasters.put("filtered-raster-v3:"+Uri.parse(url).getLastPathSegment()+":"+sample,data);}
+  // v5 excludes the soft Gaussian body rasters produced by 1.1.58. Metadata,
+  // reading progress, bookmarks and source files remain valid.
+  private String readerRasterKey(String url,int sample){return "native-source-raster-v6:"+Uri.parse(url).getLastPathSegment()+":"+sample;}
+  byte[] readerRaster(String url,int sample){return readerRasters.get(readerRasterKey(url,sample));}
+  boolean hasReaderRaster(String url,int sample){return readerRasters.contains(readerRasterKey(url,sample));}
+  void saveReaderRaster(String url,int sample,byte[] data){readerRasters.put(readerRasterKey(url,sample),data);}
   long readerRasterEpoch(){return readerRasters.epoch();}
   void persistReaderRaster(String url,int sample,byte[] data,int width,int height,int orientation,long epoch){
     synchronized(readerRasters){
@@ -503,12 +513,12 @@ final class LocalLibrary {
     try{
       Media item;synchronized(media){item=media.get(Uri.parse(url).getLastPathSegment());}
       if(item==null||!identity(resolve(item.path)).equals(item.identity))return null;
-      byte[] saved=readerRasters.get("filtered-raster-info-v2:"+Uri.parse(url).getLastPathSegment());
+      byte[] saved=readerRasters.get("adaptive-raster-info-v3:"+Uri.parse(url).getLastPathSegment());
       return saved==null?null:new JSONObject(new String(saved,java.nio.charset.StandardCharsets.UTF_8));
     }catch(Exception invalid){return null;}
   }
   void saveReaderRasterInfo(String url,int width,int height,int orientation){
-    try{readerRasters.put("filtered-raster-info-v2:"+Uri.parse(url).getLastPathSegment(),new JSONObject().put("width",width).put("height",height).put("orientation",orientation).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}catch(JSONException ignored){}
+    try{readerRasters.put("adaptive-raster-info-v3:"+Uri.parse(url).getLastPathSegment(),new JSONObject().put("width",width).put("height",height).put("orientation",orientation).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}catch(JSONException ignored){}
   }
   private WebResourceResponse mediaResponse(String mime,byte[] bytes){
     WebResourceResponse result=MainActivity.response(mime,new ByteArrayInputStream(bytes),200,"OK");
@@ -611,7 +621,8 @@ final class LocalLibrary {
       JSONObject result=new JSONObject().put("url",JSONObject.NULL).put("itemCount",scan.count);
       if(!scan.remaining.isEmpty()&&scan.visited.size()<8192)return result.put("pending",true);
       coverScans.remove(root.path);
-      return result.put("retryable",scan.failed||!scan.remaining.isEmpty());
+      boolean incomplete=scan.failed||!scan.remaining.isEmpty();
+      return result.put("retryable",incomplete).put("emptyFolder",!incomplete);
     }
   }
   private JSONObject coverResult(Entry entry,Integer count)throws Exception{
@@ -695,7 +706,7 @@ final class LocalLibrary {
   private JSONObject openDocument(JSONObject input)throws Exception{
     if(documents.size()>=6)throw new IOException("打开的文档过多，请先返回资源库。");
     Doc d=new Doc();d.path=input.getString("path");Entry documentEntry=resolve(d.path);boolean mobi=input.getString("type").equals("mobi");
-    if(mobi&&documentEntry.size>64L*1024*1024)throw new IOException("MOBI 超过本版 64 MB 上限。");
+    if(mobi&&documentEntry.size>256L*1024*1024)throw new IOException("MOBI 超过本版 256 MiB 上限。");
     if(mobi){d.source=SeekableSource.open(resolver,documentEntry.uri);if(d.source==null)throw new IOException("请先将 MOBI 保存到手机本地目录再打开。");}
     else d.source=source(documentEntry,!input.optString("purpose").equals("thumbnail"));JSONArray chapters=new JSONArray();
     try {
@@ -710,7 +721,7 @@ final class LocalLibrary {
       }
       if(d.chapters.isEmpty())throw new IOException("EPUB 没有可阅读章节。");
     }
-    if(mobi){long length=d.source.size();if(length<78||length>64L*1024*1024)throw new IOException("MOBI 文件为空或超过本版 64 MB 上限。");byte[] header=d.source.range(0,78);if(!new String(header,60,8,StandardCharsets.US_ASCII).equals("BOOKMOBI"))throw new IOException("文件不是有效的 MOBI。");}
+    if(mobi){long length=d.source.size();if(length<78||length>256L*1024*1024)throw new IOException("MOBI 文件为空或超过本版 256 MiB 上限。");byte[] header=d.source.range(0,78);if(!new String(header,60,8,StandardCharsets.US_ASCII).equals("BOOKMOBI"))throw new IOException("文件不是有效的 MOBI。");}
     String id=input.getString("id");closeDocument(id);documents.put(id,d);return new JSONObject().put("size",d.source.size()).put("chapters",chapters);
     }catch(Exception error){d.source.close();throw error;}
   }

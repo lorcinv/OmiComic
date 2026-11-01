@@ -1,4 +1,5 @@
 import { open,type FileHandle } from 'node:fs/promises';
+import { MAX_MOBI_BYTES } from '../shared/mobiLimits';
 
 /** Separate, read-only range source. MOBI never enters the PDF or EPUB parser. */
 export class MobiBinarySource {
@@ -7,7 +8,7 @@ export class MobiBinarySource {
     const file=await open(path,'r');
     try{
       const info=await file.stat(),header=Buffer.alloc(78);
-      if(!info.isFile()||info.size<78||info.size>64*1024*1024)throw Error('MOBI 文件为空或超过本版 64 MB 上限。');
+      if(!info.isFile()||info.size<78||info.size>MAX_MOBI_BYTES)throw Error('MOBI 文件为空或超过本版 256 MiB 上限。');
       await file.read(header,0,78,0);
       if(header.toString('ascii',60,68)!=='BOOKMOBI')throw Error('文件不是有效的 MOBI。');
       return new MobiBinarySource(file,info.size);

@@ -63,8 +63,9 @@ function detailCover():HTMLElement|null {
 
 /** Capture the outgoing frame before committing navigation. A newer navigation
  * supersedes a pending capture; it must never be overwritten by an older one. */
-export async function mobileNavigate(update: () => void, direction: Direction = 'forward', prepared?: () => Promise<void>, origin?:MobileNavigationOrigin, epoch = motionEpoch): Promise<void> {
+export async function mobileNavigate(update: () => void, direction: Direction = 'forward', prepared?: (isCurrent: () => boolean) => Promise<void>, origin?:MobileNavigationOrigin, epoch = motionEpoch, waitForAnimation = false): Promise<void> {
   const id = ++serial;
+  const isCurrent = () => id === serial;
   const previous = active;
   previous?.skipTransition();
   if (previous) await previous.updateCallbackDone.catch(() => undefined);
@@ -76,7 +77,7 @@ export async function mobileNavigate(update: () => void, direction: Direction = 
     delete root.dataset.mobileNavigation;
     if (hasAndroidRenderer()) androidNotify('cancelScene', {});
     flushSync(update);
-    await prepared?.();
+    await prepared?.(isCurrent);
     return;
   }
   const radial=direction==='home-expand'||direction==='home-collapse';
@@ -118,14 +119,21 @@ export async function mobileNavigate(update: () => void, direction: Direction = 
     try{
       await androidCall('beginScene',{request:id});
       if(id!==serial)return;
-      committed=true;flushSync(update);await prepared?.();
+      committed=true;flushSync(update);await prepared?.(isCurrent);
       if(id!==serial)return;
       if(suspended||epoch!==motionEpoch){androidNotify('cancelScene',{});return;}
       await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
       if(id!==serial)return;
       if(suspended||epoch!==motionEpoch||matchMedia('(prefers-reduced-motion: reduce)').matches)androidNotify('cancelScene',{});
-      else {if(radial)setRadialOrigin();await androidCall('commitScene',{request:id,direction,origin:homeOrigin,viewportWidth:innerWidth});}
-    }catch{if(id===serial){if(!committed)flushSync(update);androidNotify('cancelScene',{});}}
+      else {
+        if(radial)setRadialOrigin();
+        await androidCall('commitScene',{request:id,direction,origin:homeOrigin,viewportWidth:innerWidth});
+        if(waitForAnimation&&id===serial)await androidCall('waitScene',{request:id});
+      }
+    }catch{if(id===serial){
+      if(!committed){flushSync(update);try{await prepared?.(isCurrent);}catch{/* The entry owner handles preparation failure. */}}
+      if(id===serial)androidNotify('cancelScene',{});
+    }}
     finally{clean();}
     return;
   }
@@ -147,7 +155,7 @@ export async function mobileNavigate(update: () => void, direction: Direction = 
       committed = true;
       if(source)source.style.viewTransitionName='';
       flushSync(update);
-      await prepared?.();
+      await prepared?.(isCurrent);
       if(id===serial&&radial)setRadialOrigin();
       if(id===serial&&detail)name(direction==='detail'?detailCover():findCover(origin),'mobile-detail-cover');
     });

@@ -25,7 +25,7 @@ export function connectAndroid(): Promise<NativeCall> {
         const callback = pending.get(message.id);
         if (!callback) return;
         clearTimeout(callback.timer); pending.delete(message.id);
-        if (message.error) callback.reject(new Error(message.error));
+        if (message.error) callback.reject(message.errorCode==='READER_CANCELLED' ? new DOMException(message.error,'AbortError') : new Error(message.error));
         else callback.resolve(message.data);
       };
       port.start();

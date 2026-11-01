@@ -643,6 +643,13 @@ html[data-native-reader="on"],html[data-native-reader="on"] body,
 html[data-native-reader="on"] #root,html[data-native-reader="on"] .app-shell,
 html[data-native-reader="on"] .app-content,html[data-native-reader="on"] .page-panel,
 html[data-native-reader="on"] .reader-layout,html[data-native-reader="on"] .reader-stage { background:transparent !important; }
+
+/* Keep loading geometry for the native handoff, without painting an empty card
+   over the preceding clear frame during a rapid page turn. */
+html[data-platform="android"][data-native-reader="on"] .reader-stage .reader-page-loading {
+  opacity: 0;
+  pointer-events: none;
+}
 .reader-native-image { display:block; flex:0 0 auto; pointer-events:none; }
 
 .mobile-sort-row { gap:8px; }

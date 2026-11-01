@@ -1,11 +1,14 @@
+import { pagePreview } from './services/pagePreviewService';
 import { scanLibraryCatalog, scanLibraryCatalogBatch, configureLibraryCatalog, observeCatalogDirectory, cancelLibraryCatalogScans } from './services/libraryCatalog';
 import { foregroundWork } from './services/foregroundWork';
 import { scanDirectory, listDirectoryImages } from "./services/directoryService";
 import { normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages, type PageSort } from "./shared/readerPreferences";
 import { 切换阅读页面顺序 } from "./services/appDataService";
 import { registerDocumentIpc } from "./services/documentService";
+import { warmThumbnailDecoder } from './services/thumbnailDecoder';
 import { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu, protocol } from "electron";
 import { prepareDesktopImage, registerDesktopImageProtocol } from './services/desktopImageService';
+import { ReaderImageRequests } from './services/readerImageRequests';
 protocol.registerSchemesAsPrivileged([{ scheme: 'omicomic-image', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 import { promises as 文件系统 } from "node:fs";
 import path from "node:path";
@@ -87,6 +90,7 @@ const 图片扩展名 = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
 const 压缩包扩展名 = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 const 自然排序器 = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 let 当前阅读器会话Id = 0;
+const readerImageRequests = new ReaderImageRequests();
 const 待打开外部文件: string[] = [];
 let 正在领取外部文件 = false;
 
@@ -96,6 +100,7 @@ function 接收外部文件(文件列表: string[]): void {
   }
   if (!app.isReady()) return;
   for (const 窗口 of BrowserWindow.getAllWindows()) {
+    if (窗口.getParentWindow()) continue; // Background decoders never receive user navigation.
     if (窗口.isMinimized()) 窗口.restore();
     if (!后台验证) { 窗口.show(); 窗口.focus(); }
     窗口.webContents.send("外部文件:待打开");
@@ -337,18 +342,6 @@ function 创建页面DataUrl(图片数据: Buffer, 显示名称: string): string
   return `data:${媒体类型};base64,${图片数据.toString("base64")}`;
 }
 
-function 创建受限页面预览(数据: Buffer): { url: string; width?: number; height?: number } {
-  // Refuse huge originals before native decoding; previews must never allocate full comic libraries.
-  const 尺寸 = 读取图片像素尺寸(数据);
-  if (数据.length > 12 * 1024 * 1024 || !尺寸 || 尺寸.width * 尺寸.height > 16_000_000) {
-    throw new Error("PREVIEW_TOO_LARGE");
-  }
-  const 图片 = nativeImage.createFromBuffer(数据);
-  if (图片.isEmpty()) throw new Error("PREVIEW_INVALID");
-  const 比例 = Math.min(1, 360 / Math.max(尺寸.width, 尺寸.height));
-  const 缩略图 = 图片.resize({ width: Math.max(1, Math.round(尺寸.width * 比例)), height: Math.max(1, Math.round(尺寸.height * 比例)), quality: "good" });
-  return { url: `data:image/jpeg;base64,${缩略图.toJPEG(78).toString("base64")}`, width: 缩略图.getSize().width, height: 缩略图.getSize().height };
-}
 
 async function 读取文件夹书签页预览(输入: 书签页预览输入, 来源路径: string): Promise<string> {
   const 图片目录 = 输入.sourceType === "folder" ? 来源路径 : path.dirname(来源路径);
@@ -2055,9 +2048,11 @@ function 注册安全通道(): void {
   ipcMain.handle("阅读:设置会话", async (_事件, 输入: unknown) => {
     const 会话Id = typeof 输入 === "number" && Number.isFinite(输入) ? Math.floor(输入) : 0;
     当前阅读器会话Id = Math.max(当前阅读器会话Id, 会话Id);
+    readerImageRequests.retire(当前阅读器会话Id);
     return { ok: true, data: null };
   });
 
+  ipcMain.on('阅读:取消页面图片', (event, id: unknown) => readerImageRequests.cancel(event.sender.id, id));
   ipcMain.handle("阅读:获取页面图片", async (_事件, 输入: unknown) => {
     if (
       typeof 输入 !== "object"
@@ -2083,6 +2078,7 @@ function 注册安全通道(): void {
       : null;
     if (请求会话Id !== null && 请求会话Id > 当前阅读器会话Id) {
       当前阅读器会话Id = 请求会话Id;
+      readerImageRequests.retire(当前阅读器会话Id);
     }
     const 会话已过期 = (): boolean => 请求会话Id !== null && 请求会话Id < 当前阅读器会话Id;
     const 创建过期会话结果 = () => ({
@@ -2090,6 +2086,10 @@ function 注册安全通道(): void {
       error: { code: "STALE_READER_SESSION", message: "旧阅读请求已被忽略。" },
     });
     if (会话已过期()) return 创建过期会话结果();
+
+    const request = 'readerRequestId' in 输入 && typeof 输入.readerRequestId === 'number' && Number.isSafeInteger(输入.readerRequestId)
+      ? readerImageRequests.begin(_事件.sender.id, 输入.readerRequestId, 请求会话Id ?? 当前阅读器会话Id) : undefined;
+    try {
 
     const 来源路径 = 规范化路径(输入.sourcePath);
     if (!(await 是已授权实际路径(来源路径))) {
@@ -2120,14 +2120,15 @@ function 注册安全通道(): void {
         const 是预览 = "preview" in 输入 && 输入.preview === true;
         if (!是预览) {
           const data = await prepareDesktopImage(来源路径, 获取图片媒体类型(内部路径), 读取图片像素尺寸, {
-            innerPath: 内部路径, load: () => 读取压缩包单张图片(来源路径, 内部路径, undefined,
-              "prefetch" in 输入 && 输入.prefetch === true ? 'background' : 'foreground'),
-          });
+            innerPath: 内部路径, load: signal => 读取压缩包单张图片(来源路径, 内部路径, undefined,
+              "prefetch" in 输入 && 输入.prefetch === true ? 'background' : 'foreground', false, signal),
+          }, request?.signal);
           return 会话已过期() ? 创建过期会话结果() : { ok: true, data };
         }
-        const 图片数据 = await 读取压缩包单张图片(来源路径, 内部路径, 12 * 1024 * 1024);
-        if (会话已过期()) return 创建过期会话结果();
-        return { ok: true, data: 创建受限页面预览(图片数据) };
+        const stat=await 文件系统.stat(来源路径);
+        const data=await pagePreview(JSON.stringify([来源路径,stat.size,stat.mtimeMs,stat.ctimeMs,内部路径]),内部路径,读取图片像素尺寸,
+          ()=>读取压缩包单张图片(来源路径,内部路径,256*1024*1024,'background'));
+        return 会话已过期()?创建过期会话结果():{ok:true,data};
       } catch (错误) {
         const 错误代码 = 是压缩包服务错误(错误) ? 错误.code : "ARCHIVE_PAGE_READ_FAILED";
         const 错误信息 = 错误代码 === "ARCHIVE_ENCRYPTED"
@@ -2155,14 +2156,13 @@ function 注册安全通道(): void {
     try {
       const 文件状态 = await 文件系统.stat(来源路径);
       const 是预览 = "preview" in 输入 && 输入.preview === true;
-      if (文件状态.size > (是预览 ? 12 : 256) * 1024 * 1024) throw new Error("IMAGE_TOO_LARGE");
+      if (文件状态.size > 256 * 1024 * 1024) throw new Error("IMAGE_TOO_LARGE");
       if (!是预览) {
-        const data = await prepareDesktopImage(来源路径, 获取图片媒体类型(来源路径), 读取图片像素尺寸);
+        const data = await prepareDesktopImage(来源路径, 获取图片媒体类型(来源路径), 读取图片像素尺寸, undefined, request?.signal);
         return 会话已过期() ? 创建过期会话结果() : { ok: true, data };
       }
-      const 图片数据 = await 文件系统.readFile(来源路径);
-      if (会话已过期()) return 创建过期会话结果();
-      return { ok: true, data: 创建受限页面预览(图片数据) };
+      const data=await pagePreview(JSON.stringify([来源路径,文件状态.size,文件状态.mtimeMs,文件状态.ctimeMs]),来源路径,读取图片像素尺寸);
+      return 会话已过期()?创建过期会话结果():{ok:true,data};
     } catch {
       return {
         ok: false,
@@ -2172,6 +2172,7 @@ function 注册安全通道(): void {
         },
       };
     }
+    } finally { request?.end(); }
   });
 
   ipcMain.handle('缩略图:刷新', async () => {
@@ -2378,6 +2379,7 @@ function 创建主窗口(): void {
     }
   });
 
+  主窗口.webContents.once('did-finish-load', warmThumbnailDecoder);
   if (开发服务地址) {
     void 主窗口.loadURL(开发服务地址);
   } else {

@@ -1,3 +1,4 @@
+import { compareComicPagePaths } from './comicPageSort';
 export type PageSort = "name-asc" | "name-desc" | "time-asc" | "time-desc";
 export interface ImageAdjustments {
   enabled: boolean; brightness: number; contrast: number; gamma: number;
@@ -36,10 +37,9 @@ export function pageIdentity(page: IdentifiedPage): string {
   if (page.type === 'pdf-page' || page.type === 'epub-chapter') return page.pageId ?? `${page.type}:${page.index}`;
   return page.pageId ?? `${page.type}:${(page.archiveInnerPath ?? page.virtualPath ?? page.name).replace(/\\/g, "/")}`;
 }
-const collator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 const ordinal = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 export function sortReaderPages<T extends IdentifiedPage>(pages: T[], mode: PageSort): T[] {
-  const named = (a: T, b: T) => collator.compare(a.name, b.name) || ordinal(a.name, b.name) || ordinal(pageIdentity(a), pageIdentity(b));
+  const named = (a: T, b: T) => compareComicPagePaths(a.name, b.name) || ordinal(pageIdentity(a), pageIdentity(b));
   return [...pages].sort((a, b) => {
     if (mode.startsWith("time")) {
       const ta = typeof a.modifiedAt === "number" && Number.isFinite(a.modifiedAt) ? a.modifiedAt : null;

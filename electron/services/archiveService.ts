@@ -7,10 +7,11 @@ import { ARCHIVE_LIMITS, createEntryGuard, failLimit, isImage, normalizeArchiveE
 import { listSevenZip, readSevenZip } from "./archiveSevenZip";
 import { isNestedArchive, nestedVirtualPath, withNestedArchive } from './nestedArchiveCache';
 import { foregroundWork } from './foregroundWork';
+import { compareComicPagePaths } from '../shared/comicPageSort';
 export { 压缩包服务错误, type 压缩包错误代码 } from "./archiveSafety";
 export type 压缩包图片条目 = ArchiveEntry;
 export const 压缩包单张图片最大字节数 = ARCHIVE_LIMITS.imageBytes;
-const sorter = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
+const compareEntries = (a: ArchiveEntry, b: ArchiveEntry) => compareComicPagePaths(a.archiveChain?.join('/') ?? a.virtualPath, b.archiveChain?.join('/') ?? b.virtualPath);
 
 // Desktop ZIP work scales to the host. Keep two lanes available for a requested
 // page even while thumbnails and read-ahead fill their background allowance.
@@ -27,12 +28,17 @@ function drain() {
     const [job] = waiting.splice(index, 1); active++; if (job.seven) activeSeven++; job.run();
   }
 }
-async function bounded<T>(action: () => Promise<T>, priority: Priority = 'background', seven = false): Promise<T> {
+async function bounded<T>(action: () => Promise<T>, priority: Priority = 'background', seven = false, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
   if (waiting.length >= 128) failLimit();
   const queued = Date.now(); archiveMetrics.queued++;
-  await new Promise<void>(resolve => { waiting.push({ priority, seven, run: resolve }); drain(); });
+  await new Promise<void>((resolve,reject) => {
+    const abort = () => { const index=waiting.indexOf(job); if(index>=0)waiting.splice(index,1); reject(signal?.reason); drain(); };
+    const job={priority,seven,run:()=>{signal?.removeEventListener('abort',abort);resolve();}};
+    signal?.addEventListener('abort',abort,{once:true}); waiting.push(job); drain();
+  });
   archiveMetrics[priority === 'foreground' ? 'foregroundWaitMs' : 'backgroundWaitMs'] += Date.now() - queued;
-  try { return await foregroundWork(action); }
+  try { signal?.throwIfAborted(); return await foregroundWork(action); }
   finally { active--; if (seven) activeSeven--; drain(); }
 }
 function format(file: string): "zip" | "rar" | "7z" {
@@ -87,7 +93,8 @@ async function listZip(file: string): Promise<ArchiveEntry[]> {
   } finally { zip.close(); }
 }
 // yauzl validates sizes, but intentionally does not validate CRC32. Do it incrementally.
-async function readZip(file: string, name: string, limit: number): Promise<Buffer> {
+async function readZip(file: string, name: string, limit: number, signal?: AbortSignal): Promise<Buffer> {
+  signal?.throwIfAborted();
   const cachedDirectory = zipDirectories.get(file);
   const cachedEntry = cachedDirectory?.signature === statSignature(await fs.stat(file)) ? cachedDirectory.entries.get(name) : undefined;
   const zip = await openZip(file);
@@ -98,15 +105,19 @@ async function readZip(file: string, name: string, limit: number): Promise<Buffe
     // This avoids O(page count) directory scans every time the reader changes a page.
     const entries = cachedEntry ? [cachedEntry] : zip.eachEntry();
     for await (const entry of entries) {
+      signal?.throwIfAborted();
       checkZip(entry, guard);
       if (entry.fileName !== name || !(isImage(name) || isNestedArchive(name))) continue;
       if (entry.uncompressedSize > limit) throw new 压缩包服务错误("ARCHIVE_IMAGE_TOO_LARGE", "当前图片过大，暂时无法安全读取。");
       const stream = await zip.openReadStreamPromise(entry);
+      const abort = () => stream.destroy(new Error('Image read cancelled'));
+      signal?.addEventListener('abort',abort,{once:true});
       const chunks: Buffer[] = [];
       let size = 0;
       let crc = 0;
       const timer = setTimeout(() => stream.destroy(new Error("Archive read timed out")), ARCHIVE_LIMITS.timeoutMs);
       try {
+        signal?.throwIfAborted();
         for await (const raw of stream) {
           const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
           size += chunk.length;
@@ -116,7 +127,7 @@ async function readZip(file: string, name: string, limit: number): Promise<Buffe
         }
         if (size !== entry.uncompressedSize || crc !== entry.crc32) throw new Error("ZIP CRC mismatch");
         return Buffer.concat(chunks, size);
-      } finally { clearTimeout(timer); stream.destroy(); }
+      } finally { signal?.removeEventListener('abort',abort); clearTimeout(timer); stream.destroy(); }
     }
     throw new 压缩包服务错误("ARCHIVE_ENTRY_NOT_FOUND", "压缩包中没有找到当前图片。");
   } finally { zip.close(); }
@@ -160,9 +171,9 @@ async function rawList(file: string): Promise<ArchiveEntry[]> {
   trimMetadata();
   return entries;
 }
-async function rawRead(file: string, entry: ArchiveEntry, limit: number): Promise<Buffer> {
+async function rawRead(file: string, entry: ArchiveEntry, limit: number, signal?: AbortSignal): Promise<Buffer> {
   archiveMetrics[format(file) === 'zip' ? 'zipReads' : 'sevenReads']++;
-  return format(file) === 'zip' ? readZip(file, entry.virtualPath, limit) : readSevenZip(file, entry, limit);
+  return format(file) === 'zip' ? readZip(file, entry.virtualPath, limit, signal) : readSevenZip(file, entry, limit, signal);
 }
 async function list(file: string, depth = 0, priority: Priority = 'background'): Promise<ArchiveEntry[]> {
   const stat = await fs.stat(file);
@@ -189,7 +200,7 @@ async function list(file: string, depth = 0, priority: Priority = 'background'):
     indexing.set(key, pending);
   }
   const entries = await pending;
-  entries.sort((a, b) => sorter.compare(a.virtualPath, b.virtualPath));
+  entries.sort(compareEntries);
   cache.delete(file);
   cache.set(file, { signature, entries });
   while (cache.size > 16) cache.delete(cache.keys().next().value!);
@@ -200,11 +211,11 @@ export async function 读取压缩包图片列表(file: string): Promise<Archive
   try { return await bounded(() => list(file, 0, 'foreground'), 'foreground', format(file) !== 'zip'); } catch (error) { throw normalizeArchiveError(error); }
 }
 async function coverCandidates(file: string, depth = 0): Promise<ArchiveEntry[]> {
-  const raw = await rawList(file), direct = raw.filter(entry => isImage(entry.virtualPath)).sort((a,b) => sorter.compare(a.virtualPath,b.virtualPath));
+  const raw = await rawList(file), direct = raw.filter(entry => isImage(entry.virtualPath)).sort(compareEntries);
   if (direct.length) return direct;
   if (depth >= 3) return [];
   let failures = 0, attempts = 0;
-  for (const entry of raw.filter(entry => isNestedArchive(entry.virtualPath)).sort((a,b) => sorter.compare(a.virtualPath,b.virtualPath))) {
+  for (const entry of raw.filter(entry => isNestedArchive(entry.virtualPath)).sort(compareEntries)) {
     if (++attempts > 4) break;
     try {
       const inner = await withNestedArchive(file, entry, () => rawRead(file, entry, ARCHIVE_LIMITS.imageBytes), child => coverCandidates(child, depth + 1), 'background');
@@ -228,24 +239,26 @@ export async function 读取压缩包快速页数(file: string): Promise<number 
     return entries.some(entry => isNestedArchive(entry.virtualPath)) ? null : entries.filter(entry => isImage(entry.virtualPath)).length;
   }, 'background', format(file) !== 'zip'); } catch (error) { throw normalizeArchiveError(error); }
 }
-export async function 读取压缩包单张图片(file: string, name: string, maxBytes: number = ARCHIVE_LIMITS.imageBytes, priority: Priority = 'background', coverOnly = false): Promise<Buffer> {
+export async function 读取压缩包单张图片(file: string, name: string, maxBytes: number = ARCHIVE_LIMITS.imageBytes, priority: Priority = 'background', coverOnly = false, signal?: AbortSignal): Promise<Buffer> {
   try {
     validateEntryName(name);
     validateReadLimit(maxBytes);
     return await bounded(async () => {
       // Validate the entire directory first, including entries after the requested page.
       const entries = coverOnly ? await coverCandidates(file) : await list(file, 0, priority);
+      signal?.throwIfAborted();
       const entry = entries.find(item => item.virtualPath === name);
       if (!entry) throw new 压缩包服务错误("ARCHIVE_ENTRY_NOT_FOUND", "压缩包中没有找到当前图片。");
       if (entry.size > maxBytes) throw new 压缩包服务错误("ARCHIVE_IMAGE_TOO_LARGE", "当前图片过大，暂时无法安全读取。");
       async function readChain(current: string, parts: string[], depth: number): Promise<Buffer> {
         const entries = await rawList(current), selected = entries.find(item => item.virtualPath === parts[depth]);
         if (!selected) throw new 压缩包服务错误('ARCHIVE_ENTRY_NOT_FOUND', '内层压缩包中没有找到当前图片。');
-        if (depth === parts.length - 1) return rawRead(current, selected, maxBytes);
+        signal?.throwIfAborted();
+        if (depth === parts.length - 1) return rawRead(current, selected, maxBytes, signal);
         return withNestedArchive(current, selected, () => rawRead(current, selected, ARCHIVE_LIMITS.imageBytes), child => readChain(child, parts, depth + 1), priority);
       }
-      return entry.archiveChain ? readChain(file, entry.archiveChain, 0) : rawRead(file, entry, maxBytes);
-    }, priority, format(file) !== 'zip');
+      return entry.archiveChain ? readChain(file, entry.archiveChain, 0) : rawRead(file, entry, maxBytes, signal);
+    }, priority, format(file) !== 'zip', signal);
   } catch (error) { throw normalizeArchiveError(error); }
 }
 export function 是压缩包服务错误(error: unknown): error is 压缩包服务错误 { return error instanceof 压缩包服务错误; }

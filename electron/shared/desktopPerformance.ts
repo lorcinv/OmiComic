@@ -6,11 +6,13 @@ export function desktopPerformance(profile: Exclude<DesktopPerformanceProfile, '
   const ramGb = memoryBytes / 1024 ** 3;
   const high = profile === 'high';
   const balanced = profile === 'balanced';
-  const readerMemoryCacheSizeMb = balanced ? 256 : Math.min(high ? 16384 : 8192,
-    Math.max(512, Math.round(ramGb * (high ? 256 : 128) / 256) * 256));
+  // Browser decode buffers, GPU textures and archive bytes live outside this
+  // cache. A multi-GB cache plus dozens of concurrent PNGs can stall the desktop.
+  const readerMemoryCacheSizeMb = balanced ? 256 : Math.min(high ? 2048 : 1024,
+    Math.max(256, Math.round(ramGb * (high ? 64 : 32) / 256) * 256));
   return {
     readerMemoryCacheSizeMb,
-    readerPreloadPages: balanced ? 8 : readerMemoryCacheSizeMb >= 4096 ? (high ? 96 : 48) : readerMemoryCacheSizeMb >= 2048 ? 32 : 20,
-    readerImageLoadConcurrency: balanced ? 4 : Math.min(high ? 24 : 12, Math.max(2, threads - (high ? 0 : 2))),
+    readerPreloadPages: balanced ? 4 : high ? 24 : 12,
+    readerImageLoadConcurrency: balanced ? 2 : Math.min(high ? 6 : 4, Math.max(2, threads - 2)),
   };
 }

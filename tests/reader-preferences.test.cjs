@@ -1,8 +1,27 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { sortReaderPages, pageIdentity, resolvePageIndex, normalizeAdjustments, normalizeAutoRead, bookmarkMatches } = require('../dist-electron/shared/readerPreferences.js');
+const {compareComicPagePaths}=require('../dist-electron/shared/comicPageSort.js');
 const pages = [10, 2, 1, 20, 3].map((n, index) => ({ index, type: 'archive-image', name: `${n}.png`, archiveInnerPath: `chapter/${n}.png`, sourcePath: 'book.cbz', modifiedAt: n === 20 ? undefined : n === 10 ? 100 : 200 }));
 const names = mode => sortReaderPages(pages, mode).map(p => p.name);
+
+test('mixed scan prefixes calibrate page numbers while preserving cover, suffixes and directories',()=>{
+  const input=['书名100.png','P010.png','书名090.png','P002.png','P001.png','P000C.jpg','_c.png','P000A.jpg','[0.jpg','P000B.jpg'];
+  const expected=['_c.png','[0.jpg','P000A.jpg','P000B.jpg','P000C.jpg','P001.png','P002.png','P010.png','书名090.png','书名100.png'];
+  const rows=input.map((name,index)=>({name,index,type:'archive-image',sourcePath:'book.cbz',archiveInnerPath:name}));
+  assert.deepEqual(sortReaderPages(rows,'name-asc').map(p=>p.name),expected);
+  assert.deepEqual(sortReaderPages(rows,'name-desc').map(p=>p.name),[...expected].reverse());
+  const nested=['chapter10/P001.png','chapter2/书名090.png','chapter2/P001.png','cover.png'];
+  assert.deepEqual([...nested].sort(compareComicPagePaths),['cover.png','chapter2/P001.png','chapter2/书名090.png','chapter10/P001.png']);
+  assert.equal(resolvePageIndex(sortReaderPages(rows,'name-asc'),'archive-image:书名090.png',undefined,0),8);
+});
+
+test('calibrated filename order remains transitive and independent of ZIP entry order',()=>{
+  const names=['cover.png','P000A.jpg','[0.jpg','P002.png','书名010.png','foo3.jpg','bar20.jpg','baz.jpg','chapter1/01.png','chapter2/P001.png','1-02.png','1-10.png'];
+  const sorted=[...names].sort(compareComicPagePaths);
+  assert.deepEqual([...names].reverse().sort(compareComicPagePaths),sorted);
+  for(let i=0;i<sorted.length;i++)for(let j=i+1;j<sorted.length;j++)assert.ok(compareComicPagePaths(sorted[i],sorted[j])<0);
+});
 test('natural sort, time ties and missing times are deterministic in either direction', () => {
   assert.deepEqual(names('name-asc'), ['1.png','2.png','3.png','10.png','20.png']);
   assert.deepEqual(names('name-desc'), ['20.png','10.png','3.png','2.png','1.png']);

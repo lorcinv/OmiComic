@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { installMock } from './mock';
 import { seedDenseScreentones } from './denseScreentones';
 
-for (const [highPixels,viewportHeight] of [[false,960],[false,1392],[true,960]] as const) test(`halftones stay filtered during ordinary and panorama reading at ${viewportHeight}px${highPixels?' with an 80 MP source':''}`, async ({ page }) => {
+for (const [highPixels,viewportHeight] of [[false,960],[false,1392],[true,960]] as const) test(highPixels ? '80 MP pages use native display during ordinary and panorama reading' : `halftones stay filtered during ordinary and panorama reading at ${viewportHeight}px`, async ({ page }) => {
   test.setTimeout(90000);
   await page.setViewportSize({width:1440,height:viewportHeight});
   await page.emulateMedia({reducedMotion:'reduce'});
@@ -36,6 +36,17 @@ for (const [highPixels,viewportHeight] of [[false,960],[false,1392],[true,960]] 
   },{highPixels});
   await page.goto('/');await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
   const current=page.locator('[data-reader-page-index="8"]');
+  if(highPixels){
+    await expect(current.locator('.reader-viewport-raster')).toBeVisible({timeout:20000});
+    await expect(current.locator('.reader-effects')).toHaveAttribute('data-display-sampling','original');
+    expect(await page.evaluate(()=>(window as any).__samplingRequests)).toBe(0);
+    await page.getByRole('button',{name:'开启全景连环画',exact:true}).click();
+    await expect(current.locator('.reader-viewport-raster')).toBeVisible();
+    await expect(current.locator('.reader-effects')).toHaveAttribute('data-display-sampling','original');
+    expect(await current.locator('.reader-display-raster').evaluate((c:HTMLCanvasElement)=>[c.width,c.height])).toEqual([0,0]);
+    expect(await page.evaluate(()=>(window as any).__samplingRequests)).toBe(0);
+    return;
+  }
   await expect(current.locator('.has-display-raster')).toHaveCount(1,{timeout:20000});
   const pixels=await current.locator('.reader-display-raster').evaluate((surface:HTMLCanvasElement)=>{
     const c=document.createElement('canvas');c.width=surface.width;c.height=surface.height;
@@ -69,24 +80,20 @@ for (const [highPixels,viewportHeight] of [[false,960],[false,1392],[true,960]] 
   console.log(JSON.stringify({highPixels,...pixels,totalSamplingRequests:await page.evaluate(()=>(window as any).__samplingRequests)}));
 });
 
-test('80 MP dense dots and crosshatches remain filtered after idle and panorama mode changes',async({page})=>{
+test('80 MP dense pages remain visible without extra sampling after idle and panorama mode changes',async({page})=>{
   test.setTimeout(90000);await page.emulateMedia({reducedMotion:'reduce'});
   await page.addInitScript(installMock,{count:3});await page.addInitScript(seedDenseScreentones,{width:8000,height:10000});
   await page.goto('/');await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
   const current=page.locator('[data-reader-page-index="1"]');
   const check=async()=>{
-    await expect(current.locator('.has-display-raster')).toHaveCount(1,{timeout:20000});
-    const values=await current.locator('.reader-display-raster').evaluate((source:HTMLCanvasElement)=>{
-      const c=document.createElement('canvas');c.width=source.width;c.height=source.height;const ctx=c.getContext('2d')!;ctx.drawImage(source,0,0);
-      return (window as any).__denseZones.map((z:any)=>{const b=ctx.getImageData(Math.round(c.width*z.x)-12,Math.round(c.height*z.y)-12,24,24).data;let sum=0,sq=0,alpha=0;for(let n=0;n<b.length;n+=4){sum+=b[n];sq+=b[n]*b[n];alpha+=b[n+3];}return {n:z.n,expected:z.expected,mean:sum/576,deviation:Math.sqrt(Math.max(0,sq/576-(sum/576)**2)),alpha:alpha/576};});
-    });
-    for(const value of values){expect(value.alpha).toBe(255);expect(Math.abs(value.mean-value.expected),JSON.stringify(value)).toBeLessThan(2);expect(value.deviation,JSON.stringify(value)).toBeLessThan(2);}
-    return values;
+    await expect(current.locator('.reader-effects')).toHaveAttribute('data-display-sampling','original');
+    await expect(current.locator('.reader-viewport-raster')).toBeVisible();
+    expect(await current.locator('img.reader-image').evaluate((img:HTMLImageElement)=>[img.complete,img.naturalWidth,img.naturalHeight])).toEqual([true,8000,10000]);
+    expect(await current.locator('.reader-display-raster').evaluate((c:HTMLCanvasElement)=>[c.width,c.height])).toEqual([0,0]);
   };
-  const ordinary=await check();await page.waitForTimeout(2600);expect(await check()).toEqual(ordinary);
+  await check();await page.waitForTimeout(2600);await check();
   await page.getByRole('button',{name:'开启全景连环画',exact:true}).click();await check();
-  await page.waitForTimeout(2600);const panorama=await check();
-  console.log(JSON.stringify({dense80mp:{ordinary,panorama}}));
+  await page.waitForTimeout(2600);await check();
 });
 
 test('software sampling preserves dense tones when WebGL is unavailable',async({page})=>{
@@ -119,7 +126,7 @@ test('long panorama drags prepare newly mounted pages without exposing unfiltere
   await expect(page.locator('[data-reader-page-index="32"] .has-display-raster')).toHaveCount(1);await page.waitForTimeout(900);
   const stage=(await page.locator('.reader-stage').boundingBox())!,x=stage.x+stage.width*.8,y=stage.y+stage.height*.5;
   await page.mouse.move(x,y);await page.mouse.down();let furthest=32;
-  for(let n=1;n<=270;n++){
+  for(let n=1;n<=300;n++){
     await page.mouse.move(x-n*44,y);await page.waitForTimeout(10);
     if(n%9)continue;
     const visible=await page.locator('[data-reader-page-index]').evaluateAll(nodes=>{

@@ -11,9 +11,10 @@ export function samplingCrop(start: number, count: number, source: number, targe
   const end = Math.min(source, Math.ceil((start + count - .5) / ratio - .5) + radius + 1);
   return { first, length: end - first };
 }
-export function samplingWeights(source: number, target: number) {
+export function samplingWeights(source: number, target: number, start = 0, count = target) {
   const ratio = target / source, scale = ratio * DISPLAY_FILTER_WIDTH, radius = samplingRadius(ratio);
-  return Array.from({ length: target }, (_, out) => {
+  return Array.from({ length: count }, (_, index) => {
+    const out = start + index;
     const center = (out + .5) / ratio - .5;
     const first = Math.max(0, Math.floor(center) - radius), end = Math.min(source - 1, Math.floor(center) + radius);
     const weights = new Float64Array(end - first + 1);

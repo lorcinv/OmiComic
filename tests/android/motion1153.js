@@ -7,7 +7,15 @@ const card=name=>[...document.querySelectorAll('.page-panel.is-visible .mobile-r
 const point=async(x,y,repeat=1)=>{window.__omiTap={x,y,repeat,viewport:innerWidth};await wait(()=>!window.__omiTap,'tap');};
 const tap=async element=>{assert(element,'Missing tap target');element.scrollIntoView({block:'nearest'});await pause(350);const r=element.getBoundingClientRect();await point(r.x+r.width/2,r.y+(element.classList.contains('reader-stage')?r.height/2:Math.min(40,r.height/2)));await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));};
 const key=async code=>{window.__omiKey=code;await wait(()=>!window.__omiKey,'back');await wait(()=>!document.querySelector('.mobile-sheet-overlay'),'settings closed');await pause(300);};
-const touch=async(action,x,y)=>{window.__omiTouch={action,x,y,viewport:innerWidth};await wait(()=>!window.__omiTouch,'touch '+action);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));};
+const touch=async(action,x,y)=>{
+  const before=inputTrace.at(-1)?.time??-1,eventName=action==='down'?'pointerdown':action==='up'?'pointerup':action==='cancel'?'pointercancel':'pointermove';
+  window.__omiTouch={action,x,y,viewport:innerWidth};await wait(()=>!window.__omiTouch,'touch '+action);
+  // Native injection acknowledgement precedes WebView input dispatch. Observe
+  // delivery before sampling geometry; two animation frames alone can run
+  // before the asynchronous pointer event arrives.
+  await wait(()=>inputTrace.some(event=>event.time>before&&event.event===eventName&&Math.abs(event.x-x)<2&&Math.abs(event.y-y)<2),'delivered '+action);
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+};
 const settings=async()=>{if(!button('阅读设置'))await tap(document.querySelector('.reader-stage'));await wait(()=>button('阅读设置'),'toolbar');await tap(button('阅读设置'));await wait(()=>document.querySelector('.mobile-sheet-overlay'),'settings open');await pause(450);};
 const stats=async()=>{window.__omiNativeProbe=true;await wait(()=>!window.__omiNativeProbe,'native stats');return window.__omiNativeStats;};
 const progress=()=>document.querySelector('[aria-label="阅读进度"]').getAttribute('aria-valuenow');

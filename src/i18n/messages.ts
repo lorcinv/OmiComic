@@ -1,5 +1,6 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "重试此页": ["Retry this page", "このページを再読み込み"],
   "全景点击翻页": ["Tap to turn pages in panorama", "パノラマでタップしてページ送り"],
   "缩放比例": ["Zoom level", "拡大率"],
   "松开添加到资源库": ["Drop to add to library", "ドロップしてライブラリに追加"],
@@ -542,7 +543,7 @@ export const messages: Record<string, readonly [string, string]> = {
     "Fit screen",
     "画面に合わせる"
   ],
-  "默认开启全景模式": [
+  "默认开启全景连环画模式": [
     "Continuous mode by default",
     "連続表示を既定にする"
   ],

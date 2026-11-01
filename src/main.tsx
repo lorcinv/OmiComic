@@ -11,8 +11,10 @@ import { connectAndroid } from "./android/bridge";
 async function start() {
   if (import.meta.env.MODE === "android") {
     document.documentElement.dataset.platform = "android";
-    const native = await connectAndroid();
-    const { createAndroidApi } = await import("./android/data");
+    const [native, { createAndroidApi }] = await Promise.all([
+      connectAndroid(),
+      import('./android/data'),
+    ]);
     window.omicomic = await createAndroidApi(native);
   }
   ReactDOM.createRoot(document.getElementById("root")!).render(

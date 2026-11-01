@@ -64,7 +64,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
       {category==='reading' && <>
 
         <div className="settings-row"><span>{t("打开漫画时的缩放")}</span><strong>{t("适应窗口")}</strong></div>
-        {toggle('readerDefaultPanorama',t("默认开启全景模式"))}
+        {toggle('readerDefaultPanorama',t("默认开启全景连环画模式"))}
         {select('readerDefaultFlow',t("默认阅读流向"),[{value:'horizontal',label:'横向'},{value:'vertical',label:'纵向'}])}
         {select('readerPageMode',t("默认单双页"),[{value:'single',label:'单页'},{value:'double',label:'双页'}])}
         {select('doublePageDirection',t("默认翻页方向"),[{value:'left-to-right',label:'从左到右'},{value:'right-to-left',label:'从右到左'}])}

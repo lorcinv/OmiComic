@@ -9,10 +9,10 @@ const ts = require('typescript');
 const fixtures = path.join(__dirname, 'fixtures/images');
 const main = fs.readFileSync(path.join(__dirname, '../electron/main.ts'), 'utf8');
 const parsed = ts.createSourceFile('main.ts', main, ts.ScriptTarget.Latest, true);
-const names = ['读取图片像素尺寸', '创建受限页面预览'];
+const names = ['读取图片像素尺寸'];
 const functions = parsed.statements.filter(statement => ts.isFunctionDeclaration(statement) && names.includes(statement.name?.text));
-assert.equal(functions.length, 2, 'Expected production guard functions must still exist');
-const compiled = ts.transpileModule(functions.map(statement => statement.getText(parsed)).join('\n') + '\nexports.dimensions = 读取图片像素尺寸; exports.preview = 创建受限页面预览;', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+assert.equal(functions.length, 1, 'Production header inspector must exist');
+const compiled = ts.transpileModule(functions.map(statement => statement.getText(parsed)).join('\n') + '\nexports.dimensions = 读取图片像素尺寸;', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 function load(nativeImage) {
   const exports = {};
   vm.runInNewContext(compiled, { exports, nativeImage, Buffer });
@@ -43,36 +43,18 @@ test('original PNG fixtures have intact chunk CRCs and explicit real dimensions'
   }
 });
 
-test('33,554,432-pixel PNG and JPEG are refused before any native decode', t => {
-  let decodeCalls = 0;
-  const { dimensions, preview } = load({ createFromBuffer() { decodeCalls++; throw new Error('Native decode must not happen'); } });
-  for (const name of ['oversized-8192x4096.png', 'oversized-8192x4096.jpg']) {
-    const bytes = fixture(name);
-    const size = dimensions(bytes);
-    assert.equal(size.width, 8192); assert.equal(size.height, 4096);
-    assert.throws(() => preview(bytes), /PREVIEW_TOO_LARGE/);
-    t.diagnostic(JSON.stringify({ fixture: name, compressedBytes: bytes.length, width: size.width, height: size.height, rgbaDecodedBytesIfDecoded: size.width * size.height * 4, nativeDecodeCalls: decodeCalls }));
-  }
-  assert.equal(decodeCalls, 0);
-});
-
-test('12 MiB compressed-byte cap and unrecognized headers are rejected before decoding', () => {
-  let decodeCalls = 0;
-  const { preview } = load({ createFromBuffer() { decodeCalls++; throw new Error('unexpected native decode'); } });
-  const oversizedBytes = Buffer.concat([fixture('pixel.png'), Buffer.alloc(12 * 1024 * 1024)]);
-  assert.throws(() => preview(oversizedBytes), /PREVIEW_TOO_LARGE/);
-  for (const bytes of [Buffer.alloc(0), Buffer.from('bad image'), Buffer.from([0xff, 0xd8, 0xff])]) assert.throws(() => preview(bytes), /PREVIEW_TOO_LARGE/);
-  assert.equal(decodeCalls, 0);
-});
-
-test('12-megapixel portrait requests 270×360 preview; invalid native image is rejected', () => {
-  let resizeOptions;
-  const { preview } = load({ createFromBuffer() { return { isEmpty: () => false, resize(options) { resizeOptions = options; return { toJPEG: () => Buffer.from('spy-preview'), getSize: () => options }; } }; } });
-  const result = preview(fixture('portrait-3000x4000.png'));
-  assert.equal(resizeOptions.width, 270); assert.equal(resizeOptions.height, 360);
-  assert.equal(result.width, 270); assert.equal(result.height, 360);
-  const invalid = load({ createFromBuffer() { return { isEmpty: () => true }; } });
-  assert.throws(() => invalid.preview(fixture('pixel.png')), /PREVIEW_INVALID/);
+test('native page previews serialize originals, bound output and share cached requests', async () => {
+  const Module=require('node:module'),original=Module._load;let calls=0,active=0,peak=0;const releases=[];
+  Module._load=function(id,...args){if(id==='./thumbnailDecoder')return {decodeThumbnail:async()=>{
+    calls++;peak=Math.max(peak,++active);
+    await new Promise(resolve=>releases.push(resolve));active--;return {width:270,height:360,url:'data:image/png;base64,small'};
+  }};return original.call(this,id,...args);};
+  let preview;try{const file=require.resolve('../dist-electron/services/pagePreviewService.js');delete require.cache[file];preview=require(file).pagePreview;}finally{Module._load=original;}
+  const {dimensions}=load({});
+  const first=preview('one','/ordinary.png',dimensions),shared=preview('one','/ordinary.png',dimensions),second=preview('two','/ordinary2.png',dimensions);
+  assert.equal(first,shared);await new Promise(r=>setImmediate(r));assert.equal(calls,1);releases.shift()();
+  const result=await first;assert.equal(result.width,270);await new Promise(r=>setImmediate(r));assert.equal(calls,2);releases.shift()();await second;assert.equal(peak,1);
+  await preview('one','/ordinary.png',dimensions);assert.equal(calls,2);
 });
 
 test('library covers reject surfaces above their 40 MP scan limit before native decoding', async t => {

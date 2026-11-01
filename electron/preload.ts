@@ -286,6 +286,7 @@ export interface 获取页面图片输入 {
   virtualPath?: string;
   archiveInnerPath?: string;
   readerSessionId?: number;
+  readerRequestId?: number;
   type: 阅读页类型;
 }
 
@@ -293,6 +294,7 @@ export interface 页面图片结果 {
   url: string;
   width?: number;
   height?: number;
+  encodedBytes?: number;
 }
 
 export interface 书签页预览输入 {
@@ -479,6 +481,7 @@ contextBridge.exposeInMainWorld("omicomic", {
     ipcRenderer.invoke("阅读:设置会话", id),
   getPageImage: (输入: 获取页面图片输入): Promise<操作结果<页面图片结果>> =>
     ipcRenderer.invoke("阅读:获取页面图片", 输入),
+  cancelPageImage: (id: number): void => ipcRenderer.send("阅读:取消页面图片", id),
   getBookmarkPagePreview: (输入: 书签页预览输入): Promise<操作结果<书签页预览结果>> =>
     ipcRenderer.invoke("书签:获取页面预览", 输入),
   getThumbnail: (输入: 缩略图输入): Promise<操作结果<缩略图结果>> =>

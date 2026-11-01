@@ -31,6 +31,22 @@ test('ZIP/CBZ naturally sorted, nested Unicode, exact bytes', async t => {
  assert.equal((await archive.读取压缩包单张图片(p,'章/2.jpg')).toString(),'image fixture');
 });
 
+test('cancelled page extraction releases its archive lane and leaves the source readable', async t => {
+ const p=await fixture(t,'cancel.cbz',[{name:'large.png',data:Buffer.alloc(24*1024*1024,72)},{name:'next.png',data:Buffer.from('next page')}]);
+ const controller=new AbortController();
+ const cancelled=assert.rejects(archive.读取压缩包单张图片(p,'large.png',undefined,'foreground',false,controller.signal));
+ setTimeout(()=>controller.abort(),2); await cancelled;
+ assert.equal((await archive.读取压缩包单张图片(p,'next.png',undefined,'foreground')).toString(),'next page');
+ assert.equal((await archive.读取压缩包单张图片(p,'large.png',undefined,'foreground')).length,24*1024*1024);
+});
+
+test('mixed scan-prefix ZIP pages form one numeric sequence without changing entry identities or bytes',async t=>{
+ const entries=['书名091.png','P086.png','_c.png','P001.png','P000B.jpg','书名090.png','P000A.jpg'].map(name=>({name,data:Buffer.from(name)}));
+ const p=await fixture(t,'mixed.cbz',entries);
+ assert.deepEqual((await archive.读取压缩包图片列表(p)).map(e=>e.virtualPath),['_c.png','P000A.jpg','P000B.jpg','P001.png','P086.png','书名090.png','书名091.png']);
+ assert.equal((await archive.读取压缩包单张图片(p,'书名090.png')).toString(),'书名090.png');
+});
+
 test('nested ZIP/ZIP and ZIP/RAR pages retain exact names, bytes, and natural page order', async t => {
  const inner=zip([{name:'页10.png',data:Buffer.from('ten')},{name:'页2.png',data:Buffer.from('two')}]);
  const p=await fixture(t,'nested.zip',[{name:'卷 [1].zip',data:inner},{name:'卷2.rar',data:rar([{name:'1.jpg',data:Buffer.from('rar inner')}])}]);

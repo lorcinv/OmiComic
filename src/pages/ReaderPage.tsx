@@ -1,4 +1,6 @@
 import { uiOptions } from '../i18n';
+import { queueDesktopDecode, prioritizeDesktopDecodes } from '../reader/desktopDecodeQueue';
+import { abortable } from '../reader/abortable';
 import useMobileReaderAutoHide from '../hooks/useMobileReaderAutoHide';
 import { tr, t } from '../i18n';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +19,8 @@ import ReaderCanvas from "../components/ReaderCanvas";
 import ReaderTools from "../components/ReaderTools";
 import { isAndroid } from "../platform";
 import { androidCall, androidNotify, hasAndroidRenderer } from '../android/bridge';
+import { prepareNativeReaderPage, readerRequestCancelled } from '../android/readerRequests';
+import { nativePanoramaWindow, nativeReaderBodyCapacity } from '../android/readerWindow';
 import useNativeReaderSurface from '../android/useNativeReaderSurface';
 import { nativePreloadWindow, desktopPreloadWindow } from '../reader/preloadWindow';
 import useMobileLayout from "../hooks/useMobileLayout";
@@ -32,9 +36,9 @@ import useMobilePageSwipe from '../hooks/useMobilePageSwipe';
 import ReaderSwipePreview from '../components/ReaderSwipePreview';
 import ReaderImageEffects, { GammaFilter } from "../components/ReaderImageEffects";
 import { useAutoRead } from "../reader/useAutoRead";
-import { DEFAULT_ADJUSTMENTS, DEFAULT_AUTO_READ, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
+import { DEFAULT_ADJUSTMENTS, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
 import { useReaderDocument } from "../reader/useReaderDocument";
-import { advanceInertia, estimateReleaseVelocity, trimPrefetchBuffer, mouseDragGain, acceleratedMouseVelocity, MAX_MOTION_SPEED, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
+import { advanceInertia, estimateReleaseVelocity, mouseDragGain, acceleratedMouseVelocity, MAX_MOTION_SPEED, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
 import { afterDisplaySamplingMotion, holdDisplaySampling, noteDisplaySamplingMotion } from "../reader/displaySampling";
 import type {
   AppSettings,
@@ -53,6 +57,7 @@ interface ReaderPageProps {
   openContext: 阅读打开上下文 | null;
   isActive: boolean;
   interactive?: boolean;
+  entryPending?: boolean;
   recordProgress?: boolean;
   onSwitchResource: (
     resource: 阅读资源结果,
@@ -79,6 +84,7 @@ interface 页面图片状态 {
   height?: number;
   html?: string;
   decodedBytes?: number;
+  encodedBytes?: number;
   decodedImage?: HTMLImageElement;
   canvas?: HTMLCanvasElement;
   native?: boolean;
@@ -143,7 +149,7 @@ interface 页面图片调度任务 {
   调度代号: number;
   promise: Promise<页面图片任务结果>;
   完成: (结果: 页面图片任务结果) => void;
-  消费者取消检查: Array<() => boolean>;
+  消费者: Array<{ 已取消: () => boolean; 优先级: 页面图片任务优先级 }>;
   controller: AbortController;
 }
 
@@ -172,6 +178,24 @@ const 模式2聚拢动画毫秒 = 240;
 const 模式2跳转缩放 = 0.97;
 const 模式2快速预热最小间隔毫秒 = 70;
 let 下一个阅读器会话Id = Date.now();
+
+function 创建全景聚拢动画(页面: HTMLElement, 中心矩形: DOMRect, 纵向: boolean, 距离: number, 中心页: boolean, 延迟 = 中心页 ? 0 : 120): Animation {
+  const 矩形 = 页面.getBoundingClientRect();
+  const 侧向 = Math.sign(纵向
+    ? 矩形.top + 矩形.height / 2 - 中心矩形.top - 中心矩形.height / 2
+    : 矩形.left + 矩形.width / 2 - 中心矩形.left - 中心矩形.width / 2);
+  const x = 中心页 || 纵向 ? 0 : 侧向 * 距离;
+  const y = 中心页 || !纵向 ? 0 : 侧向 * 距离;
+  return 页面.animate([
+    { transform: `translate3d(${x}px, ${y}px, 0) scale(${模式2跳转缩放})`, opacity: 中心页 ? 1 : 0.84 },
+    { transform: "translate3d(0, 0, 0) scale(1)", opacity: 1 },
+  ], {
+    duration: 中心页 ? 220 : 模式2聚拢动画毫秒,
+    delay: 延迟,
+    easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both",
+  });
+}
+let 下一个页面读取Id = 0;
 
 function 计算模式2几何补偿偏移(
   原几何: 模式2页面几何,
@@ -260,12 +284,59 @@ function 创建默认阅读视图(设置: AppSettings | typeof 默认阅读器�
   };
 }
 
+function 创建初始阅读状态(
+  resource: 阅读资源结果 | null,
+  initialPageIndex: number,
+  设置 = resource?.readerInit?.settings ?? 默认阅读器设置,
+  进度 = resource?.readerInit?.progress ?? null,
+) {
+  const 视图 = 进度?.readerViewState ?? 创建默认阅读视图(设置);
+  const 恢复保存位置 = !resource?.requestedPageId && 进度?.currentPageIndex === initialPageIndex;
+  const 索引 = resource ? resolvePageIndex(resource.pages,
+    resource.requestedPageId ?? (恢复保存位置 ? 进度?.currentPageId : undefined),
+    恢复保存位置 ? 进度?.currentPageName : undefined, initialPageIndex) : 0;
+  return {
+    视图,
+    索引: 限制索引(索引, resource?.total ?? 0),
+    配对起点: resource && 进度?.currentPageIndex === 索引
+      ? resolvePageIndex(resource.pages, 视图.pairingAnchorId, undefined, 视图.pairingAnchor ?? 索引) : 索引,
+    设置: {
+      readerDefaultFitMode: 设置.readerDefaultFitMode,
+      readerPageMode: 视图.pageMode,
+      readerDefaultFlow: 设置.readerDefaultFlow,
+      readerDefaultPanorama: 设置.readerDefaultPanorama,
+      readerDefaultImmersive: 设置.readerDefaultImmersive,
+      doublePageFirstSingle: 设置.doublePageFirstSingle,
+      doublePageDirection: 视图.pageDirection,
+      smartDetectSpreadPage: 设置.smartDetectSpreadPage,
+      wheelPageTurn: 设置.wheelPageTurn,
+      immersiveAutoHide: 设置.immersiveAutoHide,
+      immersiveAutoHideDelay: 设置.immersiveAutoHideDelay,
+      readerHideFooterControls: 设置.readerHideFooterControls,
+      readerHideImmersiveProgress: 设置.readerHideImmersiveProgress,
+      readerMemoryCacheSizeMb: 设置.readerMemoryCacheSizeMb,
+      readerPreloadPages: 设置.readerPreloadPages,
+      readerImageLoadConcurrency: 设置.readerImageLoadConcurrency,
+      bookSwitchButtonOpacity: 设置.bookSwitchButtonOpacity,
+      readerVolumeKeys: Boolean(设置.readerVolumeKeys),
+      readerVolumeKeysReversed: Boolean(设置.readerVolumeKeysReversed),
+      mobilePanoramaTapPaging: Boolean(设置.mobilePanoramaTapPaging),
+      readerVolumePanoramaPages: 设置.readerVolumePanoramaPages ?? 1,
+      mobileReaderPreviews: 设置.mobileReaderPreviews !== false,
+      mobileReaderAutoHide: 设置.mobileReaderAutoHide !== false,
+      desktopReaderAutoHide: 设置.desktopReaderAutoHide === true,
+      mobilePreviewWidth: 设置.mobilePreviewWidth ?? 88,
+    },
+  };
+}
+
 function ReaderPage({
   resource: 输入资源,
   initialPageIndex,
   openContext,
   isActive,
   interactive = true,
+  entryPending = false,
   recordProgress = true,
   onSwitchResource,
   onBack,
@@ -278,12 +349,17 @@ function ReaderPage({
   const [手机阅读设置打开, 设置手机阅读设置打开] = useState(false);
   const [手机页面预览打开, 设置手机页面预览打开] = useState(false);
   const { resource, source: 文档源, loading: 文档加载中, error: 文档错误 } = useReaderDocument(输入资源);
+  // The manifest already carries settings and saved progress. Use them for the
+  // initial DOM too, before the reader is revealed or any pixels are decoded.
+  const 初始阅读状态 = useMemo(() => 创建初始阅读状态(resource, initialPageIndex), [resource, initialPageIndex]);
   const 原生图片核心 = isAndroid() && hasAndroidRenderer() && resource?.sourceType !== 'pdf' && (resource?.sourceType !== 'epub' && resource?.sourceType!=='mobi');
-  const [当前索引, 设置当前索引] = useState(0);
+  const [当前索引, 设置当前索引] = useState(初始阅读状态.索引);
   const [页面图片状态表, 提交页面图片状态表] = useState<Record<number, 页面图片状态>>({});
   const [可显示页组, 设置可显示页组] = useState<可显示页组 | null>(null);
   const [页面解码完成, 设置页面解码完成] = useState<Record<number,string>>({});
-  const [页面显示处理完成, 设置页面显示处理完成] = useState<Record<number,string>>({});
+  const [已呈现资源Key, 设置已呈现资源Key] = useState<string | null>(null);
+  const 漫画首屏优先 = resource?.sourceType !== 'pdf' && resource?.sourceType !== 'epub' && resource?.sourceType !== 'mobi';
+  const 后台预读已启用 = !漫画首屏优先 || isActive && interactive && recordProgress && 已呈现资源Key === resource?.resourceKey;
   const 手机页面元素 = useRef(new Map<number,HTMLImageElement>());
   const [, 设置页组加载状态] = useState<页组加载状态>({
     status: "idle",
@@ -296,7 +372,7 @@ function ReaderPage({
   const [进度保存错误, 设置进度保存错误] = useState<string | null>(null);
   const [当前页已书签, 设置当前页已书签] = useState(false);
   const [书签处理中, 设置书签处理中] = useState(false);
-  const [缩放模式, 设置缩放模式] = useState<阅读器缩放模式>("fit-window");
+  const [缩放模式, 设置缩放模式] = useState<阅读器缩放模式>(手机布局 ? "fit-window" : 初始阅读状态.视图.fitMode);
   const [可用区域, 设置可用区域] = useState<可用区域尺寸>({ width: 0, height: 0 });
   const 显示缩放缓存用量 = useRef(new Map<string,number>());
   const 显示缩放统计等待 = useRef(() => {});
@@ -312,17 +388,19 @@ function ReaderPage({
       if (显示缩放统计有效.current) 设置显示缩放缓存字节([...显示缩放缓存用量.current.values()].reduce((sum,n)=>sum+n,0));
     });
   }
-  const [页码输入, 设置页码输入] = useState("1");
-  const [阅读器设置, 设置阅读器设置] = useState(默认阅读器设置);
-  const [沉浸模式, 设置沉浸模式] = useState(false);
-  const [顶部栏可见, 设置顶部栏可见] = useState(true);
-  const [底部栏可见, 设置底部栏可见] = useState(true);
+  const [页码输入, 设置页码输入] = useState(String(初始阅读状态.索引 + 1));
+  const [阅读器设置, 设置阅读器设置] = useState(初始阅读状态.设置);
+  const [沉浸模式, 设置沉浸模式] = useState(初始阅读状态.视图.immersive);
+  const [顶部栏可见, 设置顶部栏可见] = useState(!初始阅读状态.视图.immersive);
+  const [底部栏可见, 设置底部栏可见] = useState(!初始阅读状态.视图.immersive);
   const [页码输入聚焦, 设置页码输入聚焦] = useState(false);
-  const [阅读流向, 设置阅读流向] = useState<阅读流向>("horizontal");
-  const [全景模式, 设置全景模式] = useState(false);
-  const [双页配对起点, 设置双页配对起点] = useState(initialPageIndex);
-  const [页面排序, 设置页面排序] = useState<PageSort>('name-asc');
-  const [画面调整, 设置画面调整] = useState({ ...DEFAULT_ADJUSTMENTS });
+  const [阅读流向, 设置阅读流向] = useState<阅读流向>(初始阅读状态.视图.flow);
+  const [全景模式, 设置全景模式] = useState(初始阅读状态.视图.panorama);
+  const [双页配对起点, 设置双页配对起点] = useState(初始阅读状态.配对起点);
+  const [页面排序, 设置页面排序] = useState<PageSort>(normalizePageSort(初始阅读状态.视图.pageSort));
+  const [画面调整, 设置画面调整] = useState(() => 手机布局
+    ? { ...normalizeAdjustments(resource?.readerInit?.settings.mobileImageAdjustments), enabled: true }
+    : normalizeAdjustments(初始阅读状态.视图.adjustments));
   const 全局调整待保存 = useRef<typeof DEFAULT_ADJUSTMENTS | null>(null);
   const 全局调整保存计时 = useRef<ReturnType<typeof setTimeout>>();
   function 保存全局调整(): void {
@@ -337,14 +415,14 @@ function ReaderPage({
     window.addEventListener('omi-pause',保存全局调整);
     return () => { window.removeEventListener('omi-pause',保存全局调整); 保存全局调整(); };
   }, []);
-  const [自动阅读设置, 设置自动阅读设置] = useState({ ...DEFAULT_AUTO_READ });
+  const [自动阅读设置, 设置自动阅读设置] = useState(normalizeAutoRead(初始阅读状态.视图.autoRead));
   const 阅读面板打开 = useRef(false);
   const 伽马滤镜Id = `reader-gamma-${useId().replace(/:/g, '')}`;
   const [跨本提示, 设置跨本提示] = useState<"previous" | "next" | null>(null);
   const [阅读视图已加载资源Key, 设置阅读视图已加载资源Key] = useState<string | null>(null);
   const [全景拖动中, 设置全景拖动中] = useState(false);
-  const [全景窗口中心索引, 设置全景窗口中心索引] = useState(0);
-  const [全景可见索引, 设置全景可见索引] = useState(0);
+  const [全景窗口中心索引, 设置全景窗口中心索引] = useState(初始阅读状态.索引);
+  const [全景可见索引, 设置全景可见索引] = useState(初始阅读状态.索引);
   const [全景动画启用, 设置全景动画启用] = useState(true);
   const [进度拖动比例, 设置进度拖动比例] = useState<number | null>(null);
   const 加载序号 = useRef(0);
@@ -366,6 +444,7 @@ function ReaderPage({
   const 进度拖动指针Id = useRef<number | null>(null);
   const 进度手势 = useRef<{x:number; moved:boolean} | null>(null);
   const 进度跳转序号 = useRef(0);
+  const 原生进度拖动目标 = useRef(-1);
   const 全景拖动 = useRef<全景拖动状态>({
     active: false,
     pointerId: -1,
@@ -389,6 +468,7 @@ function ReaderPage({
   const 全景切换定时器 = useRef<number | null>(null);
   const 全景滚轮结束定时器 = useRef<number | null>(null);
   const 全景跳转动画列表 = useRef<Animation[]>([]);
+  const 全景入场聚拢 = useRef<{ key: string; index: number; flow: 阅读流向; pages: HTMLElement[]; animations: Animation[]; started: boolean } | null>(null);
   const 全景单页动画 = useRef<{ frame: number; cancel: () => void } | null>(null);
   const 全景跳转幽灵 = useRef<HTMLElement | null>(null);
   const 阅读区尺寸刷新动画帧 = useRef<number | null>(null);
@@ -406,9 +486,11 @@ function ReaderPage({
   const 模式2动态预热状态 = useRef<模式2预热请求 | null>(null);
   const 模式2待预热请求 = useRef<模式2预热请求 | null>(null);
   const 模式2预热运行中 = useRef(false);
+  const 模式2预热任务 = useRef(new Map<number, { resourceKey: string; bytes: number }>());
   const 模式2预热调度帧 = useRef<number | null>(null);
   const 模式2预热延时定时器 = useRef<number | null>(null);
   const 模式2预热结果缓冲 = useRef<Map<number, 页面图片状态>>(new Map());
+  const 模式2预读窗口 = useRef(new Set<number>());
   const 模式2预热结果提交定时器 = useRef<number | null>(null);
   const 模式2预热代号 = useRef(0);
   const 模式2上次快速预热时间 = useRef(0);
@@ -535,18 +617,14 @@ function ReaderPage({
     const 状态 = 页面图片状态引用.current[页面.index];
     return Boolean(状态 && !状态.loading && (状态.error || 状态.canvas || 状态.html || 状态.native || 状态.url && (!手机布局 || 页面解码完成[页面.index] === 状态.url && 手机页面元素.current.get(页面.index)?.isConnected)));
   });
-  // Entry waits for the actual visible DOM image. Page turns use the prepared
-  // pixels above, so they can mount the next group without waiting on its DOM.
-  const 桌面画面已解码 = 手机布局 || 当前页组页面.every(页面 => {
+  // Detached decode warms pixels, but a newly mounted protocol image can still
+  // be loading. Handoff needs the real DOM image and a nonzero fitted viewport.
+  const 桌面画面已解码 = 手机布局 || 可用区域.width > 1 && 可用区域.height > 1 && 当前页组页面.every(页面 => {
     const 状态 = 页面图片状态引用.current[页面.index];
     return 状态 && (状态.error || 状态.canvas || 状态.html || 状态.native
       || 状态.url && 页面解码完成[页面.index] === 状态.url && 手机页面元素.current.get(页面.index)?.isConnected);
   });
-  const 桌面画面处理完成 = 手机布局 || 当前页组页面.every(页面 => {
-    const 状态 = 页面图片状态引用.current[页面.index];
-    return 状态 && (状态.error || 状态.canvas || 状态.html || 状态.native || 页面显示处理完成[页面.index] === `${状态.url}:${状态.width}:${状态.height}`);
-  });
-  const 显示页组 = 目标页组已准备 && (手机布局 || 全景模式 || 桌面画面处理完成)
+  const 显示页组 = 目标页组已准备 && 桌面画面已解码
     ? { indices: 当前页组索引, visualIndices: 视觉页组索引, pages: 当前页组页面 }
     : 可显示页组;
   const 显示页组页面 = 显示页组?.pages ?? 当前页组页面;
@@ -589,7 +667,7 @@ function ReaderPage({
   const 原生前进方向 = 原生前次位置.resourceKey === resource?.resourceKey
     ? Math.sign(安全索引 - 原生前次位置.index) || 原生前次位置.direction : 1;
   const 原生单页预算 = Math.min(4000000,Math.max(1000000,(可用区域.width||window.innerWidth)*devicePixelRatio*1.5*(可用区域.height||window.innerHeight)*devicePixelRatio))*4;
-  const 原生预读索引 = nativePreloadWindow(当前页组索引,resource?.total??0,原生前进方向,预加载页数,内存缓存上限字节,原生单页预算);
+  const 原生预读索引 = 后台预读已启用 ? nativePreloadWindow(当前页组索引,resource?.total??0,原生前进方向,预加载页数,内存缓存上限字节,原生单页预算) : [];
   const 原生窗口索引 = [...当前页组索引,...原生预读索引];
   const 原生窗口Key = JSON.stringify(原生窗口索引);
   const 原生页面Key = (页面:阅读页面项) => JSON.stringify([页面.sourcePath,页面.archiveInnerPath??'',页面.type]);
@@ -599,6 +677,7 @@ function ReaderPage({
     原生预读窗口.current = new Set(原生窗口索引);
     原生跳页代号.current++;
     androidNotify('readerSeek', {session:阅读器会话Id.current,seek:原生跳页代号.current,
+      focus:当前页组索引.map(index=>resource.pages[index]).filter(Boolean).map(原生页面Key),
       keep:原生窗口索引.map(index=>resource.pages[index]).filter(Boolean).map(原生页面Key)});
     // A page job belongs to the book/window, not to the render that requested it.
     // Distant seeks still retire unrelated work before scheduling the new page.
@@ -606,9 +685,14 @@ function ReaderPage({
   }, [原生图片核心,模式2,isActive,interactive,resource?.resourceKey,当前页组Key,原生窗口Key]);
   const 桌面预读窗口 = useRef(new Set<number>());
   const 桌面预读任务 = useRef(new Map<string, Promise<unknown>>());
-  const 已知页面 = Object.values(页面图片状态表).filter(state => state.url);
+  const 桌面估计索引 = 模式2 ? [全景窗口中心索引-1,全景窗口中心索引,全景窗口中心索引+1] : 当前页组索引;
+  const 已知页面 = 桌面估计索引.map(index=>页面图片状态表[index]).filter((state):state is 页面图片状态=>Boolean(state?.url));
   const 桌面单页预算 = 已知页面.length ? Math.max(1, ...已知页面.map(估算页面图片缓存字节)) : 16 * 1024 * 1024;
-  const 桌面预读索引 = desktopPreloadWindow(当前页组索引,resource?.total??0,原生前进方向,预加载页数,内存缓存上限字节,桌面单页预算);
+  const 桌面相邻页组 = resource && !模式2 ? {
+    next: 计算页组索引(计算下一页组主索引(安全索引,总页数,有效阅读器设置,页面是跨页横图),总页数,有效阅读器设置,页面是跨页横图),
+    previous: 计算页组索引(计算上一页组主索引(安全索引,总页数,有效阅读器设置,页面是跨页横图),总页数,有效阅读器设置,页面是跨页横图),
+  } : undefined;
+  const 桌面预读索引 = 后台预读已启用 ? desktopPreloadWindow(当前页组索引,resource?.total??0,原生前进方向,预加载页数,内存缓存上限字节,桌面单页预算,桌面相邻页组) : [];
   const 桌面窗口Key = JSON.stringify([...当前页组索引,...桌面预读索引]);
   useLayoutEffect(() => {
     if (isAndroid() || !isActive || !resource || 模式2) { 桌面预读窗口.current.clear(); return; }
@@ -618,10 +702,19 @@ function ReaderPage({
   const 桌面自动隐藏 = !手机布局 && 阅读器设置.desktopReaderAutoHide === true;
   const 可隐藏工具栏 = 沉浸模式 || 桌面自动隐藏;
   const 桌面按住指针 = useRef(new Set<number>());
-  const 模式2窗口半径 = Math.min(10, Math.max(6, Math.ceil(预加载页数 * 1.2)));
+  const 桌面全景容量 = Math.max(3, Math.floor(256 * 1024 * 1024 / 桌面单页预算));
+  const 模式2基础窗口半径 = Math.min(10, Math.max(6, Math.ceil(预加载页数 * 1.2)));
+  const 全景估计长度 = 已知页面.length ? Math.min(...已知页面.map(state => {
+    const size = fitPanorama({width:state.width||1,height:state.height||1},{width:Math.max(1,可用区域.width),height:Math.max(1,可用区域.height)},垂直阅读);
+    return 垂直阅读 ? size.height : size.width;
+  })) : Math.max(1,垂直阅读 ? 可用区域.height : 可用区域.width);
+  // The viewport can straddle a page boundary. A radius based only on zoom
+  // omitted its far edge on wide PC screens, even when every mounted page was ready.
+  const 模式2可见半径 = Math.min(48,Math.max(1,Math.ceil((垂直阅读?可用区域.height:可用区域.width)/Math.max(1,全景估计长度*自由缩放.scale)/2+.5)));
+  const 模式2窗口半径 = Math.max(模式2可见半径,isAndroid() ? 模式2基础窗口半径 : Math.min(模式2基础窗口半径,Math.floor((桌面全景容量-1)/2)));
   const 模式2预热窗口半径 = 内存缓存上限字节 <= 0
     ? 模式2窗口半径
-    : Math.min(32, 模式2窗口半径 + 预加载页数);
+    : Math.min(isAndroid()?32:Math.max(模式2窗口半径,Math.floor((桌面全景容量-1)/2)), 模式2窗口半径 + 预加载页数);
   const 模式2图片加载线程数 = 图片加载线程数;
   页面图片并发上限.current = 图片加载线程数;
   const 模式2窗口起点 = resource && 模式2
@@ -700,12 +793,78 @@ function ReaderPage({
     resourceKey: resource?.resourceKey ?? null,
     flow: 阅读流向,
   };
+  const 模式2视口中心 = (模式2页面几何.页面中心[安全索引] ?? 0) - 全景偏移引用.current;
+  const 模式2视口半长 = (垂直阅读 ? 模式2可用高度 : 模式2可用宽度) / 2;
+  const 手机全景进入中 = 手机布局 && 漫画首屏优先 && entryPending;
+  const 模式2可见页面索引 = 模式2
+    ? Array.from({ length: 模式2窗口终点 - 模式2窗口起点 + 1 }, (_, i) => 模式2窗口起点 + i)
+      .filter(i => i === 显示阅读索引 || (!手机全景进入中 && 获取已知页面原始尺寸(显示阅读索引) && 模式2页面几何.页面前缀长度[i] < 模式2视口中心 + 模式2视口半长 && 模式2页面几何.页面前缀长度[i + 1] > 模式2视口中心 - 模式2视口半长))
+      .sort((a, b) => Math.abs(a - 显示阅读索引) - Math.abs(b - 显示阅读索引))
+    : [];
+  const 模式2可见页面Key = 模式2可见页面索引.join('|');
+  const 首屏图片已准备 = 模式2 ? 模式2可见页面索引.length > 0 && 模式2可见页面索引.every(index => {
+    const state = 页面图片状态表[index];
+    return state && !state.loading && (state.error || state.canvas || state.html || state.native
+      || state.url && 页面解码完成[index] === state.url && 手机页面元素.current.get(index)?.isConnected);
+  }) : 目标页组已准备 && 桌面画面已解码;
+  const 桌面首屏准备中 = !手机布局 && 漫画首屏优先 && 已呈现资源Key !== resource?.resourceKey && (模式2 || !可显示页组) && !首屏图片已准备;
+  useLayoutEffect(() => {
+    if (!手机布局 || !漫画首屏优先 || !模式2 || !isActive || !resource || 阅读视图初始化中) {
+      清理全景入场聚拢();
+      return;
+    }
+    if (entryPending) {
+      if (!全景入场聚拢.current) 全景入场聚拢.current = { key: resource.resourceKey, index: 显示阅读索引, flow: 阅读流向, pages: [], animations: [], started: false };
+      return;
+    }
+    const 入场 = 全景入场聚拢.current;
+    if (!入场 || 入场.started) return;
+    if (入场.key !== resource.resourceKey || 入场.index !== 显示阅读索引 || 入场.flow !== 阅读流向 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      清理全景入场聚拢();
+      return;
+    }
+    // Only the initially visible neighbours join the settled current page.
+    // Keep their pending geometry out of native frames until the group is ready.
+    for (const 页面 of 入场.pages) 页面.style.removeProperty('visibility');
+    入场.pages = 模式2可见页面索引.filter(index => index !== 入场.index)
+      .map(index => 全景页面流.current?.querySelector<HTMLElement>(`[data-reader-page-index="${index}"]`))
+      .filter((页面): 页面 is HTMLElement => Boolean(页面));
+    const 就绪 = 入场.pages.every(页面 => {
+      const index = Number(页面.dataset.readerPageIndex), state = 页面图片状态表[index];
+      return state && !state.loading && (state.error || state.native || state.canvas || state.html
+        || state.url && 页面解码完成[index] === state.url && 手机页面元素.current.get(index)?.isConnected);
+    });
+    if (!就绪) { for (const 页面 of 入场.pages) 页面.style.visibility = 'hidden'; return; }
+    入场.started = true;
+    const 区域 = 阅读区域.current, 中心页 = 全景页面流.current?.querySelector<HTMLElement>(`[data-reader-page-index="${入场.index}"]`);
+    if (!区域 || !中心页 || !入场.pages.length) return;
+    区域.dataset.panoramaEntryPhase = 'arriving';
+    const 距离 = Math.min(52, Math.max(28, (垂直阅读 ? 区域.clientHeight : 区域.clientWidth) * 0.035));
+    const 中心矩形 = 中心页.getBoundingClientRect();
+    入场.animations = 入场.pages.filter(页面 => !页面图片状态表[Number(页面.dataset.readerPageIndex)]?.error)
+      .map(页面 => 创建全景聚拢动画(页面, 中心矩形, 垂直阅读, 距离, false, 0));
+    void Promise.allSettled(入场.animations.map(动画 => 动画.finished)).then(() => {
+      if (全景入场聚拢.current === 入场) 清理全景入场聚拢();
+    });
+  }, [手机布局, 漫画首屏优先, 模式2, isActive, resource?.resourceKey, 阅读视图初始化中, entryPending, 显示阅读索引, 阅读流向, 模式2可见页面Key, 页面图片状态表, 页面解码完成]);
+  useEffect(() => () => 清理全景入场聚拢(), []);
+  useEffect(() => {
+    if (!isActive || !interactive || !recordProgress || 阅读视图初始化中 || !首屏图片已准备 || !resource) return;
+    if (已呈现资源Key === resource.resourceKey) return;
+    // Let the saved-page frame paint before speculative reads/decodes compete
+    // with it. This gate opens once per entry, not on every subsequent turn.
+    let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => 设置已呈现资源Key(resource.resourceKey)); });
+    return () => cancelAnimationFrame(frame);
+  }, [isActive, interactive, recordProgress, 阅读视图初始化中, 首屏图片已准备, resource?.resourceKey, 已呈现资源Key]);
+  useEffect(() => {
+    if (!isActive) 设置已呈现资源Key(null);
+  }, [isActive, resource?.resourceKey]);
   // Keep navigation in logical page order; only horizontal presentation is reversed.
   const 全景横向符号 = !垂直阅读 && 从右到左阅读 ? -1 : 1;
   // Keep a bounded set of real image elements decoded, not only their URLs.
   // A warm neighbour becomes the visible page without remounting its image.
   const 手机预解码页面: 阅读页面项[] = [];
-  if (手机布局 && !模式2 && resource && 内存缓存上限字节 > 0) {
+  if (后台预读已启用 && 手机布局 && !模式2 && resource && 内存缓存上限字节 > 0) {
     let bytes = 当前页组页面.reduce((sum,page) => sum + 估算页面图片缓存字节(页面图片状态表[page.index] ?? {url:'',loading:true,error:null}),0);
     for (let distance=1;distance<=Math.min(4,预加载页数);distance++) {
       for (const index of [安全索引+distance,安全索引-distance]) {
@@ -721,7 +880,7 @@ function ReaderPage({
   // after every click. Keep just the adjacent groups' actual display surfaces
   // mounted, inside the existing byte-bounded read-ahead window.
   const 桌面预备页组 = new Map<number, number[]>();
-  if (!手机布局 && !模式2 && resource && 内存缓存上限字节 > 0 && 预加载页数 > 0) {
+  if (后台预读已启用 && !手机布局 && !模式2 && resource && 内存缓存上限字节 > 0 && 预加载页数 > 0) {
     const starts = [计算下一页组主索引(安全索引, 总页数, 有效阅读器设置, 页面是跨页横图), 计算上一页组主索引(安全索引, 总页数, 有效阅读器设置, 页面是跨页横图)];
     for (const start of starts) {
       const group = 计算页组索引(start, 总页数, 有效阅读器设置, 页面是跨页横图);
@@ -912,7 +1071,7 @@ function ReaderPage({
     for (let 索引 = 模式2窗口起点; 索引 <= 模式2窗口终点; 索引 += 1) 索引集合.add(索引);
     for (const 索引 of 当前页组索引) 索引集合.add(索引);
 
-    return Array.from(索引集合)
+    const 排序索引 = Array.from(索引集合)
       .filter((索引) => 索引 >= 0 && 索引 < resource.total)
       .sort((左侧, 右侧) => {
         const 计算分数 = (索引: number) => {
@@ -922,7 +1081,10 @@ function ReaderPage({
           return 轴向距离 >= 0 ? 轴向距离 : 1000 + Math.abs(轴向距离);
         };
         return 计算分数(左侧) - 计算分数(右侧) || 左侧 - 右侧;
-      });
+      }).slice(0, isAndroid() ? (原生图片核心 ? 48 : 索引集合.size) : Math.max(模式2窗口半径 * 2 + 1, 桌面全景容量));
+    // Native URLs are not decoded-cache residency. Bound the useful body work
+    // by actual allocations, including a small reverse-gesture margin.
+    return 原生图片核心 ? nativePanoramaWindow(排序索引,中心页,方向||原生阅读方向.current.direction,nativeReaderBodyCapacity(内存缓存上限字节,Object.values(页面图片状态引用.current)),Math.max(2,Math.ceil(1/自由缩放.scale))).keep : 排序索引;
   }
 
   function 计算模式2页面框架样式(页面索引: number): CSSProperties | undefined {
@@ -1100,7 +1262,8 @@ function ReaderPage({
       if(next)下一页();else 上一页();
     }else if(!start.moved&&Math.hypot(dx,dy)<8&&event.timeStamp-start.time<(start.type==='mouse'?1000:400)){
       const rect=event.currentTarget.getBoundingClientRect(),x=(event.clientX-rect.left)/rect.width,y=(event.clientY-rect.top)/rect.height;
-      const direction=readerTapDirection(x,y,垂直阅读,从右到左阅读,start.type==='touch',!手机布局&&!垂直阅读?.4:.25);
+      const 放大鼠标 = !手机布局 && start.type === 'mouse' && 自由缩放.scale > 1.001;
+      const direction=readerTapDirection(x,y,垂直阅读,从右到左阅读,start.type==='touch',放大鼠标?.2:!手机布局&&!垂直阅读?.4:.25,放大鼠标?.2:.25);
       if((!模式2||start.type==='mouse'||阅读器设置.mobilePanoramaTapPaging)&&direction){
         if(direction>0)下一页();else 上一页();
       }else if(手机布局){设置手机工具栏可见(value => !value);}else{显示顶部栏();显示底部栏();}
@@ -1151,7 +1314,19 @@ function ReaderPage({
     }
   }
 
+  function 清理全景入场聚拢(): void {
+    const 入场 = 全景入场聚拢.current;
+    if (!入场) return;
+    入场.started = true;
+    for (const 动画 of 入场.animations) 动画.cancel();
+    入场.animations = [];
+    for (const 页面 of 入场.pages) 页面.style.removeProperty('visibility');
+    入场.pages = [];
+    阅读区域.current?.removeAttribute('data-panorama-entry-phase');
+  }
+
   function 清理全景切换定时器(): void {
+    清理全景入场聚拢();
     全景单页动画.current?.cancel();
     if (全景切换定时器.current !== null) {
       window.clearTimeout(全景切换定时器.current);
@@ -1474,41 +1649,50 @@ function ReaderPage({
     安排刷新阅读区可用尺寸();
   }
 
-  async function 读取页面图片状态(页面: 阅读页面项, signal?: AbortSignal, prefetch=false): Promise<{ pageIndex: number; state: 页面图片状态 }> {
+  async function 读取页面图片状态(页面: 阅读页面项, signal?: AbortSignal, prefetch: boolean | (()=>boolean)=false): Promise<{ pageIndex: number; state: 页面图片状态 }> {
     try {
       if (文档源) {
-        const 内容 = await 文档源.readPage(页面.index, signal);
+        const 内容 = await abortable(() => 文档源.readPage(页面.index, signal), signal);
         return { pageIndex: 页面.index, state: { ...内容, error: null, loading: false } };
       }
       if(原生图片核心&&!/\.gif$/i.test(页面.name)){
-        const prepared=await androidCall<Pick<页面图片状态,'url'|'width'|'height'|'decodedBytes'|'native'>>('readerPrepare',{
-          sourcePath:页面.sourcePath,archiveInnerPath:页面.archiveInnerPath,type:页面.type,session:阅读器会话Id.current,prefetch,
+        const prepared=await prepareNativeReaderPage<Pick<页面图片状态,'url'|'width'|'height'|'decodedBytes'|'native'>>(()=>({
+          sourcePath:页面.sourcePath,archiveInnerPath:页面.archiveInnerPath,type:页面.type,session:阅读器会话Id.current,prefetch:typeof prefetch==='function'?prefetch():prefetch,
           workKey:原生页面Key(页面),
           seek:模式2 ? undefined : 原生跳页代号.current,
           width:Math.round((可用区域.width||window.innerWidth)*devicePixelRatio),height:Math.round((可用区域.height||window.innerHeight)*devicePixelRatio),
-        });
+        }), signal);
         if(signal?.aborted)return 创建已取消页面图片结果(页面.index);
         if(prepared.width&&prepared.height)写入页面原始尺寸(页面.index,prepared.width,prepared.height);
         return {pageIndex:页面.index,state:{...prepared,error:null,loading:false}};
       }
-      const 结果 = await window.omicomic.getPageImage({
+      const 请求Id = ++下一个页面读取Id;
+      const 取消后台读取 = () => { if (!isAndroid()) window.omicomic.cancelPageImage?.(请求Id); };
+      signal?.addEventListener('abort', 取消后台读取, { once: true });
+      let 结果: Awaited<ReturnType<typeof window.omicomic.getPageImage>>;
+      try { 结果 = await abortable(() => window.omicomic.getPageImage({
         sourcePath: 页面.sourcePath,
         virtualPath: 页面.virtualPath,
         archiveInnerPath: 页面.archiveInnerPath,
         readerSessionId: 阅读器会话Id.current,
-        prefetch,
+        readerRequestId: 请求Id,
+        prefetch: typeof prefetch==='function' ? prefetch() : prefetch,
         type: 页面.type,
-      });
+      }), signal); } finally { signal?.removeEventListener('abort', 取消后台读取); }
       if (signal?.aborted) return 创建已取消页面图片结果(页面.index);
       let decodedImage: HTMLImageElement | undefined;
       if (!isAndroid() && 结果.ok && 结果.data.url) {
         // Keep a decoded image in the same byte-bounded state as its URL. Read-ahead
         // now prepares pixels, rather than deferring the expensive decode to a turn.
-        const image = new Image(); image.decoding = 'async'; image.fetchPriority = prefetch ? 'low' : 'high';
+        const image = new Image(); image.decoding = 'async'; image.fetchPriority = (typeof prefetch==='function'?prefetch():prefetch) ? 'low' : 'high';
         if (结果.data.url.startsWith('omicomic-image:')) image.crossOrigin = 'anonymous';
         const abort = () => { image.src = ''; };
         signal?.addEventListener('abort', abort, { once: true });
-        try { image.src = 结果.data.url; await image.decode(); decodedImage = image; }
+        try {
+          const bytes = (结果.data.width || 0) * (结果.data.height || 0) * 4 + (结果.data.encodedBytes || 0);
+          await queueDesktopDecode(async () => { if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError'); image.src = 结果.data.url; await abortable(() => image.decode(), signal); }, bytes, prefetch, signal);
+          decodedImage = image;
+        }
         finally { signal?.removeEventListener('abort', abort); }
         if (signal?.aborted) return 创建已取消页面图片结果(页面.index);
       }
@@ -1521,12 +1705,13 @@ function ReaderPage({
               loading: false,
               width: decodedImage?.naturalWidth || 结果.data.width,
               height: decodedImage?.naturalHeight || 结果.data.height,
+              encodedBytes: 结果.data.encodedBytes,
               decodedImage,
             }
           : { url: "", error: 结果.error.message, loading: false },
       };
     } catch (reason) {
-      if (signal?.aborted) return 创建已取消页面图片结果(页面.index);
+      if (signal?.aborted || (原生图片核心 && readerRequestCancelled(reason))) return 创建已取消页面图片结果(页面.index);
       return {
         pageIndex: 页面.index,
         state: {
@@ -1546,6 +1731,10 @@ function ReaderPage({
   }
 
   function 排序页面图片加载队列(): void {
+    for (const 任务 of [...页面图片运行任务.current.values(), ...页面图片加载队列.current]) {
+      任务.消费者 = 任务.消费者.filter(消费者 => !消费者.已取消());
+      任务.优先级 = 任务.消费者.some(消费者 => 消费者.优先级 === 0) ? 0 : 1;
+    }
     页面图片加载队列.current.sort((左侧, 右侧) => (
       左侧.优先级 - 右侧.优先级 || 左侧.排队顺序 - 右侧.排队顺序
     ));
@@ -1563,16 +1752,26 @@ function ReaderPage({
   }
 
   function 推进页面图片加载队列(): void {
+    排序页面图片加载队列();
     const 并发上限 = Math.min(Math.max(Math.round(页面图片并发上限.current), 1), isAndroid() ? 8 : 24);
     while (页面图片加载队列.current.length > 0) {
       // Reserve a foreground lane; slow speculative reads must not block a jump.
       const 下一任务 = 页面图片加载队列.current[0];
-      const 可用并发 = 下一任务.优先级 === 0 ? Math.max(2, 并发上限) : Math.max(1, 并发上限 - 1);
-      if (页面图片运行任务数.current >= 可用并发) break;
+      const 后台任务数 = [...页面图片运行任务.current.values()].filter(task => task.优先级 !== 0).length;
+      if (页面图片运行任务数.current >= Math.max(2, 并发上限)
+        || (下一任务.优先级 !== 0 && 后台任务数 >= Math.max(1, 并发上限 - 1))) {
+        // A former foreground page may now have only read-ahead subscribers.
+        // It must not keep the foreground reservation after a rapid jump.
+        if (下一任务.优先级 === 0) {
+          const 过期前台 = [...页面图片运行任务.current.values()].find(task => task.优先级 !== 0 && !task.controller.signal.aborted);
+          过期前台?.controller.abort();
+        }
+        break;
+      }
       const 任务 = 页面图片加载队列.current.shift();
       if (!任务) break;
       页面图片排队任务.current.delete(任务.页面.index);
-      if (任务.调度代号 !== 页面图片调度代号.current || 任务.消费者取消检查.every((已取消) => 已取消())) {
+      if (任务.调度代号 !== 页面图片调度代号.current || 任务.消费者.every(消费者 => 消费者.已取消())) {
         if (页面图片读取任务.current.get(任务.页面.index) === 任务.promise) {
           页面图片读取任务.current.delete(任务.页面.index);
           活动页面加载索引.current.delete(任务.页面.index);
@@ -1583,8 +1782,15 @@ function ReaderPage({
 
       页面图片运行任务数.current += 1;
       页面图片运行任务.current.set(任务.页面.index, 任务);
-      void 读取页面图片状态(任务.页面, 任务.controller.signal,任务.优先级!==0)
-        .then((结果) => 完成页面图片调度任务(任务, 结果))
+      // Each job owns a watchdog, including panorama and read-ahead. A timed-out
+      // consumer must release its slot even when IPC/decode never replies.
+      let 超时 = false;
+      const 定时器 = window.setTimeout(() => { 超时 = true; 任务.controller.abort(); }, 页组加载超时毫秒);
+      void 读取页面图片状态(任务.页面, 任务.controller.signal,()=>任务.优先级!==0)
+        .then((结果) => 完成页面图片调度任务(任务, 超时 ? {
+          pageIndex: 任务.页面.index,
+          state: { url: '', loading: false, error: '当前页加载超时，请重试或翻页后返回。' },
+        } : 结果))
         .catch(() => 完成页面图片调度任务(任务, {
           pageIndex: 任务.页面.index,
           state: {
@@ -1592,7 +1798,7 @@ function ReaderPage({
             error: "当前页加载失败，请尝试重新打开该资源。",
             loading: false,
           },
-        }));
+        })).finally(() => window.clearTimeout(定时器));
     }
   }
 
@@ -1631,13 +1837,11 @@ function ReaderPage({
   }
 
   function 清除过期排队图片(): void {
-    if (文档源) {
-      for (const 任务 of 页面图片运行任务.current.values()) {
-        if (任务.消费者取消检查.every(已取消 => 已取消())) 任务.controller.abort();
-      }
+    for (const 任务 of 页面图片运行任务.current.values()) {
+      if (任务.消费者.every(消费者 => 消费者.已取消())) 任务.controller.abort();
     }
     页面图片加载队列.current = 页面图片加载队列.current.filter((任务) => {
-      if (!任务.消费者取消检查.every((已取消) => 已取消())) return true;
+      if (!任务.消费者.every(消费者 => 消费者.已取消())) return true;
       if (页面图片读取任务.current.get(任务.页面.index) === 任务.promise) {
         页面图片读取任务.current.delete(任务.页面.index);
         页面图片排队任务.current.delete(任务.页面.index);
@@ -1657,9 +1861,11 @@ function ReaderPage({
     const 运行任务 = 页面图片运行任务.current.get(页面.index);
     if (已有任务 && !运行任务?.controller.signal.aborted) {
       const 已排队任务 = 页面图片排队任务.current.get(页面.index) ?? 运行任务;
-      已排队任务?.消费者取消检查.push(已取消);
+      if (已排队任务) 已排队任务.消费者 = 已排队任务.消费者.filter(消费者 => !消费者.已取消());
+      已排队任务?.消费者.push({ 已取消, 优先级 });
       if (已排队任务 && 优先级 < 已排队任务.优先级) {
         已排队任务.优先级 = 优先级;
+        prioritizeDesktopDecodes();
         排序页面图片加载队列();
         推进页面图片加载队列();
       }
@@ -1678,7 +1884,7 @@ function ReaderPage({
       调度代号: 页面图片调度代号.current,
       promise,
       完成: 完成任务,
-      消费者取消检查: [已取消],
+      消费者: [{ 已取消, 优先级 }],
       controller: new AbortController(),
     };
     页面图片读取任务.current.set(页面.index, promise);
@@ -1699,7 +1905,7 @@ function ReaderPage({
 
   function 估算页面图片缓存字节(状态: 页面图片状态): number {
     if (状态.html) return 状态.html.length * 2;
-    const 压缩字节 = 估算图片Url字节(状态.url);
+    const 压缩字节 = 估算图片Url字节(状态.url) + (状态.encodedBytes || 0);
     const 解码字节 = 状态.width && 状态.height
       ? Math.max(0, 状态.width * 状态.height * 4)
       : 0;
@@ -1708,14 +1914,19 @@ function ReaderPage({
 
   function 计算缓存必留索引集合(): Set<number> {
     const 索引集合 = new Set<number>();
-    for (const 索引 of 当前页组索引) 索引集合.add(索引);
-    for (const 索引 of 可显示页组?.indices ?? []) 索引集合.add(索引);
-    for (const 索引 of 手机滑页索引) 索引集合.add(索引);
+    if (!模式2) {
+      for (const 索引 of 当前页组索引) 索引集合.add(索引);
+      for (const 索引 of 可显示页组?.indices ?? []) 索引集合.add(索引);
+      for (const 索引 of 手机滑页索引) 索引集合.add(索引);
+    }
     if (!resource || resource.total <= 0) return 索引集合;
 
     if (模式2) {
+      const 几何 = 模式2页面几何引用.current;
+      const 中心 = (几何.页面中心[安全索引引用.current] ?? 0) - 全景偏移引用.current;
+      const 半轴长 = (垂直阅读 ? 模式2可用高度 : 模式2可用宽度) / 2;
       for (let 索引 = 模式2窗口起点; 索引 <= 模式2窗口终点; 索引 += 1) {
-        索引集合.add(索引);
+        if (几何.页面前缀长度[索引] < 中心 + 半轴长 && 几何.页面前缀长度[索引 + 1] > 中心 - 半轴长) 索引集合.add(索引);
       }
     }
     for (const 索引 of 活动页面加载索引.current) 索引集合.add(索引);
@@ -1727,7 +1938,7 @@ function ReaderPage({
     并发数: number,
     写入结果: (结果: { pageIndex: number; state: 页面图片状态 }) => void,
     已取消: () => boolean,
-    选项: { 提交已完成结果?: boolean; 优先级?: 页面图片任务优先级 } = {},
+    选项: { 提交已完成结果?: boolean; 优先级?: 页面图片任务优先级; 任务已取消?: (index:number)=>boolean } = {},
   ): Promise<void> {
     let 游标 = 0;
     const 工作者数量 = Math.min(Math.max(并发数, 1), Math.max(页面列表.length, 1));
@@ -1736,7 +1947,7 @@ function ReaderPage({
         const 页面 = 页面列表[游标];
         游标 += 1;
         if (!页面) return;
-        const 结果 = await 读取页面图片状态任务(页面, 选项.优先级 ?? 1, 已取消);
+        const 结果 = await 读取页面图片状态任务(页面, 选项.优先级 ?? 1, 选项.任务已取消 ? () => 选项.任务已取消!(页面.index) : 已取消);
         if (!已取消() || 选项.提交已完成结果) 写入结果(结果);
       }
     }));
@@ -1813,8 +2024,6 @@ function ReaderPage({
     const 中心页 = 限制索引(中心索引, resource.total);
     const 修正强度 = Math.min(Math.max(强度, 0), 1);
     const 必留索引 = 计算缓存必留索引集合();
-    for (const 索引 of 当前页组索引) 必留索引.add(索引);
-    for (let 索引 = 模式2窗口起点; 索引 <= 模式2窗口终点; 索引 += 1) 必留索引.add(索引);
     for (const 索引 of 活动页面加载索引.current) 必留索引.add(索引);
 
     const 身后保留页数 = Math.max(6, 模式2窗口半径 + 2);
@@ -1877,12 +2086,11 @@ function ReaderPage({
     }
     if (模式2预热结果缓冲.current.size === 0) return;
 
-    const 视口中心索引 = 仅提交运动关键页面 ? 计算模式2偏移最近索引() : -1;
-    // The display worker must see prepared URLs before their pages enter the
-    // viewport. Keep publication batched, but include the mounted PC window.
-    const 运动准备半径 = isAndroid() ? Math.min(模式2窗口半径, Math.max(2, Math.ceil(2 / 自由缩放.scale))) : 模式2窗口半径;
+    // Publish prepared pixels ahead of the screen, including while dragging.
+    // The mounted window already bounds DOM work; staging URLs until they are
+    // visible wastes both the decode lead and the staging memory allowance.
     const 结果列表 = Array.from(模式2预热结果缓冲.current.entries())
-      .filter(([页面索引]) => !仅提交运动关键页面 || Math.abs(页面索引 - 视口中心索引) <= 运动准备半径);
+      .filter(([页面索引]) => !仅提交运动关键页面 || 模式2预读窗口.current.has(页面索引));
     if (结果列表.length === 0) return;
     for (const [页面索引] of 结果列表) {
       模式2预热结果缓冲.current.delete(页面索引);
@@ -1898,13 +2106,11 @@ function ReaderPage({
 
   function 安排刷新模式2预热结果(): void {
     if (模式2预热结果提交定时器.current !== null) return;
-    const 正在运动 = 全景拖动.current.active || 全景惯性动画帧.current !== null;
-    const 提交延迟 = 正在运动 && !isAndroid() ? 120 : 32;
     模式2预热结果提交定时器.current = window.setTimeout(() => {
       模式2预热结果提交定时器.current = null;
       const 届时仍在运动 = 全景拖动.current.active || 全景惯性动画帧.current !== null;
       刷新模式2预热结果(届时仍在运动);
-    }, 提交延迟);
+    }, 16);
   }
 
   function 取消模式2预热调度(): void {
@@ -1923,30 +2129,38 @@ function ReaderPage({
       模式2预热结果提交定时器.current = null;
     }
     模式2预热结果缓冲.current.clear();
+    模式2预读窗口.current.clear();
+    模式2预热任务.current.clear();
   }
 
-  async function 执行模式2预热请求(请求: 模式2预热请求, 执行代号: number): Promise<void> {
+  function 执行模式2预热请求(请求: 模式2预热请求, 执行代号: number): void {
     if (!resource || resource.total <= 0) return;
     const 操作资源Key = resource.resourceKey;
     const 索引列表 = 获取模式2预热索引(请求.centerIndex, 请求.direction, 请求.intensity);
     if (原生图片核心) {
-      const 优先窗口 = `${resource.resourceKey}:${请求.centerIndex}:${请求.direction}`;
+      const 原生方向 = 请求.direction || 原生阅读方向.current.direction;
+      const {keep,focus,key} = nativePanoramaWindow(索引列表,请求.centerIndex,原生方向);
+      const 优先窗口 = `${阅读器会话Id.current}:${resource.resourceKey}:${key}`;
       if (模式2原生优先窗口.current !== 优先窗口) {
         模式2原生优先窗口.current = 优先窗口;
-        const 近页 = [...索引列表].sort((a,b) => Math.abs(a-请求.centerIndex)-Math.abs(b-请求.centerIndex) || (请求.direction < 0 ? a-b : b-a));
-        androidNotify('readerSeek',{session:阅读器会话Id.current,prioritizeOnly:true,keep:近页.slice(0,48).map(index=>原生页面Key(resource.pages[index]))});
+        // With three large bodies, keep current/next/next-next rather than
+        // retaining a hidden previous page ahead of the second upcoming page.
+        // Native pins still protect every body actually visible on screen.
+        androidNotify('readerSeek',{session:阅读器会话Id.current,prioritizeOnly:true,focus:focus.map(index=>原生页面Key(resource.pages[index])),keep:keep.map(index=>原生页面Key(resource.pages[index]))});
       }
     }
     // Unpublished pages behind the moving window must not fill the staging
     // budget and prevent future pages from loading until they reach the screen.
     const 本次预热窗口 = new Set(索引列表);
+    // A fast panorama jump must retire reads for the abandoned window just as
+    // ordinary paging does. Keep the currently drawn pages and latest target.
+    if (!isAndroid() || 原生图片核心) 保留页面图片加载调度(new Set([...本次预热窗口, ...当前页组索引, ...(全景导航目标索引.current === null ? [] : [全景导航目标索引.current])]));
     for (const 索引 of 模式2预热结果缓冲.current.keys()) {
       if (!本次预热窗口.has(索引)) 模式2预热结果缓冲.current.delete(索引);
     }
     // A finished batch can remain outside the publication window. Revisit it
     // as the viewport advances, even when no further reads fit the budget.
     if (模式2预热结果缓冲.current.size > 0) 安排刷新模式2预热结果();
-    const 缓冲上限 = Math.min((isAndroid() ? 32 : 192) * 1024 * 1024, 内存缓存上限字节 * 0.2);
     let 缓冲字节 = 0;
     let 已用字节 = 0;
     let 单页估计 = 4 * 1024 * 1024;
@@ -1961,65 +2175,54 @@ function ReaderPage({
       单页估计 = Math.max(单页估计, 字节);
     }
     已用字节 += 缓冲字节;
+    for (const 任务 of 模式2预热任务.current.values()) 已用字节 += 任务.bytes;
 
     const 待加载页面 = 索引列表
       .map((索引) => resource.pages[索引])
       .filter((页面): 页面 is 阅读页面项 => Boolean(页面))
       .filter((页面) => {
-        if (页面仍在活动加载(页面.index)) return false;
-        if (Math.abs(页面.index - 请求.centerIndex) > 2
-          && (已用字节 + 单页估计 > 内存缓存上限字节 || 缓冲字节 + 单页估计 > 缓冲上限)) return false;
+        if (页面仍在活动加载(页面.index) || 模式2预热任务.current.has(页面.index)) return false;
         const 状态 = 模式2预热结果缓冲.current.get(页面.index) ?? 页面图片状态引用.current[页面.index];
         return !状态 || (!状态.url && !状态.error);
       });
     if (待加载页面.length === 0) return;
 
-    const 高强度预热 = 请求.intensity >= 0.45;
-    const 批量上限 = Math.min(
-      待加载页面.length,
-      Math.max(1, 模式2图片加载线程数 * (高强度预热 ? 2 : 1)),
-    );
-    const 本批页面 = 待加载页面.slice(0, 批量上限);
-    const 预热并发数 = 模式2图片加载线程数;
-    标记页面加载开始(本批页面);
-
-    try {
-      await 并发读取页面图片(
-        本批页面,
-        预热并发数,
-        (结果) => {
-          活动页面加载索引.current.delete(结果.pageIndex);
+    // Each completion refills its lane from the latest window. Never await an
+    // entire batch: one slow image must not idle all the other decode lanes.
+    const 名额 = Math.max(0, 模式2图片加载线程数 - 模式2预热任务.current.size);
+    let 已启动 = 0;
+    for (const 页面 of 待加载页面) {
+      if (已启动 >= 名额) break;
+      const 近页 = Math.abs(页面.index - 请求.centerIndex) <= Math.max(2, Math.ceil(1 / 自由缩放.scale));
+      if (!近页 && 已用字节 + 单页估计 > 内存缓存上限字节) continue;
+      const 任务 = { resourceKey: 操作资源Key, bytes: 单页估计 };
+      模式2预热任务.current.set(页面.index, 任务);
+      已启动++; 已用字节 += 任务.bytes;
+      void 读取页面图片状态任务(页面, 1,
+        () => 资源Key引用.current !== 操作资源Key || !全景模式引用.current || !模式2预读窗口.current.has(页面.index))
+        .then((结果) => {
           if (
             资源Key引用.current !== 操作资源Key
             || 模式2预热代号.current !== 执行代号
+            || !模式2预读窗口.current.has(结果.pageIndex)
             || !全景模式引用.current
+            || (!结果.state.url && !结果.state.error)
           ) {
             return;
           }
           模式2预热结果缓冲.current.set(结果.pageIndex, 结果.state);
-          trimPrefetchBuffer(模式2预热结果缓冲.current, 请求.centerIndex, Math.min((isAndroid() ? 32 : 1024) * 1024 * 1024, 内存缓存上限字节 * 0.25), 估算页面图片缓存字节);
           安排刷新模式2预热结果();
-        },
-        () => 资源Key引用.current !== 操作资源Key || 模式2预热代号.current !== 执行代号,
-        { 提交已完成结果: true },
-      );
-    } finally {
-      标记页面加载结束(本批页面);
-    }
-
-    const 请求仍有效 = (
-      资源Key引用.current === 操作资源Key
-      && 模式2预热代号.current === 执行代号
-      && 全景模式引用.current
-    );
-    if (请求仍有效) {
-      if (
-        待加载页面.length > 本批页面.length
-        && 模式2待预热请求.current === null
-      ) {
-        模式2待预热请求.current = 请求;
-      }
-      清理模式2动态缓存(请求.centerIndex, 请求.direction, 请求.intensity);
+        }).finally(() => {
+          if (模式2预热任务.current.get(页面.index) !== 任务) return;
+          模式2预热任务.current.delete(页面.index);
+          if (资源Key引用.current !== 操作资源Key || 模式2预热代号.current !== 执行代号 || !全景模式引用.current) return;
+          const 最新请求 = 模式2动态预热状态.current;
+          if (最新请求) {
+            模式2待预热请求.current = 最新请求;
+            清理模式2动态缓存(最新请求.centerIndex, 最新请求.direction, 最新请求.intensity);
+            安排模式2预热执行();
+          }
+        });
     }
   }
 
@@ -2032,7 +2235,7 @@ function ReaderPage({
         const 请求 = 模式2待预热请求.current;
         模式2待预热请求.current = null;
         模式2上次快速预热时间.current = performance.now();
-        await 执行模式2预热请求(请求, 执行代号);
+        执行模式2预热请求(请求, 执行代号);
       }
     } finally {
       模式2预热运行中.current = false;
@@ -2076,16 +2279,8 @@ function ReaderPage({
       direction: 选项.方向 ?? 0,
       intensity: Math.min(Math.max(选项.强度 ?? 0, 0), 1),
     };
-    const 上次请求 = 模式2动态预热状态.current;
-    const 需要接管正在运行的预热 = 模式2预热运行中.current
-      && 上次请求 !== null
-      && (
-        请求.direction !== 上次请求.direction
-        || Math.abs(请求.centerIndex - 上次请求.centerIndex) >= (请求.intensity >= 0.45 ? 1 : 3)
-      );
-    if (需要接管正在运行的预热) {
-      模式2预热代号.current += 1;
-    }
+    模式2预读窗口.current = new Set(获取模式2预热索引(请求.centerIndex, 请求.direction, 请求.intensity));
+    if (!isAndroid() || 原生图片核心) 保留页面图片加载调度(new Set([...模式2预读窗口.current, ...当前页组索引, ...(全景导航目标索引.current === null ? [] : [全景导航目标索引.current])]));
     模式2动态预热状态.current = 请求;
     模式2待预热请求.current = 请求;
 
@@ -2141,6 +2336,7 @@ function ReaderPage({
     if (状态?.native) return true;
     if (状态?.html || 状态?.canvas) return true;
     if (!状态?.url) return false;
+    if (状态.decodedImage?.complete && 状态.decodedImage.naturalWidth > 0) return true;
     const 已显示图片 = 阅读区域.current?.querySelector<HTMLImageElement>(
       `[data-reader-page-index="${目标页}"] img`,
     );
@@ -2323,22 +2519,7 @@ function ReaderPage({
       duration: 模式2滑入动画毫秒,
       easing: "cubic-bezier(0.22, 0.61, 0.36, 1)", fill: "both",
     });
-    const 新页动画 = 页面列表.map(({ 页面, 矩形, 索引 }) => {
-      const 是中心页 = 索引 === 目标索引;
-      const 侧向 = Math.sign(垂直阅读
-        ? 矩形.top + 矩形.height / 2 - 中心矩形.top - 中心矩形.height / 2
-        : 矩形.left + 矩形.width / 2 - 中心矩形.left - 中心矩形.width / 2);
-      const 起始X = 是中心页 || 垂直阅读 ? 0 : 侧向 * 聚拢距离;
-      const 起始Y = 是中心页 || !垂直阅读 ? 0 : 侧向 * 聚拢距离;
-      return 页面.animate([
-        { transform: `translate3d(${起始X}px, ${起始Y}px, 0) scale(${模式2跳转缩放})`, opacity: 是中心页 ? 1 : 0.84 },
-        { transform: "translate3d(0, 0, 0) scale(1)", opacity: 1 },
-      ], {
-        duration: 是中心页 ? 220 : 模式2聚拢动画毫秒,
-        delay: 是中心页 ? 0 : 120,
-        easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "both",
-      });
-    });
+    const 新页动画 = 页面列表.map(({ 页面, 索引 }) => 创建全景聚拢动画(页面, 中心矩形, 垂直阅读, 聚拢距离, 索引 === 目标索引));
     const 旧页动画 = 幽灵.animate(
       [
         { transform: `translate3d(${x}px, ${y}px, 0) scale(${模式2跳转缩放})`, opacity: 0.94 },
@@ -2557,6 +2738,16 @@ function ReaderPage({
     暂停全景动画();
     设置全景偏移值((centers[安全索引引用.current] ?? 0)-target);
     尝试重心化模式2窗口();
+    const 目标索引 = Math.round(fraction);
+    if (原生图片核心 && 原生进度拖动目标.current !== 目标索引) {
+      const 方向 = 目标索引 >= (原生进度拖动目标.current < 0 ? 安全索引引用.current : 原生进度拖动目标.current) ? 1 : -1;
+      原生进度拖动目标.current = 目标索引;
+      const { keep, focus } = nativePanoramaWindow(获取模式2预热索引(目标索引, 方向), 目标索引, 方向);
+      // A distant progress seek supersedes old body reads immediately. Normal
+      // panorama drags continue to use the existing continuous generation.
+      androidNotify('readerSeek', { session: 阅读器会话Id.current, seek: ++原生跳页代号.current,
+        focus: focus.map(index => 原生页面Key(resource.pages[index])), keep: keep.map(index => 原生页面Key(resource.pages[index])) });
+    }
     预热模式2窗口(Math.round(fraction),{强度:0.2});
   }
 
@@ -2568,6 +2759,7 @@ function ReaderPage({
     进度跳转序号.current += 1;
     进度拖动指针Id.current = 事件.pointerId;
     进度手势.current = {x:事件.clientX,moved:false};
+    原生进度拖动目标.current = -1;
     const 比例 = 读取进度条比例(事件);
     设置进度拖动比例(比例);
     if (!模式2) 实时拖动阅读比例(比例);
@@ -2911,7 +3103,7 @@ function ReaderPage({
     延后启用全景动画();
   }, [isActive]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     立即保存待保存进度();
     待保存进度.current = null;
     // React's development effect replay runs the unmount cleanup first.
@@ -2922,8 +3114,7 @@ function ReaderPage({
     设置阅读视图已加载资源Key(null);
     void window.omicomic.setReaderSession(阅读器会话Id.current);
     加载序号.current += 1;
-    const 最大索引 = Math.max(0, (resource?.total ?? 1) - 1);
-    const 起始索引 = Math.min(Math.max(initialPageIndex, 0), 最大索引);
+    const 起始索引 = 初始阅读状态.索引;
     取消全景拖动操作(false);
     清理全景切换定时器();
     清理全景滚轮结束定时器();
@@ -2931,15 +3122,18 @@ function ReaderPage({
     模式2动态预热状态.current = null;
     取消模式2预热调度();
     全景导航序号.current += 1;
-    全景模式引用.current = false;
-    设置全景模式(false);
+    全景模式引用.current = 初始阅读状态.视图.panorama;
+    设置全景模式(初始阅读状态.视图.panorama);
     普通预加载代号.current += 1;
     取消页面图片加载调度();
-    void 同步沉浸全屏(false, false);
+    // Apply the initial chrome before paint; initialization performs the
+    // corresponding OS fullscreen request once and waits for its result.
+    应用沉浸界面状态(初始阅读状态.视图.immersive);
     暂停全景动画();
     全景偏移引用.current = 0;
     全景窗口中心索引引用.current = 起始索引;
     设置全景窗口中心索引(起始索引);
+    设置全景可见索引(起始索引);
     设置当前索引(起始索引);
     设置页码输入(String(起始索引 + 1));
     设置页面图片状态表({});
@@ -2949,10 +3143,12 @@ function ReaderPage({
     设置错误信息(null);
     设置书签错误(null);
     设置当前页已书签(false);
-    设置阅读流向("horizontal");
-    设置缩放模式(默认阅读器设置.readerDefaultFitMode);
-    设置顶部栏可见(true);
-    设置底部栏可见(true);
+    设置阅读器设置(初始阅读状态.设置);
+    设置双页配对起点(初始阅读状态.配对起点);
+    设置阅读流向(初始阅读状态.视图.flow);
+    设置缩放模式(手机布局 ? "fit-window" : 初始阅读状态.视图.fitMode);
+    设置顶部栏可见(!初始阅读状态.视图.immersive);
+    设置底部栏可见(!初始阅读状态.视图.immersive);
     延后启用全景动画();
   }, [initialPageIndex, resource]);
 
@@ -2990,48 +3186,13 @@ function ReaderPage({
         const 已保存进度 = (
           阅读进度结果?.ok ? 阅读进度结果.data : null
         ) ?? 应用数据结果.data.readingProgress[初始化资源Key] ?? null;
-        const 阅读视图 = 已保存进度?.readerViewState ?? 创建默认阅读视图(应用设置);
-        const 新阅读器设置 = {
-          readerDefaultFitMode: 应用设置.readerDefaultFitMode,
-          readerPageMode: 阅读视图.pageMode,
-          readerDefaultFlow: 应用设置.readerDefaultFlow,
-          readerDefaultPanorama: 应用设置.readerDefaultPanorama,
-          readerDefaultImmersive: 应用设置.readerDefaultImmersive,
-          doublePageFirstSingle: 应用设置.doublePageFirstSingle,
-          doublePageDirection: 阅读视图.pageDirection,
-          smartDetectSpreadPage: 应用设置.smartDetectSpreadPage,
-          wheelPageTurn: 应用设置.wheelPageTurn,
-          immersiveAutoHide: 应用设置.immersiveAutoHide,
-          immersiveAutoHideDelay: 应用设置.immersiveAutoHideDelay,
-          readerHideFooterControls: 应用设置.readerHideFooterControls,
-          readerHideImmersiveProgress: 应用设置.readerHideImmersiveProgress,
-          readerMemoryCacheSizeMb: 应用设置.readerMemoryCacheSizeMb,
-          readerPreloadPages: 应用设置.readerPreloadPages,
-          readerImageLoadConcurrency: 应用设置.readerImageLoadConcurrency,
-          bookSwitchButtonOpacity: 应用设置.bookSwitchButtonOpacity,
-          readerVolumeKeys: Boolean(应用设置.readerVolumeKeys),
-          readerVolumeKeysReversed: Boolean(应用设置.readerVolumeKeysReversed),
-          mobilePanoramaTapPaging: Boolean(应用设置.mobilePanoramaTapPaging),
-          readerVolumePanoramaPages: 应用设置.readerVolumePanoramaPages ?? 1,
-          mobileReaderPreviews: 应用设置.mobileReaderPreviews !== false,
-          mobileReaderAutoHide: 应用设置.mobileReaderAutoHide !== false,
-          desktopReaderAutoHide: 应用设置.desktopReaderAutoHide === true,
-          mobilePreviewWidth: 应用设置.mobilePreviewWidth ?? 88,
-        };
-        const 恢复保存位置 = !resource.requestedPageId && 已保存进度?.currentPageIndex === initialPageIndex;
-        const 待恢复索引 = resolvePageIndex(resource.pages,
-          resource.requestedPageId ?? (恢复保存位置 ? 已保存进度?.currentPageId : undefined),
-          恢复保存位置 ? 已保存进度?.currentPageName : undefined, initialPageIndex);
-        const 配对起点 = 已保存进度?.currentPageIndex === 待恢复索引
-          ? resolvePageIndex(resource.pages, 阅读视图.pairingAnchorId, undefined, 阅读视图.pairingAnchor ?? 待恢复索引) : 待恢复索引;
+        const { 视图: 阅读视图, 设置: 新阅读器设置, 索引: 恢复索引, 配对起点 } = 创建初始阅读状态(resource, initialPageIndex, 应用设置, 已保存进度);
         设置页面排序(normalizePageSort(阅读视图.pageSort));
         设置画面调整(手机布局 ? { ...normalizeAdjustments(应用设置.mobileImageAdjustments), enabled: true } : normalizeAdjustments(阅读视图.adjustments));
         设置自动阅读设置(normalizeAutoRead(阅读视图.autoRead));
         设置双页配对起点(配对起点);
         // Keep the saved page until dimensions decide whether it can pair.
         // Pre-normalizing here could discard the last page on a narrower window.
-        const 恢复索引 = 限制索引(待恢复索引, resource.total);
-
         设置阅读器设置(新阅读器设置);
         设置缩放模式(手机布局 ? "fit-window" : 阅读视图.fitMode);
         设置手机页面预览打开(false);
@@ -3041,6 +3202,7 @@ function ReaderPage({
         全景偏移引用.current = 0;
         全景窗口中心索引引用.current = 恢复索引;
         设置全景窗口中心索引(恢复索引);
+        设置全景可见索引(恢复索引);
         全景模式引用.current = 阅读视图.panorama;
         全景模式启用中.current = false;
         设置全景模式(阅读视图.panorama);
@@ -3117,6 +3279,7 @@ function ReaderPage({
     清理全景切换定时器();
     清理全景滚轮结束定时器();
     取消模式2预热调度();
+    取消页面图片加载调度();
     取消全景拖动动画帧();
     取消全景惯性动画帧();
     取消阅读区尺寸刷新动画帧();
@@ -3227,7 +3390,7 @@ function ReaderPage({
     };
   }, [resource, 显示阅读索引]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isActive || !阅读区域.current) return;
 
     const 区域元素 = 阅读区域.current;
@@ -3235,7 +3398,7 @@ function ReaderPage({
 
     const 尺寸观察器 = new ResizeObserver(更新可用区域);
     尺寸观察器.observe(区域元素);
-    更新可用区域();
+    刷新阅读区可用尺寸();
 
     return () => {
       取消阅读区尺寸刷新动画帧();
@@ -3252,6 +3415,9 @@ function ReaderPage({
   }, [全景模式, 阅读流向, 缩放模式, 当前页组Key]);
 
   useEffect(() => {
+    // Panorama owns its visible-page requests. Running the ordinary spread
+    // loader too can prepare a hidden partner and replay obsolete completions.
+    if (模式2) return;
     if (!isActive || !resource || 阅读视图初始化中 || 当前页组页面.length === 0) {
       设置页面图片状态表({});
       设置可显示页组(null);
@@ -3299,6 +3465,8 @@ function ReaderPage({
       if (已结束 || 本次序号 !== 加载序号.current) return;
       已结束 = true;
       标记页面加载结束(需要加载页面);
+      for (const 页面 of 需要加载页面) 页面图片运行任务.current.get(页面.index)?.controller.abort();
+      清除过期排队图片();
       设置页面图片状态表((原表) => {
         const 新表 = { ...原表 };
         for (const 页面 of 需要加载页面) {
@@ -3325,7 +3493,10 @@ function ReaderPage({
     void 并发读取页面图片(
       需要加载页面,
       图片加载线程数,
-      (结果) => 加载结果.push(结果),
+      (结果) => {
+        加载结果.push(结果);
+        if (!已结束 && 本次序号 === 加载序号.current) 设置页面图片状态表(old => ({ ...old, [结果.pageIndex]: 结果.state }));
+      },
       () => 已结束 || 本次序号 !== 加载序号.current,
       { 优先级: 0 },
     ).then(() => {
@@ -3355,12 +3526,13 @@ function ReaderPage({
       window.clearTimeout(超时定时器);
       重置取消的页面加载状态(需要加载页面);
     };
-  }, [isActive, resource, 当前页组Key, 阅读视图初始化中]);
+  }, [isActive, resource, 当前页组Key, 阅读视图初始化中, 模式2]);
 
   useEffect(() => {
     普通预加载代号.current += 1;
     if (
       !isActive
+      || !后台预读已启用
       || !resource
       || 模式2
       || 阅读视图初始化中
@@ -3381,7 +3553,7 @@ function ReaderPage({
           // A speculative failure must allow thumbnail fallback without making
           // the next foreground request permanently inherit a prefetch error.
           const state = 结果.state.url ? 结果.state : {...结果.state,error:null,prefetchFailed:true};
-          设置页面图片状态表(原表 => ({...原表,[index]:state}));
+          设置页面图片状态表(原表 => 原表[index]?.url || 原表[index]?.error ? 原表 : ({...原表,[index]:state}));
         });
       }
       清除过期排队图片();
@@ -3397,7 +3569,7 @@ function ReaderPage({
         const job = 读取页面图片状态任务(页面,1,cancelled).then(result => {
           if (cancelled()) return;
           const next = result.state.url ? result.state : {...result.state,error:null,prefetchFailed:true};
-          设置页面图片状态表(previous => ({...previous,[index]:next}));
+          设置页面图片状态表(previous => previous[index]?.url || previous[index]?.error ? previous : ({...previous,[index]:next}));
         }).finally(() => { if (桌面预读任务.current.get(key) === job) 桌面预读任务.current.delete(key); });
         桌面预读任务.current.set(key,job);
       }
@@ -3451,6 +3623,7 @@ function ReaderPage({
     };
   }, [
     isActive,
+    后台预读已启用,
     resource,
     模式2,
     安全索引,
@@ -3466,20 +3639,15 @@ function ReaderPage({
   ]);
 
   useEffect(() => {
-    if (!isActive || !resource || !模式2 || 阅读视图初始化中) return;
+    if (!isActive || !resource || !模式2 || 阅读视图初始化中 || !后台预读已启用) return;
     预热模式2窗口(安全索引, { 立即: true });
-  }, [isActive, resource, 模式2, 安全索引, 当前页组Key, 模式2预热窗口半径, 模式2图片加载线程数, 阅读视图初始化中]);
+  }, [isActive, resource, 模式2, 安全索引, 当前页组Key, 模式2预热窗口半径, 模式2图片加载线程数, 阅读视图初始化中, 后台预读已启用]);
 
   useEffect(() => {
     if (!isActive || !resource || !模式2 || 阅读视图初始化中) return;
     let 已取消 = false;
     const 操作资源Key = resource.resourceKey;
-    const 几何 = 模式2页面几何引用.current;
-    const 视口中心 = (几何.页面中心[安全索引引用.current] ?? 0) - 全景偏移引用.current;
-    const 半轴长 = (垂直阅读 ? 模式2可用高度 : 模式2可用宽度) / 2;
-    const 索引 = Array.from({ length: 模式2窗口终点 - 模式2窗口起点 + 1 }, (_, i) => 模式2窗口起点 + i)
-      .filter(i => i === 显示阅读索引 || (几何.页面前缀长度[i] < 视口中心 + 半轴长 && 几何.页面前缀长度[i + 1] > 视口中心 - 半轴长))
-      .sort((a, b) => Math.abs(a - 显示阅读索引) - Math.abs(b - 显示阅读索引));
+    const 索引 = 模式2可见页面索引;
     // Visible content has its own foreground lane. It never waits for a stale
     // panorama prefetch batch or for the drag/inertia gesture to finish.
     for (const i of 索引) {
@@ -3501,7 +3669,7 @@ function ReaderPage({
     }
     清除过期排队图片();
     return () => { 已取消 = true; };
-  }, [isActive, resource, 模式2, 阅读视图初始化中, 显示阅读索引, 模式2窗口起点, 模式2窗口终点, 缩放模式, 阅读流向, 可用区域]);
+  }, [isActive, resource, 模式2, 阅读视图初始化中, 显示阅读索引, 模式2可见页面Key, 模式2窗口起点, 模式2窗口终点, 缩放模式, 阅读流向, 可用区域]);
 
   useEffect(() => {
     if (!isActive || !resource) return;
@@ -3523,7 +3691,7 @@ function ReaderPage({
         const 字节 = 估算页面图片缓存字节(状态);
         总字节 += 字节;
         if (必留索引.has(索引)) continue;
-        可移除项.push({ 索引, 字节, 距离: Math.abs(索引 - 安全索引) });
+        可移除项.push({ 索引, 字节, 距离: Math.abs(索引 - (模式2 ? 计算模式2偏移最近索引() : 安全索引)) });
       }
 
       if (总字节 <= 内存缓存上限字节 && 过期空项.length === 0) return 原表;
@@ -3544,7 +3712,9 @@ function ReaderPage({
   }, [isActive, resource, 页面图片状态表, 可显示页组, 安全索引, 当前页组Key, 模式2, 模式2窗口起点, 模式2窗口终点, 内存缓存上限字节]);
 
   useLayoutEffect(() => {
-    if (!resource || 当前页组页面.length === 0 || !目标页组已准备 || (!手机布局 && !模式2 && !桌面画面处理完成)) return;
+    if (!resource || 当前页组页面.length === 0 || !目标页组已准备 || !桌面画面已解码) return;
+    // The decoded source is the final ordinary-page surface. Publish it without
+    // waiting for another worker/filter, retaining the old group only on reads.
     设置可显示页组({
       indices: 当前页组索引,
       visualIndices: 视觉页组索引,
@@ -3555,13 +3725,14 @@ function ReaderPage({
       requestId: 原状态.requestId,
       pageGroupKey: 当前页组Key,
     }));
-  }, [resource, 当前页组Key, 目标页组已准备, 桌面画面处理完成, 手机布局, 模式2]);
+  }, [resource, 当前页组Key, 目标页组已准备, 桌面画面已解码]);
 
   useEffect(() => {
-    if (!onReady || 文档加载中 || (!文档错误 && !错误信息 && (阅读视图初始化中 || !目标页组已准备 || !桌面画面已解码 || !桌面画面处理完成))) return;
-    if (!手机布局) {
-      // The actual DOM images have decoded; reveal them without an extra pair
-      // of animation-frame waits (the native mobile surface still needs those).
+    // First entry already has decoded original pixels. Optional display
+    // filtering must not keep the entire reader behind the library screen.
+    if (!onReady || 文档加载中 || (!文档错误 && !错误信息 && (阅读视图初始化中 || !首屏图片已准备))) return;
+    if (原生图片核心) {
+      // The native commitScene barrier checks the actual composed current page.
       let cancelled = false;
       queueMicrotask(() => { if (!cancelled) onReady(); });
       return () => { cancelled = true; };
@@ -3571,7 +3742,7 @@ function ReaderPage({
     // this same reader surface over the still-visible library.
     frame=requestAnimationFrame(()=>{frame=requestAnimationFrame(()=>onReady());});
     return()=>cancelAnimationFrame(frame);
-  }, [手机布局,onReady,阅读视图初始化中,文档加载中,目标页组已准备,桌面画面已解码,桌面画面处理完成,文档错误,错误信息]);
+  }, [手机布局,原生图片核心,onReady,阅读视图初始化中,文档加载中,首屏图片已准备,文档错误,错误信息]);
 
   useEffect(() => {
     if (!isActive || 阅读视图初始化中) return;
@@ -3932,6 +4103,7 @@ function ReaderPage({
       } is-flow-${阅读流向}`}
       aria-labelledby="reader-title"
       aria-busy={!文档错误 && 阅读视图初始化中}
+      style={!resource?.readerInit && 阅读视图初始化中 && !错误信息 && !文档错误 ? { visibility: "hidden" } : undefined}
     >
       <GammaFilter id={伽马滤镜Id} gamma={画面调整.gamma} />
       {进度保存错误 && <div className="document-save-error" role="alert">{t(进度保存错误 ?? '')}<button aria-label={t("关闭进度提示")} onClick={() => 设置进度保存错误(null)}>×</button></div>}
@@ -4111,13 +4283,14 @@ function ReaderPage({
 
       <div
         ref={阅读区域}
+        data-reader-scrubbing={模式2 && 进度拖动指针Id.current !== null && 进度手势.current?.moved || undefined}
         data-reader-zoom={自由缩放.scale}
         className={`reader-stage ${自由缩放.scale > 1 ? 'is-free-zoomed' : ''} zoom-stage-${全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式} is-flow-${阅读流向} ${
           模式2 ? "is-panorama" : ""
         } ${全景拖动中 ? "is-panorama-dragging" : ""} ${
           全景动画启用 ? "is-panorama-animated" : "is-panorama-static"
         }`}
-        onPointerDown={(event) => { if(自由缩放.down(event)){if(手机布局&&!模式2&&event.isPrimary)手机滑页.down(event);else 手机滑页.cancel();手机触点.current=null;return;} 开始手机触控(event); if(手机滑页.down(event))手机触点.current=null; 开始全景拖动(event); }}
+        onPointerDown={(event) => { 开始手机触控(event); if(自由缩放.down(event)){if(手机布局&&!模式2&&event.isPrimary)手机滑页.down(event);else 手机滑页.cancel();if(event.pointerType!=='mouse')手机触点.current=null;return;} if(手机滑页.down(event))手机触点.current=null; 开始全景拖动(event); }}
         onPointerMove={event => { const start=手机触点.current;if(start&&start.id===event.pointerId&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>=8)start.moved=true;if(自由缩放.move(event)){const overflow=自由缩放.pageOverflow();if(overflow!==null)手机滑页.move(event,overflow);else 手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} if(手机滑页.move(event))return; 拖动全景(event); }}
         onPointerUp={(event) => { const swiped=手机滑页.up(event),zoomed=自由缩放.up(event);if(swiped||zoomed){if(!swiped)手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} 结束全景指针(event); 结束手机触控(event); }}
         onPointerCancel={(event) => { 自由缩放.cancel(event); 手机滑页.cancel(event); 手机触点.current=null; 取消全景指针(event); }}
@@ -4197,6 +4370,7 @@ function ReaderPage({
             ) : (
               <div
                 ref={全景页面流}
+                data-reader-entry-pending={桌面首屏准备中 || undefined}
                 className={`reader-page-spread ${
                   模式2
                     ? `is-comic-strip is-${阅读流向}-strip is-panorama-strip`
@@ -4224,15 +4398,24 @@ function ReaderPage({
                     <figure
                       className={`reader-page-frame ${模式2位置类名}`}
                       data-reader-page-index={页面.index}
+                      data-native-work-key={原生图片核心 ? 原生页面Key(页面) : undefined}
                       key={页面.index}
                       aria-hidden={!模式2 && !显示页组索引.includes(页面.index) ? true : undefined}
-                      style={!模式2 && !显示页组索引.includes(页面.index) ? {position:'absolute',visibility:'hidden',opacity:0,pointerEvents:'none'} : 计算模式2页面框架样式(页面.index)}
+                      style={!模式2 && !显示页组索引.includes(页面.index) ? {position:'absolute',visibility:'hidden',opacity:0,pointerEvents:'none'} : {
+                        ...计算模式2页面框架样式(页面.index),
+                        ...(手机全景进入中 && 页面.index !== 显示阅读索引 ? {visibility:'hidden'} : {}),
+                      }}
                     >
-                      <ReaderImageEffects samplingPriority={模式2 ? undefined : 当前页组索引.includes(页面.index)} layoutKey={[模式2, 阅读流向, 缩放模式, 可用区域.width, 可用区域.height].join(":")} alignmentKey={[模式2 ? 全景窗口中心索引 : 显示页组索引.join('|'), 阅读流向, 可用区域.width, 可用区域.height, 自由缩放.scale].join(":")} settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sampleable={!/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} onReadinessChange={ready => { if (状态.url && (!模式2 || !interactive)) { const key = `${状态.url}:${状态.width}:${状态.height}`; 设置页面显示处理完成(old => { if (ready) return old[页面.index] === key ? old : { ...old, [页面.index]: key }; if (old[页面.index] !== key) return old; const next = {...old}; delete next[页面.index]; return next; }); } }} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
+                      <ReaderImageEffects nativeZoom={自由缩放.scale>1.001} samplingPriority={模式2 ? undefined : 当前页组索引.includes(页面.index)} layoutKey={[模式2, 阅读流向, 缩放模式, 可用区域.width, 可用区域.height].join(":")} alignmentKey={[模式2 ? 全景窗口中心索引 : 显示页组索引.join('|'), 阅读流向, 可用区域.width, 可用区域.height, 自由缩放.scale].join(":")} settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sampleable={!/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} sourceBytes={状态.encodedBytes} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${resource.resourceKey}:${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
                       {状态.error ? (
                         <div className="reader-page-error" role="alert">
                           <span>{t("第 ")}{页面.index + 1} {阅读单位}{t("加载失败")}</span>
                           <em>{t(状态.error ?? '')}</em>
+                          <button type="button" onClick={() => {
+                            页面图片运行任务.current.get(页面.index)?.controller.abort();
+                            设置页面图片状态表(old => ({ ...old, [页面.index]: { url: '', error: null, loading: false } }));
+                            void 确保页面图片就绪(页面.index);
+                          }}>{t('重试此页')}</button>
                         </div>
                       ) : 状态.canvas ? (
                         <ReaderCanvas canvas={状态.canvas} title={页面.name} style={计算页面图片样式(页面.index)} />
@@ -4250,13 +4433,14 @@ function ReaderPage({
                           style={计算页面图片样式(页面.index)}
                           draggable={false}
                           loading={
-                            !模式2 || Math.abs(页面.index - 全景窗口中心索引) <= 2
+                            !isAndroid() || !模式2 || Math.abs(页面.index - 全景窗口中心索引) <= 2
                               ? "eager"
                               : "lazy"
                           }
-                          fetchPriority={页面.index === 安全索引 ? "high" : "low"}
+                          fetchPriority={Math.abs(页面.index - 显示阅读索引) <= (模式2 ? 模式2可见半径 : 0) ? "high" : "low"}
                           decoding="async"
                           onError={() => {
+                            if (页面图片状态引用.current[页面.index]?.url !== 状态.url) return;
                             设置页面图片状态表((原表) => ({
                               ...原表,
                               [页面.index]: {
@@ -4268,10 +4452,11 @@ function ReaderPage({
                           }}
                           onLoad={async (事件) => {
                             const img=事件.currentTarget,url=状态.url;
+                            if (页面图片状态引用.current[页面.index]?.url !== url) return;
                             记录页面原始尺寸(页面.index,img);
-                            if(!手机布局){设置页面解码完成(old=>({...old,[页面.index]:url}));return;}
                             try { await img.decode(); } catch { if(!img.complete||!img.naturalWidth)return; }
                             if(!img.isConnected || 页面图片状态引用.current[页面.index]?.url!==url)return;
+                            if(!手机布局){设置页面解码完成(old=>old[页面.index]===url?old:({...old,[页面.index]:url}));return;}
                             // Keep the old DOM/page until this exact image is decoded.
                             requestAnimationFrame(()=>requestAnimationFrame(()=>{
                               if(!img.isConnected || 页面图片状态引用.current[页面.index]?.url!==url)return;

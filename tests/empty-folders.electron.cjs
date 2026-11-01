@@ -1,0 +1,34 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
+const {_electron,expect}=require('@playwright/test');
+
+test('packaged library hides confirmed empty branches and keeps documents or images whose cover failed',{timeout:90000},async t=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'omicomic-empty-folders-')),library=path.join(root,'books'),profile=path.join(root,'profile');
+  let app;
+  t.after(async()=>{if(app)await app.close();assert.equal(path.dirname(root),path.resolve(os.tmpdir()));assert.ok(path.basename(root).startsWith('omicomic-empty-folders-'));await fs.rm(root,{recursive:true,force:true});});
+  await fs.mkdir(library);await fs.mkdir(profile);
+  for(const name of ['00 Empty','01 Notes','02 Empty tree/inside','10 Content','11 Document','12 Broken'])await fs.mkdir(path.join(library,name),{recursive:true});
+  await fs.writeFile(path.join(library,'01 Notes','notes.txt'),'metadata');
+  await fs.copyFile('tests/fixtures/images/pixel.png',path.join(library,'10 Content','page.png'));
+  await fs.writeFile(path.join(library,'11 Document','book.mobi'),'invalid document fixture');
+  await fs.writeFile(path.join(library,'12 Broken','page.png'),'invalid image fixture');
+  const env={...process.env,OMICOMIC_TEST_HEADLESS:'1',OMICOMIC_TEST_PROFILE:profile};delete env.ELECTRON_RUN_AS_NODE;delete env.VITE_DEV_SERVER_URL;
+  const executable=path.resolve(process.env.OMICOMIC_PACKAGED_EXE||'release/OmiComic-1.1.63-显示优化版/win-unpacked/OmiComic.exe');
+  app=await _electron.launch({executablePath:executable,args:[],env});
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1440,960));
+  const page=await app.firstWindow();await page.emulateMedia({reducedMotion:'reduce'});
+  await page.evaluate(async library=>{await window.omicomic.addLibraryRoot({path:library,name:'Empty folder checks'});await window.omicomic.updateLibraryState({lastActiveRootPath:library,lastCurrentPath:library});await window.omicomic.updateSettings({showHomePage:false,cardScale:60});},library);
+  await page.reload();const cards=page.locator('.resource-card');
+  for(const name of ['10 Content','11 Document','12 Broken'])await expect(cards.filter({hasText:name})).toBeVisible({timeout:20000});
+  for(const name of ['00 Empty','01 Notes','02 Empty tree'])await expect(cards.filter({hasText:name})).toHaveCount(0,{timeout:20000});
+  assert.equal((await fs.stat(path.join(library,'00 Empty'))).isDirectory(),true,'Hiding must never remove source folders');
+  const added=path.join(library,'02 Empty tree','inside','new.png');await fs.copyFile('tests/fixtures/images/pixel.png',added);
+  await page.evaluate(file=>window.dispatchEvent(new CustomEvent('omi-thumbnail-invalidated',{detail:file})),added);
+  await expect(cards.filter({hasText:'02 Empty tree'})).toBeVisible({timeout:20000});
+  await expect(cards.filter({hasText:'02 Empty tree'}).locator('.resource-preview img')).toBeVisible({timeout:20000});
+  const info=await app.evaluate(({app})=>({version:app.getVersion(),packaged:app.isPackaged}));
+  assert.equal(info.version,'1.1.63');assert.equal(info.packaged,true);
+  await fs.mkdir(path.join(root,'evidence'),{recursive:true});
+  console.log(JSON.stringify({...info,emptyBranchesHidden:3,nonemptyFoldersRetained:3,sourceFoldersPreserved:true,addingDescendantRestoresFolder:true}));
+});

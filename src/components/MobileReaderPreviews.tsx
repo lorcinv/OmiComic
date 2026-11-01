@@ -30,10 +30,8 @@ export default function MobileReaderPreviews({ pages, current, width, onPage, na
   const center=moving.current ? offset/stride : current;
   const radius=Math.ceil(viewport/stride/2)+1;
   const start=Math.max(0,Math.floor(center)-radius), end=Math.min(pages.length,Math.ceil(center)+radius+1);
-  // Far thumbnails also read the archive. Let the current page and its immediate
-  // neighbours finish first instead of competing with their native preparation.
-  const nearbyPending=nativeImage!==undefined && nativeRadius>0 && [...nativeTargets]
-    .some(index=>!/\.gif$/i.test(pages[index].name) && !settled.current.pages.has(index));
+  // The body and tiny previews have separate budgets. A missing body page
+  // must not freeze the whole visible strip behind a large source decode.
   return <section className="mobile-reader-previews" aria-label={t("拖动页面预览")}>
     <div className="mobile-reader-filmstrip" ref={rail} onPointerDown={() => {programmatic.current=null; moving.current=true;}}
       onScroll={event => { const left=event.currentTarget.scrollLeft; setOffset(left);
@@ -48,8 +46,8 @@ export default function MobileReaderPreviews({ pages, current, width, onPage, na
         <div style={{width:start*stride,flex:'none'}}/>
         {pages.slice(start,end).map(page => {
           const shared = nativeImages?.[page.index];
-          const native = page.index===current ? nativeImage : nativeImage!==undefined && nativeTargets.has(page.index) && !/\.gif$/i.test(page.name) && !shared?.error && !shared?.prefetchFailed
-            ? (shared?.native ? shared.url : settled.current.pages.has(page.index) ? undefined : null) : nearbyPending && !nativeTargets.has(page.index) ? null : undefined;
+          const native = page.index===current && nativeImage ? nativeImage
+            : shared?.native && shared.url && nativeTargets.has(page.index) && !/\.gif$/i.test(page.name) ? shared.url : undefined;
           return <div key={page.index} className="mobile-filmstrip-page" style={{width}}><DetailPagePreview page={page} selected={page.index===current} nativeImage={native} previewPriority={Math.abs(page.index-current)} eager onSelect={() => {moving.current=false; onPage(page.index);}} onOpen={() => {}}/></div>;
         })}
       </div>

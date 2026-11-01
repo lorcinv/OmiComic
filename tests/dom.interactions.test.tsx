@@ -19,7 +19,8 @@ async function openDetails() {
   const book = Array.from(document.querySelectorAll<HTMLElement>('.resource-card')).find(card => card.textContent?.includes('Book'));
   expect(book).toBeTruthy();
   fireEvent.click(within(book!).getByRole('button', { name: '打开资源信息' }));
-  await waitFor(() => expect(document.querySelectorAll('.resource-detail-thumbnail')).toHaveLength(48));
+  await waitFor(() => expect(document.querySelectorAll('.resource-detail-thumbnail').length).toBeGreaterThan(0));
+  expect(document.querySelectorAll('.resource-detail-thumbnail').length).toBeLessThanOrEqual(48);
   return view;
 }
 
@@ -72,13 +73,16 @@ describe('OmiComic actual React DOM regressions', () => {
     // This verifies React structure and state, not browser geometry. Playwright covers geometry separately.
   });
 
-  it('mounts only 48 previews for 10,000 pages and next group begins at page 49', async () => {
+  it('virtualizes 10,000 previews in a continuous scroll window', async () => {
     await openDetails();
     const first = document.querySelector('.resource-detail-thumbnail')!;
     expect(first.getAttribute('aria-label')).toMatch(/第 1 页/);
-    fireEvent.click(screen.getByRole('button', { name: '下一组预览' }));
-    await waitFor(() => expect(document.querySelector('.resource-detail-thumbnail')?.getAttribute('aria-label')).toMatch(/第 49 页/));
-    expect(document.querySelectorAll('.resource-detail-thumbnail')).toHaveLength(48);
+    const grid=document.querySelector<HTMLDivElement>('.resource-detail-thumbnail-grid')!;
+    Object.defineProperty(grid,'clientWidth',{configurable:true,value:900});Object.defineProperty(grid,'clientHeight',{configurable:true,value:600});
+    grid.scrollTop=20000;fireEvent.scroll(grid);
+    await waitFor(() => expect(document.querySelector('.resource-detail-thumbnail')?.getAttribute('aria-label')).not.toMatch(/第 1 页/));
+    expect(document.querySelectorAll('.resource-detail-thumbnail').length).toBeLessThanOrEqual(48);
+    expect(screen.queryByRole('button',{name:'下一组预览'})).toBeNull();
     await waitFor(() => expect((window as any).__previewCalls).toBeGreaterThan(0));
     expect((window as any).__previewCalls).toBeLessThanOrEqual(96);
   });

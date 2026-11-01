@@ -7,8 +7,7 @@ import type { OmiBrandOriginGetter } from "./OmiBrandIcon";
 import HomePage from "./pages/HomePage";
 import WindowControls from "./WindowControls";
 import DesktopDirectoryDrop from './components/DesktopDirectoryDrop';
-import MobileSettings from './components/MobileSettings';
-import BookReaderSettings from './components/BookReaderSettings';
+import { loadReader, warmReader } from './reader/loadReader';
 import { 应用主题配色, applyDesktopTypography } from './theme';
 import { isAndroid } from "./platform";
 import { androidCall, hasAndroidRenderer } from './android/bridge';
@@ -23,6 +22,11 @@ function App() {
   useEffect(() => mobile ? observeMobileNavigationLifecycle() : undefined, [mobile]);
   useUiLanguage(mobile, false);
   const [homeSettings, setHomeSettings] = useState<AppSettings | null>(null);
+  const [homeSettingsComponents, setHomeSettingsComponents] = useState<{
+    MobileSettings: typeof import('./components/MobileSettings')['default'];
+    BookReaderSettings: typeof import('./components/BookReaderSettings')['default'];
+  } | null>(null);
+  const { MobileSettings, BookReaderSettings } = homeSettingsComponents ?? {};
   const openingSettings = useRef(false);
   async function openHomeSettings() {
     if (!mobile) { await 切换主界面('资源库'); window.dispatchEvent(new Event('omi-open-settings')); return; }
@@ -30,9 +34,18 @@ function App() {
     const motion = mobileNavigationEpoch();
     openingSettings.current = true;
     try {
-      const result = await window.omicomic.getAppData();
+      const [result, mobileSettings, bookSettings] = await Promise.all([
+        window.omicomic.getAppData(),
+        import('./components/MobileSettings'),
+        import('./components/BookReaderSettings'),
+      ]);
       if (!result.ok) { 设置外部打开错误(result.error.message); return; }
-      await mobileNavigate(() => setHomeSettings(result.data.settings), 'forward', undefined, undefined, motion);
+      await mobileNavigate(() => {
+        setHomeSettingsComponents({ MobileSettings: mobileSettings.default, BookReaderSettings: bookSettings.default });
+        setHomeSettings(result.data.settings);
+      }, 'forward', undefined, undefined, motion);
+    } catch {
+      设置外部打开错误('设置加载失败，请重试。');
     } finally { openingSettings.current = false; }
   }
   useEffect(() => {
@@ -49,7 +62,7 @@ function App() {
     };
   }, [mobile]);
   useEffect(()=>{
-    const prepare = () => { void import('./pages/ReaderPage').catch(() => undefined); };
+    const prepare = warmReader;
     if (!isAndroid() && window.requestIdleCallback) {
       const idle = window.requestIdleCallback(prepare, { timeout: 1500 });
       return () => window.cancelIdleCallback(idle);
@@ -72,7 +85,7 @@ function App() {
   const [阅读器准备中, 设置阅读器准备中] = useState(false);
   const [手机阅读转场中, 设置手机阅读转场中] = useState(false);
   const 阅读打开请求 = useRef(0);
-  const 等待阅读画面 = useRef<{ id: number; finish: (ready: boolean) => void } | null>(null);
+  const 等待阅读画面 = useRef<{ id: number; visible: boolean; returnPage: 页面名称; finish: (ready: boolean) => void } | null>(null);
   const 资源库就绪 = useRef(false);
   const 等待资源库 = useRef<Array<() => void>>([]);
   const [启动资料, 设置启动资料] = useState<OmiComicAppData | null>(null);
@@ -107,11 +120,13 @@ function App() {
 
   function 取消阅读准备(): void {
     阅读打开请求.current++;
-    等待阅读画面.current?.finish(false);
+    const pending = 等待阅读画面.current;
+    pending?.finish(false);
     等待阅读画面.current = null;
     设置阅读器准备中(false);
     设置手机阅读转场中(false);
-    if (当前页面 !== "阅读器") 设置阅读资源(null);
+    if (pending?.visible) { 设置当前页面(pending.returnPage); 设置阅读资源(null); }
+    else if (当前页面 !== "阅读器") 设置阅读资源(null);
   }
   useEffect(() => {
     const cancel=()=>{if(等待阅读画面.current)取消阅读准备();};
@@ -121,7 +136,7 @@ function App() {
       if (document.documentElement.dataset.randomBrowse === 'on') return;
       event.preventDefault(); event.stopImmediatePropagation();
     };
-    const pointer = () => { if (!mobile) cancel(); };
+    const pointer = () => { if (!mobile && !等待阅读画面.current?.visible) cancel(); };
     window.addEventListener('omi-cancel-reader-prepare',cancel);
     window.addEventListener('keydown',key,true);
     window.addEventListener('pointerdown',pointer,true);
@@ -235,7 +250,7 @@ function App() {
   }
 
   async function 加载阅读器(): Promise<void> {
-    const 页面 = await import("./pages/ReaderPage");
+    const 页面 = await loadReader();
     if (应用已挂载.current) flushSync(() => 设置阅读器组件(() => 页面.default));
   }
 
@@ -335,19 +350,36 @@ function App() {
     if (!应用已挂载.current || request !== 阅读打开请求.current) return;
     const 准备后显示 = mobile || 当前页面 !== '阅读器';
     if (准备后显示) {
-      // Keep the library/home on screen while the actual reader image decodes.
-      // The prepared reader keeps the same DOM/image nodes through the reveal.
-      const ready = await new Promise<boolean>(resolve => {
+      // Keep the outgoing screen until the actual fitted first frame is ready.
+      // Start Android's scene capture alongside decoding, not after it.
+      const readiness = new Promise<boolean>(resolve => {
         const timer = setTimeout(() => resolve(false), 20000);
-        等待阅读画面.current = { id: request, finish: value => { clearTimeout(timer); resolve(value); } };
+        等待阅读画面.current = { id: request, visible: false, returnPage: 当前页面, finish: value => { clearTimeout(timer); resolve(value); } };
         flushSync(() => {
           设置阅读资源(资源); 设置阅读起始页(起始页); 设置阅读上下文(上下文 ?? null);
           设置阅读打开序号(request); 设置阅读器准备中(true);
         });
       });
+      let nativeRevealed = false;
+      const nativeTransition = mobile && hasAndroidRenderer() ? (() => {
+        设置手机阅读转场中(true);
+        return mobileNavigate(() => {}, 'forward', async isCurrent => {
+          const ready = await readiness;
+          if (!ready || !isCurrent() || request !== 阅读打开请求.current || !应用已挂载.current) throw new DOMException('Reader entry cancelled', 'AbortError');
+          nativeRevealed = true;
+          flushSync(() => { 设置当前页面('阅读器'); 设置阅读器准备中(false); });
+        }, undefined, motion, true);
+      })() : null;
+      const ready = await readiness;
+      if (nativeTransition) await nativeTransition;
       if (request !== 阅读打开请求.current || !应用已挂载.current) return;
       等待阅读画面.current = null;
-      if (!ready) { 设置阅读器准备中(false); 设置阅读资源(null); 设置外部打开错误("漫画页面读取超时，请重试。"); return; }
+      if (!ready) { 设置阅读器准备中(false); 设置手机阅读转场中(false); 设置阅读资源(null); 设置外部打开错误("漫画页面读取超时，请重试。"); return; }
+      if (nativeTransition) {
+        设置手机阅读转场中(false);
+        if (!nativeRevealed) { 设置阅读器准备中(false); 设置阅读资源(null); }
+        return;
+      }
       if (mobile) {
         设置手机阅读转场中(true);
         await mobileNavigate(() => { if (request !== 阅读打开请求.current) return; 设置当前页面("阅读器"); 设置阅读器准备中(false); }, 'forward', undefined, undefined, motion);
@@ -359,27 +391,8 @@ function App() {
       if (准备后显示) { 设置当前页面('阅读器'); 设置阅读器准备中(false); }
       else 提交阅读器页面(资源, 起始页, 上下文);
     };
-    const 减少动画 = isAndroid() || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const 转场原点 = 获取转场原点?.();
-    if (!转场原点 || 减少动画 || typeof document.startViewTransition !== "function") {
-      显示阅读器();
-      return;
-    }
-
-    const 根节点 = document.documentElement;
-    根节点.classList.add("is-reader-gradient-transition");
-    const 清理转场 = (): void => {
-      根节点.classList.remove("is-reader-gradient-transition");
-    };
-    try {
-      const 转场 = document.startViewTransition(() => {
-        flushSync(显示阅读器);
-      });
-      void 转场.finished.then(清理转场, 清理转场);
-    } catch {
-      清理转场();
-      显示阅读器();
-    }
+    // Reuse the same decoded DOM. No empty intermediate reader or remount.
+    显示阅读器();
   }
 
   async function 切换手机漫画(资源: 阅读资源结果, 起始页: number, 上下文: 阅读打开上下文, motion = mobileNavigationEpoch()): Promise<void> {
@@ -396,7 +409,7 @@ function App() {
     if(request!==阅读打开请求.current||!应用已挂载.current)return;
     const prepared=new Promise<void>(resolve=>{
       const timer=setTimeout(resolve,2000);
-      等待阅读画面.current={id:request,finish:()=>{clearTimeout(timer);resolve();}};
+      等待阅读画面.current={id:request,visible:false,returnPage:'阅读器',finish:()=>{clearTimeout(timer);resolve();}};
     });
     await mobileNavigate(()=>{
       if(request!==阅读打开请求.current)return;
@@ -421,7 +434,7 @@ function App() {
             onOpenReader={打开阅读器页面}
           />}
         </div>
-        <div className={`page-panel ${当前页面 === "阅读器" ? "is-visible" : "is-hidden"} ${阅读器准备中 ? "mobile-reader-preparing" : ""}`} aria-hidden={阅读器准备中 || undefined}>
+        <div className={`page-panel ${当前页面 === "阅读器" ? "is-visible" : "is-hidden"} ${阅读器准备中 && 当前页面 !== '阅读器' ? "mobile-reader-preparing" : ""}`} aria-hidden={阅读器准备中 && 当前页面 !== '阅读器' || undefined}>
           {(当前页面 === "阅读器" || 阅读器准备中) && ReaderPage && <ReaderPage
             key={阅读资源 ? `${阅读打开序号}:${阅读资源.resourceKey}:${阅读资源.sourcePath}:${阅读起始页}:${阅读资源.total}` : "reader-empty"}
             resource={阅读资源}
@@ -429,6 +442,7 @@ function App() {
             openContext={阅读上下文}
             isActive={当前页面 === "阅读器" || 阅读器准备中}
             interactive={!阅读器准备中}
+            entryPending={阅读器准备中 || 手机阅读转场中}
             recordProgress={当前页面 === "阅读器" && !阅读器准备中 && !手机阅读转场中}
             onReady={() => { if (等待阅读画面.current?.id === 阅读打开序号) 等待阅读画面.current.finish(true); }}
             onSwitchResource={(资源, 起始页, 上下文, motion) => {
@@ -451,7 +465,7 @@ function App() {
           />}
         </div>
       </main>
-      {mobile && homeSettings && <MobileSettings settings={homeSettings} displayScope="recent" onSaved={settings => { setHomeSettings(settings); 应用主题配色(settings.colorTheme); }} onClose={() => void mobileNavigate(() => { setHomeSettings(null); 设置进度刷新令牌(value => value + 1); }, 'back')} bookSettings={<BookReaderSettings preferred={null} onSaved={() => 设置进度刷新令牌(value => value + 1)} />} />}
+      {mobile && homeSettings && MobileSettings && BookReaderSettings && <MobileSettings settings={homeSettings} displayScope="recent" onSaved={settings => { setHomeSettings(settings); 应用主题配色(settings.colorTheme); }} onClose={() => void mobileNavigate(() => { setHomeSettings(null); 设置进度刷新令牌(value => value + 1); }, 'back')} bookSettings={<BookReaderSettings preferred={null} onSaved={() => 设置进度刷新令牌(value => value + 1)} />} />}
       {!mobile && <GlobalTooltip />}
       {外部打开错误 && <div className="external-open-error" role="alert">{t(外部打开错误 ?? '')}<button aria-label={t("关闭打开提示")} onClick={() => 设置外部打开错误(null)}>×</button></div>}
       <WindowControls />

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { secureRandomIndex } from '../library/randomBrowse';
-type Order = { keys: string[]; ids: Uint32Array; selected: number };
+type Order = { keys: string[]; ids: Uint32Array; selected: number; drawn: Map<string, unknown> };
 function newOrder<T>(items: T[], key: (item: T) => string): Order {
   const keys = [...new Set(items.map(key))];
-  return { keys, ids: Uint32Array.from({ length: keys.length }, (_, index) => index), selected: 0 };
+  return { keys, ids: Uint32Array.from({ length: keys.length }, (_, index) => index), selected: 0, drawn: new Map() };
 }
 export function useRandomBrowse(scope: string | null, count: number, filter = '') {
   const [session, setSession] = useState<{ scope: string; revision: number } | null>(null);
@@ -20,15 +20,21 @@ export function useRandomBrowse(scope: string | null, count: number, filter = ''
     setSession(old => ({ scope, revision: (old?.revision ?? 0) + 1 }));
   }
   useEffect(() => { stop(); }, [scope]);
-  function select<T>(items: T[], key: (item: T) => string): T[] {
+  function select<T>(items: T[], key: (item: T) => string, complete = true): T[] {
     if (!active) return items;
     if (!order.current || order.current.signature !== signature) {
       order.current = { signature, value: newOrder(items, key) };
     }
-    const value = order.current.value, available = new Map(items.filter(item => {
+    const eligible = (item: T) => {
       const source = item as { path?: string; sourcePath?: string };
       return !rejected.current.has(source.path ?? source.sourcePath ?? key(item));
-    }).map(item => [key(item), item]));
+    };
+    const value = order.current.value, available = new Map(items.filter(eligible).map(item => [key(item), item]));
+    // Replacement queries also publish partial arrays, which may temporarily
+    // omit every drawn book. Only a completed snapshot can remove a selection.
+    if (!complete) for (const [id, item] of value.drawn) {
+      if (!available.has(id) && eligible(item as T)) available.set(id, item as T);
+    }
     value.selected = value.ids.slice(0, value.selected).filter(id => available.has(value.keys[id])).length;
     value.ids = value.ids.filter(id => available.has(value.keys[id]));
     // A cold catalog arrives in small batches. Keep the already drawn prefix,
@@ -52,6 +58,7 @@ export function useRandomBrowse(scope: string | null, count: number, filter = ''
       [value.ids[index], value.ids[selected]] = [value.ids[selected], value.ids[index]];
     }
     value.selected = Math.max(value.selected, take);
+    value.drawn = new Map(Array.from(value.ids.subarray(0, value.selected), id => [value.keys[id], available.get(value.keys[id])]));
     return Array.from(value.ids.subarray(0, take), id => available.get(value.keys[id])!);
   }
   return { active, busy: false, scanned: 0, revision: active ? session!.revision : 0, selectionRevision,

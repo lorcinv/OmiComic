@@ -1,5 +1,5 @@
 type Source = HTMLImageElement | HTMLCanvasElement;
-type Task = { id: number; source: Source; url: string; width: number; height: number; urgent: boolean; cancelled: boolean; finish: (bitmap: ImageBitmap) => void; failed?: () => void };
+type Task = { id: number; source: Source; url: string; width: number; height: number; desktop: boolean; urgent: boolean; cancelled: boolean; finish: (bitmap: ImageBitmap) => void; failed?: () => void };
 let worker: Worker | null = null, active: Task | null = null, sequence = 0, timer = 0, resume = 0;
 const queue: Task[] = [];
 
@@ -73,22 +73,22 @@ function next() {
   };
   worker.onerror = () => { worker?.terminate(); worker = null; task.failed?.(); done(); };
   timer = window.setTimeout(() => { worker?.terminate(); worker = null; task.failed?.(); done(); }, 60000);
-  if (task.url && (displaySamplingMoving() || task.source instanceof HTMLImageElement && (!task.source.complete || !task.source.naturalWidth))) { worker.postMessage({ id: task.id, url: task.url, width: task.width, height: task.height }); return; }
+  if (task.url && (displaySamplingMoving() || task.source instanceof HTMLImageElement && (!task.source.complete || !task.source.naturalWidth))) { worker.postMessage({ id: task.id, url: task.url, width: task.width, height: task.height, desktop:task.desktop }); return; }
   void (async () => {
     if (task.source instanceof HTMLImageElement) await task.source.decode();
     if (task.cancelled || active !== task) return;
-    if (task.url && displaySamplingMoving()) { worker!.postMessage({ id: task.id, url: task.url, width: task.width, height: task.height }); return; }
+    if (task.url && displaySamplingMoving()) { worker!.postMessage({ id: task.id, url: task.url, width: task.width, height: task.height, desktop:task.desktop }); return; }
     // ImageBitmap can share the already-decoded source; no full-size Canvas or
     // PNG/data-URL encoding is introduced for large pages.
     const bitmap = await createImageBitmap(task.source,{premultiplyAlpha:'premultiply'});
     if (task.cancelled || active !== task) { bitmap.close(); return; }
-    worker!.postMessage({ id: task.id, bitmap, width: task.width, height: task.height }, [bitmap]);
+    worker!.postMessage({ id: task.id, bitmap, width: task.width, height: task.height, desktop:task.desktop }, [bitmap]);
   })().catch(() => { task.failed?.(); done(); });
 }
 
-export function queueDisplaySampling(source: Source, width: number, height: number, finish: Task['finish'], urgent = true, failed?: () => void) {
+export function queueDisplaySampling(source: Source, width: number, height: number, finish: Task['finish'], urgent = true, failed?: () => void, desktop = false) {
   const url = source instanceof HTMLImageElement ? source.currentSrc || source.src : '';
-  const task: Task = { id: ++sequence, source, url: /^(?:omicomic-image:|blob:|data:image\/|https?:)/i.test(url) ? url : '', width, height, urgent, finish, failed, cancelled: false };
+  const task: Task = { id: ++sequence, source, url: /^(?:omicomic-image:|blob:|data:image\/|https?:)/i.test(url) ? url : '', width, height, desktop, urgent, finish, failed, cancelled: false };
   // Pages on screen go ahead of pages prepared just outside it.
   const later = urgent ? queue.findIndex(queued => !queued.urgent) : -1;
   if (later >= 0) queue.splice(later, 0, task); else queue.push(task);

@@ -33,7 +33,7 @@
 <details>
 <summary>支持哪些漫画和图片格式？</summary>
 
-支持图片文件夹、JPG／JPEG／PNG／WebP／BMP／GIF 图片，以及 ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和传统无 DRM 的 MOBI。压缩包无需先解压；EPUB／MOBI 的进度按章节显示。MOBI 首版支持 64 MB 内文件、8 MB 内正文，暂不支持 KF8／双格式、DRM 或 HUFF/CDIC 压缩，遇到不支持的文件请先转换为 EPUB。
+支持图片文件夹、JPG／JPEG／PNG／WebP／BMP／GIF 图片，以及 ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和传统无 DRM 的 MOBI。压缩包无需先解压；EPUB／MOBI 的进度按章节显示。MOBI 支持 256 MiB 内文件、8 MiB 内正文，暂不支持 KF8／双格式、DRM 或 HUFF/CDIC 压缩，遇到不支持的文件请先转换为 EPUB。
 
 </details>
 

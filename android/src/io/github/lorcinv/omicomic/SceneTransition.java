@@ -94,6 +94,13 @@ final class SceneTransition {
   private void restoreRevealLayer(){
     if(revealLayer!=null){revealLayer.setLayerType(previousLayerType,null);revealLayer=null;}
   }
+  void afterFinished(long request,Runnable ready){
+    final long deadline=android.os.SystemClock.uptimeMillis()+2000;
+    new Runnable(){public void run(){
+      if(suspended||request!=id||snapshot==null||android.os.SystemClock.uptimeMillis()>=deadline){ready.run();return;}
+      content.postDelayed(this,16);
+    }}.run();
+  }
   void cancel(){
     generation++;
     id=-1;

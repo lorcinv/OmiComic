@@ -32,6 +32,63 @@ function details() {
 }
 const origin: MobileNavigationOrigin = { left: 20, top: 100, width: 100, height: 150, selectionKey: 'book-a' };
 
+it('keeps the forward animation when entering a web reader', async () => {
+  const update = vi.fn();
+  await mobileNavigate(update, 'forward');
+  expect(update).toHaveBeenCalledOnce();
+  expect(captures).toHaveLength(1);
+  expect(document.documentElement.dataset.mobileNavigation).toBeUndefined();
+});
+
+it('waits for the prepared reader before committing the native forward animation', async () => {
+  native.available = true;
+  native.call.mockResolvedValue(undefined);
+  let release!: () => void;
+  const prepared = new Promise<void>(resolve => { release = resolve; });
+  const update = vi.fn();
+  const navigation = mobileNavigate(update, 'forward', () => prepared);
+  await Promise.resolve();
+  expect(update).toHaveBeenCalledOnce();
+  expect(native.call.mock.calls.map(call => call[0])).toEqual(['beginScene']);
+  release();
+  await navigation;
+  expect(native.call.mock.calls.map(call => call[0])).toEqual(['beginScene', 'commitScene']);
+  expect(native.call).toHaveBeenLastCalledWith('commitScene', expect.objectContaining({ direction: 'forward' }));
+});
+
+it('still prepares the destination when native scene capture fails', async () => {
+  native.available = true;
+  native.call.mockRejectedValue(new Error('capture unavailable'));
+  const update = vi.fn(), prepared = vi.fn().mockResolvedValue(undefined);
+  await mobileNavigate(update, 'forward', prepared);
+  expect(update).toHaveBeenCalledOnce();
+  expect(prepared).toHaveBeenCalledOnce();
+  expect(native.notify).toHaveBeenCalledWith('cancelScene', {});
+});
+
+it('does not reveal a prepared reader after a newer navigation supersedes it', async () => {
+  native.available = true; native.call.mockResolvedValue(undefined);
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; }), reveal = vi.fn();
+  const old = mobileNavigate(() => {}, 'forward', async isCurrent => { await waiting; if (isCurrent()) reveal(); });
+  await Promise.resolve();
+  await mobileNavigate(() => {}, 'back');
+  release(); await old;
+  expect(reveal).not.toHaveBeenCalled();
+  expect(native.call.mock.calls.filter(call => call[0] === 'commitScene').map(call => call[1].direction)).toEqual(['back']);
+});
+
+it('can keep reader entry pending until the native slide finishes', async () => {
+  native.available = true;
+  let release!: () => void, settled = false;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  native.call.mockImplementation((method: string) => method === 'waitScene' ? waiting : Promise.resolve());
+  const navigation = mobileNavigate(() => {}, 'forward', undefined, undefined, mobileNavigationEpoch(), true).then(() => { settled = true; });
+  await vi.waitFor(() => expect(native.call.mock.calls.map(call => call[0])).toEqual(['beginScene', 'commitScene', 'waitScene']));
+  expect(settled).toBe(false);
+  release(); await navigation; expect(settled).toBe(true);
+});
+
 beforeEach(() => {
   native.available = false; native.call.mockReset(); native.notify.mockReset();
   cancelMobileNavigation(); captures = [];

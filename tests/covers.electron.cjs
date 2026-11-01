@@ -48,26 +48,48 @@ test('real PDF/EPUB and collection covers render, stay bounded, and never interr
     await fs.rm(root, { recursive: true, force: true });
   });
   electron = await _electron.launch({ executablePath, args: process.env.OMICOMIC_PACKAGED_EXE ? [] : ['.'], env });
+  await electron.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>!w.getParentWindow()).webContents.setBackgroundThrottling(false));
   const page = await electron.firstWindow(); await page.emulateMedia({ reducedMotion: 'reduce' });
+  // Capture the actual Electron surface: CDP capture can wait indefinitely for
+  // a hidden test window's compositor after a long sequence of page turns.
+  const screenshot=async filename=>{
+    // DOM decode can precede the hidden window's compositor commit. Capture
+    // only after that same content has had actual paint opportunities.
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const capture=await electron.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>!w.getParentWindow()).webContents.capturePage(undefined,{stayAwake:true}).then(image=>{
+      const pixels=image.getBitmap(),pages=[0,0];
+      for(let n=0;n<pixels.length;n+=4){
+        if(pixels[n+1]===223&&(pixels[n]===235&&pixels[n+2]===209||pixels[n]===209&&pixels[n+2]===235))pages[0]++;
+        if(pixels[n+1]===203&&(pixels[n]===223&&pixels[n+2]===186||pixels[n]===186&&pixels[n+2]===223))pages[1]++;
+      }
+      return {url:image.toDataURL(),pages};
+    }));
+    assert.match(capture.url,/^data:image\/png;base64,/);
+    if(filename.includes('double-pages')){
+      if(!capture.pages.every(n=>n>150000))await fs.writeFile(filename.replace('.png','-failed.png'),Buffer.from(capture.url.split(',')[1],'base64'));
+      assert.ok(capture.pages.every(n=>n>150000),'Native screenshot lost the actual page pixels: '+JSON.stringify(capture.pages));
+    }
+    const bytes=Buffer.from(capture.url.split(',')[1],'base64');assert.ok(bytes.length>100);await fs.writeFile(filename,bytes);
+  };
   await page.locator('.omi-home__library').click();
   const card = name => page.locator('.resource-card').filter({ has: page.locator('.resource-details > strong', { hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }) });
   for (const name of ['First.pdf', 'Front.epub', 'Legacy.epub', 'Illustrated.epub', 'Collection', 'PDF Collection', 'Pair Book']) {
     await expect(card(name).locator('.resource-preview > img')).toBeVisible({ timeout: 20000 });
     await expect.poll(() => card(name).locator('.resource-preview > img').evaluate(img => img.complete && img.naturalWidth > 0 && Math.max(img.naturalWidth, img.naturalHeight) <= 360)).toBe(true);
   }
-  await expect(card('Collection').locator('.resource-card-info')).toHaveText('');
-  await expect(card('PDF Collection').locator('.resource-card-info')).toContainText('1 文件夹');
+  await expect(card('Collection').locator('.resource-card-info')).toHaveText('2 项');
+  await expect(card('PDF Collection').locator('.resource-card-info')).toHaveText('1 项');
   for (const [name, type] of [['Broken.pdf', 'pdf'], ['TextOnly.epub', 'epub']]) {
     await expect(card(name).locator(`.resource-icon-symbol .is-${type}`)).toBeVisible();
     await expect(card(name).locator('.resource-icon-symbol')).toHaveText('');
   }
-  await page.screenshot({ path: 'test-results/pc-real-covers.png' });
-  await expect(card('Mixed Folder').locator('.resource-card-info')).toContainText('1 文件夹 · 1 图片');
+  await screenshot('test-results/pc-real-covers.png');
+  await expect(card('Mixed Folder').locator('.resource-card-info')).toHaveText('1 项');
   await card('Mixed Folder').dblclick();
   await expect(card('Nested')).toBeVisible();
   await expect(card('cover.png')).toBeVisible();
   await expect(page.locator('.reader-layout')).not.toBeVisible();
-  await page.getByRole('button',{name:'上一级',exact:true}).click();
+  await page.getByRole('button',{name:'返回',exact:true}).click();
   await expect(card('Mixed Folder')).toBeVisible();
 
   const sessionCheck = await page.evaluate(async filePath => {
@@ -85,8 +107,12 @@ test('real PDF/EPUB and collection covers render, stay bounded, and never interr
   }, path.join(books, 'First.pdf'));
   assert.ok(Object.values(sessionCheck).every(Boolean), JSON.stringify(sessionCheck));
   const pair = async expected => {
-    await expect.poll(() => page.locator('.reader-page-spread > figure').evaluateAll(figures => figures.map(f => Number(f.dataset.readerPageIndex) + 1))).toEqual(expected);
-    await expect.poll(() => page.locator('.reader-page-spread img').evaluateAll(images => images.length > 0 && images.every(img => img.complete && img.naturalWidth === 600))).toBe(true);
+    // Prepared hidden DOM can already have both pages. Keyboard input belongs
+    // to the visible reader after App has completed the opening handoff.
+    await expect(page.locator('.page-panel.is-visible .reader-stage')).toBeVisible();
+    await expect(page.locator('.page-panel.mobile-reader-preparing')).toHaveCount(0);
+    await expect.poll(() => page.locator('.reader-page-spread > figure:not([aria-hidden="true"])').evaluateAll(figures => figures.map(f => Number(f.dataset.readerPageIndex) + 1))).toEqual(expected);
+    await expect.poll(() => page.locator('.reader-page-spread > figure:not([aria-hidden="true"]) img.reader-image').evaluateAll(images => images.length > 0 && images.every(img => img.complete && img.naturalWidth === 600))).toBe(true);
   };
   await card('Pair Book').dblclick();
   await page.getByRole('button', { name: '当前单页，点击切换双页', exact: true }).click(); await pair([1, 2]);
@@ -103,7 +129,10 @@ test('real PDF/EPUB and collection covers render, stay bounded, and never interr
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await card('Pair Book').dblclick(); await pair([8, 9]);
   await page.keyboard.press('ArrowLeft'); await pair([6, 7]);
-  await page.screenshot({ path: 'test-results/pc-real-double-pages.png' });
+  const surfaces=await page.locator('.reader-page-frame:not([aria-hidden="true"])').evaluateAll(figures=>figures.map(frame=>({page:frame.getAttribute('data-reader-page-index'),effects:[...frame.querySelectorAll('.reader-effects')].map(e=>({classes:e.className,data:{...e.dataset},rect:e.getBoundingClientRect().toJSON()})),surfaces:[...frame.querySelectorAll('canvas,img')].map(e=>({tag:e.tagName,width:e.width,height:e.height,visibility:getComputedStyle(e).visibility,rect:e.getBoundingClientRect().toJSON(),pixel:e.tagName==='CANVAS'&&e.width&&e.height?[...e.getContext('2d').getImageData(Math.floor(e.width/2),Math.floor(e.height/2),1,1).data]:null}))})));
+  await fs.writeFile('test-results/pc-cover-surfaces.json',JSON.stringify(surfaces,null,2));
+  assert.ok(surfaces.every(frame=>frame.surfaces.some(s=>s.tag==='CANVAS'&&s.visibility==='visible'&&s.pixel?.[3]>0||s.tag==='IMG'&&s.visibility==='visible'&&s.width>0)),'Current pages lack visible pixels: '+JSON.stringify(surfaces));
+  await screenshot('test-results/pc-real-double-pages.png');
   await expect.poll(async () => (await page.evaluate(() => window.omicomic.getAppData())).data.readingProgress[`folder:${pairs}`]?.readerViewState?.pairingAnchor).toBe(5);
   assert.deepEqual(await fs.readFile(path.join(books, 'First.pdf')), pdf);
   await fs.writeFile('test-results/pc-cover-results.json', JSON.stringify({ realCovers: 7, iconFallbacks: 2, sessionCheck, doublePages: { initial: [1, 2], end: [9, 10], percent: 100, entry: [6, 7], next: [8, 9], persistedAnchor: 5 }, executablePath }, null, 2));

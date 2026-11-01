@@ -12,6 +12,7 @@ test('packaged library scrolls continuously and identifies real collection folde
   await fs.mkdir(profile); await fs.mkdir(books);
   const pixel = await fs.readFile('tests/fixtures/images/pixel.png');
   await fs.mkdir(path.join(books, '000 集合', '子文件夹', '下一级'), { recursive: true });
+  await fs.writeFile(path.join(books, '000 集合', '子文件夹', '下一级', 'page.png'), pixel);
   for (let i = 1; i < 130; i++) {
     const folder = path.join(books, `${String(i).padStart(3, '0')} 图片`);
     await fs.mkdir(folder); await fs.writeFile(path.join(folder, 'cover.png'), pixel);
@@ -44,9 +45,9 @@ test('packaged library scrolls continuously and identifies real collection folde
   await page.reload(); await page.locator('.omi-home__library').click();
   const cards = page.locator('.resource-card');
   await expect(page.locator('.page-size-effective')).toHaveCount(0);
-  await expect(cards.filter({ hasText: '000 集合' }).locator('.resource-card-info > span').first()).toHaveText('1 文件夹');
+  await expect(cards.filter({ hasText: '000 集合' }).locator('.resource-card-info > span').first()).toHaveText('1 项');
   await expect(cards.filter({ hasText: '001 图片' }).locator('.resource-card-info > span').first()).toHaveText('0/2 · 0%');
-  await expect(cards.filter({ hasText: '002 图片' }).locator('.resource-card-info > span').first()).toHaveText('');
+  await expect(cards.filter({ hasText: '002 图片' }).locator('.resource-card-info > span').first()).toHaveText('2 项');
   await cards.filter({ hasText: '000 集合' }).dblclick();
   await expect(cards).toHaveCount(1);
   await page.keyboard.press('Escape');

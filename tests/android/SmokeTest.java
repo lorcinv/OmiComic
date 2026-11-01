@@ -32,27 +32,40 @@ public final class SmokeTest extends Instrumentation {
     catch(NoSuchFieldException legacy){View cover=(View)field(activity,"launchCover");return cover==null?-1f:1f-cover.getAlpha();}
   }
   private final class ReaderMotionFrames implements Choreographer.FrameCallback {
-    final Object surface;final JSONArray frames=new JSONArray();boolean stopped;int callbacks;long lastDrawn=-1,lastEmpty=-1;
-    ReaderMotionFrames(Activity activity)throws Exception{surface=field(activity,"readerSurface");}
+    final Object surface,scene;final JSONArray frames=new JSONArray();boolean stopped,lastCovered,lastSnapshot;float lastSceneTranslation=Float.NaN;int callbacks;long lastDrawn=-1,lastEmpty=-1;
+    ReaderMotionFrames(Activity activity)throws Exception{surface=field(activity,"readerSurface");scene=field(activity,"sceneTransition");}
     public void doFrame(long time){
       if(stopped)return;
       try{
         long drawn=(Long)field(surface,"drawnFrames"),empty=(Long)field(surface,"emptyFrames");
-        if(drawn==lastDrawn&&empty==lastEmpty){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
-        lastDrawn=drawn;lastEmpty=empty;
+        ViewGroup sceneRoot=(ViewGroup)field(scene,"root");View snapshot=(View)field(scene,"snapshot"),content=(View)field(scene,"content");
+        boolean covered=snapshot!=null&&sceneRoot.indexOfChild(snapshot)>sceneRoot.indexOfChild(content);
+        float sceneTranslation=content.getTranslationX();boolean hasSnapshot=snapshot!=null;
+        if(drawn==lastDrawn&&empty==lastEmpty&&covered==lastCovered&&sceneTranslation==lastSceneTranslation&&hasSnapshot==lastSnapshot){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
+        lastDrawn=drawn;lastEmpty=empty;lastCovered=covered;lastSceneTranslation=sceneTranslation;lastSnapshot=hasSnapshot;
         Object current=field(surface,"current");JSONArray slots=new JSONArray();boolean pixels=false;
         if(current!=null){android.graphics.RectF clip=(android.graphics.RectF)field(current,"clip");
           for(Object slot:(java.util.List<?>)field(current,"slots")){
             android.graphics.RectF rect=(android.graphics.RectF)field(slot,"rect");Object raster=field(slot,"raster");
             android.graphics.Bitmap bitmap=raster==null?null:(android.graphics.Bitmap)field(raster,"bitmap");
             if(bitmap!=null&&!bitmap.isRecycled()&&android.graphics.RectF.intersects(rect,clip))pixels=true;
-            slots.put(new JSONObject().put("url",field(slot,"url")).put("left",rect.left).put("top",rect.top).put("width",rect.width()).put("height",rect.height()));
+            int sample=raster==null?0:(Integer)field(raster,"sample");
+            Object presentation=((java.util.Map<?,?>)field(surface,"tilePresentations")).get(field(slot,"url"));Object detail=presentation==null?null:field(presentation,"current");
+            if(detail!=null)sample=Math.min(sample,(Integer)field(detail,"sample"));
+            double density=raster==null?0:sample*Math.max(rect.width()/(Integer)field(raster,"width"),rect.height()/(Integer)field(raster,"height"));
+            slots.put(new JSONObject().put("url",field(slot,"url")).put("left",rect.left).put("top",rect.top).put("width",rect.width()).put("height",rect.height()).put("sourceSample",raster==null?0:field(raster,"sample")).put("visibleSample",sample).put("pixelDensity",density).put("bitmapWidth",bitmap==null?0:bitmap.getWidth()).put("bitmapHeight",bitmap==null?0:bitmap.getHeight()));
           }
         }
-        JSONObject recorded=new JSONObject().put("time",time/1000000).put("zoom",current==null?0:field(current,"zoom")).put("pixels",pixels).put("slots",slots).put("drawnFrames",field(surface,"drawnFrames")).put("emptyFrames",field(surface,"emptyFrames"));
+        JSONObject recorded=new JSONObject().put("time",time/1000000).put("zoom",current==null?0:field(current,"zoom")).put("pixels",pixels).put("slots",slots).put("drawnFrames",field(surface,"drawnFrames")).put("emptyFrames",field(surface,"emptyFrames")).put("sceneCovered",covered).put("sceneTranslationX",sceneTranslation).put("sceneWidth",content.getWidth()).put("sceneSnapshot",hasSnapshot).put("active",field(surface,"active"));
+        try{synchronized(field(surface,"cacheLock")){
+          JSONArray decoding=new JSONArray();java.util.Map<?,?> pending=(java.util.Map<?,?>)field(surface,"pending"),ranks=(java.util.Map<?,?>)field(surface,"workingKeys");
+          for(Object work:pending.values()){int tid=(Integer)field(work,"threadId");if(tid>0)decoding.put(new JSONObject().put("rank",ranks.get(field(work,"key"))).put("priority",android.os.Process.getThreadPriority(tid)));}
+          recorded.put("bodyPriorities",decoding);
+        }}catch(NoSuchFieldException legacy){/* Original 1.1.63 baseline. */}
+        if(current!=null){android.graphics.RectF clip=(android.graphics.RectF)field(current,"clip");recorded.put("clip",new JSONArray(new float[]{clip.left,clip.top,clip.right,clip.bottom}));}
         try{recorded.put("restoring",current!=null&&Boolean.TRUE.equals(field(current,"restoring"))).put("tileQualityPages",((java.util.Map<?,?>)field(surface,"completeTilePlans")).size()).put("heldQualityPages",((java.util.Map<?,?>)field(surface,"restoreTilePlans")).size()).put("restoreQualityFrames",field(surface,"restoreQualityFrames")).put("restoreFadeFrames",field(surface,"restoreFadeFrames")).put("workingPages",((java.util.Map<?,?>)field(surface,"workingKeys")).size());}catch(NoSuchFieldException legacy){/* Keep prior-release baseline recordings usable. */}
-        try{recorded.put("qualityBlendFrames",field(surface,"qualityBlendFrames")).put("tileDecodes",field(surface,"tileDecodes")).put("tileBytes",field(surface,"tileBytes"));
-          JSONArray levels=new JSONArray();for(Object state:((java.util.Map<?,?>)field(surface,"tilePresentations")).values()){Object plan=field(state,"current");long start=(Long)field(state,"started");levels.put(new JSONObject().put("sample",plan==null?0:field(plan,"sample")).put("filterBucket",plan==null?0:field(plan,"filterBucket")).put("mix",start==0?1:Math.min(1,(SystemClock.uptimeMillis()-start)/180.)));}recorded.put("qualityLevels",levels);
+        try{java.lang.reflect.Method tileBudget=surface.getClass().getDeclaredMethod("tileBudget");tileBudget.setAccessible(true);recorded.put("qualityBlendFrames",field(surface,"qualityBlendFrames")).put("tileDecodes",field(surface,"tileDecodes")).put("tileBytes",field(surface,"tileBytes")).put("tileBudget",tileBudget.invoke(surface));
+          JSONArray levels=new JSONArray();for(Object state:((java.util.Map<?,?>)field(surface,"tilePresentations")).values()){Object plan=field(state,"current");long start=(Long)field(state,"started");levels.put(new JSONObject().put("sample",plan==null?0:field(plan,"sample")).put("bytes",plan==null?0:field(plan,"bytes")).put("mix",start==0?1:Math.min(1,(SystemClock.uptimeMillis()-start)/180.)));}recorded.put("qualityLevels",levels);
         }catch(NoSuchFieldException legacy){/* Older APK baseline. */}
         frames.put(recorded);
         if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);
@@ -67,6 +80,28 @@ public final class SmokeTest extends Instrumentation {
   private void awaitSceneSettled(Activity activity)throws Exception {
     long deadline=SystemClock.uptimeMillis()+4000;
     while(true){boolean[] moving={false};runOnMainSync(()->{try{moving[0]=field(field(activity,"sceneTransition"),"snapshot")!=null;}catch(NoSuchFieldException legacy){}catch(Exception error){throw new RuntimeException(error);}});if(!moving[0])return;if(SystemClock.uptimeMillis()>deadline)throw new IOException("Native navigation did not settle");SystemClock.sleep(20);}
+  }
+  private JSONObject readerRevealGateTest(Activity activity)throws Exception {
+    awaitSceneSettled(activity);
+    Object surface=field(activity,"readerSurface"),scene=field(activity,"sceneTransition");
+    java.lang.reflect.Method ready=surface.getClass().getDeclaredMethod("afterFrameReady",Runnable.class),begin=scene.getClass().getDeclaredMethod("begin",long.class,Runnable.class),cancel=scene.getClass().getDeclaredMethod("cancel");
+    ready.setAccessible(true);begin.setAccessible(true);cancel.setAccessible(true);
+    java.lang.reflect.Field current=surface.getClass().getDeclaredField("current"),pending=surface.getClass().getDeclaredField("pendingFrame");current.setAccessible(true);pending.setAccessible(true);
+    Object saved=field(surface,"current");if(saved==null)throw new IOException("Missing source frame for reveal check");
+    CountDownLatch captured=new CountDownLatch(1),released=new CountDownLatch(1);
+    runOnMainSync(()->{try{begin.invoke(scene,Long.MAX_VALUE,(Runnable)captured::countDown);}catch(Exception error){throw new RuntimeException(error);}});
+    if(!captured.await(3,TimeUnit.SECONDS))throw new IOException("Reader snapshot was not captured");
+    try{
+      runOnMainSync(()->{try{current.set(surface,null);pending.set(surface,null);((View)surface).invalidate();ready.invoke(surface,(Runnable)released::countDown);}catch(Exception error){throw new RuntimeException(error);}});
+      if(released.await(220,TimeUnit.MILLISECONDS))throw new AssertionError("Reveal ran while native pixels were unavailable");
+      if(field(scene,"snapshot")==null)throw new AssertionError("Pending native frame lost its scene cover");
+      runOnMainSync(()->{try{current.set(surface,saved);((View)surface).invalidate();}catch(Exception error){throw new RuntimeException(error);}});
+      if(!released.await(3,TimeUnit.SECONDS))throw new AssertionError("Reveal did not resume after submitting source pixels");
+      CountDownLatch webOnly=new CountDownLatch(1);java.lang.reflect.Constructor<?> constructor=saved.getClass().getDeclaredConstructor();constructor.setAccessible(true);Object empty=constructor.newInstance();
+      runOnMainSync(()->{try{current.set(surface,empty);ready.invoke(surface,(Runnable)webOnly::countDown);}catch(Exception error){throw new RuntimeException(error);}});
+      if(!webOnly.await(3,TimeUnit.SECONDS))throw new AssertionError("Web-only/error content was held waiting for native pixels");
+      return new JSONObject().put("pendingSourceRetainsScene",true).put("submittedSourceReleasesScene",true).put("webOnlyAndErrorAllowed",true);
+    }finally{runOnMainSync(()->{try{current.set(surface,saved);pending.set(surface,null);cancel.invoke(scene);((View)surface).invalidate();}catch(Exception error){throw new RuntimeException(error);}});}
   }
   private JSONObject homeRevealCancellationTest(Activity activity)throws Exception {
     awaitSceneSettled(activity);
@@ -288,6 +323,7 @@ public final class SmokeTest extends Instrumentation {
   private JSONObject antialiasTest()throws Exception {
     Class<?> decoder=Class.forName("io.github.lorcinv.omicomic.ReaderBitmapDecoder"),check=Class.forName("io.github.lorcinv.omicomic.ReaderBitmapDecoder$Check");
     java.lang.reflect.Method decode=decoder.getDeclaredMethod("decode",byte[].class,int.class,check);decode.setAccessible(true);
+    java.lang.reflect.Method legacyPng=decoder.getDeclaredMethod("png",byte[].class,int.class,check);legacyPng.setAccessible(true);
     Object noop=java.lang.reflect.Proxy.newProxyInstance(check.getClassLoader(),new Class<?>[]{check},(proxy,method,arguments)->null);
     JSONArray cases=new JSONArray();
     for(String name:new String[]{"lines","dots","diagonal","variable","alpha","palette","palette-alpha","icc","interlaced","lines.jpg","dots.jpg","diagonal.jpg","variable.jpg"}){
@@ -306,7 +342,21 @@ public final class SmokeTest extends Instrumentation {
       }
       double mean=(double)error/count;
       cases.put(new JSONObject().put("name",name).put("meanError",mean).put("maxError",max).put("oldMeanError",(double)oldError/count).put("decodeMs",ms).put("mipmaps",filtered.hasMipMap()));
+      if(!jpeg){long before=SystemClock.uptimeMillis();android.graphics.Bitmap previous=(android.graphics.Bitmap)legacyPng.invoke(null,data,8,noop);long elapsed=SystemClock.uptimeMillis()-before;if(previous!=null){cases.getJSONObject(cases.length()-1).put("legacyPngDecodeMs",elapsed);previous.recycle();}}
       if(mean>(jpeg?2:1)||max>(jpeg?8:2))throw new IOException("Aliasing regression: "+cases);
+      if(!jpeg&&!name.equals("icc")&&!name.equals("interlaced")){
+        // Cross the 1 MP small-page boundary so the native-parser/streaming
+        // route is measured independently of the unchanged tiny-image route.
+        android.graphics.Bitmap source=android.graphics.BitmapFactory.decodeByteArray(data,0,data.length);
+        android.graphics.Bitmap expanded=android.graphics.Bitmap.createScaledBitmap(source,1024,1024,false);source.recycle();
+        ByteArrayOutputStream encoded=new ByteArrayOutputStream();expanded.compress(android.graphics.Bitmap.CompressFormat.PNG,100,encoded);expanded.recycle();
+        long fastStart=SystemClock.uptimeMillis();android.graphics.Bitmap medium=(android.graphics.Bitmap)decode.invoke(null,encoded.toByteArray(),16,noop);long fastMs=SystemClock.uptimeMillis()-fastStart;
+        long mediumError=0;int mediumMax=0,mediumCount=0;
+        for(int y=4;y<medium.getHeight()-4;y++)for(int x=4;x<medium.getWidth()-4;x++)for(int channel=0;channel<4;channel++){int diff=Math.abs((medium.getPixel(x,y)>>>(channel*8)&255)-dc[channel]);mediumError+=diff;mediumMax=Math.max(mediumMax,diff);mediumCount++;}
+        medium.recycle();double mediumMean=mediumError/(double)mediumCount;
+        cases.getJSONObject(cases.length()-1).put("nativePngLanczos",new JSONObject().put("sourcePixels",1048576).put("meanError",mediumMean).put("maxError",mediumMax).put("decodeMs",fastMs));
+        if(mediumMean>1||mediumMax>2)throw new IOException("Native-parser PNG regression: "+cases);
+      }
       if(!jpeg){
         android.graphics.BitmapRegionDecoder regional=android.graphics.BitmapRegionDecoder.newInstance(data,0,data.length,false);
         java.lang.reflect.Method region=decoder.getDeclaredMethod("region",android.graphics.BitmapRegionDecoder.class,android.graphics.Rect.class,int.class,boolean.class);region.setAccessible(true);
@@ -537,6 +587,10 @@ public final class SmokeTest extends Instrumentation {
   @Override public void onStart() {
     Bundle output=new Bundle();
     try {
+      if("large-images".equals(args.getString("mode"))){
+        JSONObject result=new JSONObject().put("ok",true).put("largeImages",LargeImageChecks.run(getContext())).put("ordinaryQuality",antialiasTest());
+        output.putString("result",result.toString());finish(Activity.RESULT_OK,output);return;
+      }
       java.util.List<Float> launchFrames=java.util.Collections.synchronizedList(new java.util.ArrayList<>());
       java.util.List<Long> launchTimes=java.util.Collections.synchronizedList(new java.util.ArrayList<>());
       if(args.getString("mode","").startsWith("mobile1120-")||(args.getString("mode","").startsWith("mobile1121-")||args.getString("mode","").startsWith("mobile1122-"))) {
@@ -561,7 +615,7 @@ public final class SmokeTest extends Instrumentation {
       runOnMainSync(()->web=find(activity.getWindow().getDecorView()));
       if(web==null)throw new IOException("WebView missing");
       long deadline=System.currentTimeMillis()+30000;
-      String startupSelector=("launch1145".equals(args.getString("mode"))||"display-sampling1149".equals(args.getString("mode"))||"interaction1152".equals(args.getString("mode"))||"motion1153".equals(args.getString("mode"))||"presentation1154".equals(args.getString("mode"))||"quality1155".equals(args.getString("mode")))?".library-layout":".omi-home";
+      String startupSelector="mobile-preview-speed".equals(args.getString("mode"))?".omi-home,.library-layout":("launch1145".equals(args.getString("mode"))||"display-sampling1149".equals(args.getString("mode"))||"interaction1152".equals(args.getString("mode"))||"motion1153".equals(args.getString("mode"))||"presentation1154".equals(args.getString("mode"))||"quality1155".equals(args.getString("mode")))?".library-layout":".omi-home";
       while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('"+startupSelector+"')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
       // DOM existence precedes the first composed frame. Do not inject taps
       // through the launch cover while observing its initial reveal.
@@ -571,7 +625,7 @@ public final class SmokeTest extends Instrumentation {
       String mode=args.getString("mode","smoke");
       // Waiting for all animation transactions can hold ACTION_DOWN for five
       // seconds on the headless emulator. Motion checks need real tap durations.
-      boolean syncGestureInput=!mode.equals("motion1153")&&!mode.equals("interaction1152")&&!mode.equals("presentation1154")&&!mode.equals("quality1155");
+      boolean syncGestureInput=!mode.equals("motion1153")&&!mode.equals("interaction1152")&&!mode.equals("presentation1154")&&!mode.equals("quality1155")&&!mode.equals("mobile-preview-speed");
       if(!syncGestureInput){
         // A failed drag assertion can leave an injected pointer down across test
         // processes. Retire that sequence before the next isolated gesture run.
@@ -599,7 +653,9 @@ public final class SmokeTest extends Instrumentation {
       };
       if("about".equals(args.getString("mode")))addMonitor(externalMonitor);
       byte[] script;
-      try(InputStream input=getContext().getAssets().open(mode+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
+      String fixture=args.getString("fixture","");
+      String scriptAsset=mode.equals("quality1155")&&fixture.startsWith("entry1168")?"android-entry1168":mode.equals("quality1155")&&fixture.startsWith("panorama1167")?"android-panorama1167":mode.equals("quality1155")&&fixture.startsWith("entry1167")?"android-entry1167":mode.equals("quality1155")&&fixture.startsWith("entry1166")?"android-entry1166":mode.equals("quality1155")&&fixture.startsWith("entry1165")?"android-entry1165":mode.equals("quality1155")&&fixture.startsWith("speed")?"android-speed1163":mode.equals("quality1155")&&fixture.startsWith("reentry")?"android-reentry1163":mode.equals("quality1155")&&fixture.equals("empty-folders")?"android-empty-folders1163":mode;
+      try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
       deadline=System.currentTimeMillis()+((mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
       String result;
@@ -715,6 +771,36 @@ public final class SmokeTest extends Instrumentation {
         String pendingFrameUrl=eval("window.__omiNativePendingUrl||null");
         if(!"null".equals(pendingFrameUrl)){nativePendingFrameTest(field(activity,"readerSurface"),field(activity,"library"),(String)new JSONTokener(pendingFrameUrl).nextValue());eval("window.__omiNativePendingPassed=true;window.__omiNativePendingUrl=null");}
         if("true".equals(eval("window.__omiNativeMovingPendingCheck===true"))){JSONObject report=nativeMovingPendingFrameTest(field(activity,"readerSurface"));eval("window.__omiNativeMovingPendingResult="+report+";window.__omiNativeMovingPendingCheck=false");}
+        if("true".equals(eval("window.__omiTilePolicyCheck===true"))){JSONObject[] policy={null};runOnMainSync(()->{try{policy[0]=LargeImageChecks.tilePolicy(field(activity,"readerSurface"),field(activity,"library"));}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiTilePolicyResult="+policy[0]+";window.__omiTilePolicyCheck=false");}
+        if("true".equals(eval("window.__omiNativeQueueCheck===true"))){JSONObject[] check={null};runOnMainSync(()->{try{check[0]=LargeImageChecks.scheduling(field(activity,"readerSurface"));}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiNativeQueueResult="+check[0]+";window.__omiNativeQueueCheck=false");}
+        if("true".equals(eval("window.__omiReaderRevealCheck===true"))){JSONObject check=readerRevealGateTest(activity);eval("window.__omiReaderRevealResult="+check+";window.__omiReaderRevealCheck=false");}
+        String coverProbe=(String)new JSONTokener(eval("JSON.stringify(window.__omiWarmCoverCheck||null)")).nextValue();
+        if(!"null".equals(coverProbe)){JSONObject report=LargeImageChecks.warmCover(field(activity,"library"),new JSONObject(coverProbe).getString("url"));eval("window.__omiWarmCoverResult="+report+";window.__omiWarmCoverCheck=null");}
+        String gestures=(String)new JSONTokener(eval("JSON.stringify(window.__omiNativeGestureBurst||null)")).nextValue();
+        if(!"null".equals(gestures)){
+          JSONObject request=new JSONObject(gestures);JSONArray paths=request.getJSONArray("paths");int[] origin=new int[2],width=new int[1];
+          awaitSceneSettled(activity);runOnMainSync(()->{web.getLocationOnScreen(origin);width[0]=web.getWidth();});float scale=(float)(width[0]/request.getDouble("viewport"));long lastUp=0;
+          for(int path=0;path<paths.length();path++){
+            JSONObject segment=paths.getJSONObject(path),from=segment.getJSONObject("from"),to=segment.getJSONObject("to");int steps=request.optInt("steps",8);long down=SystemClock.uptimeMillis();
+            for(int step=0;step<=steps+1;step++){
+              float fraction=Math.min(1,step/(float)steps),x=origin[0]+(float)(from.getDouble("x")+(to.getDouble("x")-from.getDouble("x"))*fraction)*scale,y=origin[1]+(float)(from.getDouble("y")+(to.getDouble("y")-from.getDouble("y"))*fraction)*scale;
+              long at=SystemClock.uptimeMillis();MotionEvent.PointerProperties finger=new MotionEvent.PointerProperties();finger.id=0;finger.toolType=MotionEvent.TOOL_TYPE_FINGER;MotionEvent.PointerCoords point=new MotionEvent.PointerCoords();point.x=x;point.y=y;point.pressure=1;point.size=1;
+              MotionEvent motion=MotionEvent.obtain(down,at,step==0?MotionEvent.ACTION_DOWN:step==steps+1?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE,1,new MotionEvent.PointerProperties[]{finger},new MotionEvent.PointerCoords[]{point},0,0,1,1,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
+              runOnMainSync(()->activity.dispatchTouchEvent(motion));motion.recycle();if(step==steps+1)lastUp=at;SystemClock.sleep(request.optInt("stepMs",16));
+            }
+            SystemClock.sleep(request.optInt("gapMs",24));
+          }
+          eval("window.__omiNativeGestureResult={lastUpUptime:"+lastUp+",paths:"+paths.length()+"};window.__omiNativeGestureBurst=null");
+        }
+        String burst=(String)new JSONTokener(eval("JSON.stringify(window.__omiKeyBurst||null)")).nextValue();
+        if(burst!=null&&!burst.equals("null")){
+          JSONObject request=new JSONObject(burst);int code=request.optInt("code",22),count=request.optInt("count",8);long last=0;
+          // Dispatch through the Activity/WebView input path. UiAutomation can
+          // block for seconds waiting for headless compositor transactions,
+          // which would turn a rapid burst into eight slow individual turns.
+          for(int i=0;i<count;i++){last=SystemClock.uptimeMillis();final long at=last;runOnMainSync(()->{activity.dispatchKeyEvent(new KeyEvent(at,at,KeyEvent.ACTION_DOWN,code,0));activity.dispatchKeyEvent(new KeyEvent(at,SystemClock.uptimeMillis(),KeyEvent.ACTION_UP,code,0));});SystemClock.sleep(request.optInt("stepMs",25));}
+          eval("window.__omiKeyBurstResult={lastKeyUptime:"+last+"};window.__omiKeyBurst=null");
+        }
         if("true".equals(eval("window.__omiNativeProbe===true"))){
           Object surface=field(activity,"readerSurface");java.lang.reflect.Method stats=surface.getClass().getDeclaredMethod("stats");stats.setAccessible(true);
           Object library=field(activity,"library");java.lang.reflect.Method stored=null;
@@ -724,6 +810,9 @@ public final class SmokeTest extends Instrumentation {
             JSONObject state=(JSONObject)stats.invoke(surface);Object current=field(surface,"current");JSONArray rasters=new JSONArray();
             if(current!=null)for(Object slot:(java.util.List<?>)field(current,"slots")){Object raster=field(slot,"raster");android.graphics.Bitmap bitmap=(android.graphics.Bitmap)field(raster,"bitmap"),adjusted=(android.graphics.Bitmap)((java.util.Map<?,?>)field(surface,"adjusted")).get((String)field(raster,"url")+":"+field(raster,"sample")+(String)field(surface,"effectsKey"));rasters.put(new JSONObject().put("left",((android.graphics.RectF)field(slot,"rect")).left).put("top",((android.graphics.RectF)field(slot,"rect")).top).put("url",field(raster,"url")).put("width",field(raster,"width")).put("height",field(raster,"height")).put("sample",field(raster,"sample")).put("orientation",field(raster,"orientation")).put("preview",field(raster,"preview")).put("bitmapWidth",bitmap.getWidth()).put("bitmapHeight",bitmap.getHeight()).put("color",bitmap.getPixel(bitmap.getWidth()/4,bitmap.getHeight()/4)).put("adjustedColor",adjusted==null?JSONObject.NULL:adjusted.getPixel(adjusted.getWidth()/4,adjusted.getHeight()/4)));}
             state.put("rasters",rasters).put("adjustedCount",((java.util.Map<?,?>)field(surface,"adjusted")).size());
+            try{state.put("detailPlanReuses",field(surface,"detailPlanReuses")).put("detailPlansCreated",field(surface,"detailPlansCreated"));}catch(NoSuchFieldException legacy){/* Earlier APK baseline. */}
+            try{state.put("windowReheats",field(surface,"windowReheats"));}catch(NoSuchFieldException legacy){}
+            try{state.put("queuedBodyCancellations",field(surface,"queuedBodyCancellations")).put("joinedBodyLoads",field(surface,"joinedBodyLoads"));}catch(NoSuchFieldException legacy){}
             if(hasRaster!=null){JSONArray saved=new JSONArray();for(int i=0;i<rasters.length();i++){JSONObject raster=rasters.getJSONObject(i);if(!raster.getBoolean("preview")&&(Boolean)hasRaster.invoke(library,raster.getString("url"),raster.getInt("sample")))saved.put(raster.getString("url"));}state.put("persistedVisibleUrls",saved);}
             synchronized(field(surface,"cacheLock")){
               java.util.Map<?,?> cache=(java.util.Map<?,?>)field(surface,"cache");JSONArray clear=new JSONArray();
@@ -767,7 +856,13 @@ public final class SmokeTest extends Instrumentation {
           float x=origin[0]+(float)point.getDouble("x")*scale,y=origin[1]+(float)point.getDouble("y")*scale;
           int repeats=point.optInt("repeat",1);if(repeats<1||repeats>2)throw new IOException("Invalid tap repeat count");
           long tapSequenceStart=SystemClock.uptimeMillis();
-          for(int n=0;n<repeats;n++){
+          // UiAutomation waits for system window animations even with sync=false.
+          // A stuck emulator starting_reveal can turn a 60 ms single tap into a
+          // 5 second hold. The shell input command sends a real native tap
+          // without that animation wait; it does not bypass WebView hit testing.
+          if(!syncGestureInput&&repeats==1){
+            shell("input touchscreen tap "+x+" "+y);
+          }else for(int n=0;n<repeats;n++){
             long down=repeats==2?tapSequenceStart+n*130:SystemClock.uptimeMillis();
             MotionEvent.PointerProperties finger=new MotionEvent.PointerProperties();finger.id=0;finger.toolType=MotionEvent.TOOL_TYPE_FINGER;
             MotionEvent.PointerCoords position=new MotionEvent.PointerCoords();position.x=x;position.y=y;position.pressure=1;position.size=1;
@@ -776,7 +871,7 @@ public final class SmokeTest extends Instrumentation {
             MotionEvent release=MotionEvent.obtain(down,repeats==2?down+60:SystemClock.uptimeMillis(),MotionEvent.ACTION_UP,1,new MotionEvent.PointerProperties[]{finger},new MotionEvent.PointerCoords[]{position},0,0,1,1,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
             getUiAutomation().injectInputEvent(release,syncGestureInput);release.recycle();if(n+1<repeats)SystemClock.sleep(70);
           }
-          eval("window.__omiTap=null");
+          eval("(window.__omiTapTransportTrace??=[]).push({shell:"+(!syncGestureInput&&repeats==1)+",repeat:"+repeats+",startedUptime:"+tapSequenceStart+",elapsed:"+(SystemClock.uptimeMillis()-tapSequenceStart)+"});window.__omiTap=null");
         }
         String touch=(String)new JSONTokener(eval("JSON.stringify(window.__omiTouch||null)")).nextValue();
         if(!"null".equals(touch)){
@@ -798,15 +893,16 @@ public final class SmokeTest extends Instrumentation {
           runOnMainSync(()->{web.getLocationOnScreen(origin);width[0]=web.getWidth();});
           float scale=(float)(width[0]/request.getDouble("viewport"));long down=SystemClock.uptimeMillis();
           MotionEvent.PointerProperties finger=new MotionEvent.PointerProperties();finger.id=0;finger.toolType=MotionEvent.TOOL_TYPE_FINGER;
+          long lastUp=down;
           for(int step=0;step<=12;step++){
             float fraction=Math.min(1,step/11f);
             MotionEvent.PointerCoords position=new MotionEvent.PointerCoords();position.pressure=1;position.size=1;
             position.x=origin[0]+(float)(from.getDouble("x")+(to.getDouble("x")-from.getDouble("x"))*fraction)*scale;
             position.y=origin[1]+(float)(from.getDouble("y")+(to.getDouble("y")-from.getDouble("y"))*fraction)*scale;
             MotionEvent motion=MotionEvent.obtain(down,SystemClock.uptimeMillis(),step==0?MotionEvent.ACTION_DOWN:step==12?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE,1,new MotionEvent.PointerProperties[]{finger},new MotionEvent.PointerCoords[]{position},0,0,1,1,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
-            getUiAutomation().injectInputEvent(motion,true);motion.recycle();SystemClock.sleep(step==0?request.optInt("holdMs",80):Math.max(1,request.optInt("stepMs",24)));
+            if(step==12)lastUp=motion.getEventTime();getUiAutomation().injectInputEvent(motion,!request.optBoolean("async",false));motion.recycle();SystemClock.sleep(step==0?request.optInt("holdMs",80):Math.max(1,request.optInt("stepMs",24)));
           }
-          eval("window.__omiDrag=null");
+          eval("window.__omiDragResult={lastUpUptime:"+lastUp+"};window.__omiDrag=null");
         }
         String pinch=(String)new JSONTokener(eval("JSON.stringify(window.__omiPinch||null)")).nextValue();
         if(!"null".equals(pinch)){
@@ -829,7 +925,7 @@ public final class SmokeTest extends Instrumentation {
       if(mode.equals("launch1145")||mode.equals("search1145"))resultObject.put("launchReadyMs",launchReadyMs);
       if(mode.equals("mobile1138-entry")){String trace=(String)new JSONTokener(eval("JSON.stringify(window.__omiEntryTrace||[])")).nextValue();resultObject.put("entryTrace",new JSONArray(trace));}
       if(!resultObject.optBoolean("ok")){String snapshot=(String)new JSONTokener(eval("JSON.stringify(window.__omiNativeStats||null)")).nextValue();if(snapshot!=null&&!snapshot.equals("null"))resultObject.put("lastReaderStats",new JSONObject(snapshot));
-        if(mode.equals("motion1153")||mode.equals("presentation1154")){String motion=(String)new JSONTokener(eval("JSON.stringify(window.__omiMotionReport||null)")).nextValue();if(motion!=null&&!motion.equals("null"))resultObject.put("motionReport",new JSONObject(motion));}
+        if(mode.equals("motion1153")||mode.equals("presentation1154")||mode.equals("quality1155")){String motion=(String)new JSONTokener(eval("JSON.stringify(window.__omiMotionReport||null)")).nextValue();if(motion!=null&&!motion.equals("null"))resultObject.put("motionReport",new JSONObject(motion));}
       }
       if(mode.equals("about")){
         removeMonitor(externalMonitor);

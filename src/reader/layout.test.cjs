@@ -22,6 +22,14 @@ test('fit-window contains pairs on phones while explicit scale modes keep their 
   assert.ok(pair.every(size => size.height <= viewport.height));
 });
 
+test('a spread retains source dimensions before the viewport has a usable layout', () => {
+  for (const mode of ['fit-window','fit-height','fit-width']) for (const viewport of [{width:0,height:800},{width:1400,height:0},{width:0,height:0}]) {
+    const fitted=fitSpread([portrait,broad],viewport,mode);
+    assert.equal(fitted[0].width,portrait.width);assert.equal(fitted[0].height,portrait.height);
+    assert.equal(fitted[1].width,broad.width);assert.equal(fitted[1].height,broad.height);
+  }
+});
+
 test('only fit-window contains both axes; width and height modes respect their chosen axis', () => {
   for (const size of [{ width: 18000, height: 400 }, { width: 400, height: 18000 }]) {
     for (const mode of ['fit-window', 'fit-height', 'fit-width']) {

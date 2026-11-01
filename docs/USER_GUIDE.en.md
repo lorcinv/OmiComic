@@ -33,7 +33,7 @@ Reading progress is saved automatically. If Show home screen is off, use Recent 
 <details>
 <summary>Which comic and image formats are supported?</summary>
 
-Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI. Archives do not need extracting; EPUB/MOBI progress is shown by chapter. Initial MOBI support is limited to 64 MB files and 8 MB text, excluding KF8/dual-format, DRM and HUFF/CDIC compression. Convert unsupported files to EPUB first.
+Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI. Archives do not need extracting; EPUB/MOBI progress is shown by chapter. MOBI supports files up to 256 MiB and text up to 8 MiB, excluding KF8/dual-format, DRM and HUFF/CDIC compression. Convert unsupported files to EPUB first.
 
 </details>
 

@@ -5,6 +5,17 @@ import useReaderDisplaySampling from '../src/hooks/useReaderDisplaySampling';
 import { holdDisplaySampling, noteDisplaySamplingMotion } from '../src/reader/displaySampling';
 import { imageFilter } from '../src/components/ReaderImageEffects';
 import { DEFAULT_ADJUSTMENTS } from '../electron/shared/readerPreferences';
+import { preferNativeImageDisplay } from '../src/reader/largeImagePolicy';
+
+it('routes expensive images by page bytes, pixels and long edge while retaining ordinary filtering',()=>{
+  expect(preferNativeImageDisplay(2000,3000,5*1024*1024)).toBe(true);
+  expect(preferNativeImageDisplay(4000,4000,5*1024*1024-1)).toBe(false);
+  expect(preferNativeImageDisplay(4000,4001,1000)).toBe(true);
+  expect(preferNativeImageDisplay(100,8193,1000)).toBe(true);
+  expect(preferNativeImageDisplay(100,8192,1000)).toBe(false);
+  expect(preferNativeImageDisplay(0,0,5*1024*1024)).toBe(true);
+  expect(preferNativeImageDisplay(NaN,Infinity,NaN)).toBe(false);
+});
 
 it('uses no compositor colour filter for neutral adjustments while retaining real adjustments',()=>{
   expect(imageFilter({...DEFAULT_ADJUSTMENTS,enabled:true},'gamma')).toBe('none');
@@ -16,10 +27,51 @@ vi.mock('../src/reader/displaySampling',async original=>({
   ...await original<typeof import('../src/reader/displaySampling')>(),
   queueDisplaySampling:(_source:unknown,_width:number,_height:number,finish:(bitmap:ImageBitmap)=>void)=>{jobs.push(finish);return vi.fn();},
 }));
-function Page({name,report,sourceWidth=0,sourceHeight=0}:{name:string;report:(bytes:number)=>void;sourceWidth?:number;sourceHeight?:number}){
-  const host=useRef<HTMLDivElement>(null),sample=useReaderDisplaySampling(host,name,true,false,report,{width:sourceWidth,height:sourceHeight});
-  return <div ref={host} data-pending={sample.pending} data-ready={sample.ready}><div className="reader-effects-original"><img src="data:image/png;base64,AA=="/></div><canvas ref={sample.canvas} width={0} height={0}/></div>;
+function Page({name,report,sourceWidth=0,sourceHeight=0,sourceBytes=0,allowOriginal=false}:{name:string;report:(bytes:number)=>void;sourceWidth?:number;sourceHeight?:number;sourceBytes?:number;allowOriginal?:boolean}){
+  const host=useRef<HTMLDivElement>(null),sample=useReaderDisplaySampling(host,name,true,false,report,{width:sourceWidth,height:sourceHeight,encodedBytes:sourceBytes},'',undefined,allowOriginal);
+  return <div ref={host} data-pending={sample.pending} data-ready={sample.ready} data-prepared={sample.prepared}><div className="reader-effects-original"><img src="data:image/png;base64,AA=="/></div><canvas ref={sample.canvas} width={0} height={0}/></div>;
 }
+it('keeps desktop source pixels ready while a quality worker is still pending',async()=>{
+  const originalWorker=globalThis.Worker,originalBitmap=globalThis.createImageBitmap;
+  vi.stubGlobal('Worker',class{});vi.stubGlobal('createImageBitmap',vi.fn());vi.useFakeTimers();
+  vi.spyOn(HTMLImageElement.prototype,'naturalWidth','get').mockReturnValue(1000);vi.spyOn(HTMLImageElement.prototype,'naturalHeight','get').mockReturnValue(1500);
+  vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockReturnValue({left:0,top:0,right:400,bottom:600,x:0,y:0,width:400,height:600,toJSON(){}});
+  const start=jobs.length,view=render(<Page name="desktop-slow-filter" report={vi.fn()} allowOriginal/>);
+  try{
+    await act(async()=>{await Promise.resolve();vi.advanceTimersByTime(5000);});
+    expect(jobs).toHaveLength(start+1);
+    expect(view.container.firstElementChild?.getAttribute('data-pending')).toBe('false');
+    expect(view.container.firstElementChild?.getAttribute('data-prepared')).toBe('false');
+    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as any);
+    act(()=>jobs[start]({close:vi.fn()} as any));
+    expect(view.container.firstElementChild?.getAttribute('data-prepared')).toBe('true');
+  }
+  finally{view.unmount();vi.useRealTimers();vi.stubGlobal('Worker',originalWorker);vi.stubGlobal('createImageBitmap',originalBitmap);}
+});
+it.each([
+  {sourceWidth:8000,sourceHeight:10000,sourceBytes:1000},
+  {sourceWidth:1000,sourceHeight:1500,sourceBytes:5*1024*1024},
+  {sourceWidth:400,sourceHeight:9000,sourceBytes:1000},
+])('shows a large original without waiting for a sampling job: %j',async dimensions=>{
+  const originalWorker=globalThis.Worker,originalBitmap=globalThis.createImageBitmap;
+  vi.stubGlobal('Worker',class{});vi.stubGlobal('createImageBitmap',vi.fn());vi.useFakeTimers();
+  const start=jobs.length,report=vi.fn(),view=render(<Page name="large" report={report} {...dimensions}/>);
+  try{
+    expect(view.container.firstElementChild?.getAttribute('data-pending')).toBe('false');
+    await act(async()=>{await Promise.resolve();vi.advanceTimersByTime(100);window.dispatchEvent(new Event('resize'));});
+    expect(jobs).toHaveLength(start);expect(view.container.firstElementChild?.getAttribute('data-ready')).toBe('false');
+    expect(view.container.querySelector('canvas')?.width).toBe(0);
+  }finally{view.unmount();vi.useRealTimers();vi.stubGlobal('Worker',originalWorker);vi.stubGlobal('createImageBitmap',originalBitmap);}
+});
+it('rechecks unknown header dimensions after the browser decodes a large original',async()=>{
+  const originalWorker=globalThis.Worker,originalBitmap=globalThis.createImageBitmap;
+  vi.stubGlobal('Worker',class{});vi.stubGlobal('createImageBitmap',vi.fn());vi.useFakeTimers();
+  vi.spyOn(HTMLImageElement.prototype,'naturalWidth','get').mockReturnValue(8000);
+  vi.spyOn(HTMLImageElement.prototype,'naturalHeight','get').mockReturnValue(10000);
+  const start=jobs.length,view=render(<Page name="unknown-large" report={vi.fn()}/>);
+  try{await act(async()=>{await Promise.resolve();vi.advanceTimersByTime(100);});expect(jobs).toHaveLength(start);expect(view.container.firstElementChild?.getAttribute('data-pending')).toBe('false');}
+  finally{view.unmount();vi.useRealTimers();vi.stubGlobal('Worker',originalWorker);vi.stubGlobal('createImageBitmap',originalBitmap);}
+});
 it('falls back to the original after a failed pixel copy instead of keeping the reader hidden',async()=>{
   const originalWorker=globalThis.Worker,originalBitmap=globalThis.createImageBitmap;
   vi.stubGlobal('Worker',class{});vi.stubGlobal('createImageBitmap',vi.fn());vi.useFakeTimers();
@@ -42,7 +94,7 @@ it('prepares a lazy page from known header dimensions before the browser decodes
 it('keeps a pending filter after repeated same-size notifications and owns the delivered pixels',async()=>{
   const originalWorker=globalThis.Worker,originalBitmap=globalThis.createImageBitmap;
   vi.useFakeTimers();vi.stubGlobal('Worker',class{});vi.stubGlobal('createImageBitmap',vi.fn());
-  vi.spyOn(HTMLImageElement.prototype,'naturalWidth','get').mockReturnValue(8000);vi.spyOn(HTMLImageElement.prototype,'naturalHeight','get').mockReturnValue(10000);
+  vi.spyOn(HTMLImageElement.prototype,'naturalWidth','get').mockReturnValue(3000);vi.spyOn(HTMLImageElement.prototype,'naturalHeight','get').mockReturnValue(4000);
   vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockReturnValue({left:0,top:0,right:659,bottom:824,x:0,y:0,width:659,height:824,toJSON(){}});
   const drawImage=vi.fn();vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage} as any);
   const start=jobs.length,report=vi.fn(),view=render(<Page name="dense" report={report}/>);

@@ -33,7 +33,7 @@
 <details>
 <summary>対応する漫画・画像形式は？</summary>
 
-画像フォルダー、JPG／JPEG／PNG／WebP／BMP／GIF、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、従来形式の DRM なし MOBI に対応。圧縮ファイルは解凍不要、EPUB／MOBI の進捗は章単位です。MOBI は初期対応としてファイル 64 MB・本文 8 MB まで。KF8／二重形式・DRM・HUFF/CDIC 圧縮は未対応のため、EPUB に変換してください。
+画像フォルダー、JPG／JPEG／PNG／WebP／BMP／GIF、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、従来形式の DRM なし MOBI に対応。圧縮ファイルは解凍不要、EPUB／MOBI の進捗は章単位です。MOBI はファイル 256 MiB・本文 8 MiB まで。KF8／二重形式・DRM・HUFF/CDIC 圧縮は未対応のため、EPUB に変換してください。
 
 </details>
 

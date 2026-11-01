@@ -33,15 +33,25 @@ test('desktop image transport preserves bytes, authorizations, full resolution, 
     const canvas=document.createElement('canvas');canvas.width=canvas.height=1;canvas.getContext('2d').drawImage(image,0,0,1,1);const pixel=[...canvas.getContext('2d').getImageData(0,0,1,1).data];
     const rejected=await window.omicomic.getPageImage({sourcePath:outside,type:'folder-image'});
     const unknown=await fetch('omicomic-image://page/not-a-token');
-    return {localUrl:a.data.url,archiveUrl:b.data.url,coalesced:reads.every(r=>r.data.url===b.data.url),hashes:[await hash(a.data.url),await hash(b.data.url)],size:[image.naturalWidth,image.naturalHeight],pixel,rejected:rejected.error?.code,unknownStatus:unknown.status};
+    return {localUrl:a.data.url,archiveUrl:b.data.url,encodedBytes:[a.data.encodedBytes,b.data.encodedBytes],coalesced:reads.every(r=>r.data.url===b.data.url),hashes:[await hash(a.data.url),await hash(b.data.url)],size:[image.naturalWidth,image.naturalHeight],pixel,rejected:rejected.error?.code,unknownStatus:unknown.status};
   },{file,archive,outside});
   const hash=require('node:crypto').createHash('sha256').update(picture).digest('hex');
   assert.deepEqual(result.hashes,[hash,hash]);assert.equal(result.coalesced,true);assert.deepEqual(result.size,[2400,3600]);
+  assert.deepEqual(result.encodedBytes,[picture.length,picture.length]);
   assert.equal(result.rejected,'PATH_NOT_ALLOWED');assert.equal(result.unknownStatus,404);assert.match(result.localUrl,/^omicomic-image:/);assert.ok(result.localUrl.length<100);
+  const cancellation=await page.evaluate(async archive=>{
+    const input={sourcePath:archive,type:'archive-image',archiveInnerPath:'01 # page.png'};
+    const abandoned=window.omicomic.getPageImage({...input,readerRequestId:91001});window.omicomic.cancelPageImage(91001);
+    const live=window.omicomic.getPageImage({...input,readerRequestId:91002});
+    const [old,current]=await Promise.all([abandoned,live]);
+    const retry=await window.omicomic.getPageImage({...input,readerRequestId:91003});
+    return {cancelled:!old.ok,otherSubscriberReady:current.ok,retryReady:retry.ok};
+  },archive);
+  assert.deepEqual(cancellation,{cancelled:true,otherSubscriberReady:true,retryReady:true});
   // Render the real reader and exercise canvas processing through the CORS-safe protocol.
   await page.locator('.omi-home__library').click();
   await page.locator('.resource-card').filter({hasText:'01 # 图片'}).dblclick();
-  await expect(page.locator('.reader-page-frame :is(.reader-image,.reader-processed-image,.reader-display-raster):visible').first()).toBeVisible();
+  await expect(page.locator('.reader-page-frame :is(.reader-image,.reader-processed-image,.reader-display-raster,.reader-viewport-raster):visible').first()).toBeVisible();
   await page.getByRole('button',{name:'画面调整',exact:true}).click();
   await expect(page.getByRole('checkbox',{name:'启用画面调整'})).toHaveCount(0);
   await page.getByRole('slider',{name:'亮度',exact:true}).fill('125');
@@ -57,5 +67,5 @@ test('desktop image transport preserves bytes, authorizations, full resolution, 
   const session=await page.evaluate(async file=>{await window.omicomic.setReaderSession(10000);return window.omicomic.getPageImage({sourcePath:file,type:'folder-image',readerSessionId:9999});},file);
   assert.equal(session.error.code,'STALE_READER_SESSION');
   await fs.mkdir('test-results',{recursive:true});
-  await fs.writeFile('test-results/desktop-images-smoke.json',JSON.stringify({version:await app.evaluate(({app})=>app.getVersion()),executable,byteExact:true,coalesced:true,sourceSize:result.size,opaqueUrlLength:result.localUrl.length,pathAuthorizationPassed:true,cacheInvalidationPassed:true,staleSessionPassed:true,realtimeEffectsPassed:true,canvasProcessingPassed:true},null,2));
+  await fs.writeFile('test-results/desktop-images-smoke.json',JSON.stringify({version:await app.evaluate(({app})=>app.getVersion()),executable,byteExact:true,coalesced:true,sourceSize:result.size,opaqueUrlLength:result.localUrl.length,pathAuthorizationPassed:true,cacheInvalidationPassed:true,staleSessionPassed:true,cancellation,realtimeEffectsPassed:true,canvasProcessingPassed:true},null,2));
 });

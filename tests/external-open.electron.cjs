@@ -27,16 +27,17 @@ test('external opens persist and route to the running app; temporary actions pre
     assert.ok(path.basename(dir).startsWith('omicomic-external-'));
     await fs.rm(dir, { recursive: true, force: true });
   });
-  const environment = { ...process.env }; delete environment.ELECTRON_RUN_AS_NODE;
+  const environment = { ...process.env, OMICOMIC_TEST_HEADLESS:'1', OMICOMIC_TEST_PROFILE:profile }; delete environment.ELECTRON_RUN_AS_NODE;
   const launch = async (...files) => {
     electron = await _electron.launch({ executablePath: require('electron'), args: [loader, ...files], env: environment });
     const page = await electron.firstWindow();
+    await electron.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>!w.getParentWindow()).webContents.setBackgroundThrottling(false));
     await page.emulateMedia({ reducedMotion: 'reduce' });
     return page;
   };
   let page = await launch(selected);
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
-  await expect(page.locator('.reader-page-frame img')).toBeVisible();
+  await expect(page.locator('.reader-page-frame:not([aria-hidden="true"]) img.reader-image')).toBeVisible();
   let data = (await page.evaluate(() => window.omicomic.getAppData())).data;
   assert.equal(data.library.roots.length, 0);
   assert.equal(data.temporaryOpened.length, 1);
@@ -55,7 +56,7 @@ test('external opens persist and route to the running app; temporary actions pre
   await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('1');
   await expect(page.getByRole('region', { name: '漫画 B / 01.png', exact: true })).toBeVisible();
   assert.equal((await exited)[0], 0);
-  assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1);
+  assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(w=>!w.getParentWindow()).length), 1);
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await page.getByRole('button', { name: /^临时存放/ }).click();
   const cards = page.locator('[aria-label="临时存放资源列表"] .resource-card');
@@ -79,5 +80,8 @@ test('external opens persist and route to the running app; temporary actions pre
   await expect.poll(async () => (await page.evaluate(() => window.omicomic.getAppData())).data.temporaryOpened.length).toBe(0);
   const reopened = await page.evaluate(file => window.omicomic.getResourcePages({ path: file, type: 'image' }), selected);
   assert.equal(reopened.ok, true, 'removing a temporary reference must not break persisted reading progress access');
-  await page.screenshot({ path: 'test-results/external-open-home.png' });
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const shot=await electron.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>!w.getParentWindow()).webContents.capturePage(undefined,{stayAwake:true}).then(image=>image.toDataURL()));
+  assert.match(shot,/^data:image\/png;base64,/);
+  await fs.writeFile('test-results/external-open-home.png',Buffer.from(shot.split(',')[1],'base64'));
 });

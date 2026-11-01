@@ -18,15 +18,14 @@ async function open(page: import('@playwright/test').Page, slowSampling=false) {
   await page.locator('.page-panel.is-visible').evaluate(async element=>{await Promise.all(element.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>undefined)));});
 }
 
-test('ordinary reading reveals prepared pixels once instead of showing unfiltered then filtered tones',async({page})=>{
+test('ordinary reading exposes decoded originals while the optional fit filter is pending',async({page})=>{
   await open(page,true);await page.waitForTimeout(150);
-  expect(await page.evaluate(()=>(window as any).__unfilteredVisible)).toBe(0);
+  expect(await page.evaluate(()=>(window as any).__unfilteredVisible)).toBeGreaterThan(0);
 });
-test('ordinary page turns keep the complete previous image while the next filter finishes',async({page})=>{
+test('ordinary page turns keep source pixels visible without waiting for the fit filter',async({page})=>{
   await open(page,true);
-  await page.evaluate(()=>{(window as any).__emptyReaderFrames=0;(window as any).__checkReaderPixels=true;const frame=()=>{if(!(window as any).__checkReaderPixels)return;const visible=[...document.querySelectorAll<HTMLCanvasElement>('.reader-page-frame:not([aria-hidden="true"]) .has-display-raster canvas')].some(c=>c.width>0&&getComputedStyle(c).visibility==='visible');if(!visible)(window as any).__emptyReaderFrames++;requestAnimationFrame(frame);};requestAnimationFrame(frame);});
+  await page.evaluate(()=>{(window as any).__emptyReaderFrames=0;(window as any).__checkReaderPixels=true;const frame=()=>{if(!(window as any).__checkReaderPixels)return;const visible=[...document.querySelectorAll('.reader-page-frame:not([aria-hidden="true"]) :is(.reader-display-raster,.reader-viewport-raster,img.reader-image)')].some(c=>(c instanceof HTMLImageElement?c.complete&&c.naturalWidth>0:(c as HTMLCanvasElement).width>0)&&getComputedStyle(c).visibility==='visible');if(!visible)(window as any).__emptyReaderFrames++;requestAnimationFrame(frame);};requestAnimationFrame(frame);});
   await page.getByRole('button',{name:'下一页',exact:true}).click();
-  await expect(page.locator('[data-reader-page-index="12"]:not([aria-hidden="true"]) .has-display-raster')).toHaveCount(1);
   await expect(page.locator('[data-reader-page-index="13"]:not([aria-hidden="true"]) .has-display-raster')).toHaveCount(1);
   expect(await page.evaluate(()=>{(window as any).__checkReaderPixels=false;return (window as any).__emptyReaderFrames;})).toBe(0);
 });
@@ -48,10 +47,10 @@ test.describe('fractional pixel presentation',()=>{
   test.use({viewport:{width:1101,height:821},deviceScaleFactor:1.25});
   test('zoom keeps a complete image and does not apply the zoom factor twice to its bitmap',async({page})=>{
     await open(page);
-    await page.evaluate(()=>{(window as any).__zoomBlankFrames=0;(window as any).__checkZoom=true;const sample=()=>{if(!(window as any).__checkZoom)return;const e=document.querySelector('.reader-effects')!,canvas=e.querySelector('canvas')!,image=e.querySelector('img')!;if(getComputedStyle(canvas).visibility==='hidden'&&getComputedStyle(image).visibility==='hidden')(window as any).__zoomBlankFrames++;requestAnimationFrame(sample);};requestAnimationFrame(sample);});
+    await page.evaluate(()=>{(window as any).__zoomBlankFrames=0;(window as any).__checkZoom=true;const sample=()=>{if(!(window as any).__checkZoom)return;const e=document.querySelector('.reader-effects')!;if(![...e.querySelectorAll('canvas,img')].some(node=>getComputedStyle(node).visibility==='visible'&&(node instanceof HTMLImageElement?node.complete&&node.naturalWidth>0:(node as HTMLCanvasElement).width>0)))(window as any).__zoomBlankFrames++;requestAnimationFrame(sample);};requestAnimationFrame(sample);});
     const box=(await page.locator('.reader-stage').boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.keyboard.down('Control');await page.mouse.wheel(0,-180);await page.keyboard.up('Control');
-    const canvas=page.locator('[data-reader-page-index="12"] .reader-display-raster');
-    await expect.poll(()=>canvas.evaluate(c=>{const r=c.getBoundingClientRect(),host=c.parentElement!.getBoundingClientRect();return Math.abs(r.width-host.width)<1&&Math.abs(r.height-host.height)<1&&Math.abs(r.width*devicePixelRatio-c.width)<1;})).toBe(true);
+    const canvas=page.locator('[data-reader-page-index="12"] :is(.reader-display-raster,.reader-viewport-raster):visible');
+    await expect.poll(()=>canvas.evaluate(c=>{const r=c.getBoundingClientRect();return Math.abs(r.width*devicePixelRatio-c.width)<1&&Math.abs(r.height*devicePixelRatio-c.height)<1;})).toBe(true);
     await page.getByRole('button',{name:'缩放',exact:true}).click();await page.getByRole('button',{name:'重置大小',exact:true}).click();await page.keyboard.press('Escape');
     await expect.poll(()=>canvas.evaluate(c=>{const r=c.getBoundingClientRect(),host=c.parentElement!.getBoundingClientRect();return Math.abs(r.width-host.width)<1&&Math.abs(r.height-host.height)<1;})).toBe(true);
     expect(await page.evaluate(()=>{(window as any).__checkZoom=false;return (window as any).__zoomBlankFrames;})).toBe(0);

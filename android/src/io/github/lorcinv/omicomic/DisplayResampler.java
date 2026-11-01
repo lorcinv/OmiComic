@@ -30,14 +30,23 @@ final class DisplayResampler {
   }
   static Bitmap resize(Bitmap source,int width,int height,ReaderBitmapDecoder.Check check)throws IOException {
     if(width<1||height<1||(long)width*height>4000000L||width>=source.getWidth()||height>=source.getHeight())return null;
-    return filter(source,width,height,width/(double)source.getWidth(),height/(double)source.getHeight(),check);
-  }
-  static Bitmap prefilter(Bitmap source,double ratio,ReaderBitmapDecoder.Check check)throws IOException {
-    return filter(source,source.getWidth(),source.getHeight(),ratio,ratio,check);
+    return reduce(source,width,height,check);
   }
   static Bitmap reduce(Bitmap source,int width,int height,ReaderBitmapDecoder.Check check)throws IOException {
     if(width<1||height<1||(long)width*height>4000000L||width>source.getWidth()||height>source.getHeight())return null;
-    return filter(source,width,height,width/(double)source.getWidth(),height/(double)source.getHeight(),check);
+    check.run();
+    Stream stream=new Stream(source.getWidth(),source.getHeight(),width,height,source.hasAlpha());
+    int[] row=new int[source.getWidth()];
+    try{
+      for(int y=0;y<source.getHeight();y++){
+        check.run();source.getPixels(row,0,row.length,0,y,row.length,1);
+        boolean monochrome=true,opaque=!source.hasAlpha();
+        if(!opaque){opaque=true;for(int pixel:row)if((pixel>>>24)!=255){opaque=false;break;}}
+        for(int pixel:row)if((pixel>>>16&255)!=(pixel&255)||(pixel>>>8&255)!=(pixel&255)){monochrome=false;break;}
+        stream.row(y,row,monochrome,opaque);
+      }
+      check.run();return stream.finish();
+    }catch(IOException|RuntimeException|OutOfMemoryError error){stream.bitmap.recycle();throw error;}
   }
   /** Streaming PNG low-pass, before inSampleSize discards any pixels. */
   static final class Stream {
@@ -117,47 +126,6 @@ final class DisplayResampler {
       if(next!=ys.length)throw new IOException("Incomplete PNG sampling rows");
       bitmap.setDensity(Bitmap.DENSITY_NONE);bitmap.prepareToDraw();return bitmap;
     }
-  }
-  private static Bitmap filter(Bitmap source,int width,int height,double xRatio,double yRatio,ReaderBitmapDecoder.Check check)throws IOException {
-    check.run();
-    Weights[] xs=weights(source.getWidth(),width,xRatio),ys=weights(source.getHeight(),height,yRatio);
-    int[] input=new int[source.getWidth()],output=new int[width];
-    LinkedHashMap<Integer,float[]> rows=new LinkedHashMap<>();ArrayDeque<float[]> reusable=new ArrayDeque<>();
-    Bitmap result=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
-    boolean alpha=source.hasAlpha();
-    try{
-      for(int y=0;y<height;y++){
-        check.run();Weights vertical=ys[y];
-        Iterator<Map.Entry<Integer,float[]>> old=rows.entrySet().iterator();
-        while(old.hasNext()){Map.Entry<Integer,float[]> row=old.next();if(row.getKey()>=vertical.start)break;reusable.add(row.getValue());old.remove();}
-        for(int row=vertical.start;row<vertical.start+vertical.values.length;row++){
-          if(rows.containsKey(row))continue;
-          check.run();source.getPixels(input,0,input.length,0,row,input.length,1);
-          float[] filtered=reusable.poll();if(filtered==null)filtered=new float[width*4];
-          for(int x=0;x<width;x++){
-            Weights horizontal=xs[x];float r=0,g=0,b=0,a=0;
-            for(int i=0;i<horizontal.values.length;i++){
-              int pixel=input[horizontal.start+i];float weightedOpacity=(alpha?(pixel>>>24):255)*horizontal.values[i];
-              r+=(pixel>>>16&255)*weightedOpacity;g+=(pixel>>>8&255)*weightedOpacity;b+=(pixel&255)*weightedOpacity;a+=weightedOpacity;
-            }
-            int at=x*4;filtered[at]=r;filtered[at+1]=g;filtered[at+2]=b;filtered[at+3]=a;
-          }
-          rows.put(row,filtered);
-        }
-        float[][] contributing=new float[vertical.values.length][];
-        for(int i=0;i<contributing.length;i++)contributing[i]=rows.get(vertical.start+i);
-        for(int x=0;x<width;x++){
-          float r=0,g=0,b=0,a=0;int at=x*4;
-          for(int i=0;i<vertical.values.length;i++){
-            float[] row=contributing[i];float weight=vertical.values[i];
-            r+=row[at]*weight;g+=row[at+1]*weight;b+=row[at+2]*weight;a+=row[at+3]*weight;
-          }
-          output[x]=a<.5f?0:(clamp(a)<<24)|(clamp(r/a)<<16)|(clamp(g/a)<<8)|clamp(b/a);
-        }
-        result.setPixels(output,0,width,0,y,width,1);
-      }
-      check.run();result.setDensity(Bitmap.DENSITY_NONE);result.prepareToDraw();return result;
-    }catch(IOException|RuntimeException|OutOfMemoryError error){result.recycle();throw error;}
   }
   private static int clamp(float n){return Math.max(0,Math.min(255,Math.round(n)));}
 }

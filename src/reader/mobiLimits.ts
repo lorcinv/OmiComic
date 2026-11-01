@@ -1,4 +1,5 @@
-export const MAX_MOBI_BYTES=64*1024*1024,MAX_MOBI_TEXT=8*1024*1024;
+import { MAX_MOBI_BYTES, MAX_MOBI_TEXT } from '../../electron/shared/mobiLimits';
+export { MAX_MOBI_BYTES, MAX_MOBI_TEXT };
 function textRecordLength(input:Uint8Array,compression:number,flags:number){
   let data=input;
   for(let bits=flags>>>1;bits;bits>>>=1)if(bits&1){let size=0;for(const byte of data.subarray(Math.max(0,data.length-4))){if(byte&128)size=0;size=(size<<7)|(byte&127);}if(size<=0||size>data.length)throw Error('MOBI 文本尾部无效。');data=data.subarray(0,data.length-size);}
@@ -17,7 +18,7 @@ function textRecordLength(input:Uint8Array,compression:number,flags:number){
 /** Bound records before invoking the third-party decompressor. */
 export function inspectMobi(buffer:ArrayBuffer){
   const bytes=new Uint8Array(buffer),view=new DataView(buffer),ascii=(start:number,count:number)=>String.fromCharCode(...bytes.subarray(start,start+count));
-  if(bytes.length<78||bytes.length>MAX_MOBI_BYTES||ascii(60,8)!=='BOOKMOBI')throw Error('文件不是有效的 MOBI，或超过本版 64 MB 上限。');
+  if(bytes.length<78||bytes.length>MAX_MOBI_BYTES||ascii(60,8)!=='BOOKMOBI')throw Error('文件不是有效的 MOBI，或超过本版 256 MiB 上限。');
   const count=view.getUint16(76);if(count<2||count>20000||78+count*8>bytes.length)throw Error('MOBI 记录表无效。');
   const offsets=Array.from({length:count},(_,n)=>view.getUint32(78+n*8));
   if(offsets.some((offset,n)=>offset<78+count*8||offset>=bytes.length||n>0&&offset<=offsets[n-1]))throw Error('MOBI 记录范围无效。');

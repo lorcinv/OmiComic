@@ -11,7 +11,8 @@ const path7z: string = typeof __OMICOMIC_BUNDLED__ !== "undefined" && __OMICOMIC
   : require("7zip-bin-full").path7z;
 
 // Only the bundled executable is used. No shell, user-supplied options, disk extraction or prompts.
-function run(args: string[], maxBytes: number): Promise<Buffer> {
+function run(args: string[], maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
+  if (signal?.aborted) return Promise.reject(signal.reason);
   if (!path.isAbsolute(path7z)) return Promise.reject(new Error("Bundled 7-Zip is required"));
   return new Promise((resolve, reject) => {
     const executable = path7z.replace(/app\.asar([\\/])/, "app.asar.unpacked$1");
@@ -21,6 +22,8 @@ function run(args: string[], maxBytes: number): Promise<Buffer> {
     let stderr = "";
     let failure: Error | undefined;
     const kill = (error: Error) => { failure ??= error; child.kill("SIGKILL"); };
+    const abort = () => kill(new Error('Image read cancelled'));
+    signal?.addEventListener('abort',abort,{once:true});
     const timeout = setTimeout(() => kill(new 压缩包服务错误("ARCHIVE_LIMIT_EXCEEDED", "压缩包处理超时，请拆分后再打开。")), ARCHIVE_LIMITS.timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
       length += chunk.length;
@@ -28,9 +31,10 @@ function run(args: string[], maxBytes: number): Promise<Buffer> {
       else if (!failure) chunks.push(chunk);
     });
     child.stderr.on("data", (chunk: Buffer) => { if (stderr.length < 8192) stderr += chunk.toString("utf8").slice(0, 8192 - stderr.length); });
-    child.once("error", error => { clearTimeout(timeout); reject(error); });
+    child.once("error", error => { signal?.removeEventListener('abort',abort); clearTimeout(timeout); reject(error); });
     child.once("close", code => {
       clearTimeout(timeout);
+      signal?.removeEventListener('abort',abort);
       if (failure) reject(failure);
       else if (code !== 0) reject(/password|encrypted/i.test(stderr) ? new 压缩包服务错误("ARCHIVE_ENCRYPTED", "暂不支持加密压缩包。") : new Error(stderr || "7z failed"));
       else resolve(Buffer.concat(chunks, length));
@@ -84,7 +88,7 @@ export async function listSevenZip(archivePath: string): Promise<ArchiveEntry[]>
   if (totalSize > 1024 * 1024 && totalSize > Math.max(stat.size, 1) * ARCHIVE_LIMITS.ratio) failLimit();
   return entries;
 }
-export async function readSevenZip(archivePath: string, entry: ArchiveEntry, maxBytes: number): Promise<Buffer> {
+export async function readSevenZip(archivePath: string, entry: ArchiveEntry, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
   if (entry.size > maxBytes) throw new 压缩包服务错误("ARCHIVE_IMAGE_TOO_LARGE", "当前图片过大，暂时无法安全读取。");
   // -spd disables wildcard expansion, -- ends option parsing, absolute archive paths avoid @listfile syntax.
   // Names beginning @ cannot safely be passed as literal 7z selectors; fail closed instead.
@@ -92,7 +96,7 @@ export async function readSevenZip(archivePath: string, entry: ArchiveEntry, max
   // RAR5 rejects 7z's MemUse decoder option. RAR dictionaries are bounded at indexing above.
   const decoderOptions = /\.(rar|cbr)$/i.test(archivePath) ? [] : ["-mmemuse=512m"];
   const threads = Math.max(1, Math.min(8, Math.floor(os.availableParallelism() / 2)));
-  const data = await run(["x", "-so", "-y", "-spd", `-mmt=${threads}`, ...decoderOptions, "-p", "--", path.resolve(archivePath), entry.virtualPath], maxBytes);
+  const data = await run(["x", "-so", "-y", "-spd", `-mmt=${threads}`, ...decoderOptions, "-p", "--", path.resolve(archivePath), entry.virtualPath], maxBytes, signal);
   if (data.length !== entry.size) throw new Error("7z output size mismatch");
   return data;
 }

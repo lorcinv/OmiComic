@@ -25,3 +25,7 @@ it('preserves flat tone and suppresses dense non-power-of-two texture before dow
     expect(deviation,`source period ${period}`).toBeLessThan(1);
   }
 });
+it('computes identical weights for a GPU tile and the corresponding software output span',()=>{
+  const full=samplingWeights(1500,823),tile=samplingWeights(1500,823,317,128);
+  expect(tile).toEqual(full.slice(317,445));
+});

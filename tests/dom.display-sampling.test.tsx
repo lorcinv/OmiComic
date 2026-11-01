@@ -22,7 +22,7 @@ describe('reader display sampling during panorama motion', () => {
     const release = holdDisplaySampling(), finish = vi.fn();
     try {
       const cancel = queueDisplaySampling(image, 659, 824, finish);
-      expect(worker!.posted).toEqual([{ id: expect.any(Number), url: image.src, width: 659, height: 824 }]);
+      expect(worker!.posted).toEqual([{ id: expect.any(Number), url: image.src, width: 659, height: 824, desktop: false }]);
       expect(makeBitmap).not.toHaveBeenCalled();
       const bitmap = { close: vi.fn() };
       worker!.onmessage!({ data: { id: worker!.posted[0].id, bitmap } });

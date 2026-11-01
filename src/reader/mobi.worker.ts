@@ -1,10 +1,22 @@
 import { initMobiFile } from '@lingo-reader/mobi-parser';
-import { inspectMobi } from './mobiLimits';
+import { inspectMobi, MAX_MOBI_BYTES } from './mobiLimits';
 import { documentRaster } from './documentRaster';
 
 const owned=new Set<string>(),create=URL.createObjectURL.bind(URL);
 URL.createObjectURL=blob=>{const url=create(blob);owned.add(url);return url;};
 let book:Awaited<ReturnType<typeof initMobiFile>>;
+let rangeSequence=0;
+const ranges=new Map<number,{resolve:(data:Uint8Array)=>void;reject:(error:Error)=>void}>();
+async function readBook(size:number){
+  if(!Number.isSafeInteger(size)||size<78||size>MAX_MOBI_BYTES)throw Error('MOBI 文件为空或超过本版 256 MiB 上限。');
+  const bytes=new Uint8Array(size);
+  for(let begin=0;begin<size;begin+=1024*1024){
+    const end=Math.min(size,begin+1024*1024),id=++rangeSequence;
+    const part=await new Promise<Uint8Array>((resolve,reject)=>{ranges.set(id,{resolve,reject});self.postMessage({method:'range',id,begin,end});});
+    if(part.length!==end-begin)throw Error('MOBI 文件读取中断。');bytes.set(part,begin);
+  }
+  return bytes.buffer;
+}
 async function chapter(index:number){
   if(!Number.isInteger(index))throw Error('MOBI 章节编号无效。');
   const entry=book.getSpine()[index];if(!entry)throw Error('MOBI 章节不存在。');
@@ -21,11 +33,16 @@ async function chapter(index:number){
 }
 let queue=Promise.resolve();
 self.onmessage=event=>{
-  const {id,method,buffer,index}=event.data;
+  const {id,method,buffer,index,size}=event.data;
+  // Range replies must bypass the command queue: its open task awaits them.
+  if(method==='range'){
+    const range=ranges.get(id);if(!range)return;ranges.delete(id);
+    if(event.data.error)range.reject(Error(event.data.error));else range.resolve(new Uint8Array(buffer));return;
+  }
   queue=queue.then(async()=>{try{
     if(method==='open'){
-      inspectMobi(buffer);
-      const file={name:'book.mobi',arrayBuffer:async()=>buffer} as File;
+      const contents=await readBook(size);inspectMobi(contents);
+      const file={name:'book.mobi',arrayBuffer:async()=>contents} as File;
       book=await initMobiFile(file);
       const spine=book.getSpine();if(!spine.length||spine.length>5000)throw Error('MOBI 没有可阅读章节或章节过多。');
       self.postMessage({id,data:spine.map((_entry,n)=>({index:n,name:`第 ${n+1} 章`}))});
