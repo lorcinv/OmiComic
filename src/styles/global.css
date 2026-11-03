@@ -6987,7 +6987,7 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
   margin-top: 0;
   border-radius: 13px;
   background: var(--强调色);
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--阴影基色) 16%, transparent);
+  box-shadow: none;
 }
 
 .resource-detail-primary-actions {

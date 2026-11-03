@@ -15,7 +15,7 @@ const compiled = ts.transpileModule(declaration.getText(parsed) + '\n注册安�
 
 test('actual progress IPC validator accepts PDF, EPUB and MOBI and rejects unsupported sources', async () => {
  const handlers = new Map(); let saved;
- vm.runInNewContext(compiled, {ipcMain:{on:()=>{},handle:(name,handler)=>handlers.set(name,handler)}, Map, 保存阅读进度:async value=>(saved=value),});
+ vm.runInNewContext(compiled, {ipcMain:{on:()=>{},handle:(name,handler)=>handlers.set(name,handler)}, registerDataBackupIpc:()=>{}, Map, 保存阅读进度:async value=>(saved=value),});
  for(const sourceType of ['folder','archive','image','pdf','epub','mobi']) {
   const result=await handlers.get('数据:保存阅读进度')({}, {resourceKey:`${sourceType}:file`,sourcePath:'/file',sourceType,currentPageIndex:120,totalPages:200});
   assert.equal(result.ok,true); assert.equal(saved.currentPageIndex,120); assert.equal(saved.sourceType,sourceType);

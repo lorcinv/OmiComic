@@ -1,5 +1,6 @@
 import type { ReaderPreferences, PageSort } from "./shared/readerPreferences";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import type { DataImportOptions } from './shared/dataBackup';
 
 export interface 应用信息 {
   name: string;
@@ -361,6 +362,12 @@ contextBridge.exposeInMainWorld("omicomic", {
   getAppData: (): Promise<操作结果<OmiComicAppData>> =>
     ipcRenderer.invoke("数据:获取应用数据"),
   getHomeArtwork: () => ipcRenderer.invoke('主界面:获取图案'),
+  openResourceDirectory: (input: {sourcePath:string;sourceType:资源类型}) => ipcRenderer.invoke('外部文件:浏览目录',input),
+  exportDataBackup: () => ipcRenderer.invoke('数据备份:导出'),
+  readDataBackup: () => ipcRenderer.invoke('数据备份:选择'),
+  applyDataBackup: (token: string, options: DataImportOptions) => ipcRenderer.invoke('数据备份:导入', token, options),
+  hasDataImportBackup: () => ipcRenderer.invoke('数据备份:可恢复'),
+  restoreDataBackup: () => ipcRenderer.invoke('数据备份:恢复'),
   selectHomeArtwork: () => ipcRenderer.invoke('主界面:选择图案'),
   saveHomeArtwork: (input: import('./shared/homeArtwork').SaveHomeArtwork) => ipcRenderer.invoke('主界面:保存图案', input),
   resetHomeArtwork: () => ipcRenderer.invoke('主界面:恢复图案'),

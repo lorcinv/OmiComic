@@ -624,12 +624,19 @@ public final class SmokeTest extends Instrumentation {
       if(web==null)throw new IOException("WebView missing");
       long deadline=System.currentTimeMillis()+30000;
       String startupSelector="mobile-preview-speed".equals(args.getString("mode"))?".omi-home,.library-layout":("launch1145".equals(args.getString("mode"))||"display-sampling1149".equals(args.getString("mode"))||"interaction1152".equals(args.getString("mode"))||"motion1153".equals(args.getString("mode"))||"presentation1154".equals(args.getString("mode"))||"quality1155".equals(args.getString("mode")))?".library-layout":".omi-home";
+      if((args.getString("fixture","").startsWith("tagdata1176")||args.getString("fixture","").startsWith("tagpolish1177")))startupSelector=".omi-home,.library-layout";
+      if(args.getString("fixture","").startsWith("bottom1178"))startupSelector=".omi-home,.library-layout";
       while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('"+startupSelector+"')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
       // DOM existence precedes the first composed frame. Do not inject taps
       // through the launch cover while observing its initial reveal.
       long launchDeadline=SystemClock.uptimeMillis()+6000;
       while(true){boolean[] covered={false};runOnMainSync(()->{try{covered[0]=launchProgress(activity)>=0;}catch(NoSuchFieldException legacy){}catch(Exception error){throw new RuntimeException(error);}});if(!covered[0])break;if(SystemClock.uptimeMillis()>launchDeadline)throw new IOException("Launch cover did not close");Thread.sleep(20);}
       long launchReadyMs=SystemClock.uptimeMillis()-launchStarted;
+      if((args.getString("fixture","").startsWith("tagdata1176")||args.getString("fixture","").startsWith("tagpolish1177"))){
+        Object local=field(activity,"library");java.lang.reflect.Method grant=local.getClass().getDeclaredMethod("addGrant",android.net.Uri.class,boolean.class);grant.setAccessible(true);
+        String fixtureRoot=(String)grant.invoke(local,android.provider.DocumentsContract.buildTreeDocumentUri("io.github.lorcinv.omicomic.test.catalog","root"),true);
+        eval("window.__omiTagDataRoot="+JSONObject.quote(fixtureRoot));
+      }
       String mode=args.getString("mode","smoke");
       // Waiting for all animation transactions can hold ACTION_DOWN for five
       // seconds on the headless emulator. Motion checks need real tap durations.
@@ -652,6 +659,10 @@ public final class SmokeTest extends Instrumentation {
       org.json.JSONObject externalLink=new org.json.JSONObject();
       android.app.Instrumentation.ActivityMonitor externalMonitor=new android.app.Instrumentation.ActivityMonitor(){
         @Override public android.app.Instrumentation.ActivityResult onStartActivity(android.content.Intent intent){
+          if((args.getString("fixture","").startsWith("tagdata1176")||args.getString("fixture","").startsWith("tagpolish1177"))&&"application/json".equals(intent.getType())&&(Intent.ACTION_CREATE_DOCUMENT.equals(intent.getAction())||Intent.ACTION_OPEN_DOCUMENT.equals(intent.getAction()))){
+            if(Intent.ACTION_CREATE_DOCUMENT.equals(intent.getAction())){String name=intent.getStringExtra(Intent.EXTRA_TITLE);if(name==null||!name.matches("OmiComic-Data-android-[0-9]{8}-[0-9]{6}\\.json"))throw new IllegalStateException("Unexpected backup filename: "+name);}
+            return new android.app.Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(android.net.Uri.fromFile(new File(getTargetContext().getFilesDir(),"tagdata1176-export.json"))));
+          }
           if("about".equals(args.getString("mode"))&&android.content.Intent.ACTION_VIEW.equals(intent.getAction())){
             try{externalLink.put("action",intent.getAction()).put("url",intent.getDataString());}catch(org.json.JSONException error){throw new RuntimeException(error);}
             return new android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null);
@@ -659,7 +670,7 @@ public final class SmokeTest extends Instrumentation {
           return null;
         }
       };
-      if("about".equals(args.getString("mode")))addMonitor(externalMonitor);
+      if("about".equals(args.getString("mode"))||(args.getString("fixture","").startsWith("tagdata1176")||args.getString("fixture","").startsWith("tagpolish1177")))addMonitor(externalMonitor);
       byte[] script;
       String fixture=args.getString("fixture","");
       String scriptAsset=fixture.startsWith("workflow1172")?"android-workflow1172":fixture.startsWith("workflow1171")?"android-workflow1171":fixture.startsWith("previews1170")?"android-previews1170":fixture.startsWith("shelf1169")?"android-shelf1169":fixture.startsWith("formats1168")?"android-formats1168":fixture.startsWith("uipdf1168")?"android-ui-pdf1168":mode.equals("quality1155")&&fixture.startsWith("entry1168")?"android-entry1168":mode.equals("quality1155")&&fixture.startsWith("panorama1167")?"android-panorama1167":mode.equals("quality1155")&&fixture.startsWith("entry1167")?"android-entry1167":mode.equals("quality1155")&&fixture.startsWith("entry1166")?"android-entry1166":mode.equals("quality1155")&&fixture.startsWith("entry1165")?"android-entry1165":mode.equals("quality1155")&&fixture.startsWith("speed")?"android-speed1163":mode.equals("quality1155")&&fixture.startsWith("reentry")?"android-reentry1163":mode.equals("quality1155")&&fixture.equals("empty-folders")?"android-empty-folders1163":mode;
@@ -669,6 +680,9 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("swipe200"))scriptAsset="android-mobile-swipe200";
       if(fixture.startsWith("stability1174"))scriptAsset="android-stability1174";
       if(fixture.startsWith("brand1175"))scriptAsset="android-brand1175";
+      if(fixture.startsWith("tagdata1176"))scriptAsset="android-tagdata1176";
+      if(fixture.startsWith("tagpolish1177"))scriptAsset="android-tagpolish1177";
+      if(fixture.startsWith("bottom1178"))scriptAsset="android-bottom-sheet1178";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
       deadline=System.currentTimeMillis()+((mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);

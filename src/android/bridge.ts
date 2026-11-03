@@ -31,7 +31,7 @@ export function connectAndroid(): Promise<NativeCall> {
       port.start();
       const call: NativeCall = <T>(method: string, args: unknown = {}) => new Promise<T>((resolveCall, rejectCall) => {
         const id = ++sequence;
-        const timer = window.setTimeout(() => { pending.delete(id); rejectCall(new Error("操作超时，请重试。")); }, method.startsWith("choose") ? 600000 : 120000);
+        const timer = window.setTimeout(() => { pending.delete(id); rejectCall(new Error("操作超时，请重试。")); }, method.startsWith("choose") || method === 'readBackupFile' || method === 'exportBackupFile' ? 600000 : 120000);
         pending.set(id, { resolve: value => resolveCall(value as T), reject: rejectCall, timer });
         port.postMessage(JSON.stringify({ id, method, args }));
       });

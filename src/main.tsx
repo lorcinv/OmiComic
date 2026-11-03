@@ -6,6 +6,7 @@ import "./styles/global.css";
 import "./styles/desktopLibrary.css";
 import "./styles/mobile.css";
 import "./styles/desktopTheme.css";
+import "./styles/tagData.css";
 import { connectAndroid } from "./android/bridge";
 
 async function start() {

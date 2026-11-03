@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { consumeDismissGesture } from '../hooks/consumeDismissGesture';
 import MobileIcon from './MobileIcon';
 import MobileSheet from './MobileSheet';
+import TagAutocomplete from './TagAutocomplete';
 
 type MetadataPatch = { tags?: string[]; note?: string };
-export default function DetailMetadata({ tags, note, error, onSave, mobile = true }: {
-  tags: string[]; note: string; error?: string | null; mobile?: boolean;
+export default function DetailMetadata({ tags, allTags = [], note, error, onSave, mobile = true }: {
+  tags: string[]; allTags?: string[]; note: string; error?: string | null; mobile?: boolean;
   onSave: (patch: MetadataPatch) => Promise<boolean>;
 }) {
   const [tagEdit, setTagEdit] = useState(false), [adding, setAdding] = useState(false);
@@ -61,7 +62,7 @@ export default function DetailMetadata({ tags, note, error, onSave, mobile = tru
     if (await save({ tags: next })) { setInput(''); setAdding(false); }
   }
   const addForm = <form className="mobile-tag-add-form" onSubmit={event => { event.preventDefault(); void add(); }}>
-    <input autoFocus aria-label={t("新标签")} placeholder={t("输入标签，逗号分隔")} value={input} onChange={event => setInput(event.target.value)} />
+    <TagAutocomplete autoFocus value={input} onChange={setInput} allTags={allTags} excluded={tags} disabled={saving}/>
     <button type="submit" disabled={saving || !input.trim()}>{t("添加")}</button>
   </form>;
   return <section className={`resource-detail-direct-editor ${mobile ? 'mobile-detail-metadata' : 'desktop-detail-metadata'}`}>
@@ -79,7 +80,7 @@ export default function DetailMetadata({ tags, note, error, onSave, mobile = tru
         {tag}{tagEdit && <MobileIcon name="close" />}</button>) : <span className="drawer-muted">{t("未设置标签")}</span>}
         <button className="tag-chip tag-add-button" aria-label={t("添加标签")} onClick={() => { setTagEdit(true); setInput(''); setAdding(true); }}><MobileIcon name="add" />{t("添加标签")}</button>
       </div>
-      {adding && !mobile && <div className="detail-tag-add-inline">{addForm}<button onClick={() => setAdding(false)}>{t("取消")}</button></div>}
+      {adding && !mobile && <div className="detail-tag-add-inline">{addForm}</div>}
     </div>
     <div className="resource-detail-direct-summary" ref={noteRegion} aria-label={t("资源简介区域")} onDoubleClick={() => { if (!mobile) setNoteEdit(true); }}>
       <div className="resource-detail-field-label">{t("简介")}{mobile && <button className="mobile-edit-summary" disabled={saving} aria-label={noteEdit ? t("保存简介") : t("编辑简介")} onClick={() => { if (noteEdit) void finishNote(); else setNoteEdit(true); }}>{noteEdit ? t("保存") : t("编辑")}</button>}</div>

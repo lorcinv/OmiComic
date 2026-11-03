@@ -119,6 +119,28 @@ No. Removing a favorite, shelf item, bookmark or history entry only removes that
 
 </details>
 
+<details>
+<summary>How do tag suggestions and Quick tags work?</summary>
+
+When adding a tag, type part of its name to see existing tags. Suggestions scroll horizontally below the input, with faded edges and no scrollbar. In tag management, drag to reorder and click to highlight a selection; only Delete is red. Quick tags uses existing tags: select available tags below and press Add, or select assigned tags above and press Remove.
+
+**Windows**: Scroll suggestions with the wheel or drag them. Open Quick tags to the left of Rename on the detail page.
+
+**Android**: Swipe suggestions horizontally. Swipe left on the detail page to open the Quick tags drawer from the right.
+
+</details>
+
+<details>
+<summary>Can I browse a folder without saving it to the library?</summary>
+
+Yes. Open location browses the containing folder temporarily without adding a saved library root.
+
+**Windows**: Choose Open location from a Temporary storage or Recent reads card’s context menu. If a recent item is outside the library, Add containing folder to library is also available.
+
+**Android**: Choose Open location in a recent item’s actions. A file-only permission may require choosing its containing folder in the system picker; the folder can then be browsed without saving it to the library.
+
+</details>
+
 <a id="guide-reading"></a>
 
 ## Reading
@@ -232,7 +254,7 @@ No. Brightness, contrast, gamma and color effects change display only; Reset res
 
 **Windows**: Settings → Appearance: choose theme and language, and adjust global and page-number text sizes. Change card size in View.
 
-**Android**: Settings → Appearance: choose theme, language and the view to customize, then set grid columns or cover size. Each view keeps its own layout.
+**Android**: Settings → Appearance: choose theme and language, then adjust global and information text sizes independently for the phone. Select a view to set grid columns or cover size. Each view keeps its own layout.
 
 </details>
 
@@ -254,6 +276,13 @@ Settings → Appearance → Home mascot: choose an image, crop and save. PNG/JPG
 <summary>Defaults or per-comic settings?</summary>
 
 Default reading sets initial preferences. Page order and auto-reading speed can be saved per comic; open that comic's details before changing reading settings. PDF/EPUB retain document order.
+
+</details>
+
+<details>
+<summary>How do I export, import or restore app data?</summary>
+
+Open Settings → Safety and backup. Export filenames include OmiComic, the platform and date/time. Backups contain progress, favorites, bookmarks, shelves, tags, notes and settings, excluding comic files, caches and custom home artwork. Preview an import, choose Merge or Replace, and decide which conflicting records to keep. Original paths and authorized local libraries are checked automatically for unique folder matches, without a full-library scan or content hashing. Unmatched folders can be selected manually or left for later. A pre-import backup can be restored in Safety and backup. Import and restore reload the library.
 
 </details>
 

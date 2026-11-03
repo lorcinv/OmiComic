@@ -39,6 +39,7 @@ public final class MainActivity extends Activity {
   private final Set<Integer> capturedVolumeKeys = new HashSet<>();
   private long lastVolumeTurn;
   private int pickerId = -1;
+  private String pendingDataExport;
   private boolean fullscreen;
   private boolean keyboardVisible;
 
@@ -150,6 +151,7 @@ public final class MainActivity extends Activity {
               if(method.equals("cancelScene")){sceneTransition.cancel();if(id!=0)reply(id,true,null);return;}
               if(method.equals("waitScene")){sceneTransition.afterFinished(args.optLong("request"),()->reply(id,true,null));return;}
               if(method.equals("chooseFolder")||method.equals("chooseFile")){choose(id,method.equals("chooseFolder"));return;}
+              if(method.equals("exportBackupFile")||method.equals("readBackupFile")){chooseBackup(id,method.equals("exportBackupFile"),args);return;}
               if(method.equals("close")){reply(id,null,null);finish();return;}
               if(method.equals("background")){reply(id,null,null);moveTaskToBack(true);return;}
               if(method.equals("setColorTheme")){applySystemTheme(args.optString("theme"));reply(id,true,null);return;}
@@ -164,7 +166,7 @@ public final class MainActivity extends Activity {
               if(method.equals("cancelLibraryScan")){library.cancelCatalog();return;}
               final JSONObject params=args;final long catalogRequestEpoch=library.catalogGeneration();
               int priority=method.equals("getThumbnail")||method.equals("getReadablePageCount")||method.equals("checkResourcePath")||method.equals("getBookmarkPagePreview")||(method.equals("openDocument")&&params.optString("purpose").equals("thumbnail"))?2:0;
-              (method.equals("scanLibrary")?catalogWork:method.equals("saveData")||method.equals("backupData")?persistence:method.equals("getResourcePages")?openings:method.equals("getThumbnail")?covers:method.equals("getPageImage")?pageRequests:work).execute(priority,()->{try{if(method.equals("scanLibrary")&&catalogRequestEpoch!=library.catalogGeneration())throw new InterruptedIOException("资源库扫描已取消。");reply(id,library.call(method,params),null);}catch(Exception e){reply(id,null,explain(e));}});
+              (method.equals("scanLibrary")?catalogWork:method.equals("saveData")||method.equals("backupData")||method.equals("importDataBackup")||method.equals("restoreDataBackup")?persistence:method.equals("getResourcePages")?openings:method.equals("getThumbnail")?covers:method.equals("getPageImage")?pageRequests:work).execute(priority,()->{try{if(method.equals("scanLibrary")&&catalogRequestEpoch!=library.catalogGeneration())throw new InterruptedIOException("资源库扫描已取消。");reply(id,library.call(method,params),null);}catch(Exception e){reply(id,null,explain(e));}});
             }catch(Exception e){android.util.Log.e("OmiComic","Invalid request",e);}
           }
         });
@@ -235,8 +237,24 @@ public final class MainActivity extends Activity {
     if(!folder){intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");}
     try{startActivityForResult(intent,folder?41:42);}catch(Exception e){pickerId=-1;reply(id,null,"无法打开系统文件选择器。");}
   }
+  private void chooseBackup(int id,boolean exporting,JSONObject args){
+    if(pickerId!=-1){reply(id,null,"文件选择窗口已打开。");return;}
+    pickerId=id;
+    pendingDataExport=exporting?args.optString("text"):null;
+    Intent intent=new Intent(exporting?Intent.ACTION_CREATE_DOCUMENT:Intent.ACTION_OPEN_DOCUMENT);
+    intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("application/json");
+    if(exporting)intent.putExtra(Intent.EXTRA_TITLE,args.optString("filename","OmiComic-Data-android.json"));
+    try{startActivityForResult(intent,exporting?44:43);}catch(Exception e){pickerId=-1;pendingDataExport=null;reply(id,null,"无法打开系统文件选择器。");}
+  }
   @Override protected void onActivityResult(int request,int result,Intent input){
     super.onActivityResult(request,result,input);
+    if(request==43||request==44){
+      int id=pickerId;pickerId=-1;final String payload=pendingDataExport;pendingDataExport=null;
+      if(result!=RESULT_OK||input==null||input.getData()==null){reply(id,null,null);return;}
+      final Uri uri=input.getData();
+      work.execute(()->{try{if(request==44){DataBackupFiles.write(getContentResolver(),uri,payload);reply(id,uri.toString(),null);}else reply(id,DataBackupFiles.read(getContentResolver(),uri),null);}catch(Exception e){reply(id,null,explain(e));}});
+      return;
+    }
     if(request!=41&&request!=42)return;
     int id=pickerId;pickerId=-1;
     if(result!=RESULT_OK||input==null||input.getData()==null){reply(id,null,null);return;}

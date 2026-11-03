@@ -753,7 +753,7 @@ final class LocalLibrary {
   }
   private Object foregroundCall(String method,JSONObject input)throws Exception{
     awaitReaderCleanup();
-    if(method.equals("loadData")||method.equals("saveData")||method.equals("backupData")){
+    if(method.equals("loadData")||method.equals("saveData")||method.equals("backupData")||method.equals("importDataBackup")||method.equals("restoreDataBackup")||method.equals("hasDataImportBackup")){
       synchronized(dataLock){return dispatch(method,input);}
     }
     if(method.equals("getResourcePages")||method.equals("listDirectory")||method.equals("scanLibrary")){
@@ -775,6 +775,16 @@ final class LocalLibrary {
     switch(method){
       case "loadData":{if(!dataFile.getBaseFile().exists())return null;JSONObject saved=new JSONObject(new String(dataFile.readFully(),StandardCharsets.UTF_8));configureCaches(saved.optJSONObject("settings"));return saved;}
       case "saveData":save(dataFile,input.getJSONObject("data"));configureCaches(input.getJSONObject("data").optJSONObject("settings"));return null;
+      case "importDataBackup":{
+        AtomicFile before=new AtomicFile(new File(context.getFilesDir(),"before-data-import.json"));
+        save(before,input.getJSONObject("before"));save(dataFile,input.getJSONObject("data"));configureCaches(input.getJSONObject("data").optJSONObject("settings"));return null;
+      }
+      case "hasDataImportBackup":return new File(context.getFilesDir(),"before-data-import.json").exists();
+      case "restoreDataBackup":{
+        AtomicFile before=new AtomicFile(new File(context.getFilesDir(),"before-data-import.json"));
+        JSONObject restored=new JSONObject(new String(before.readFully(),StandardCharsets.UTF_8));
+        save(dataFile,restored);configureCaches(restored.optJSONObject("settings"));before.delete();return restored;
+      }
       case "getAndroidCacheInfo":return cacheInfo();
       case "clearAndroidReadCache":readerPages.clear();readerRasters.clear();thumbnails.clear();nativeArchives.release();previewArchives.release();invalidateMedia();return cacheInfo();
       case "backupData":save(new AtomicFile(new File(context.getFilesDir(),"before-file-operation.json")),input.getJSONObject("data"));return null;

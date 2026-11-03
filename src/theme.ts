@@ -1,5 +1,5 @@
 import type { 主题配色 } from "./types";
-import { desktopTypography, DESKTOP_FONT_STANDARD } from '../electron/shared/desktopTypography';
+import { desktopTypography, mobileTypography, DESKTOP_FONT_STANDARD } from '../electron/shared/desktopTypography';
 
 export const 主题选项: ReadonlyArray<{ id: 主题配色; label: string; description: string }> = [
   { id: "mist", label: "雾灰", description: "冷白底色 · 浅灰蓝按钮" },
@@ -14,9 +14,12 @@ export function 应用主题配色(输入: unknown): 主题配色 {
   return 配色;
 }
 
-export function applyDesktopTypography(settings: Parameters<typeof desktopTypography>[0]) {
+export function applyDesktopTypography(settings: Parameters<typeof desktopTypography>[0] & Parameters<typeof mobileTypography>[0]) {
   const sizes = desktopTypography(settings);
   document.documentElement.style.setProperty('--desktop-info-size', sizes.desktopInfoFontSize + 'px');
   document.documentElement.style.setProperty('--desktop-font-factor', String(sizes.desktopGlobalFontSize / DESKTOP_FONT_STANDARD));
+  const mobile = mobileTypography(settings);
+  document.documentElement.style.setProperty('--mobile-info-size', mobile.mobileInfoFontSize + 'px');
+  document.documentElement.style.setProperty('--mobile-font-factor', String(mobile.mobileGlobalFontSize / DESKTOP_FONT_STANDARD));
   return sizes;
 }

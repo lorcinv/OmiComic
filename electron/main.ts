@@ -75,6 +75,7 @@ import {
 import { 获取缩略图, clearThumbnailCache } from "./services/thumbnailService";
 import { configureThumbnailDiskCache } from './services/thumbnailDiskCache';
 import { getHomeArtwork, importHomeArtwork, resetHomeArtwork, saveHomeArtwork } from './services/homeArtworkService';
+import { registerDataBackupIpc } from './services/dataBackupService';
 
 const 开发服务地址 = process.env.VITE_DEV_SERVER_URL;
 // DirectComposition can tear moving panorama images on Windows. Present the
@@ -596,6 +597,12 @@ async function 读取阅读资源(输入: unknown, overrideSort?: PageSort): Pro
 }
 
 function 注册安全通道(): void {
+  registerDataBackupIpc(data => {
+    已授权根目录.clear();
+    data.library.roots.forEach(root => 已授权根目录.add(root.path));
+    cancelLibraryCatalogScans();
+    clearThumbnailCache();
+  });
   ipcMain.handle("阅读:页面排序", async (_event, input: { path?: unknown; type?: unknown; mode?: unknown; currentPageId?: unknown }) => {
     if (!input || typeof input.currentPageId !== "string" || normalizePageSort(input.mode) !== input.mode || !["folder", "image", "archive"].includes(String(input.type))) return { ok: false, error: { code: "INVALID_READER_SORT", message: "此资源不支持图片页面排序。" } };
     try {
@@ -720,7 +727,7 @@ function 注册安全通道(): void {
   ipcMain.handle("外部文件:加入资源库", async (_事件, key: unknown) => {
     try {
       const 数据 = await 读取应用数据();
-      const 项目 = 数据.temporaryOpened.find(项 => 项.resourceKey === key);
+      const 项目 = 数据.temporaryOpened.find(项 => 项.resourceKey === key) ?? 数据.recentOpened.find(项 => 项.resourceKey === key);
       if (!项目) throw new Error("记录不存在");
       const 目录 = 资源所在目录(项目);
       if (!(await 文件系统.stat(目录)).isDirectory()) throw new Error("目录不存在");
@@ -728,6 +735,21 @@ function 注册安全通道(): void {
       已授权根目录.add(目录);
       return { ok: true, data: await 读取应用数据() };
     } catch { return { ok: false, error: { code: "PROMOTE_TEMP_FAILED", message: "无法将所在目录加入资源库，请检查原目录是否仍然存在。" } }; }
+  });
+  ipcMain.handle('外部文件:浏览目录', async (_event, input: unknown) => {
+    try {
+      if (!input || typeof input !== 'object' || !('sourcePath' in input) || typeof input.sourcePath !== 'string' || !path.isAbsolute(input.sourcePath)) throw new Error('资源路径无效。');
+      const sourcePath = 规范化路径(input.sourcePath), data = await 读取应用数据();
+      const known = [...data.temporaryOpened,...data.recentOpened,...data.favorites,...data.bookmarks,...Object.values(data.resourceMeta),...Object.values(data.readingProgress),...data.virtualFolders.flatMap(folder=>folder.items)]
+        .some(item => 规范化路径(item.sourcePath) === sourcePath);
+      if (!known && !await 是已授权实际路径(sourcePath)) throw new Error('请先打开该资源，再浏览所在目录。');
+      const exactRoot = data.library.roots.find(root => 规范化路径(root.path) === sourcePath);
+      const target = await 文件系统.realpath(exactRoot ? sourcePath : path.dirname(sourcePath));
+      if (!(await 文件系统.stat(target)).isDirectory()) throw new Error('所在目录无法访问。');
+      const existingRoot = 查找所属根目录(target);
+      if (!existingRoot) 已授权根目录.add(target);
+      return {ok:true,data:{path:target,rootPath:existingRoot ?? target}};
+    } catch (error) { return {ok:false,error:{code:'BROWSE_DIRECTORY_FAILED',message:error instanceof Error?error.message:'所在目录无法打开。'}}; }
   });
   ipcMain.handle("应用:获取信息", async () => {
     const metadata = JSON.parse(await 文件系统.readFile(path.join(app.getAppPath(), "package.json"), "utf8"));

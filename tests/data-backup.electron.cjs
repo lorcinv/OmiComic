@@ -1,0 +1,43 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises');
+const path=require('node:path');
+const os=require('node:os');
+const {_electron}=require('@playwright/test');
+
+test('actual Windows backup dialogs, JSON import/undo, temporary browsing and recent promotion use isolated data',{timeout:90000},async t=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'omi-backup-runtime-')),profile=path.join(dir,'profile'),folder=path.join(dir,'Outside');
+  await fs.mkdir(profile);await fs.mkdir(folder);
+  const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mNQ8yoBAAF+AOUqTs0pAAAAAElFTkSuQmCC','base64');
+  const image=path.join(folder,'01.png');await fs.writeFile(image,pixel);
+  const environment={...process.env,OMICOMIC_TEST_HEADLESS:'1',OMICOMIC_TEST_PROFILE:profile};delete environment.ELECTRON_RUN_AS_NODE;
+  let app;
+  t.after(async()=>{if(app)await app.close();assert.equal(path.dirname(dir),path.resolve(os.tmpdir()));assert.ok(path.basename(dir).startsWith('omi-backup-runtime-'));await fs.rm(dir,{recursive:true,force:true});});
+  const executable=process.env.OMI_RELEASE_EXE||require('electron');
+  app=await _electron.launch({executablePath:executable,args:process.env.OMI_RELEASE_EXE?[image]:[path.resolve('.'),image],env:environment});
+  const page=await app.firstWindow();await page.waitForFunction(()=>!!window.omicomic);
+  const info=await page.evaluate(()=>window.omicomic.getAppInfo());assert.equal(info.version,require('../package.json').desktopVersion);
+  let initial;
+  for(let i=0;i<100;i++){initial=await page.evaluate(()=>window.omicomic.getAppData());if(initial.ok&&initial.data.temporaryOpened.length)break;await new Promise(resolve=>setTimeout(resolve,50));}
+  assert.equal(initial.data.temporaryOpened.length,1);assert.equal(initial.data.library.roots.length,0);
+  const ref=initial.data.temporaryOpened[0],exported=path.join(dir,'export.json'),bad=path.join(dir,'bad.json');await fs.writeFile(bad,'broken JSON');
+  let result=await page.evaluate(async ref=>window.omicomic.updateResourceMeta({...ref,tags:['原标签'],note:'原备注'}),ref);assert.equal(result.ok,true);
+  await app.evaluate(({dialog},{file})=>{dialog.showSaveDialog=async(...args)=>{global.__backupDefaultName=(args.at(-1)||{}).defaultPath;return{canceled:false,filePath:file};};},{file:exported});
+  result=await page.evaluate(()=>window.omicomic.exportDataBackup());assert.equal(result.ok,true);assert.match(await app.evaluate(()=>global.__backupDefaultName),/^OmiComic-Data-win-\d{8}-\d{6}\.json$/);
+  const contents=JSON.parse(await fs.readFile(exported,'utf8'));assert.equal(contents.format,'OmiComic.Data');assert.equal(contents.data.externalReadGrants,undefined);
+  await app.evaluate(({dialog},{file})=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},{file:bad});
+  result=await page.evaluate(()=>window.omicomic.readDataBackup());assert.equal(result.ok,false);
+  await app.evaluate(({dialog},{file})=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},{file:exported});
+  await page.evaluate(ref=>window.omicomic.updateResourceMeta({...ref,tags:['导入前']}),ref);
+  const preview=await page.evaluate(()=>window.omicomic.readDataBackup());assert.equal(preview.ok,true);assert.ok(preview.data.matches.some(match=>match.from===folder&&match.to===folder));
+  result=await page.evaluate(async preview=>window.omicomic.applyDataBackup(preview.token,{mode:'merge',prefer:'imported',includeSettings:false,mappings:preview.matches.map(({from,to})=>({from,to}))}),preview.data);assert.equal(result.ok,true);
+  assert.deepEqual(result.data.resourceMeta[ref.resourceKey].tags,['原标签']);assert.equal(result.data.resourceMeta[ref.resourceKey].note,'原备注');assert.deepEqual(result.data.library.roots,[]);
+  await page.reload();result=await page.evaluate(()=>window.omicomic.getAppData());assert.deepEqual(result.data.resourceMeta[ref.resourceKey].tags,['原标签']);
+  result=await page.evaluate(()=>window.omicomic.restoreDataBackup());assert.equal(result.ok,true);assert.deepEqual(result.data.resourceMeta[ref.resourceKey].tags,['导入前']);
+  const browse=await page.evaluate(ref=>window.omicomic.openResourceDirectory(ref),ref);assert.equal(browse.ok,true);assert.equal(browse.data.path,folder);
+  result=await page.evaluate(()=>window.omicomic.getAppData());assert.equal(result.data.library.roots.length,0);
+  await page.evaluate(key=>window.omicomic.removeTemporaryOpened(key),ref.resourceKey);
+  result=await page.evaluate(key=>window.omicomic.promoteTemporaryOpened(key),ref.resourceKey);assert.equal(result.ok,true);assert.equal(result.data.library.roots[0].path,folder);
+  assert.deepEqual(await fs.readFile(image),pixel);
+  await fs.mkdir('test-results',{recursive:true});await fs.writeFile('test-results/data-backup-windows-runtime.json',JSON.stringify({version:info.version,packaged:!!process.env.OMI_RELEASE_EXE,checks:['native save/open dialogs','invalid file rejected','automatic original directory match','JSON import and reload','undo import','temporary directory remains unsaved','recent-only directory promotion','source bytes unchanged']},null,2));
+});

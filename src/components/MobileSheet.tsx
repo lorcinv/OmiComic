@@ -1,5 +1,5 @@
 import { tr, t } from '../i18n';
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { takeDrawerGesture } from '../hooks/mobileDrawerGesture';
 import { useMobileScrim } from '../hooks/mobileScrim';
@@ -8,7 +8,7 @@ export const MOBILE_SHEET_MOTION_MS = 180;
 export function dismissMobileSheet(afterClose?: () => void): void {
   window.dispatchEvent(new CustomEvent('omi-mobile-sheet-dismiss', { detail: afterClose }));
 }
-export default function MobileSheet({ title, onClose, beforeClose, children, side = false, showClose = true }: { title: string; onClose: () => void; beforeClose?: () => boolean; children: ReactNode; side?: boolean | 'right'; showClose?: boolean }) {
+export default function MobileSheet({ title, onClose, beforeClose, children, side = false, showClose = true, showHeading = true, showHandle = true }: { title: string; onClose: () => void; beforeClose?: () => boolean; children: ReactNode; side?: boolean | 'right'; showClose?: boolean; showHeading?: boolean; showHandle?: boolean }) {
   const panel = useRef<HTMLElement>(null), backdrop = useRef<HTMLDivElement>(null);
   const scrim = useMobileScrim(true, 0);
   const close = useRef(onClose); close.current = onClose;
@@ -17,6 +17,7 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
   const progress = useRef(0), closing = useRef(false);
   const initialGesture = useRef<ReturnType<typeof takeDrawerGesture> | undefined>(undefined);
   const swipe = useRef<{ x: number; y: number; initial: number; lastX: number; lastTime: number; velocity: number; horizontal: boolean } | null>(null);
+  const handleDrag = useRef<{ pointer: number; y: number; initial: number; lastY: number; lastTime: number; velocity: number; moved: boolean } | null>(null);
   const direction = side === 'right' ? 1 : -1;
   const transform = (value: number) => side ? `translate3d(${direction*(1-value)*100}%,0,0)` : `translate3d(0,${(1-value)*100}%,0)`;
   function paint(value: number) {
@@ -34,10 +35,11 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
     paint(progress.current);
   }
   function settle(to: number, afterClose?: () => void) {
-    stop();swipe.current=null;
+    stop();swipe.current=null;handleDrag.current=null;
     if(!to && guard.current && !guard.current())to=1;
     closing.current=to===0;
     const element=panel.current,from=progress.current;
+    if (!to && element?.contains(document.activeElement) && document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const finish=()=>{paint(to);if(element)element.style.willChange='';if(!to){close.current();afterClose?.();}};
     if(!element || matchMedia('(prefers-reduced-motion: reduce)').matches || Math.abs(to-from)<.001){finish();return;}
     element.style.willChange='transform';
@@ -51,10 +53,38 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
       paint(to);animation.cancel();motion.current=null;finish();
     }).catch(()=>undefined);
   }
+  function startHandleDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (side || closing.current || event.button !== 0 || event.isPrimary === false || sheets.at(-1) !== panel.current || document.querySelector('.root-delete-overlay,.settings-window-overlay')) return;
+    event.preventDefault(); stop();
+    handleDrag.current = { pointer: event.pointerId, y: event.clientY, initial: progress.current, lastY: event.clientY, lastTime: performance.now(), velocity: 0, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function moveHandleDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const gesture = handleDrag.current, element = panel.current;
+    if (!gesture || !element || gesture.pointer !== event.pointerId) return;
+    const distance = event.clientY - gesture.y;
+    if (!gesture.moved && Math.abs(distance) < 4) return;
+    gesture.moved = true; event.preventDefault(); element.style.willChange = 'transform';
+    const now = performance.now();
+    gesture.velocity = (event.clientY - gesture.lastY) / Math.max(8, now - gesture.lastTime);
+    gesture.lastY = event.clientY; gesture.lastTime = now;
+    paint(Math.max(0, Math.min(1, gesture.initial - distance / Math.max(1, element.clientHeight))));
+  }
+  function endHandleDrag(event: ReactPointerEvent<HTMLDivElement>, cancelled = false) {
+    const gesture = handleDrag.current;
+    if (!gesture || gesture.pointer !== event.pointerId) return;
+    handleDrag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    const distance = gesture.lastY - gesture.y;
+    const velocity = performance.now() - gesture.lastTime < 100 ? gesture.velocity : 0;
+    const closeEnough = velocity >= -.45 && (distance >= Math.min(120, (panel.current?.clientHeight ?? 400) * .3) || (distance > 8 && velocity > .45));
+    settle(!cancelled && gesture.moved && closeEnough ? 0 : 1);
+  }
   const settleRef=useRef(settle);settleRef.current=settle;
   useLayoutEffect(()=>{
-    const previous=document.activeElement as HTMLElement|null;
     const element=panel.current!;sheets.push(element);
+    // Autofocus can already belong to this sheet. Never restore a closing input.
+    const previous=element.contains(document.activeElement)?null:document.activeElement as HTMLElement|null;
     const isTop=()=>sheets.at(-1)===element&&!document.querySelector('.root-delete-overlay,.settings-window-overlay');
     const back=(event:Event)=>{if(!isTop())return;event.preventDefault();event.stopImmediatePropagation();if(document.querySelector('.reader-tool-panel'))window.dispatchEvent(new Event('omi-reader-close-panel'));else settleRef.current(0);};
     const dismiss=(event:Event)=>{if(isTop())settleRef.current(0,(event as CustomEvent<(()=>void)|undefined>).detail);};
@@ -71,11 +101,11 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
     if(opening){
       swipe.current={x:opening.x,y:opening.y,initial:0,lastX:opening.currentX,lastTime:performance.now(),velocity:0,horizontal:true};
       element.style.willChange='transform';paint(Math.max(0,Math.min(1,(opening.currentX-opening.x)*-direction/element.clientWidth)));
-    }else{element.focus({preventScroll:true});settleRef.current(1);}
+    }else{if(!element.contains(document.activeElement))element.focus({preventScroll:true});settleRef.current(1);}
     const down=(event:TouchEvent)=>{
       if(!side||!isTop()||event.touches.length!==1)return;
       const target=event.target as Element;
-      if(!element.parentElement?.contains(target)||target.closest('input,textarea,[role="slider"]'))return;
+      if(!element.parentElement?.contains(target)||target.closest('input,textarea,[role="slider"],[data-tag-sort],[data-reorder-key],.tag-completion-strip,.quick-tags-list'))return;
       const t=event.touches[0];stop();closing.current=false;
       swipe.current={x:t.clientX,y:t.clientY,initial:progress.current,lastX:t.clientX,lastTime:performance.now(),velocity:0,horizontal:false};
     };
@@ -103,17 +133,19 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
     window.addEventListener('keydown',key,true);window.addEventListener('omi-library-back',back,true);window.addEventListener('omi-reader-back',back,true);window.addEventListener('omi-mobile-sheet-dismiss',dismiss);
     window.addEventListener('touchstart',down,{capture:true,passive:true});window.addEventListener('touchmove',move,{capture:true,passive:false});window.addEventListener('touchend',end,{capture:true,passive:false});window.addEventListener('touchcancel',end,{capture:true,passive:false});
     return()=>{
+      handleDrag.current=null;
       motion.current?.cancel();const index=sheets.indexOf(element);if(index>=0)sheets.splice(index,1);
       window.removeEventListener('keydown',key,true);window.removeEventListener('omi-library-back',back,true);window.removeEventListener('omi-reader-back',back,true);window.removeEventListener('omi-mobile-sheet-dismiss',dismiss);
       window.removeEventListener('touchstart',down,true);window.removeEventListener('touchmove',move,true);window.removeEventListener('touchend',end,true);window.removeEventListener('touchcancel',end,true);
+      if(element.contains(document.activeElement) && document.activeElement instanceof HTMLElement)document.activeElement.blur();
       if(previous?.isConnected)previous.focus({preventScroll:true});
     };
   },[]);
   return createPortal(<div className={`mobile-sheet-overlay ${side?'is-side-drawer':''} ${side==='right'?'is-right-drawer':''}`} onClick={event=>{if(event.target===event.currentTarget||event.target===backdrop.current){event.preventDefault();event.stopPropagation();if(!closing.current)settle(0);}}}>
     <div className="mobile-sheet-backdrop" ref={backdrop} style={{opacity:0}} aria-hidden="true"/>
-    <section className="mobile-sheet" ref={panel} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
-      <div className="mobile-sheet-handle" aria-hidden="true"/>
-      <header className="mobile-sheet-heading"><h2>{title}</h2>{!side&&showClose&&<button onClick={()=>settle(0)} aria-label={tr`关闭${title}`}>{t("完成")}</button>}</header>
+    <section className={`mobile-sheet${showHeading ? '' : ' is-headingless'}`} ref={panel} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
+      {showHandle&&!side&&<div className="mobile-sheet-grab-area" onPointerDown={startHandleDrag} onPointerMove={moveHandleDrag} onPointerUp={event=>endHandleDrag(event)} onPointerCancel={event=>endHandleDrag(event,true)} onLostPointerCapture={event=>{if(event.target===event.currentTarget)endHandleDrag(event,true);}}><div className="mobile-sheet-handle" aria-hidden="true"/></div>}
+      {showHeading&&<header className="mobile-sheet-heading"><h2>{title}</h2>{!side&&showClose&&<button onClick={()=>settle(0)} aria-label={tr`关闭${title}`}>{t("完成")}</button>}</header>}
       <div className="mobile-sheet-content">{children}</div>
     </section>
   </div>,document.body);

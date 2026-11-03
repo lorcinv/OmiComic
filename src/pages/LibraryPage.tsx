@@ -50,6 +50,11 @@ import { matchesMobileSearch } from "../library/mobileSearch";
 import { getMobileDisplay, mobileDisplayScope, mobileDisplayLabels, patchMobileDisplay } from "../library/mobileDisplay";
 import MobilePagePager, { MobileDetailPager } from "../components/MobilePagePager";
 import MobileDetailMetadata from "../components/MobileDetailMetadata";
+import TagSortList from '../components/TagSortList';
+import QuickTagsDrawer from '../components/QuickTagsDrawer';
+import DataManagement from '../components/DataManagement';
+import TagAutocomplete from '../components/TagAutocomplete';
+import { withinPath } from '../../electron/services/resourceRecords';
 import LocalFileDialog, { type LocalFileTarget } from "../components/LocalFileDialog";
 import 资源详情缩略图 from "../components/DetailPagePreview";
 import ContinuousDetailPreviews, {type DetailPreviewNavigation} from '../components/ContinuousDetailPreviews';
@@ -137,7 +142,7 @@ type 整理空白菜单视图 = Exclude<管理视图, "virtual-folder">;
 type 选择视图 = Exclude<资源库视图, "bookshelf">;
 type 收藏输入 = Omit<FavoriteItem, "addedAt" | "updatedAt" | "sortIndex">;
 
-type 右侧抽屉 = "settings" | "tag-filter" | null;
+type 右侧抽屉 = "settings" | "tag-filter" | "quick-tags" | null;
 type 设置分类 = "appearance" | "library" | "progress" | "safety" | "reader-default" | "reader" | "performance" | "about";
 
 const 设置分类选项: Array<{ id: 设置分类; label: string; description: string }> = [
@@ -147,7 +152,7 @@ const 设置分类选项: Array<{ id: 设置分类; label: string; description: 
   { id: "reader-default", label: "默认阅读", description: "新书首次打开时的阅读方式" },
   { id: "reader", label: "漫画阅读设置", description: "页面排序、自动阅读与工具栏" },
   { id: "performance", label: "性能与缓存", description: "内存缓存、预加载与并发" },
-  { id: "safety", label: "安全与确认", description: "删除软件记录前的确认选项" },
+  { id: "safety", label: "安全与备份", description: "删除确认、数据导出与导入" },
   { id: "about", label: "关于 OmiComic", description: "版本、介绍与操作说明" },
 ];
 
@@ -1205,7 +1210,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [完整标签浮层, 设置完整标签浮层] = useState<{ key: string; tags: string[]; style: CSSProperties } | null>(null);
   const [资源元数据表, 设置资源元数据表] = useState<Record<string, ResourceMetaItem>>({});
   const [标签顺序, 设置标签顺序] = useState<string[]>([]);
-  const [拖拽标签, 设置拖拽标签] = useState<string | null>(null);
   const [整理侧边栏透明度, 设置整理侧边栏透明度] = useState<整理侧边栏透明度>(默认设置.organizeDrawerOpacity);
   const [书架备注悬停延迟, 设置书架备注悬停延迟] = useState<书架备注悬停延迟>(默认设置.bookshelfNoteHoverDelayMs);
   const [最近打开记录上限, 设置最近打开记录上限] = useState<最近打开记录上限>(默认设置.recentOpenedLimit);
@@ -2425,7 +2429,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     return Array.from(文件表.values());
   }, [当前页书架文件夹列表, 手机布局,目录连续列表.visibleStart,目录连续列表.visibleEnd,目录连续列表.start]);
   const 全部标签列表 = useMemo(() => {
-    const 标签集合 = new Set<string>();
+    const 标签集合 = new Set<string>(标签顺序);
     for (const 元数据 of Object.values(资源元数据表)) {
       for (const 标签 of 规范化标签列表(元数据.tags)) 标签集合.add(标签);
     }
@@ -4013,7 +4017,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       if (重置分页) {
         退出选择模式();
         设置当前页(1);
-        if (手机布局 && (当前视图 !== "directory" || 当前目录?.path !== 结果.data.path)) 设置导航会话(value => value + 1);
+        if (当前视图 !== "directory" || 当前目录?.path !== 结果.data.path) 设置导航会话(value => value + 1);
       }
 
       设置历史记录((原记录) => {
@@ -6162,26 +6166,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   async function 保存标签排序(新顺序: string[]): Promise<void> {
+    const 旧顺序 = 标签顺序;
     设置标签顺序(新顺序);
     const 结果 = await window.omicomic.updateTagOrder(新顺序);
-    if (!结果.ok) 设置错误信息(结果.error.message);
+    if (!结果.ok) { 设置标签顺序(旧顺序); 设置错误信息(结果.error.message); }
     else 设置标签顺序(结果.data);
   }
 
-  function 处理标签拖放(目标标签: string): void {
-    if (!拖拽标签 || 拖拽标签 === 目标标签) {
-      设置拖拽标签(null);
-      return;
-    }
-    const 新顺序 = [...全部标签列表];
-    const 起点 = 新顺序.indexOf(拖拽标签);
-    const 终点 = 新顺序.indexOf(目标标签);
-    if (起点 >= 0 && 终点 >= 0) {
-      新顺序.splice(起点, 1);
-      新顺序.splice(终点, 0, 拖拽标签);
-      void 保存标签排序(新顺序);
-    }
-    设置拖拽标签(null);
+  function 保存可见标签排序(顺序: string[]): void {
+    const 可见 = new Set(顺序); let i = 0;
+    void 保存标签排序(全部标签列表.map(标签 => 可见.has(标签) ? 顺序[i++] : 标签));
   }
 
   function 复制路径(路径: string): void {
@@ -6752,6 +6746,14 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   async function 打开资源所在目录(input: ResourceMetaInput): Promise<void> {
     设置手机操作目标(null); 退出选择模式(); 取消手机后台打开请求();
     设置手机筛选展开(false); 设置搜索内容(''); 设置已选标签列表([]);
+    if (window.omicomic.openResourceDirectory) {
+      try {
+        const result = await window.omicomic.openResourceDirectory(input);
+        if (!result.ok) { 设置错误信息(result.error.message); return; }
+        if (result.data) await 打开目录(result.data.path,result.data.rootPath);
+      } catch { 设置错误信息('所在目录无法打开。'); }
+      return;
+    }
     const sourcePath = input.sourcePath.replace(/\/$/, '');
     // Android document grants are virtual roots, not real /local directories.
     // A directly granted file cannot expose its parent without a directory grant.
@@ -7080,23 +7082,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                     onMouseDown={(事件) => 事件.stopPropagation()}
                     onClick={(事件) => 事件.stopPropagation()}
                   >
-                    <input
-                      autoFocus
-                      value={标签添加输入}
-                      placeholder="输入标签，逗号分隔"
-                      onChange={(事件) => 设置标签添加输入(事件.target.value)}
-                      onKeyDown={(事件) => {
-                        if (事件.key === "Enter") {
-                          事件.preventDefault();
-                          事件.stopPropagation();
-                          添加整理标签();
-                        } else if (事件.key === "Escape") {
-                          事件.preventDefault();
-                          事件.stopPropagation();
-                          关闭标签添加弹窗();
-                        }
-                      }}
-                    />
+                    <TagAutocomplete autoFocus value={标签添加输入} onChange={设置标签添加输入} allTags={全部标签列表} excluded={解析标签输入(整理标签输入)} onConfirm={添加整理标签} onCancel={关闭标签添加弹窗}/>
                     <button type="button" onClick={添加整理标签}>添加</button>
                     <button type="button" onClick={关闭标签添加弹窗}>取消</button>
                   </span>,
@@ -7158,9 +7144,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         <div className="mobile-tag-manage-actions">
           <button className={标签删除选择模式?'is-active':''} onClick={()=>标签删除选择模式?退出标签删除选择模式():设置标签删除选择模式(true)}><MobileIcon name="select"/>{标签删除选择模式?t("取消"):t("选择")}</button>
           <button disabled={!标签删除选择模式||!全部标签列表.length} onClick={()=>设置当前可见标签为待删除(全部标签列表)}>{t("全选")}</button>
-          <button disabled={!待删除数量} onClick={请求删除已选择标签}><MobileIcon name="delete"/>{t("删除")}{待删除数量?` ${待删除数量}`:''}</button>
+          <button className="tag-delete-action" disabled={!待删除数量} onClick={请求删除已选择标签}><MobileIcon name="delete"/>{t("删除")}{待删除数量?` ${待删除数量}`:''}</button>
         </div>
-        <div className="mobile-tag-catalogue"><MobileReorderList items={全部标签列表} itemKey={tag=>tag} onReorder={keys=>{if(!标签删除选择模式)void 保存标签排序(keys);}} render={tag=><button className={`tag-chip ${待删除标签选择集合.has(tag)?'is-delete-selected':''}`} aria-pressed={待删除标签选择集合.has(tag)} onClick={()=>{if(!标签删除选择模式)设置标签删除选择模式(true);切换待删除标签(tag);}}>{tag}</button>}/>{!全部标签列表.length&&<p className="drawer-muted">{t("暂无标签")}</p>}</div>
+        <div className="mobile-tag-catalogue"><TagSortList tags={全部标签列表} selecting={标签删除选择模式} selected={待删除标签选择集合} onReorder={保存可见标签排序} onToggle={tag=>{if(标签删除选择模式)切换待删除标签(tag);}}/></div>
       </div>
     </MobileSheet>;
 
@@ -7302,29 +7288,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             </section>
             <section className="settings-section tag-all-section">
               <h3>{t("全部标签")}</h3>
-              <div className="tag-filter-list">
-                {显示标签.length > 0 ? 显示标签.map((标签) => (
-                  <button
-                    type="button"
-                    draggable={!标签删除选择模式}
-                    className={`tag-filter-chip ${已选标签列表.includes(标签) && !标签删除选择模式 ? "is-active" : ""} ${待删除标签选择集合.has(标签) ? "is-delete-selected" : ""}`}
-                    key={标签}
-                    onClick={() => {
-                      if (标签删除选择模式) 切换待删除标签(标签);
-                      else 切换筛选标签(标签);
-                    }}
-                    onDragStart={() => 设置拖拽标签(标签)}
-                    onDragOver={(事件) => 事件.preventDefault()}
-                    onDrop={() => {
-                      if (!标签删除选择模式) 处理标签拖放(标签);
-                    }}
-                    aria-pressed={标签删除选择模式 ? 待删除标签选择集合.has(标签) : 已选标签列表.includes(标签)}
-                    title={标签删除选择模式 ? t("点击选择或取消待删除标签") : t("拖拽调整标签顺序")}
-                  >
-                    {标签}
-                  </button>
-                )) : <span className="drawer-muted">{t("暂无标签")}</span>}
-              </div>
+              <TagSortList tags={显示标签} selecting={标签删除选择模式} selected={标签删除选择模式 ? 待删除标签选择集合 : new Set(已选标签列表)} onReorder={保存可见标签排序} onToggle={标签=>标签删除选择模式 ? 切换待删除标签(标签) : 切换筛选标签(标签)}/>
             </section>
           </div>
         </aside>
@@ -7594,7 +7558,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 </button>
               </div>
             </div>
-            <MobileDetailMetadata key={资源Key} mobile={手机布局} tags={当前标签} note={整理备注输入} error={t(整理错误 ?? '')} onSave={async patch=>{
+            <MobileDetailMetadata key={资源Key} mobile={手机布局} tags={当前标签} allTags={全部标签列表} note={整理备注输入} error={t(整理错误 ?? '')} onSave={async patch=>{
               const saved=await 保存资源信息(patch);
               if(saved){if(patch.tags)设置整理标签输入(patch.tags.join(", "));if(patch.note!==undefined)设置整理备注输入(patch.note);}
               return saved;
@@ -7685,7 +7649,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       </section>
     );
   }
-  useMobileDrawerGesture(手机导航区域, 手机布局 && isActive && !资源信息目标 && !选择模式 && !手机书架排序, side => {
+  useMobileDrawerGesture(手机导航区域, 手机布局 && isActive && !选择模式 && !手机书架排序, side => {
+    if (资源信息目标) { if (side !== 'right') return false; 设置当前右侧抽屉('quick-tags'); return true; }
     if (side === 'right') 设置当前右侧抽屉("tag-filter");
     else if (当前视图 === 'directory') 设置手机侧栏('library');
     else if (当前视图 === 'bookshelf' || 当前视图 === 'virtual-folder') 设置手机侧栏('bookshelf');
@@ -7710,7 +7675,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         onQuery={value => { 设置当前视图搜索内容(value); 回到第一页(); }}
         onSearch={open => open ? 设置手机筛选展开(true) : 取消当前搜索()} />}
       {书签重命名 && <RenameBookmarkDialog bookmark={书签重命名} onClose={() => 设置书签重命名(null)} onSaved={item => { 设置书签列表(old => old.map(value => value.id===item.id ? item : value)); if(资源信息目标?.kind==='bookmark' && 资源信息目标.item.id===item.id) 设置资源信息目标({...资源信息目标,item}); }}/>}
-      {手机布局 && 手机详情菜单 && 资源信息目标 && <MobileSheet title={t("漫画操作")} onClose={() => 设置手机详情菜单(false)}>
+      {手机布局 && 手机详情菜单 && 资源信息目标 && <MobileSheet title={t("漫画操作")} showHeading={false} onClose={() => 设置手机详情菜单(false)}>
         <button className="mobile-settings-link" onClick={() => { if(资源信息目标.kind==='bookmark') 设置书签重命名(资源信息目标.item); else 打开详情文件操作("rename"); 设置手机详情菜单(false); }}><MobileIcon name="rename"/>{资源信息目标.kind==='bookmark' ? t("重命名书签") : t("重命名")}</button>
         <button className="mobile-settings-link" onClick={() => { 打开详情文件操作("delete"); 设置手机详情菜单(false); }}><MobileIcon name="delete"/>{t("删除")}</button>
       </MobileSheet>}
@@ -7727,8 +7692,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         <button className="mobile-settings-link" onClick={() => { 请求删除书架栏(手机分类管理); 设置手机分类管理(null); }}>{t("删除分类")}</button>
       </MobileSheet>}
       {手机布局 && 渲染手机书架操作栏()}
-      {手机布局 && 手机显示选项 && <MobileSheet title={t("显示选项")} onClose={() => 设置手机显示选项(false)}>
-        <p className="settings-hint">{t("仅调整")}{t(mobileDisplayLabels[手机显示范围])}{t("的显示方式。")}</p>
+      {手机布局 && 手机显示选项 && <MobileSheet title={t("显示选项")} showHeading={false} onClose={() => 设置手机显示选项(false)}>
         <label className="mobile-option-row"><span>{t("网格列数 ")}<b>{手机基础列数}</b></span><input aria-label={t("网格列数")} type="range" min="2" max="6" step="1" value={手机基础列数} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {columns:Number(event.target.value)}))} /></label>
         {手机自适应.wide && <small className="mobile-adaptive-hint">{t("宽屏自动适配")} · {手机列数} {t("列")}</small>}
         <label className="mobile-option-row"><span>{t("列表封面尺寸 ")}<b>{手机封面尺寸}</b></span><input aria-label={t("列表封面尺寸")} type="range" min="64" max="132" step="4" value={手机封面尺寸} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {coverSize:Number(event.target.value)}))} /></label>
@@ -7999,6 +7963,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
         {资源信息目标 && !手机布局 && <div className="resource-detail-footer">
           <div className="resource-detail-file-actions">
+            <button type="button" className="resource-detail-action" onClick={() => 设置当前右侧抽屉('quick-tags')}><span>{t('快速标签')}</span></button>
             <button type="button" className="resource-detail-action" aria-label={t("重命名本地文件")} onClick={() => 打开详情文件操作("rename")}><span>{t("重命名")}</span></button>
             <button type="button" className="resource-detail-action" onClick={() => 打开详情文件操作("delete")}><span>{t("删除…")}</span></button>
           </div>
@@ -9040,7 +9005,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   disabled={根目录列表.length === 0}
                   onClick={() => 设置根目录下拉打开((当前) => !当前)}
                 >
-                  <span>{当前根目录项目?.name ?? (根目录列表.length === 0 ? t("尚未添加目录") : t("选择资源目录"))}</span>
+                  <span>{当前根目录项目?.name ?? (当前根目录 ? 获取目录名称(当前根目录) : 根目录列表.length === 0 ? t("尚未添加目录") : t("选择资源目录"))}</span>
                   <span className="root-library-chevron" aria-hidden="true" />
                 </button>
                 {根目录下拉打开 && (
@@ -9216,9 +9181,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   hidden={当前设置分类 !== "appearance"}
                 >
                   <div className="settings-row"><span>{t('语言 / Language')}</span><GlassSelect ariaLabel="语言 / Language" value={界面语言} options={[{value:'zh-CN',label:'简体中文'},{value:'en',label:'English'},{value:'ja',label:'日本語'}]} onChange={value => 保存界面设置({language:normalizeLanguage(value)})}/></div>
-                  <label className="settings-toggle"><input type="checkbox" checked={显示主界面} onChange={event => 保存界面设置({showHomePage:event.target.checked})}/><span>{t("显示主界面")}</span></label>
                   <div className="settings-row"><span>{t('全局字号')}</span><FontSizeControl label={t('全局字号')} value={全局字号} onChange={value => 保存界面设置({desktopGlobalFontSize:value, desktopInfoFontSize:信息字号})}/></div>
                   <div className="settings-row"><span>{t('页码与信息字号')}</span><FontSizeControl label={t('页码与信息字号')} value={信息字号} onChange={value => 保存界面设置({desktopInfoFontSize:value, desktopGlobalFontSize:全局字号})}/></div>
+                  <label className="settings-toggle"><input type="checkbox" checked={显示主界面} onChange={event => 保存界面设置({showHomePage:event.target.checked})}/><span>{t("显示主界面")}</span></label>
                   <HomeArtworkSettings />
                   <div className="settings-row mobile-hidden">
                     <span>{t("卡片尺寸")}</span>
@@ -9438,7 +9403,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   aria-labelledby="settings-category-safety"
                   hidden={当前设置分类 !== "safety"}
                 >
-                  <h3>{t("安全与确认")}</h3>
+                  <h3>{t("安全与备份")}</h3>
                   <label className="settings-toggle">
                     <input
                       type="checkbox"
@@ -9486,6 +9451,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                     />
                     <span>{t("删除标签前确认")}</span>
                   </label>
+                  {当前设置分类 === "safety" && <DataManagement onImported={()=>window.location.reload()}/>}
                 </section>
 
                 <section
@@ -9727,6 +9693,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           </div>
         )}
         {当前右侧抽屉 === "tag-filter" && 渲染标签筛选抽屉()}
+        {当前右侧抽屉 === 'quick-tags' && 资源信息目标 && <QuickTagsDrawer tags={解析标签输入(整理标签输入)} allTags={全部标签列表} mobile={手机布局} error={整理错误} onClose={关闭右侧抽屉} onSave={async tags=>{const saved=await 保存资源信息({tags});if(saved)设置整理标签输入(tags.join(', '));return saved;}}/>}
         {完整标签浮层 && createPortal(
           <div className="preview-tag-popover" style={完整标签浮层.style} role="dialog" aria-label={t("隐藏标签列表")}>
             {完整标签浮层.tags.map((标签) => (
@@ -9944,7 +9911,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置最近菜单(null);
               }}
             >{t("查看资源信息")}</button>
-            {!是临时存放 && <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(最近菜单.项目); 设置最近菜单(null); }}>{t("打开路径")}</button>}
+            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(最近菜单.项目); 设置最近菜单(null); }}>{t("打开路径")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9986,7 +9953,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置最近菜单(null);
               }}
             >{t("加入收藏")}</button>
-            {是临时存放 && <button type="button" role="menuitem" onClick={() => void 临时文件目录加入资源库(最近菜单.项目)}>{t("将所在目录加入资源库")}</button>}
+            {(是临时存放 || !根目录列表.some(root=>withinPath(最近菜单.项目.sourcePath,root.path))) && <button type="button" role="menuitem" onClick={() => void 临时文件目录加入资源库(最近菜单.项目)}>{t("将所在目录加入资源库")}</button>}
             <div className="context-menu-separator" role="separator" />
             <button
               type="button"

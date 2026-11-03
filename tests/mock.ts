@@ -13,6 +13,7 @@ export function installMock({count}: {count:number}) {
    takeExternalOpen:async()=>ok(null),onExternalOpen:()=>()=>{},
    getAppInfo:async()=>({name:'OmiComic',version:'test',platform:'linux'}),getAppData:async()=>ok(data),
    updateSettings:async(input:any)=>{Object.assign(settings,input);return ok(settings);},
+   openResourceDirectory:async(input:any)=>{const p=input.sourcePath.replace(/\\/g,'/'),root=data.library.roots.find(r=>r.path===p),directory=root?p:p.slice(0,p.lastIndexOf('/'));return ok({path:directory,rootPath:data.library.roots.find(r=>directory===r.path||directory.startsWith(r.path+'/'))?.path??directory});},
    getThumbnail:async()=>ok({url:image}),getReadablePageCount:async()=>ok(count),getReadingProgress:async()=>ok(null),
    scanLibrary:async(path:string)=>{const result=await (window as any).omicomic.listDirectory(path);return ok({items:result.data.items.map((item:any)=>({...item,containsImages:item.type==='folder'})),directories:1,skipped:0,scannedAt:Date.now()});},
    listDirectory:async(path:string)=>ok({path,parentPath:path==='/comics'?null:'/comics',items:path==='/comics'?items:[file('Nested','folder',path)],total:path==='/comics'?items.length:1}),

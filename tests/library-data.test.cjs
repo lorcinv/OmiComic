@@ -556,3 +556,14 @@ test('invalid-reference cleanup removes all matching records by path/key and pre
   assert.equal(data.resourceMeta[keep].note, 'keep.cbz');
   for (const item of items) assert.equal(await fs.readFile(item.sourcePath, 'utf8'), `untouched:${item.title}`);
 });
+
+test('mobile typography persists alongside independent desktop sizes', async t => {
+  const f = await fixture(t, { settings: { desktopGlobalFontSize: 17, desktopInfoFontSize: 13 } });
+  await f.service.更新设置({ mobileGlobalFontSize: 16, mobileInfoFontSize: 11 });
+  const settings = (await f.load().读取应用数据()).settings;
+  assert.equal(settings.mobileGlobalFontSize, 16); assert.equal(settings.mobileInfoFontSize, 11);
+  assert.equal(settings.desktopGlobalFontSize, 17); assert.equal(settings.desktopInfoFontSize, 13);
+  await f.service.更新设置({ mobileGlobalFontSize: 100, mobileInfoFontSize: -2 });
+  const clamped = (await f.load().读取应用数据()).settings;
+  assert.equal(clamped.mobileGlobalFontSize, 24); assert.equal(clamped.mobileInfoFontSize, 10);
+});

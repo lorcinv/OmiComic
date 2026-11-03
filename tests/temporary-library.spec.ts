@@ -38,7 +38,7 @@ test('temporary shelf reuses cards, search and details; deleting a reference pre
   await page.getByRole('textbox', { name: '搜索临时存放' }).fill('测试标签');
   await expect(cards).toHaveCount(1);
   await cards.first().getByRole('button', { name: '打开资源信息' }).click();
-  await expect(page.locator('.resource-detail-thumbnail')).toHaveCount(48);
+  await expect(page.getByRole('button',{name:'第 1 页：page0.png',exact:true})).toBeVisible();
   await expect(page.getByText('临时简介', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^临时存放/ }).click();
   await cards.filter({ hasText: 'Outside A' }).click({ button: 'right' });
@@ -62,4 +62,22 @@ test('adding the containing directory removes its temporary references and makes
   expect(await page.evaluate(() => (window as any).__temporaryData.library.roots.some((root: any) => root.path === '/outside'))).toBe(true);
   await page.getByRole('button', { name: /^最近阅读/ }).click();
   await expect(page.locator('[aria-label="最近阅读资源列表"] .resource-card')).toHaveCount(4);
+});
+
+test('temporary references can browse unsaved directories without adding them to the library', async ({page})=>{
+  await seed(page);
+  await page.locator('[aria-label="临时存放资源列表"] .resource-card').first().click({button:'right'});
+  await page.getByRole('menuitem',{name:'打开路径',exact:true}).click();
+  await expect(page.locator('.resource-card').filter({hasText:'Nested'})).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).__temporaryData.library.roots.map((root:any)=>root.path))).toEqual(['/comics']);
+});
+
+test('recent records outside the library offer promotion; records in saved roots do not',async({page})=>{
+  await page.addInitScript(installMock,{count:8});
+  await page.addInitScript(async()=>{const result=await window.omicomic.getAppData();if(!result.ok)throw Error();result.data.recentOpened.push({resourceKey:'archive:/outside/Recent.cbz',sourcePath:'/outside/Recent.cbz',sourceType:'archive',title:'Outside Recent',currentPageIndex:0,totalPages:8,updatedAt:1});});
+  await page.goto('/');await page.getByRole('button',{name:'打开资源库',exact:true}).click();await page.getByRole('button',{name:/^最近阅读/}).click();
+  await page.locator('[aria-label="最近阅读资源列表"] .resource-card').filter({hasText:'Outside Recent'}).click({button:'right'});
+  await expect(page.getByRole('menuitem',{name:'将所在目录加入资源库',exact:true})).toBeVisible();await page.keyboard.press('Escape');
+  await page.locator('[aria-label="最近阅读资源列表"] .resource-card').filter({has:page.locator('strong',{hasText:/^First$/})}).click({button:'right'});
+  await expect(page.getByRole('menuitem',{name:'将所在目录加入资源库',exact:true})).toHaveCount(0);
 });

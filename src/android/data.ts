@@ -4,6 +4,8 @@ import { androidNotify, type NativeCall } from "./bridge";
 import { sanitizeAndroidChapter } from "./epub";
 import { version as appVersion } from "../../package.json";
 import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
+import { backupFilename, createDataBackup, parseDataBackup, mergeBackup, autoMatchBackupLocations, type DataImportPreview } from '../../electron/shared/dataBackup';
+import { mobileTypography } from '../../electron/shared/desktopTypography';
 
 const defaults: AppSettings = {
   showHomePage: true,
@@ -92,12 +94,56 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
   };
   const external: Array<{ resource: 阅读资源结果; initialPageIndex: number }> = [];
   const listeners = new Set<() => void>();
+  let pendingBackup: DataImportPreview | null = null;
   const api: OmiComicApi = {
+    openResourceDirectory: async input => {
+      try {
+        const source = input.sourcePath.replace(/\/$/, '');
+        const isRoot = /^\/local\/[^/]+\/[^/]+$/.test(source);
+        const path = isRoot && input.sourceType === 'folder' ? source : parent(source);
+        const state = await native<{readable:boolean;isDirectory:boolean}>('checkResourcePath',{path});
+        if (state.readable && state.isDirectory) return ok({path,rootPath:/^\/local\/[^/]+\/[^/]+/.exec(path)?.[0] ?? path});
+        // A single-file SAF grant cannot grant its parent. A directory choice stays outside the saved library.
+        const chosen = await native<string|null>('chooseFolder');
+        return ok(chosen ? {path:chosen,rootPath:chosen} : null);
+      } catch(e) { return failure(e); }
+    },
+    exportDataBackup: async () => {
+      await queue;
+      return call('exportBackupFile', { filename: backupFilename('android'), text: JSON.stringify(createDataBackup(data, 'android', appVersion), null, 2) + '\n' });
+    },
+    readDataBackup: async () => {
+      pendingBackup = null;
+      try {
+        const raw = await native<string | null>('readBackupFile');
+        if (raw === null) return ok(null);
+        pendingBackup = { token: crypto.randomUUID(), backup: parseDataBackup(raw) };
+        pendingBackup.matches = await autoMatchBackupLocations(pendingBackup.backup, data, 'android', async (path, directory) => {
+          try { const state = await native<{ readable: boolean; isDirectory: boolean }>('checkResourcePath', { path }); return state.readable && state.isDirectory === directory; } catch { return false; }
+        });
+        return ok(structuredClone(pendingBackup));
+      } catch (e) { return failure(e); }
+    },
+    applyDataBackup: (token, options) => write(async draft => {
+      if (!pendingBackup || pendingBackup.token !== token) throw new Error('请重新选择备份文件。');
+      const next = mergeBackup(draft, pendingBackup.backup, options, 'android');
+      for (const mapping of options.mappings) {
+        const checked = await native<{ readable: boolean; isDirectory: boolean }>('checkResourcePath', { path: mapping.to });
+        if (!checked.readable || !checked.isDirectory) throw new Error('目标目录无法访问，请重新选择目录。');
+      }
+      await native('importDataBackup', { before: draft, data: next });
+      Object.assign(draft, next); pendingBackup = null; return draft;
+    }, false),
+    hasDataImportBackup: () => call('hasDataImportBackup'),
+    restoreDataBackup: () => write(async draft => {
+      const previous = await native<OmiComicAppData>('restoreDataBackup');
+      Object.assign(draft, previous); return draft;
+    }, false),
     getAppInfo: async () => ({name:"OmiComic", version:appVersion, platform:"android"}),
     getAndroidCacheInfo: () => call("getAndroidCacheInfo"),
     clearAndroidReadCache: () => call("clearAndroidReadCache"),
     getAppData: () => read(() => data),
-    updateSettings: input => write(d => (d.settings = {...d.settings,...input})),
+    updateSettings: input => write(d => (d.settings = {...d.settings,...input,...mobileTypography({...d.settings,...input})})),
     addLibraryRoot: input => write(d => {
       const root = d.library.roots.find(r => r.path === input.path);
       if (root) return root;

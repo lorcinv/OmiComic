@@ -1,4 +1,5 @@
 html[data-platform="android"] { --window-controls-height: 0px; }
+:root[data-omi-layout="mobile"] { --desktop-font-scale:var(--mobile-font-factor,1); font-size:calc(16px * var(--desktop-font-scale)); }
 html[data-platform="android"] body { min-width:320px; height:100dvh; }
 html[data-platform="android"] .window-controls { display:none; }
 html[data-platform="android"] .reader-toolbar { padding-right:16px; }
@@ -185,6 +186,9 @@ html[data-platform="android"] .reader-stage::-webkit-scrollbar { display:none; }
 .root-delete-overlay[data-shared-scrim="true"] { background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; }
 .mobile-sheet { position:relative; width:min(100%,560px); max-height:calc(100dvh - 24px); overflow:auto; overscroll-behavior:contain; padding:8px 18px 20px; border:1px solid var(--控件边框); border-radius:24px; background:var(--面板色); backdrop-filter:none; box-shadow:var(--阴影); color:var(--主文字); outline:none; contain:layout style; transform:translate3d(0,0,0); }
 .mobile-sheet-handle { width:32px; height:4px; margin:0 auto 6px; border-radius:9px; background:var(--边框色); }
+.mobile-sheet-grab-area { display:flex; flex:none; align-items:center; justify-content:center; height:24px; margin:-8px 0 -6px; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; }
+.mobile-sheet-grab-area:active { cursor:grabbing; }
+.mobile-sheet-grab-area > .mobile-sheet-handle { margin:0; }
 .mobile-sheet-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:12px; }
 .mobile-sheet-heading h2 { margin:0; font-size:calc(18px * var(--desktop-font-scale, 1)); }
 .mobile-sheet-heading button { min-height:44px; border:0; padding:8px 12px; color:var(--强调色); background:none; font-size:calc(14px * var(--desktop-font-scale, 1)); }
@@ -266,6 +270,7 @@ body:has(.mobile-sheet-overlay) .glass-select-options.is-portal { z-index:1120; 
 .mobile-option-row > span { display:flex; justify-content:space-between; }
 .mobile-option-row input { width:100%; accent-color:var(--强调色); }
 .mobile-settings-link { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border:0; border-top:1px solid var(--边框色); background:none; font:inherit; color:var(--主文字); }
+.mobile-sheet.is-headingless .mobile-sheet-content > .mobile-settings-link:first-child { border-top:0; }
 .mobile-sheet-overlay.is-side-drawer { padding:0; justify-content:flex-start; align-items:stretch; }
 .is-side-drawer .mobile-sheet { width:min(84vw,360px); height:100%; max-height:100%; padding:18px 0; display:flex; flex-direction:column; border-radius:0 22px 22px 0; }
 .is-side-drawer .mobile-sheet-handle { display:none; }
@@ -687,3 +692,7 @@ html[data-platform="android"][data-native-reader="on"] .reader-stage .reader-pag
   .mobile-settings-body > nav:has(> .mobile-setting-category) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:28px; align-content:start; }
   .is-mobile-library .resource-detail-hero { grid-template-columns:min(28vw,220px) minmax(0,1fr); }
 }
+
+/* Mobile text preferences are independent of desktop typography. */
+[data-omi-layout="mobile"] :is(.mobile-card-pages,.mobile-bookmark-date,.mobile-reader-current,.mobile-reader-total,.mobile-page-pill output,.resource-detail-progress-copy,.resource-detail-thumbnail-caption strong) { font-size:calc(var(--mobile-info-size,12px) * var(--desktop-font-scale,1)); }
+[data-omi-layout="mobile"] .mobile-settings-page .font-size-control > :is(button,input) { box-sizing:border-box; flex:0 0 40px; width:40px; min-width:40px; max-width:40px; height:40px; min-height:40px; max-height:40px; padding:0; border:1px solid var(--控件边框); border-radius:7px; background:var(--控件背景); color:var(--主文字); font:inherit; line-height:1; text-align:center; }

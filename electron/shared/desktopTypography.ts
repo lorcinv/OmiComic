@@ -17,3 +17,10 @@ export function desktopTypography(settings: { desktopInfoFontSize?: number; desk
     desktopGlobalFontSize: normalizeDesktopFontSize(settings.desktopGlobalFontSize, DESKTOP_FONT_STANDARD),
   };
 }
+
+export function mobileTypography(settings: { mobileInfoFontSize?: number; mobileGlobalFontSize?: number }) {
+  return {
+    mobileInfoFontSize: normalizeDesktopFontSize(settings.mobileInfoFontSize, DESKTOP_INFO_STANDARD),
+    mobileGlobalFontSize: normalizeDesktopFontSize(settings.mobileGlobalFontSize, DESKTOP_FONT_STANDARD),
+  };
+}

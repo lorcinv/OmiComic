@@ -38,6 +38,8 @@ export interface AppSettings {
   showHomePage?: boolean;
   desktopInfoFontSize?: number;
   desktopGlobalFontSize?: number;
+  mobileInfoFontSize?: number;
+  mobileGlobalFontSize?: number;
   desktopReaderAutoHide?: boolean;
   desktopPerformanceProfile?: 'auto' | 'balanced' | 'high' | 'custom';
 
@@ -395,6 +397,12 @@ export interface AndroidCacheInfo { readerBytes: number; readerLimit: number; th
 export type { HomeArtwork } from '../../electron/shared/homeArtwork';
 import type { HomeArtwork, SaveHomeArtwork } from '../../electron/shared/homeArtwork';
 export interface OmiComicApi {
+  openResourceDirectory?(input: { sourcePath: string; sourceType: 资源类型 }): Promise<操作结果<{ path: string; rootPath: string } | null>>;
+  exportDataBackup?(): Promise<操作结果<string | null>>;
+  readDataBackup?(): Promise<操作结果<import('../../electron/shared/dataBackup').DataImportPreview | null>>;
+  applyDataBackup?(token: string, options: import('../../electron/shared/dataBackup').DataImportOptions): Promise<操作结果<OmiComicAppData>>;
+  hasDataImportBackup?(): Promise<操作结果<boolean>>;
+  restoreDataBackup?(): Promise<操作结果<OmiComicAppData>>;
   getHomeArtwork?(): Promise<操作结果<HomeArtwork | null>>;
   selectHomeArtwork?(): Promise<操作结果<HomeArtwork | null>>;
   saveHomeArtwork?(input: SaveHomeArtwork): Promise<操作结果<HomeArtwork>>;

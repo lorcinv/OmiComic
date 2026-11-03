@@ -1,4 +1,4 @@
-import { desktopTypography } from "../shared/desktopTypography";
+import { desktopTypography, mobileTypography } from "../shared/desktopTypography";
 import os from 'node:os';
 import { desktopPerformance, type DesktopPerformanceProfile } from '../shared/desktopPerformance';
 import type { ReaderPreferences, PageSort } from "../shared/readerPreferences";
@@ -45,6 +45,8 @@ export interface AppSettings {
   language?: 'zh-CN' | 'en' | 'ja';
   desktopInfoFontSize?: number;
   desktopGlobalFontSize?: number;
+  mobileInfoFontSize?: number;
+  mobileGlobalFontSize?: number;
   desktopReaderAutoHide?: boolean;
   desktopPerformanceProfile?: 'auto' | 'balanced' | 'high' | 'custom';
   desktopPerformanceRevision?: number;
@@ -473,6 +475,7 @@ function 修正设置(输入: unknown): AppSettings {
     language: 设置.language === 'en' || 设置.language === 'ja' ? 设置.language : 'zh-CN',
     showHomePage: 设置.showHomePage !== false,
     ...desktopTypography(设置),
+    ...mobileTypography(设置),
     desktopReaderAutoHide: 设置.desktopReaderAutoHide === true,
     desktopPerformanceProfile,
     desktopPerformanceRevision: 2,
@@ -1095,6 +1098,36 @@ export async function 恢复已移除索引(): Promise<OmiComicAppData> {
     数据.excludedResourcePaths = [];
     await 直接保存应用数据(数据);
     return 数据;
+  });
+}
+
+export async function 导入备份数据(prepare: (current: OmiComicAppData) => OmiComicAppData): Promise<OmiComicAppData> {
+  return 排队执行数据变更(async () => {
+    const current = structuredClone(await 读取应用数据());
+    const next = prepare(current);
+    await 安全写入JSON(`${获取数据文件路径()}.before-data-import.json`, current);
+    await 直接保存应用数据(next);
+    return structuredClone(await 读取应用数据());
+  });
+}
+
+export async function 读取备份快照(): Promise<OmiComicAppData> {
+  await 数据变更队列;
+  return structuredClone(await 读取应用数据());
+}
+
+export async function 有导入前备份(): Promise<boolean> {
+  try { await 文件系统.access(`${获取数据文件路径()}.before-data-import.json`); return true; } catch { return false; }
+}
+
+export async function 恢复导入前数据(): Promise<OmiComicAppData> {
+  return 排队执行数据变更(async () => {
+    const file = `${获取数据文件路径()}.before-data-import.json`;
+    const previous: unknown = JSON.parse(await 文件系统.readFile(file, 'utf8'));
+    if (!是对象(previous) || previous.version !== 数据版本 || !是对象(previous.library) || !是对象(previous.settings)) throw new Error('导入前备份无法读取。');
+    await 直接保存应用数据(previous as unknown as OmiComicAppData);
+    await 文件系统.unlink(file).catch(() => undefined);
+    return structuredClone(await 读取应用数据());
   });
 }
 

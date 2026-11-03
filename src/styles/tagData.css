@@ -1,0 +1,81 @@
+/* Existing OmiComic surfaces and type are retained. Suggestions share the input's exact width. */
+.tag-autocomplete { flex:1 1 0; width:0; min-width:0; max-width:100%; position:relative; display:flex; flex-direction:column; gap:7px; }
+.tag-autocomplete > input { width:100%!important; flex:none!important; box-sizing:border-box; }
+.tag-completion-strip { display:flex; align-items:center; gap:8px; width:100%; max-width:100%; min-width:0; padding:2px 0; overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; scrollbar-width:none; touch-action:pan-x; cursor:grab; user-select:none; -webkit-user-select:none; mask-image:linear-gradient(to right,transparent 0,#000 var(--tag-fade-left,18px),#000 calc(100% - var(--tag-fade-right,18px)),transparent 100%); } /* taste-skill-ignore: requested edge fade is a clipping mask, not a background fill. */
+.tag-completion-strip[data-at-start="true"] { --tag-fade-left:0px; }
+.tag-completion-strip[data-at-end="true"] { --tag-fade-right:0px; }
+.tag-completion-strip::-webkit-scrollbar { display:none; width:0; height:0; }
+.tag-completion-strip > button { flex:0 0 auto; min-height:32px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border:1px solid var(--控件边框); border-radius:9px; background:var(--控件背景); color:var(--主文字); padding:5px 12px; font:inherit; cursor:inherit; }
+.tag-completion-strip > button:hover,.tag-completion-strip > button.is-active { border-color:var(--强调色); background:var(--强调浅色); color:var(--强调色); }
+.mobile-tag-add-form { align-items:flex-start; min-width:0; max-width:100%; width:100%; }
+.mobile-sheet:has(.mobile-tag-add-form) { width:min(560px,calc(100vw - 24px)); }
+.mobile-tag-catalogue { scrollbar-width:none; }.mobile-tag-catalogue::-webkit-scrollbar { display:none; }
+.tag-add-popover { align-items:flex-start; }
+.detail-tag-add-inline { align-items:flex-start; min-width:0; max-width:100%; }
+.mobile-tag-add-form > button,.detail-tag-add-inline > button { flex:none; }
+.tag-sort-list { display:flex; flex-wrap:wrap; align-content:flex-start; gap:10px 8px; padding:4px; }
+.tag-sort-item { position:relative; max-width:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
+.tag-catalogue-chip { display:flex; align-items:center; gap:7px; max-width:100%; min-height:34px; padding:7px 12px; border:1px solid color-mix(in srgb,var(--主文字) 26%,var(--面板色)); background:var(--控件背景); color:var(--主文字); cursor:pointer; overflow-wrap:anywhere; }
+.tag-sort-item > .tag-filter-chip { cursor:grab; }
+.tag-sort-item.is-dragging { z-index:4; pointer-events:none; }
+.tag-sort-list.is-sorting,.tag-sort-list.is-sorting * { cursor:grabbing; }
+.tag-sort-item.is-dragging > .tag-filter-chip { animation:none!important; opacity:.9; border-color:var(--强调色); box-shadow:0 4px 12px #0002; } /* taste-skill-ignore: the shadow belongs to the actively dragged floating tag. */
+.tag-sort-item.drop-before::before,.tag-sort-item.drop-after::after { content:''; position:absolute; top:3px; bottom:3px; width:3px; border-radius:2px; background:var(--强调色); transform:translateX(-50%); pointer-events:none; animation:none; }
+/* Both sides of the same 8px gap share its exact midpoint, including during selection wiggle. */
+.tag-sort-item.drop-before::before { left:-4px; }.tag-sort-item.drop-after::after { left:calc(100% + 4px); }
+.tag-sort-item .is-management-selected,.quick-tags-list .is-management-selected { border-color:var(--强调色)!important; background:var(--强调色)!important; color:var(--强调文字)!important; }
+.tag-sort-list.is-selecting .tag-filter-chip { animation:tag-manage-wiggle .28s ease-in-out infinite alternate; transform-origin:50% 65%; }
+@keyframes tag-manage-wiggle { from{transform:rotate(-1.1deg)}to{transform:rotate(1.1deg)} }
+[data-omi-layout="desktop"] .tag-all-section .tag-sort-item > .tag-filter-chip { border:1px solid color-mix(in srgb,var(--主文字) 26%,var(--面板色)); }
+[data-omi-layout="desktop"] .tag-all-section .tag-sort-list.is-selecting .tag-filter-chip { animation:tag-manage-wiggle .28s ease-in-out infinite alternate; opacity:1; }
+.mobile-tag-manage-actions .tag-delete-action:not(:disabled),.tag-filter-actions .danger-soft-action:not(:disabled) { color:#fff!important; background:#b93659!important; border-color:#b93659!important; }
+.quick-tags-overlay { z-index:140; }
+.quick-tags-drawer { width:min(420px,100vw); display:flex; flex-direction:column; overflow:hidden; }
+[data-omi-layout="desktop"] .organize-drawer.quick-tags-drawer { background:color-mix(in srgb,var(--玻璃基色) 78%,transparent); backdrop-filter:blur(18px) saturate(1.16); -webkit-backdrop-filter:blur(18px) saturate(1.16); } /* taste-skill-ignore: requested surface matches the existing desktop glass menus. */
+.quick-tags-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:22px 24px 16px; }
+.quick-tags-heading h2 { margin:0; font-size:20px; }
+.quick-tags-content { flex:1; min-height:0; display:flex; flex-direction:column; gap:14px; padding:8px 24px 24px; }
+.quick-tags-group { flex:1 1 0; min-height:0; display:flex; flex-direction:column; gap:12px; }
+.quick-tags-group:first-child { flex:0 1 auto; max-height:40%; }
+.quick-tags-group h3 { display:flex; justify-content:space-between; margin:0; font-size:14px; font-weight:600; }
+.quick-tags-group h3 span { color:var(--次文字); font-variant-numeric:tabular-nums; }
+.quick-tags-list { flex:1; min-height:0; overflow:auto; display:flex; align-content:flex-start; flex-wrap:wrap; gap:10px 8px; padding:0; border:0; border-radius:0; scrollbar-width:none; overscroll-behavior:contain; }
+.quick-tags-list::-webkit-scrollbar { display:none; }
+.quick-tags-list .tag-catalogue-chip { border-color:color-mix(in srgb,var(--主文字) 26%,var(--面板色)); }
+[data-omi-layout="desktop"] .quick-tags-list > .tag-filter-chip { border:1px solid color-mix(in srgb,var(--主文字) 26%,var(--面板色)); }
+.quick-tags-actions { display:flex; align-items:center; justify-content:center; gap:12px; flex:none; padding:14px 0; border-top:1px solid var(--边框色); border-bottom:1px solid var(--边框色); }
+[data-omi-layout="desktop"] .quick-tags-actions { border-top:0; border-bottom:0; }
+.quick-tags-actions button { display:flex; align-items:center; justify-content:center; gap:8px; min-width:112px; min-height:38px; }
+[data-omi-layout="desktop"] .quick-tags-actions .secondary-action { min-height:34px; padding:7px 16px; border-radius:9px; font-size:calc(12px * var(--desktop-font-scale,1)); }
+.quick-tag-chevron { width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.data-management { display:flex; flex-direction:column; gap:18px; }
+.data-management h3,.data-management p { margin:0; }
+.data-backup-row { display:flex; align-items:center; gap:14px; min-width:0; color:var(--次文字); font-size:calc(13px * var(--desktop-font-scale,1)); }
+.data-backup-row > button { flex:none; min-width:104px; min-height:34px; padding:7px 14px; border-radius:9px; font-size:inherit; }
+.data-backup-row > span { min-width:0; line-height:1.6; }
+.data-management-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.data-management-actions button { min-height:38px; min-width:104px; }
+.data-import-preview,.data-restore { display:flex; flex-direction:column; gap:16px; padding:18px; border:1px solid var(--控件边框); border-radius:12px; }
+.data-import-origin { font-size:12px; color:var(--次文字); overflow-wrap:anywhere; }
+.data-import-counts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:0; }
+.data-import-counts dt { font-size:12px; color:var(--次文字); }.data-import-counts dd { margin:6px 0 0; font-size:18px; font-variant-numeric:tabular-nums; }
+.data-root-mappings { display:flex; flex-direction:column; gap:16px; }.data-root-mapping { display:flex; flex-direction:column; gap:7px; min-width:0; }
+.data-directory-details { min-width:0; }.data-directory-details > summary { cursor:pointer; font-weight:600; }.data-directory-details > summary span { float:right; font-size:13px; font-variant-numeric:tabular-nums; color:var(--次文字); }.data-directory-details[open] > p { margin:14px 0; }
+.data-root-mapping > small { color:var(--次文字); font-size:12px; overflow-wrap:anywhere; }
+.data-root-mapping > div { display:flex; align-items:center; gap:8px; }.data-root-mapping > div > span { flex:1; min-width:0; overflow-wrap:anywhere; font-size:13px; }
+.data-root-mapping button { flex:none; }.data-mapping-clear { border:0; background:transparent; color:var(--次文字); font-size:20px; cursor:pointer; }
+.data-operation-message { color:var(--强调色); }
+[data-omi-layout="mobile"] .tag-completion-strip > button { min-height:40px; padding:8px 14px; }
+[data-omi-layout="mobile"] .tag-catalogue-chip { min-height:34px; padding:6px 11px; }
+[data-omi-layout="mobile"] :is(.tag-sort-list,.quick-tags-list) { gap:6px 8px; }
+[data-omi-layout="mobile"] .quick-tags-content { height:100%; padding:4px 16px 16px; }
+[data-omi-layout="mobile"] .mobile-sheet:has(.quick-tags-content) .mobile-sheet-heading { padding-left:16px; padding-right:16px; }
+[data-omi-layout="mobile"] .quick-tags-actions button { min-height:44px; }
+[data-omi-layout="mobile"] .quick-tags-actions .secondary-action:not(:disabled) { background:var(--强调色); border-color:var(--强调色); color:var(--强调文字); }
+[data-omi-layout="mobile"] .quick-tags-actions,[data-omi-layout="mobile"] .data-management-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
+[data-omi-layout="mobile"] .quick-tags-actions button,[data-omi-layout="mobile"] .data-management-actions button { width:100%; min-width:0; }
+[data-omi-layout="mobile"] .data-import-preview,[data-omi-layout="mobile"] .data-restore { padding:14px; }
+[data-omi-layout="mobile"] .data-management-actions button { min-height:44px; }
+[data-omi-layout="mobile"] .data-backup-row { min-height:60px; padding:10px 0; border-bottom:1px solid var(--边框色); font-size:calc(14px * var(--desktop-font-scale,1)); }
+[data-omi-layout="mobile"] .data-backup-row > button { min-width:88px; min-height:40px; padding:8px 12px; }
+@media(prefers-reduced-motion:reduce) { .tag-sort-list.is-selecting .tag-filter-chip,[data-omi-layout="desktop"] .tag-all-section .tag-sort-list.is-selecting .tag-filter-chip { animation:none; } }

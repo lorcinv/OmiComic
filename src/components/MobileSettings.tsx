@@ -10,6 +10,10 @@ import MobileIcon, { type MobileIconName } from './MobileIcon';
 import AboutOmiComic from './AboutOmiComic';
 import { mobileNavigate } from '../hooks/mobileNavigation';
 import { useMobileScrim } from '../hooks/mobileScrim';
+import DataManagement from './DataManagement';
+import { FontSizeControl } from './FontSizeControl';
+import { mobileTypography } from '../../electron/shared/desktopTypography';
+import { applyDesktopTypography } from '../theme';
 
 const categories: Array<{id:string;title:string;note:string;icon:MobileIconName}> = [
   {id:'appearance',title:'外观与主题',note:'配色、卡片布局与缩略预览',icon:'grid'},
@@ -17,7 +21,7 @@ const categories: Array<{id:string;title:string;note:string;icon:MobileIconName}
   {id:'reading',title:'默认阅读',note:'阅读方式、双页与音量键',icon:'bookmark'},
   {id:'book',title:'漫画阅读设置',note:'页面排序与自动阅读速度',icon:'shelf'},
   {id:'performance',title:'性能与缓存',note:'图片缓存、预加载与并发',icon:'settings'},
-  {id:'safety',title:'安全与确认',note:'收藏、书签和历史删除确认',icon:'select'},
+  {id:'safety',title:'安全与备份',note:'删除确认、数据导出与导入',icon:'select'},
   {id:'about',title:'关于 OmiComic',note:'版本、介绍与操作说明',icon:'info'},
 ];
 export default function MobileSettings({ settings, onSaved, onClose, bookSettings, displayScope = 'directory' }: { settings:AppSettings; onSaved:(s:AppSettings)=>void; onClose:()=>void; bookSettings:ReactNode; displayScope?:MobileDisplayScope }) {
@@ -25,6 +29,8 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
   const [category,setCategory]=useState(''), [value,setValue]=useState(settings), [error,setError]=useState('');
   const [displayPage,setDisplayPage]=useState<MobileDisplayScope>(displayScope);
   const display=getMobileDisplay(value,displayPage);
+  const fonts=mobileTypography(value);
+  useEffect(()=>{applyDesktopTypography(value);},[value]);
   const [cacheInfo,setCacheInfo]=useState<AndroidCacheInfo|null>(null), [clearing,setClearing]=useState(false);
   useEffect(() => { let cancelled=false; if(category==='performance')void queue.current.then(()=>window.omicomic.getAndroidCacheInfo?.()).then(r=>{if(!cancelled&&r?.ok)setCacheInfo(r.data);}).catch(()=>{});return()=>{cancelled=true;}; },[category,value.androidReaderDiskCacheSizeMb,value.androidThumbnailCacheSizeMb]);
   const queue=useRef(Promise.resolve()), mounted=useRef(true);
@@ -42,8 +48,10 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
     <header><button className="mobile-icon-button" aria-label={category?t("返回设置"):t("关闭设置")} onClick={back}><MobileIcon name="back"/></button><h2>{categories.find(item=>item.id===category)?.title ? t(categories.find(item=>item.id===category)!.title) : t("设置")}</h2></header>
     <div className="mobile-settings-body">{!category ? <nav aria-label={t("设置分类")}>{categories.map(item => <button key={item.id} className="mobile-setting-category" onClick={() => void mobileNavigate(() => setCategory(item.id))}><MobileIcon name={item.icon}/><span><strong>{t(item.title)}</strong><small>{t(item.note)}</small></span><MobileIcon name="chevron"/></button>)}</nav> : <>
       {category==='appearance' && <>
-        <label className="settings-toggle"><span>{t("显示主界面")}</span><input type="checkbox" checked={value.showHomePage !== false} onChange={event => save({showHomePage:event.target.checked})}/></label>
         <div className="settings-row"><span>{t('语言 / Language')}</span><GlassSelect ariaLabel="语言 / Language" value={normalizeLanguage(value.language)} options={[{value:'zh-CN',label:'简体中文'},{value:'en',label:'English'},{value:'ja',label:'日本語'}]} onChange={language=>save({language:normalizeLanguage(language)})}/></div>
+        <div className="settings-row"><span>{t('全局字号')}</span><FontSizeControl label={t('全局字号')} value={fonts.mobileGlobalFontSize} onChange={mobileGlobalFontSize=>save({mobileGlobalFontSize})}/></div>
+        <div className="settings-row"><span>{t('页码与信息字号')}</span><FontSizeControl label={t('页码与信息字号')} value={fonts.mobileInfoFontSize} onChange={mobileInfoFontSize=>save({mobileInfoFontSize})}/></div>
+        <label className="settings-toggle"><span>{t("显示主界面")}</span><input type="checkbox" checked={value.showHomePage !== false} onChange={event => save({showHomePage:event.target.checked})}/></label>
         {select('colorTheme',t("界面主题"),[{value:'mist',label:'雾蓝'},{value:'nord',label:'北境'},{value:'sand',label:'暖沙'},{value:'night',label:'夜色'}])}
         <div className="settings-row"><span>{t("显示设置页面")}</span><GlassSelect ariaLabel={t("显示设置页面")} value={displayPage} options={uiOptions(Object.entries(mobileDisplayLabels).map(([key,label])=>({value:key as MobileDisplayScope,label})))} onChange={setDisplayPage}/></div>
         <div className="settings-row"><span>{t("卡片布局")}</span><GlassSelect ariaLabel={t("卡片布局")} value={display.layout} options={uiOptions([{value:'grid' as const,label:'网格'},{value:'list' as const,label:'缩略图与说明'}])} onChange={layout=>save(patchMobileDisplay(value,displayPage,{layout}))}/></div>
@@ -86,7 +94,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {range('readerPreloadPages',t("预加载范围"),0,20,1,2,' 页')}
         {range('readerImageLoadConcurrency',t("图片并发加载数"),1,4,1,2)}
       </>}
-      {category==='safety' && <>{(['favorites','bookmarks','recent'] as const).map((key,index) => <label className="settings-toggle" key={key}><span>{t(['删除收藏前确认','删除书签前确认','删除历史前确认'][index])}</span><input type="checkbox" checked={value.confirmBeforeBatchDelete[key]} onChange={event => save({confirmBeforeBatchDelete:{...value.confirmBeforeBatchDelete,[key]:event.target.checked}})}/></label>)}{toggle('confirmBeforeDeleteTags',t("删除标签前确认"))}</>}
+      {category==='safety' && <>{(['favorites','bookmarks','recent'] as const).map((key,index) => <label className="settings-toggle" key={key}><span>{t(['删除收藏前确认','删除书签前确认','删除历史前确认'][index])}</span><input type="checkbox" checked={value.confirmBeforeBatchDelete[key]} onChange={event => save({confirmBeforeBatchDelete:{...value.confirmBeforeBatchDelete,[key]:event.target.checked}})}/></label>)}{toggle('confirmBeforeDeleteTags',t("删除标签前确认"))}<DataManagement beforeOperation={()=>queue.current} onImported={()=>window.location.reload()}/></>}
       {category==='about' && <AboutOmiComic />}
     </>}{error && <p role="alert">{t(error ?? '')}</p>}</div>
   </section></div>, document.body);
