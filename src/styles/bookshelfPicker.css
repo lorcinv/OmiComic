@@ -1,0 +1,36 @@
+.shelf-picker { display:grid; grid-template-columns:220px minmax(0,1fr); grid-template-rows:min(420px,calc(100dvh - 190px)) auto; grid-template-areas:"categories books" "actions actions"; gap:12px; width:100%; min-width:0; }
+.shelf-picker-surface { border:1px solid color-mix(in srgb,var(--玻璃边缘) 78%,transparent); border-radius:12px; background:color-mix(in srgb,var(--玻璃基色) 78%,transparent); box-shadow:none; backdrop-filter:blur(18px) saturate(1.16); -webkit-backdrop-filter:blur(18px) saturate(1.16); color:var(--主文字); }
+.root-delete-overlay.is-shelf-picker-editor { z-index:1200; }
+.shelf-picker-categories { grid-area:categories; display:grid; grid-template-rows:auto minmax(0,1fr); gap:8px; padding:10px; min-height:0; min-width:0; }
+.shelf-picker-search { display:block; min-width:0; }
+.shelf-picker-search>span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.shelf-picker-search input { width:100%; min-width:0; min-height:40px; padding:9px 11px; border:1px solid var(--控件边框); border-radius:9px; background:var(--控件背景); color:var(--主文字); font:inherit; outline:none; }
+.shelf-picker-search input:focus { border-color:var(--强调色); }
+.shelf-picker-category-list,.shelf-picker-book-list { display:grid; align-content:start; gap:6px; min-height:0; min-width:0; }
+.shelf-picker-books { grid-area:books; display:grid; grid-template-rows:minmax(0,1fr); padding:10px; min-height:0; }
+.shelf-picker-category-list>button,.shelf-picker-book-list>button { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:40px; min-width:0; padding:9px 10px; border:1px solid transparent; border-radius:8px; background:var(--bookshelf-target-glass-bg); color:var(--主文字); text-align:left; font:inherit; }
+.shelf-picker-category-list>button[aria-pressed="true"],.shelf-picker-category-list>button:hover,.shelf-picker-book-list>button:hover { border-color:var(--控件边框); background:var(--bookshelf-target-glass-active-bg); }
+.shelf-picker-category-list>button span,.shelf-picker-book-list>button span { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.shelf-picker em { flex:none; font-size:12px; font-style:normal; color:var(--次文字); }
+.shelf-picker .drawer-muted { margin:2px 0; font-size:13px; line-height:1.6; }
+.shelf-picker-actions { grid-area:actions; display:grid; grid-template-columns:220px minmax(0,1fr); gap:12px; }
+.shelf-picker-actions>button { width:100%; min-width:0; min-height:42px; padding:10px; text-align:left; font:inherit; }
+.shelf-picker-actions>button:hover { background:var(--bookshelf-target-glass-active-bg); border-color:var(--控件边框); }
+.shelf-picker button:disabled { opacity:.55; cursor:default; }
+.shelf-picker.is-mobile { grid-template-columns:minmax(0,1fr); grid-template-rows:44px minmax(64px,.72fr) minmax(64px,1fr) 44px; grid-template-areas:"search" "categories" "books" "actions"; height:min(68dvh,600px); max-height:calc(100dvh - 120px); min-height:250px; gap:10px; padding-bottom:env(safe-area-inset-bottom,0px); }
+.shelf-picker.is-mobile>.shelf-picker-search { grid-area:search; }
+.shelf-picker.is-mobile .shelf-picker-search input { height:44px; font-size:16px; }
+.shelf-picker.is-mobile .shelf-picker-categories { grid-template-rows:minmax(0,1fr); padding:8px; }
+.shelf-picker.is-mobile .shelf-picker-category-list { grid-template-columns:minmax(0,1fr); }
+.shelf-picker.is-mobile .shelf-picker-books { padding:8px; }
+.shelf-picker.is-mobile .shelf-picker-category-list>button,.shelf-picker.is-mobile .shelf-picker-book-list>button { min-height:44px; }
+.shelf-picker.is-mobile .shelf-picker-actions { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.shelf-picker.is-mobile .shelf-picker-actions>button { min-height:44px; padding:8px 6px; text-align:center; font-size:14px; }
+.picker-scroll-area { position:relative; min-height:0; min-width:0; height:100%; overflow:hidden; }
+.picker-scroll-content { height:100%; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; }
+.picker-scroll-content::-webkit-scrollbar { display:none; }
+.picker-scrollbar { position:absolute; right:0; top:0; bottom:0; width:18px; touch-action:none; cursor:default; outline:none; }
+.picker-scrollbar::before { content:""; position:absolute; right:6px; top:0; bottom:0; width:4px; border-radius:4px; background:color-mix(in srgb,var(--控件边框) 45%,transparent); }
+.picker-scroll-thumb { position:absolute; top:0; right:0; width:18px; touch-action:none; cursor:grab; }
+.picker-scroll-thumb::before { content:""; position:absolute; inset:0 6px 0 auto; width:4px; border-radius:4px; background:var(--次文字); }
+.picker-scrollbar:focus-visible { box-shadow:inset 0 0 0 1px var(--强调色); border-radius:4px; }

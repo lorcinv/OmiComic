@@ -32,16 +32,21 @@ public final class SmokeTest extends Instrumentation {
     catch(NoSuchFieldException legacy){View cover=(View)field(activity,"launchCover");return cover==null?-1f:1f-cover.getAlpha();}
   }
   private final class ReaderMotionFrames implements Choreographer.FrameCallback {
-    final Object surface,scene;final JSONArray frames=new JSONArray();boolean stopped,lastCovered,lastSnapshot;float lastSceneTranslation=Float.NaN;int callbacks;long lastDrawn=-1,lastEmpty=-1;
+    final Object surface,scene;final JSONArray frames=new JSONArray();boolean stopped,lastCovered,lastSnapshot;float lastSceneTranslation=Float.NaN,lastSourceScale=Float.NaN,lastContentScale=Float.NaN;int callbacks;long lastDrawn=-1,lastEmpty=-1;
     ReaderMotionFrames(Activity activity)throws Exception{surface=field(activity,"readerSurface");scene=field(activity,"sceneTransition");}
     public void doFrame(long time){
       if(stopped)return;
       try{
         long drawn=(Long)field(surface,"drawnFrames"),empty=(Long)field(surface,"emptyFrames");
         ViewGroup sceneRoot=(ViewGroup)field(scene,"root");View snapshot=(View)field(scene,"snapshot"),content=(View)field(scene,"content");
-        boolean covered=snapshot!=null&&sceneRoot.indexOfChild(snapshot)>sceneRoot.indexOfChild(content);
-        float sceneTranslation=content.getTranslationX();boolean hasSnapshot=snapshot!=null;
-        if(drawn==lastDrawn&&empty==lastEmpty&&covered==lastCovered&&sceneTranslation==lastSceneTranslation&&hasSnapshot==lastSnapshot){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
+        View opening=null;try{opening=(View)field(scene,"readerOpening");}catch(NoSuchFieldException legacy){}
+        boolean covered=snapshot!=null&&sceneRoot.indexOfChild(snapshot)>sceneRoot.indexOfChild(content)||opening!=null&&opening.getTranslationX()<1&&opening.getAlpha()>.7f;
+        float sceneTranslation=opening==null?content.getTranslationX():opening.getTranslationX();boolean hasSnapshot=snapshot!=null||opening!=null;
+        float sourceScale=snapshot==null?1:snapshot.getScaleX();
+        float contentScale=content.getScaleX();
+        if(drawn==lastDrawn&&empty==lastEmpty&&covered==lastCovered&&sceneTranslation==lastSceneTranslation&&hasSnapshot==lastSnapshot&&sourceScale==lastSourceScale&&contentScale==lastContentScale){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
+        lastSourceScale=sourceScale;
+        lastContentScale=contentScale;
         lastDrawn=drawn;lastEmpty=empty;lastCovered=covered;lastSceneTranslation=sceneTranslation;lastSnapshot=hasSnapshot;
         Object current=field(surface,"current");JSONArray slots=new JSONArray();boolean pixels=false;
         if(current!=null){android.graphics.RectF clip=(android.graphics.RectF)field(current,"clip");
@@ -56,7 +61,10 @@ public final class SmokeTest extends Instrumentation {
             slots.put(new JSONObject().put("url",field(slot,"url")).put("left",rect.left).put("top",rect.top).put("width",rect.width()).put("height",rect.height()).put("sourceSample",raster==null?0:field(raster,"sample")).put("visibleSample",sample).put("pixelDensity",density).put("bitmapWidth",bitmap==null?0:bitmap.getWidth()).put("bitmapHeight",bitmap==null?0:bitmap.getHeight()));
           }
         }
-        JSONObject recorded=new JSONObject().put("time",time/1000000).put("zoom",current==null?0:field(current,"zoom")).put("pixels",pixels).put("slots",slots).put("drawnFrames",field(surface,"drawnFrames")).put("emptyFrames",field(surface,"emptyFrames")).put("sceneCovered",covered).put("sceneTranslationX",sceneTranslation).put("sceneWidth",content.getWidth()).put("sceneSnapshot",hasSnapshot).put("active",field(surface,"active"));
+        JSONObject recorded=new JSONObject().put("time",time/1000000).put("zoom",current==null?0:field(current,"zoom")).put("pixels",pixels).put("slots",slots).put("drawnFrames",field(surface,"drawnFrames")).put("emptyFrames",field(surface,"emptyFrames")).put("sceneCovered",covered).put("sceneTranslationX",sceneTranslation).put("sceneWidth",content.getWidth()).put("sceneSnapshot",hasSnapshot).put("active",field(surface,"active")).put("readerOpening",opening!=null);
+        recorded.put("sourceScale",sourceScale);
+        recorded.put("contentScale",contentScale);
+        try{recorded.put("readerDuration",field(scene,"READER_ENTER_MS"));}catch(NoSuchFieldException legacy){}
         try{synchronized(field(surface,"cacheLock")){
           JSONArray decoding=new JSONArray();java.util.Map<?,?> pending=(java.util.Map<?,?>)field(surface,"pending"),ranks=(java.util.Map<?,?>)field(surface,"workingKeys");
           for(Object work:pending.values()){int tid=(Integer)field(work,"threadId");if(tid>0)decoding.put(new JSONObject().put("rank",ranks.get(field(work,"key"))).put("priority",android.os.Process.getThreadPriority(tid)));}
@@ -654,7 +662,13 @@ public final class SmokeTest extends Instrumentation {
       if("about".equals(args.getString("mode")))addMonitor(externalMonitor);
       byte[] script;
       String fixture=args.getString("fixture","");
-      String scriptAsset=mode.equals("quality1155")&&fixture.startsWith("entry1168")?"android-entry1168":mode.equals("quality1155")&&fixture.startsWith("panorama1167")?"android-panorama1167":mode.equals("quality1155")&&fixture.startsWith("entry1167")?"android-entry1167":mode.equals("quality1155")&&fixture.startsWith("entry1166")?"android-entry1166":mode.equals("quality1155")&&fixture.startsWith("entry1165")?"android-entry1165":mode.equals("quality1155")&&fixture.startsWith("speed")?"android-speed1163":mode.equals("quality1155")&&fixture.startsWith("reentry")?"android-reentry1163":mode.equals("quality1155")&&fixture.equals("empty-folders")?"android-empty-folders1163":mode;
+      String scriptAsset=fixture.startsWith("workflow1172")?"android-workflow1172":fixture.startsWith("workflow1171")?"android-workflow1171":fixture.startsWith("previews1170")?"android-previews1170":fixture.startsWith("shelf1169")?"android-shelf1169":fixture.startsWith("formats1168")?"android-formats1168":fixture.startsWith("uipdf1168")?"android-ui-pdf1168":mode.equals("quality1155")&&fixture.startsWith("entry1168")?"android-entry1168":mode.equals("quality1155")&&fixture.startsWith("panorama1167")?"android-panorama1167":mode.equals("quality1155")&&fixture.startsWith("entry1167")?"android-entry1167":mode.equals("quality1155")&&fixture.startsWith("entry1166")?"android-entry1166":mode.equals("quality1155")&&fixture.startsWith("entry1165")?"android-entry1165":mode.equals("quality1155")&&fixture.startsWith("speed")?"android-speed1163":mode.equals("quality1155")&&fixture.startsWith("reentry")?"android-reentry1163":mode.equals("quality1155")&&fixture.equals("empty-folders")?"android-empty-folders1163":mode;
+      if(fixture.startsWith("filmstrip1173"))scriptAsset="android-filmstrip1173";
+      if(fixture.startsWith("tuning1173"))scriptAsset="android-mobile-tuning1173";
+      if(fixture.startsWith("content200"))scriptAsset="android-content200";
+      if(fixture.startsWith("swipe200"))scriptAsset="android-mobile-swipe200";
+      if(fixture.startsWith("stability1174"))scriptAsset="android-stability1174";
+      if(fixture.startsWith("brand1175"))scriptAsset="android-brand1175";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
       deadline=System.currentTimeMillis()+((mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
@@ -677,6 +691,7 @@ public final class SmokeTest extends Instrumentation {
       ReaderMotionFrames[] readerMotionFrames={null};
       while("null".equals(result=eval("JSON.stringify(window.__omiResult)"))||"\"null\"".equals(result)){
         if(System.currentTimeMillis()>deadline)throw new IOException("Smoke timed out: "+eval("document.body.innerText"));
+        if("true".equals(eval("window.__omiWaitScene===true"))){awaitSceneSettled(activity);CountDownLatch frame=new CountDownLatch(1);runOnMainSync(()->web.postVisualStateCallback(SystemClock.uptimeMillis(),new WebView.VisualStateCallback(){@Override public void onComplete(long id){frame.countDown();}}));if(!frame.await(4,TimeUnit.SECONDS))throw new IOException("Web scene frame did not commit");SystemClock.sleep(100);eval("window.__omiWaitScene=false");}
         if("true".equals(eval("window.__omiReaderMotionStart===true"))){runOnMainSync(()->{try{readerMotionFrames[0]=new ReaderMotionFrames(activity);Choreographer.getInstance().postFrameCallback(readerMotionFrames[0]);}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiReaderMotionStart=false");}
         if("true".equals(eval("window.__omiReaderMotionStop===true"))){String[] captured={null};runOnMainSync(()->{readerMotionFrames[0].stopped=true;captured[0]=readerMotionFrames[0].frames.toString();});eval("window.__omiReaderMotionFrames="+captured[0]+";window.__omiReaderMotionStop=false");}
         if("true".equals(eval("window.__omiDisplaySamplingCheck===true"))){JSONObject sampled=displaySamplingTest();eval("window.__omiDisplaySamplingResult="+sampled+";window.__omiDisplaySamplingCheck=false");}
@@ -835,6 +850,13 @@ public final class SmokeTest extends Instrumentation {
           JSONObject report=new JSONObject().put("musicBefore",music).put("musicAfter",audio.getStreamVolume(3)).put("ringBefore",ring).put("ringAfter",audio.getStreamVolume(2)).put("capturing",field(activity,"readerVolumeKeys"));
           eval("window.__omiKeyResult="+report+";window.__omiKey=null;");
         }
+        String textInput=(String)new JSONTokener(eval("JSON.stringify(window.__omiText||null)")).nextValue();
+        if(!"null".equals(textInput)){
+          String text=(String)new JSONTokener(textInput).nextValue();
+          if(!text.matches("[A-Za-z0-9_-]{1,80}"))throw new IOException("Invalid test text input");
+          shell("input text "+text);
+          eval("window.__omiText=null");
+        }
         String rotation=eval("window.__omiRotation??null");
         if(!"null".equals(rotation)){runOnMainSync(()->activity.setRequestedOrientation(Integer.parseInt(rotation)));eval("window.__omiRotation=null");}
         String shot=(String)new JSONTokener(eval("JSON.stringify(window.__omiShot||null)")).nextValue();
@@ -892,6 +914,12 @@ public final class SmokeTest extends Instrumentation {
           JSONObject request=new JSONObject(drag),from=request.getJSONObject("from"),to=request.getJSONObject("to");int[] origin=new int[2],width=new int[1];
           runOnMainSync(()->{web.getLocationOnScreen(origin);width[0]=web.getWidth();});
           float scale=(float)(width[0]/request.getDouble("viewport"));long down=SystemClock.uptimeMillis();
+          if(request.optBoolean("shell",false)){
+            // Like shell taps, shell swipes avoid UiAutomation's wait on a
+            // stale emulator window-reveal animation while preserving native input.
+            shell("input touchscreen swipe "+(origin[0]+from.getDouble("x")*scale)+" "+(origin[1]+from.getDouble("y")*scale)+" "+(origin[0]+to.getDouble("x")*scale)+" "+(origin[1]+to.getDouble("y")*scale)+" "+request.optInt("durationMs",240));
+            eval("window.__omiDragResult={lastUpUptime:"+SystemClock.uptimeMillis()+"};window.__omiDrag=null");
+          }else{
           MotionEvent.PointerProperties finger=new MotionEvent.PointerProperties();finger.id=0;finger.toolType=MotionEvent.TOOL_TYPE_FINGER;
           long lastUp=down;
           for(int step=0;step<=12;step++){
@@ -903,6 +931,7 @@ public final class SmokeTest extends Instrumentation {
             if(step==12)lastUp=motion.getEventTime();getUiAutomation().injectInputEvent(motion,!request.optBoolean("async",false));motion.recycle();SystemClock.sleep(step==0?request.optInt("holdMs",80):Math.max(1,request.optInt("stepMs",24)));
           }
           eval("window.__omiDragResult={lastUpUptime:"+lastUp+"};window.__omiDrag=null");
+          }
         }
         String pinch=(String)new JSONTokener(eval("JSON.stringify(window.__omiPinch||null)")).nextValue();
         if(!"null".equals(pinch)){
@@ -983,6 +1012,7 @@ public final class SmokeTest extends Instrumentation {
         io.put("previewIndexBuilds",field(field(library,"previewArchives"),"indexBuilds"));
         try{io.put("readerPageDecodes",field(field(library,"nativeArchives"),"pageDecodes")).put("readerPageDiskHits",field(field(library,"nativeArchives"),"pageDiskHits"));}catch(NoSuchFieldException legacy){}
         try{io.put("folderCoverHits",field(library,"folderCoverHits")).put("folderCoverSteps",field(library,"folderCoverSteps"));}catch(NoSuchFieldException legacy){}
+        try{io.put("pdfCoverHits",field(library,"pdfCoverHits")).put("pdfCoverRenders",field(library,"pdfCoverRenders"));}catch(NoSuchFieldException legacy){}
         try{io.put("zipRandomReads",field(field(library,"nativeArchives"),"zipRandomReads")).put("uriIndexHits",field(library,"uriIndexHits")).put("directoryIndexHits",field(library,"directoryIndexHits"));}catch(NoSuchFieldException legacy){}
         resultObject.put("io",io);
         if(mode.equals("loading-restore")){

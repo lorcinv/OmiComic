@@ -1,0 +1,114 @@
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const assert=(ok,label)=>{if(!ok)throw Error(label);};
+const wait=async(fn,label)=>{const end=Date.now()+25000;while(!await fn()){if(Date.now()>end)throw Error(label+' '+document.body.innerText.slice(-600));await pause(25);}};
+const value=async task=>{const result=await task;assert(result.ok,JSON.stringify(result));return result.data;};
+const button=(label,scope=document)=>[...scope.querySelectorAll('button')].find(el=>el.getBoundingClientRect().width>0&&(el.getAttribute('aria-label')===label||el.textContent.trim()===label));
+const tap=async el=>{assert(el,'Missing tap target');el.scrollIntoView({block:'nearest',behavior:'instant'});await pause(180);const r=el.getBoundingClientRect();window.__omiTap={x:r.x+r.width/2,y:r.y+Math.min(30,r.height/2),viewport:innerWidth};await wait(()=>!window.__omiTap,'native tap');};
+const drag=async(from,to,durationMs=260)=>{window.__omiDrag={from,to,viewport:innerWidth,shell:true,durationMs};await wait(()=>!window.__omiDrag,'native swipe');};
+const shot=async name=>{window.__omiShot=name;await wait(()=>!window.__omiShot,'screenshot');};
+const api=window.omicomic,data=await value(api.getAppData()),root=data.library.roots.find(item=>item.name==='Halftone1149')??data.library.roots[0];
+await value(api.updateSettings({readerPageMode:'single',readerDefaultPanorama:false,readerDefaultFlow:'horizontal',readerPreloadPages:2,mobileReaderAutoHide:false,mobileReaderPreviews:true,hideBookshelfItemsInLibrary:false}));
+const card=name=>[...document.querySelectorAll('.page-panel.is-visible .mobile-resource-card')].find(el=>el.querySelector('strong')?.textContent===name);
+if(button('打开资源库'))button('打开资源库').click();
+for(let i=0;i<5&&!card('Document.pdf');i++){window.dispatchEvent(new Event('omi-back'));await pause(200);}
+const checks=[],trace=window.__omiMotionReport={checks};
+for(const name of['Document.pdf','Quick1172.cbz']){
+ const path=root.path+'/'+name,book=await value(api.getResourcePages({path,type:name.endsWith('.pdf')?'pdf':'archive'}));
+ await value(api.saveReadingProgress({resourceKey:book.resourceKey,sourcePath:path,sourceType:book.sourceType,title:name,currentPageIndex:0,totalPages:book.pages.length,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:'horizontal',panorama:false,immersive:false}}));
+ await wait(()=>card(name),'source '+name);card(name).click();
+ await wait(()=>document.querySelector('.page-panel.is-visible .reader-stage'),'reader');
+ const stage=()=>document.querySelector('.page-panel.is-visible .reader-stage'),progress=()=>document.querySelector('[aria-label="阅读进度"]');
+ await wait(()=>progress()&&Number(progress().getAttribute('aria-valuemax'))>1,'page manifest');
+ if(name.endsWith('.pdf'))await wait(()=>stage()?.querySelector('canvas.reader-pdf-canvas')?.width>0,'PDF body');
+ await pause(500);
+ await wait(()=>document.querySelector('.reader-layout')?.getAttribute('aria-busy')==='false','reader interactive');
+ if(!document.querySelector('.reader-layout.is-mobile-chrome-visible')){
+  const s=stage().getBoundingClientRect();window.__omiTap={x:s.x+s.width/2,y:s.y+s.height/2,viewport:innerWidth};await wait(()=>!window.__omiTap,'native center tap');
+ }
+ await wait(()=>document.querySelector('.reader-layout.is-mobile-chrome-visible'),'visible toolbar');await pause(180);
+ const p=progress().getBoundingClientRect();await drag({x:p.x+p.width*.15,y:p.y+p.height/2},{x:p.x+p.width*.5,y:p.y+p.height/2});
+ await wait(()=>document.querySelector('.mobile-reader-filmstrip'),'preview strip');await pause(300);
+ const rail=document.querySelector('.mobile-reader-filmstrip'),r=rail.getBoundingClientRect(),positions=[],before=rail.scrollLeft;let release=null;
+ rail.addEventListener('scrollend',()=>positions.push(rail.scrollLeft));
+ rail.addEventListener('touchend',()=>{release=rail.scrollLeft;},{passive:true});
+ await drag({x:r.x+r.width*.8,y:r.y+r.height*.5},{x:r.x+r.width*.2,y:r.y+r.height*.5},400);
+ await wait(()=>release!==null,'native preview touch release');
+ const firstEnd=release;await pause(400);const after=rail.scrollLeft;
+ const selected=rail.querySelector('[aria-pressed="true"]'),rect=selected?.getBoundingClientRect();
+ trace.preview={name,firstEnd,after,positions,selected:selected?.textContent};
+ assert(rect&&Math.abs(rect.x+rect.width/2-(r.x+r.width/2))<2,'Preview did not align directly');
+ assert(after>before+96,'Preview did not advance under a real swipe');assert(Math.abs(after-firstEnd)<1,'Preview recentered after native scroll end');
+ await wait(()=>{const img=rail.querySelector('[aria-pressed="true"] img');return img?.complete&&img.naturalWidth>0;},'selected preview decode');
+ checks.push({name,before,firstEnd,after,centerError:Math.abs(rect.x+rect.width/2-(r.x+r.width/2)),decoded:true});
+ await shot(name.endsWith('.pdf')?'workflow1172-pdf':'workflow1172-comic');
+ window.dispatchEvent(new Event('omi-back'));await pause(150);if(document.querySelector('.page-panel.is-visible .reader-stage'))window.dispatchEvent(new Event('omi-back'));await wait(()=>card(name),'return to library');
+}
+{
+ await tap(card('Document.pdf').querySelector('[aria-label="打开资源信息"]'));
+ await wait(()=>document.querySelectorAll('.resource-detail-thumbnail img').length>0,'PDF detail thumbnails');
+ document.querySelector('.resource-detail-preview-panel').scrollIntoView({block:'start',behavior:'instant'});await pause(180);
+ await wait(()=>{const images=[...document.querySelectorAll('.resource-detail-thumbnail img')];return images.length===6&&images.every(img=>img.complete&&img.naturalWidth>0);},'decoded PDF detail');
+ assert(![...document.querySelectorAll('.resource-detail-preview-empty')].some(el=>el.textContent.includes('PDF')),'PDF details still show placeholder');
+ await pause(500);await shot('workflow1172-pdf-details');checks.push({flow:'pdf-details',decoded:true,pages:document.querySelectorAll('.resource-detail-thumbnail').length});
+ window.dispatchEvent(new Event('omi-back'));await wait(()=>card('Quick1172.cbz'),'PDF detail return');
+}
+let source=card('Quick1172.cbz');await tap(source.querySelector('[aria-label="打开资源信息"]'));
+await wait(()=>document.querySelector('.resource-detail-page'),'detail preview');
+await wait(()=>document.querySelector('.mobile-page-pill.is-inline[aria-label="预览分页"]')?.textContent.includes('1 / 3'),'original detail pager');
+const inline=document.querySelector('.mobile-page-pill.is-inline[aria-label="预览分页"]');
+await tap(button('下一组预览',inline));
+await wait(()=>document.querySelector('.mobile-page-pill:not(.is-inline)[aria-label="浮动预览分页"]')?.textContent.includes('2 / 3'),'pager follows group navigation');
+await wait(()=>{const thumb=[...document.querySelectorAll('.resource-detail-thumbnail')].find(el=>el.querySelector('strong')?.textContent==='49'),r=thumb?.getBoundingClientRect();return r&&r.bottom>0&&r.top<innerHeight-70;},'group navigation lands on page 49 at native density');
+const detail=document.querySelector('.resource-detail-page'),before=detail.scrollTop,dr=detail.getBoundingClientRect();
+await drag({x:dr.x+dr.width*.5,y:dr.y+dr.height*.8},{x:dr.x+dr.width*.5,y:dr.y+dr.height*.3},350);
+await wait(()=>detail.scrollTop>before,'continuous detail swipe');await shot('workflow1172-detail-pager');
+assert(document.querySelectorAll('.resource-detail-thumbnail').length<48,'Unbounded detail images');
+checks.push({flow:'detail-previews',originalPager:true,continuousSwipe:true,mountedImages:document.querySelectorAll('.resource-detail-thumbnail').length});
+window.dispatchEvent(new Event('omi-back'));await wait(()=>card('Quick1172.cbz'),'detail return');
+source=card('Quick1172.cbz');source.scrollIntoView({block:'center',behavior:'instant'});await pause(150);const r=source.getBoundingClientRect(),point={x:r.x+r.width/2,y:r.y+35};
+await drag(point,point,650);await wait(()=>button('加入书架'),'context add action');await tap(button('加入书架'));
+const picker=()=>document.querySelector('.shelf-picker.is-mobile');await wait(picker,'mobile picker');
+assert(!picker().querySelector('[role="scrollbar"]'),'Mobile picker has a drag scrollbar');
+assert(picker().children[0].classList.contains('shelf-picker-search'),'Search must be first');
+await pause(500);await shot('workflow1172-picker');
+const suffix=String(Date.now()%100000),categoryName='Category'+suffix,shelfName='Shelf'+suffix;
+const setName=async name=>{const input=document.querySelector('.virtual-folder-dialog input');await tap(input);input.select();window.__omiText=name;await wait(()=>!window.__omiText,'native typing');await wait(()=>input.value===name,'typed name');await tap(button('保存',document.querySelector('.virtual-folder-dialog')));await wait(()=>!document.querySelector('.virtual-folder-dialog'),'saved name');};
+await tap(button('新建书架分类',picker()));await wait(()=>document.querySelector('.virtual-folder-dialog input'),'category editor');await setName(categoryName);
+await wait(()=>picker()?.querySelector('[aria-pressed="true"]')?.textContent.includes(categoryName),'new category stays selected');
+assert(card('Quick1172.cbz'),'Category creation navigated away from source');
+await tap(button('新建书架并加入',picker()));await wait(()=>document.querySelector('.virtual-folder-dialog input'),'shelf editor');await setName(shelfName);
+await wait(()=>!picker(),'picker closes after adding');assert(card('Document.pdf')&&!document.querySelector('.page-panel.is-visible .resource-detail-page'),'Shelf creation navigated away from source');
+const saved=await value(api.getAppData()),shelf=saved.virtualFolders.find(item=>item.name===shelfName),category=saved.bookshelves.find(item=>item.name===categoryName);
+assert(shelf?.items.length===1&&shelf.bookshelfId===category?.id,'Pending resource or category was lost');
+checks.push({flow:'mobile-add-to-shelf',searchFirst:true,scrollbar:false,sourceRetained:true,categorySelected:true,persistedItems:shelf.items.length});
+await value(api.deleteBookshelf(category.id));
+{
+ const navigation=label=>[...document.querySelectorAll('.sidebar-primary-nav .sidebar-item')].find(el=>el.querySelector('span')?.textContent===label);
+ for(let i=0;i<3;i++){
+  const actions=document.querySelector('.mobile-action-bar');if(!actions||actions.getBoundingClientRect().width<1)break;
+  window.dispatchEvent(new Event('omi-back'));await pause(180);
+ }
+ const scroller=()=>document.querySelector('.page-panel.is-visible .resource-list-scroll');
+ const target=card('Quick1172.cbz');target.scrollIntoView({block:'center',behavior:'instant'});await pause(150);const before=scroller().scrollTop;
+ await tap(navigation('最近阅读'));await pause(150);await tap(navigation('资源库'));await wait(()=>scroller()&&Math.abs(scroller().scrollTop-before)<3,'return restores library scroll');
+ await tap(navigation('资源库'));await wait(()=>scroller()?.scrollTop<1,'active tab resets scroll');checks.push({flow:'tab-position',restored:true,reset:true});
+}
+for(const name of['Reader1152.mobi','KF8_1172.mobi','Dual_1172.mobi']){
+ const path=root.path+'/'+name,descriptor=await value(api.getResourcePages({path,type:'mobi'}));
+ await value(api.saveReadingProgress({resourceKey:descriptor.resourceKey,sourcePath:path,sourceType:'mobi',title:name,currentPageIndex:0,totalPages:2,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:'horizontal',panorama:false,immersive:false}}));
+ if(!card(name)){document.querySelector('.page-panel.is-visible .resource-list-scroll').scrollTop=0;await pause(150);}
+ await wait(()=>card(name),'MOBI card '+name);card(name).click();
+ await wait(()=>document.querySelector('.page-panel.is-visible .reader-stage iframe'),'MOBI iframe '+name);
+ await wait(()=>document.querySelector('.reader-layout')?.getAttribute('aria-busy')==='false','MOBI body ready');
+ let frame=document.querySelector('.page-panel.is-visible .reader-stage iframe');assert(frame.contentDocument?.body,'MOBI chapter pixels');
+ if(!document.querySelector('.reader-layout.is-mobile-chrome-visible')){const r=document.querySelector('.reader-stage').getBoundingClientRect();window.__omiTap={x:r.x+r.width*.5,y:r.y+r.height*.5,viewport:innerWidth};await wait(()=>!window.__omiTap,'MOBI toolbar');}
+ const total=Number(document.querySelector('[aria-label="阅读进度"]')?.getAttribute('aria-valuemax'));assert(total>1,'MOBI chapter manifest');
+ const r=document.querySelector('.reader-stage').getBoundingClientRect();window.__omiTap={x:r.x+r.width*.94,y:r.y+r.height*.5,viewport:innerWidth};await wait(()=>!window.__omiTap,'MOBI page tap');
+ await wait(()=>document.querySelector('[data-reader-page-index="1"]:not([aria-hidden="true"]) iframe'),'MOBI second chapter');checks.push({flow:'mobi',name,total,chapterTurn:true});
+ window.dispatchEvent(new Event('omi-back'));await wait(()=>card('Document.pdf'),'MOBI return');
+}
+await value(api.refreshThumbnails());
+const coverInput={path:root.path+'/Document.pdf',type:'pdf'},cold=performance.now(),first=await value(api.getThumbnail(coverInput)),coldMs=performance.now()-cold,warm=performance.now(),second=await value(api.getThumbnail(coverInput)),warmMs=performance.now()-warm;
+assert(first.url?.startsWith('data:image/jpeg;')&&first.url===second.url,'Native PDF cover or disk cache missing');
+checks.push({flow:'pdf-cover',native:true,cached:true,coldMs,warmMs});
+return {checks,input:'Android native taps, typing, long hold and swipes; source cards activated in DOM'};

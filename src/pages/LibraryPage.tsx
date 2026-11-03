@@ -3,6 +3,8 @@ import { FontSizeControl } from "../components/FontSizeControl";
 import HomeArtworkSettings from '../components/HomeArtworkSettings';
 import AboutOmiComic from '../components/AboutOmiComic';
 import { warmReader } from '../reader/loadReader';
+import {beginReaderOpening,cancelReaderOpening} from '../android/readerOpening';
+import type {DocumentSource} from '../reader/documentSource';
 import { uiOptions, setUiLanguage, normalizeLanguage } from '../i18n';
 import AppIcon from '../components/AppIcon';
 import { t, tr } from '../i18n';
@@ -33,6 +35,10 @@ import MobileReorderList from "../components/MobileReorderList";
 import MobileResourceCard from "../components/MobileResourceCard";
 import MobileBookshelfCard from "../components/MobileBookshelfCard";
 import MobileActionBar, { type MobileAction } from "../components/MobileActionBar";
+import { collectBookshelfItems } from "../library/bookshelfImports";
+import ContextMenu from '../components/ContextMenu';
+import BookshelfTargetPicker from '../components/BookshelfTargetPicker';
+import {useNoticeState} from '../notifications';
 import { useRandomBrowse } from '../hooks/useRandomBrowse';
 import { useLibraryQueryResult } from '../hooks/useLibraryQuery';
 import { useLibraryCatalog, observeLibraryDirectory, excludeLibraryCatalogPaths, invalidateLibraryCatalog } from '../library/libraryCatalog';
@@ -46,7 +52,7 @@ import MobilePagePager, { MobileDetailPager } from "../components/MobilePagePage
 import MobileDetailMetadata from "../components/MobileDetailMetadata";
 import LocalFileDialog, { type LocalFileTarget } from "../components/LocalFileDialog";
 import 资源详情缩略图 from "../components/DetailPagePreview";
-import ContinuousDetailPreviews from '../components/ContinuousDetailPreviews';
+import ContinuousDetailPreviews, {type DetailPreviewNavigation} from '../components/ContinuousDetailPreviews';
 import { useBoundedRecord } from "../hooks/useBoundedRecord";
 import { useDetailPreviewWheel } from "../hooks/useDetailPreviewWheel";
 import { useCardScaleWheel } from "../hooks/useCardScaleWheel";
@@ -976,7 +982,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       if (手机操作目标) { 设置手机操作目标(null); event.preventDefault(); return; }
       if (手机书架管理 || 手机书架排序) { 设置手机书架管理(null); 设置手机书架排序(false); event.preventDefault(); return; }
       if (手机筛选展开 || 当前搜索内容) { 取消当前搜索(); event.preventDefault(); return; }
-      if (正在打开资源路径 || 正在读取) { 打开阅读请求序号.current++; 读取序号.current++; 设置正在打开资源路径(null); 设置正在读取(false); event.preventDefault(); return; }
+      if (正在打开资源路径 || 正在读取) { cancelReaderOpening();打开阅读请求序号.current++; 读取序号.current++; 设置正在打开资源路径(null); 设置正在读取(false); event.preventDefault(); return; }
       if (当前视图 === "virtual-folder") { 返回书架根层(); event.preventDefault(); return; }
       if (当前视图 === "directory" && 当前目录?.parentPath && 当前根目录) {
         void 返回上一处(); event.preventDefault();
@@ -992,8 +998,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [正在读取, 设置正在读取] = useState(false);
   const [正在打开资源路径, 设置正在打开资源路径] = useState<string | null>(null);
   const 打开清单任务 = useRef<{ path: string; promise: ReturnType<typeof window.omicomic.getResourcePages> } | null>(null);
-  const [错误信息, 设置错误信息] = useState<string | null>(null);
-  const [成功提示, 设置成功提示] = useState<string | null>(null);
+  const [, 设置错误信息] = useNoticeState('error',0,'关闭错误提示',isActive);
+  const [, 设置成功提示] = useNoticeState('success',2600,'关闭提示',isActive);
   const [搜索内容, 设置搜索内容] = useState("");
   const [最近搜索内容, 设置最近搜索内容] = useState("");
   const [收藏搜索内容, 设置收藏搜索内容] = useState("");
@@ -1082,6 +1088,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 手机自适应 = useResponsiveLibrary(手机基础列数, 手机布局);
   const 手机列数 = 手机自适应.columns;
   const [目录空白菜单, 设置目录空白菜单] = useState<{ x: number; y: number } | null>(null);
+  const [选择右键菜单, 设置选择右键菜单] = useState<{ x: number; y: number } | null>(null);
+  const [电脑书架选择中, 设置电脑书架选择中] = useState(false);
+  const [电脑已选书架, 设置电脑已选书架] = useState<Set<string>>(new Set());
   const [资源菜单, 设置资源菜单] = useState<{
     x: number;
     y: number;
@@ -1091,6 +1100,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     localPath: string;
     progressText?: string | null;
     thumbnailUrl?: string | null;
+    collection?: boolean;
   } | null>(null);
   const [最近菜单, 设置最近菜单] = useState<{ x: number; y: number; 项目: RecentOpenedItem } | null>(null);
   const [收藏菜单, 设置收藏菜单] = useState<{ x: number; y: number; 项目: FavoriteItem } | null>(null);
@@ -1138,6 +1148,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [虚拟文件夹弹窗, 设置虚拟文件夹弹窗] = useState<虚拟文件夹弹窗状态>(null);
   const [虚拟文件夹名称输入, 设置虚拟文件夹名称输入] = useState("");
   const [虚拟文件夹备注输入, 设置虚拟文件夹备注输入] = useState("");
+  const [书架编辑错误, 设置书架编辑错误] = useState<string | null>(null);
   const [待删除虚拟文件夹, 设置待删除虚拟文件夹] = useState<(VirtualFolder & { selection?: VirtualFolder[] }) | null>(null);
   const [待清空虚拟文件夹, 设置待清空虚拟文件夹] = useState<清空书架确认状态>(null);
   const [待清空无效资源, 设置待清空无效资源] = useState<清空无效资源确认状态>(null);
@@ -1178,6 +1189,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [资源详情路径浮层打开, 设置资源详情路径浮层打开] = useState(false);
   const 资源详情滚动容器 = useRef<HTMLElement>(null);
   const 资源详情预览滚动容器 = useRef<HTMLDivElement>(null);
+  const 资源详情预览导航 = useRef<DetailPreviewNavigation>(null);
+  const 资源详情文档预览源 = useRef<DocumentSource|null>(null);
+  useEffect(()=>()=>{资源详情文档预览源.current?.dispose();},[]);
   const 资源详情编辑快照 = useRef<{ note: string; tags: string } | null>(null);
   const 资源详情加载序号 = useRef(0);
   const 手机详情封面起点 = useRef<MobileNavigationOrigin>();
@@ -1246,7 +1260,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 书架备注悬停Key = useRef<string | null>(null);
   const 书架备注鼠标位置 = useRef({ x: 0, y: 0 });
   const 设置保存请求序号 = useRef(0);
-  const 成功提示定时器 = useRef<number | null>(null);
   const 可见书签ID集合 = useRef<Set<string>>(new Set());
   const 书签预览状态Ref = useRef<Record<string, 缩略图状态>>({});
   const 自动翻页锁定 = useRef(false);
@@ -1255,6 +1268,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 待恢复滚动位置 = useRef<"top" | "bottom" | null>(null);
   const 待恢复精确滚动位置 = useRef<number | null>(null);
   const 阅读返回定位快照 = useRef<阅读返回定位快照 | null>(null);
+  const 栏目浏览位置 = useRef(new Map<string,ReturnType<typeof 读取栏目浏览位置>>());
   const 打开阅读请求序号 = useRef(0);
   const 界面设置快照 = useRef<AppSettings>({ ...默认设置 });
   const 缩放保存定时器 = useRef<number | null>(null);
@@ -1394,26 +1408,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     回到第一页();
   }
 
-  function 显示成功提示(内容: string): void {
-    if (成功提示定时器.current !== null) {
-      window.clearTimeout(成功提示定时器.current);
-      成功提示定时器.current = null;
-    }
-    设置错误信息(null);
-    设置成功提示(内容);
-    成功提示定时器.current = window.setTimeout(() => {
-      设置成功提示(null);
-      成功提示定时器.current = null;
-    }, 2600);
-  }
-
-  function 关闭成功提示(): void {
-    if (成功提示定时器.current !== null) {
-      window.clearTimeout(成功提示定时器.current);
-      成功提示定时器.current = null;
-    }
-    设置成功提示(null);
-  }
+  function 显示成功提示(内容: string): void { 设置成功提示(内容); }
 
   function 获取资源整理信息(输入: ResourceMetaInput, 兼容项目?: Pick<FavoriteItem, "note" | "tags">): ResourceMetaItem {
     const 已保存 = 资源元数据表[输入.resourceKey];
@@ -2175,9 +2170,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       ?? null;
   }, [加入书架目标组列表, 加入书架目标书架栏ID]);
   const 加入书架可选目标列表 = 当前加入书架目标组?.folders ?? [];
-  const 使用分栏加入书架目标 = 书架列表.length > 1;
   const 加入书架菜单样式 = useMemo<CSSProperties>(() => {
-    const 宽度 = 使用分栏加入书架目标 ? 690 : 260;
+    const 宽度 = 690;
     const 高度 = 460;
     const 视口宽度 = typeof window === "undefined" ? 宽度 + 24 : window.innerWidth;
     const 视口高度 = typeof window === "undefined" ? 高度 + 24 : window.innerHeight;
@@ -2187,7 +2181,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       top: Math.max(8, Math.min(锚点.y, 视口高度 - 高度 - 12)),
       width: Math.min(宽度, 视口宽度 - 24),
     };
-  }, [加入虚拟文件夹目标?.anchor, 使用分栏加入书架目标]);
+  }, [加入虚拟文件夹目标?.anchor]);
   const 转存书架菜单样式 = useMemo<CSSProperties>(() => {
     const 宽度 = 690;
     const 高度 = 460;
@@ -2776,9 +2770,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (书架备注悬停定时器.current !== null) {
       window.clearTimeout(书架备注悬停定时器.current);
     }
-    if (成功提示定时器.current !== null) {
-      window.clearTimeout(成功提示定时器.current);
-    }
   }, []);
 
   useEffect(() => {
@@ -3202,9 +3193,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }, [书签拖拽Key, 书签拖拽落点, 书签列表]);
 
   useEffect(() => {
-    if (!目录空白菜单 && !资源菜单 && !最近菜单 && !收藏菜单 && !书签菜单 && !书架菜单 && !书架栏空白菜单 && !虚拟文件夹菜单 && !书架空白菜单 && !书架内部空白菜单 && !整理空白菜单 && !虚拟文件夹资源菜单 && !根目录菜单 && !标签菜单) return;
+    if (!选择右键菜单 && !目录空白菜单 && !资源菜单 && !最近菜单 && !收藏菜单 && !书签菜单 && !书架菜单 && !书架栏空白菜单 && !虚拟文件夹菜单 && !书架空白菜单 && !书架内部空白菜单 && !整理空白菜单 && !虚拟文件夹资源菜单 && !根目录菜单 && !标签菜单) return;
 
     function 关闭菜单(): void {
+      设置选择右键菜单(null);
       设置目录空白菜单(null);
       设置资源菜单(null);
       设置最近菜单(null);
@@ -3223,6 +3215,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
     function 处理按键(事件: KeyboardEvent): void {
       if (事件.key === "Escape") {
+        设置选择右键菜单(null);
         设置目录空白菜单(null);
         设置资源菜单(null);
         设置最近菜单(null);
@@ -3246,7 +3239,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       window.removeEventListener("click", 关闭菜单);
       window.removeEventListener("keydown", 处理按键);
     };
-  }, [目录空白菜单, 资源菜单, 最近菜单, 收藏菜单, 书签菜单, 书架菜单, 书架栏空白菜单, 虚拟文件夹菜单, 书架空白菜单, 书架内部空白菜单, 整理空白菜单, 虚拟文件夹资源菜单, 根目录菜单, 标签菜单]);
+  }, [选择右键菜单, 目录空白菜单, 资源菜单, 最近菜单, 收藏菜单, 书签菜单, 书架菜单, 书架栏空白菜单, 虚拟文件夹菜单, 书架空白菜单, 书架内部空白菜单, 整理空白菜单, 虚拟文件夹资源菜单, 根目录菜单, 标签菜单]);
 
   useEffect(() => {
     if (!当前右侧抽屉) return;
@@ -3653,7 +3646,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   ]);
 
   const 封面目标 = useMemo(()=>缩略图目标项目.filter(file=>支持真实缩略图(file.type)),[缩略图目标项目]);
-  useCoverQueue(封面目标,isActive&&!正在打开资源路径&&!backgroundPaused,(文件,结果)=>{
+  useCoverQueue(封面目标,isActive&&!资源信息目标&&!正在打开资源路径&&!backgroundPaused,(文件,结果)=>{
     空目录.observe(文件,结果);
     设置缩略图表(原表=>({...原表,[文件.path]:结果.ok&&结果.data.url
       ? {status:'loaded',url:结果.data.url,itemCount:结果.data.itemCount,childFolderCount:结果.data.childFolderCount,folderSummary:结果.data.folderSummary,byteSize:结果.data.byteSize,sourceVersion:`${文件.size??''}:${文件.modifiedAt??''}`}
@@ -4020,6 +4013,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       if (重置分页) {
         退出选择模式();
         设置当前页(1);
+        if (手机布局 && (当前视图 !== "directory" || 当前目录?.path !== 结果.data.path)) 设置导航会话(value => value + 1);
       }
 
       设置历史记录((原记录) => {
@@ -4154,18 +4148,22 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const request=打开阅读请求序号.current;
     void Promise.resolve(onOpenReader(资源, 起始页, 上下文, 转场原点, motion)).catch(()=>{
       if(request===打开阅读请求序号.current)设置错误信息('阅读器打开失败，请重试。');
-    }).finally(()=>{if(request===打开阅读请求序号.current)设置正在打开资源路径(null);});
+    }).finally(()=>{if(request===打开阅读请求序号.current){cancelReaderOpening(资源.sourcePath);设置正在打开资源路径(null);}});
   }
 
   function 读取漫画清单(input: Parameters<typeof window.omicomic.getResourcePages>[0]) {
     if (打开清单任务.current?.path === input.path) return 打开清单任务.current.promise;
-    warmReader();
+    // A folder can be a container rather than a comic. Its manifest decides;
+    // never run the reader opening pulse before ordinary folder navigation.
+    if(isAndroid()&&input.type!=='folder')beginReaderOpening(input.path);
+    warmReader(input.type ?? (/\.pdf$/i.test(input.path) ? 'pdf' : undefined));
     设置正在打开资源路径(input.path);
     const promise = window.omicomic.getResourcePages(input).then(result=>{
-      if(isAndroid()&&!result.ok&&打开清单任务.current?.promise===promise)设置正在打开资源路径(null);
+      if(isAndroid()&&result.ok&&input.type==='folder'&&打开清单任务.current?.promise===promise)beginReaderOpening(input.path);
+      if(isAndroid()&&!result.ok&&打开清单任务.current?.promise===promise){cancelReaderOpening(input.path);设置正在打开资源路径(null);}
       return result;
     },error=>{
-      if(isAndroid()&&打开清单任务.current?.promise===promise)设置正在打开资源路径(null);
+      if(isAndroid()&&打开清单任务.current?.promise===promise){cancelReaderOpening(input.path);设置正在打开资源路径(null);}
       throw error;
     }).finally(() => {
       if (打开清单任务.current?.promise === promise) {
@@ -4178,7 +4176,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   async function 打开混合目录(path: string, type: string, request: number, motion: number): Promise<boolean> {
-    if (随机模式 || isAndroid() || type !== 'folder') return false;
+    if (随机模式 || type !== 'folder') return false;
+    if (isAndroid()) {
+      if (!缩略图表[path]?.itemCount || !当前根目录) return false;
+      await 打开目录(path,当前根目录,'push',true,motion);
+      return true;
+    }
     let summary: Pick<缩略图状态,'itemCount'|'childFolderCount'|'folderSummary'> | undefined = 缩略图表[path];
     if (summary?.childFolderCount === undefined) {
       const result = await window.omicomic.getThumbnail({path,type:'folder'});
@@ -4243,7 +4246,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
-      if(isAndroid())设置正在打开资源路径(null);
+      if(isAndroid()){cancelReaderOpening();设置正在打开资源路径(null);}
       设置错误信息("无法打开该阅读资源，请稍后重试。");
     }
   }
@@ -4282,7 +4285,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
-      if(isAndroid())设置正在打开资源路径(null);
+      if(isAndroid()){cancelReaderOpening();设置正在打开资源路径(null);}
       设置错误信息("最近阅读的资源不存在或无法访问。");
     }
   }
@@ -4320,7 +4323,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
-      if(isAndroid())设置正在打开资源路径(null);
+      if(isAndroid()){cancelReaderOpening();设置正在打开资源路径(null);}
       设置错误信息("收藏资源不存在或无法访问。");
     }
   }
@@ -4336,12 +4339,27 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
     设置错误信息(null);
     try {
-      if (await 打开混合目录(项目.sourcePath, 项目.sourceType, 本次打开序号, motion)) return;
       const 结果 = await 读取漫画清单({
         path: 项目.sourcePath,
         type: 项目.sourceType,
       });
       if (本次打开序号 !== 打开阅读请求序号.current) return;
+      if (!结果.ok && 结果.error.code === 'NO_IMAGES' && 项目.sourceType === 'folder' && 当前虚拟文件夹) {
+        // Older shelves may contain a collection directory. Expand it in place
+        // when opened, keeping the original reference until all books are added.
+        const items = await collectBookshelfItems([项目]);
+        if (本次打开序号 !== 打开阅读请求序号.current) return;
+        if (!items.length) { 设置错误信息('所选文件夹中没有可加入书架的资源。'); return; }
+        const added = await window.omicomic.addVirtualFolderItems({ folderId: 当前虚拟文件夹.id, items });
+        if (!added.ok) { 设置错误信息(added.error.message); return; }
+        设置虚拟文件夹列表(old => old.map(folder => folder.id === added.data.folder.id ? added.data.folder : folder));
+        const removed = await window.omicomic.removeVirtualFolderItem({ folderId: 当前虚拟文件夹.id, resourceKey: 项目.resourceKey });
+        if (!removed.ok) { 设置错误信息(removed.error.message); return; }
+        设置虚拟文件夹列表(old => old.map(folder => folder.id === removed.data.id ? removed.data : folder));
+        设置已选项目Key集合(old => { const next = new Set(old); next.delete(项目.resourceKey); return next; });
+        显示成功提示(`已加入 ${added.data.addedCount} 个资源到书架。`);
+        return;
+      }
       if (!结果.ok) {
         设置错误信息(结果.error.message);
         return;
@@ -4360,7 +4378,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       );
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
-      if(isAndroid())设置正在打开资源路径(null);
+      if(isAndroid()){cancelReaderOpening();设置正在打开资源路径(null);}
       设置错误信息("书架中的资源不存在或无法访问。");
     }
   }
@@ -4392,7 +4410,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       打开阅读器(结果.data, 起始页, 随机模式 ? 创建阅读上下文("bookmarks", 项目.id, 书签阅读队列) : undefined, undefined, motion);
     } catch {
       if (本次打开序号 !== 打开阅读请求序号.current) return;
-      if(isAndroid())设置正在打开资源路径(null);
+      if(isAndroid()){cancelReaderOpening();设置正在打开资源路径(null);}
       设置错误信息("书签资源不存在或无法访问。");
     }
   }
@@ -4926,16 +4944,38 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     return ['directory', 'bookshelf', 'favorites', 'bookmarks', 'recent'].indexOf(视图 === 'virtual-folder' ? 'bookshelf' : 视图);
   }
 
-  function 切换手机栏目(目标: 资源库视图, commit: () => void): void {
-    取消手机后台打开请求();
-    重置栏目搜索();
+  function 读取栏目浏览位置(){
+    return {view:当前视图,page:当前页,scrollTop:列表容器.current?.scrollTop??null,root:当前根目录,directory:当前目录,
+      bookshelfId:当前书架ID,folderId:当前虚拟文件夹ID,navigation:导航会话,record:阅读记录分类,
+      search:搜索内容,recentSearch:最近搜索内容,favoriteSearch:收藏搜索内容,bookmarkSearch:书签搜索内容,
+      tags:[...已选标签列表],sort:排序};
+  }
+  function 栏目位置键(view:资源库视图,record=阅读记录分类){return view==='virtual-folder'?'bookshelf':view==='recent'?record:view;}
+  function 切换手机栏目(目标: 资源库视图, commit: () => void, record?:'recent'|'temporary'): void {
+    const from=栏目位置键(当前视图),to=栏目位置键(目标,record??'recent');
+    const different=from!==to;
+    if(different){目录连续列表.sync();栏目浏览位置.current.set(from,读取栏目浏览位置());}
+    if(手机布局)取消手机后台打开请求();
+    let saved=different?栏目浏览位置.current.get(to):undefined;
+    if(saved?.root&&!根目录列表.some(root=>root.path===saved!.root))saved=undefined;
+    if(saved?.folderId&&!虚拟文件夹列表.some(folder=>folder.id===saved!.folderId))saved=undefined;
+    const apply=()=>{
+      if(资源信息目标)关闭资源详情页面(true);
+      if(!saved){commit();return;}
+      待恢复滚动位置.current=null;待恢复精确滚动位置.current=saved.scrollTop;
+      设置当前根目录(saved.root);设置当前目录(saved.directory);设置当前书架ID(saved.bookshelfId);设置当前虚拟文件夹ID(saved.folderId);
+      设置搜索内容(saved.search);设置最近搜索内容(saved.recentSearch);设置收藏搜索内容(saved.favoriteSearch);设置书签搜索内容(saved.bookmarkSearch);
+      设置已选标签列表(saved.tags);设置排序(saved.sort);设置阅读记录分类(saved.record);设置导航会话(saved.navigation);
+      设置当前视图(saved.view);设置当前页(saved.page);设置错误信息(null);退出选择模式();
+    };
+    if(!手机布局){apply();return;}
     const 当前序号 = 手机栏目序号(当前视图), 目标序号 = 手机栏目序号(目标);
-    if (当前序号 === 目标序号) { cancelMobileNavigation(); commit(); return; }
-    void mobileNavigate(commit, 目标序号 > 当前序号 ? 'tab-next' : 'tab-prev');
+    if (当前序号 === 目标序号) { cancelMobileNavigation(); apply(); return; }
+    void mobileNavigate(apply, 目标序号 > 当前序号 ? 'tab-next' : 'tab-prev');
   }
 
   function 打开书架(已转场: unknown = false): void {
-    if (手机布局 && 已转场 !== true) { 切换手机栏目('bookshelf', () => 打开书架(true)); return; }
+    if (已转场 !== true) { 切换手机栏目('bookshelf', () => 打开书架(true)); return; }
     设置导航会话(value => value + 1);
     重置栏目搜索();
     if (资源信息目标) 关闭资源详情页面(true);
@@ -4949,6 +4989,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 进入书架文件夹(文件夹: VirtualFolder, 已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 进入书架文件夹(文件夹, true), "folder"); return; }
+    if (手机布局) 设置导航会话(value => value + 1);
     设置当前虚拟文件夹ID(文件夹.id);
     目录连续列表.sync();
     设置当前视图("virtual-folder");
@@ -4959,6 +5000,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 返回书架根层(已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 返回书架根层(true), "folder"); return; }
+    if (手机布局) 设置导航会话(value => value + 1);
     if (排序 === "type") 设置排序("name-asc");
     if (!当前书架ID && 书架列表[0]) 设置当前书架ID(书架列表[0].id);
     目录连续列表.sync();
@@ -4978,7 +5020,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 切换阅读记录分类(分类: "recent" | "temporary", 已转场: unknown = false): void {
-    if (手机布局 && 已转场 !== true) { 切换手机栏目('recent', () => 切换阅读记录分类(分类, true)); return; }
+    if (已转场 !== true) { 切换手机栏目('recent', () => 切换阅读记录分类(分类, true),分类); return; }
     重置栏目搜索();
     if (资源信息目标) 关闭资源详情页面(true);
     退出选择模式();
@@ -5168,7 +5210,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 打开资源库(已转场: unknown = false): void {
-    if (手机布局 && 已转场 !== true) { 切换手机栏目('directory', () => 打开资源库(true)); return; }
+    if (已转场 !== true) { 切换手机栏目('directory', () => 打开资源库(true)); return; }
     设置导航会话(value => value + 1);
     重置栏目搜索();
     随机浏览.stop();
@@ -5293,8 +5335,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           return;
         }
         设置书架列表((原列表) => [...原列表, 结果.data]);
-        设置当前书架ID(结果.data.id);
-        设置当前视图("bookshelf");
+        if (加入虚拟文件夹目标) {
+          设置加入书架搜索内容("");
+          设置加入书架目标书架栏ID(结果.data.id);
+        } else {
+          设置当前书架ID(结果.data.id);
+          设置当前视图("bookshelf");
+        }
         打开书架弹窗(null);
         return;
       }
@@ -5396,6 +5443,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   function 打开虚拟文件夹弹窗(状态: 虚拟文件夹弹窗状态): void {
     设置虚拟文件夹弹窗(状态);
     设置错误信息(null);
+    设置书架编辑错误(null);
+    if (状态 && 手机布局) 设置手机书架管理(null);
     if (!状态) {
       设置虚拟文件夹名称输入("");
       设置虚拟文件夹备注输入("");
@@ -5406,7 +5455,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       设置虚拟文件夹备注输入("");
     } else {
       设置虚拟文件夹名称输入(状态.folder.name);
-      设置虚拟文件夹备注输入(状态.folder.note);
+      设置虚拟文件夹备注输入(状态.folder.note ?? "");
     }
   }
 
@@ -5416,11 +5465,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 备注 = 虚拟文件夹备注输入.trim();
 
     if ((虚拟文件夹弹窗.mode === "create" || 虚拟文件夹弹窗.mode === "rename") && !名称) {
-      设置错误信息("书架名称不能为空。");
+      设置书架编辑错误("书架名称不能为空。");
       return;
     }
     if (
-      名称
+      虚拟文件夹弹窗.mode !== "note" && 名称
       && 虚拟文件夹列表.some((项目) => 项目.name === 名称 && 项目.bookshelfId === (
         虚拟文件夹弹窗.mode === "create"
           ? 虚拟文件夹弹窗.bookshelfId ?? 当前书架?.id
@@ -5429,17 +5478,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         虚拟文件夹弹窗.mode === "create" || 项目.id !== 虚拟文件夹弹窗.folder.id
       ))
     ) {
-      设置错误信息("已存在同名书架。");
+      设置书架编辑错误("已存在同名书架。");
       return;
     }
 
+    设置书架编辑错误(null);
     设置删除确认处理中(true);
     try {
       if (虚拟文件夹弹窗.mode === "create") {
         const 目标书架栏ID = 虚拟文件夹弹窗.bookshelfId ?? 当前书架?.id;
-        const 结果 = await window.omicomic.createVirtualFolder({ name: 名称, note: 备注, bookshelfId: 目标书架栏ID });
+        const 结果 = await window.omicomic.createVirtualFolder({ name: 名称, bookshelfId: 目标书架栏ID });
         if (!结果.ok) {
-          设置错误信息(结果.error.message);
+          设置书架编辑错误(结果.error.message);
           return;
         }
         let 新文件夹 = 结果.data;
@@ -5448,7 +5498,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             folderId: 结果.data.id,
             items: 虚拟文件夹弹窗.items,
           });
-          if (加入结果.ok) 新文件夹 = 加入结果.data.folder;
+          if (!加入结果.ok) {
+            const 待加入项目 = 虚拟文件夹弹窗.items;
+            设置虚拟文件夹列表((原列表) => [...原列表, 新文件夹]);
+            打开虚拟文件夹弹窗(null);
+            设置加入书架目标书架栏ID(新文件夹.bookshelfId);
+            设置加入虚拟文件夹目标({ items: 待加入项目, title: 名称 });
+            设置错误信息(加入结果.error.message);
+            return;
+          }
+          新文件夹 = 加入结果.data.folder;
         }
         设置虚拟文件夹列表((原列表) => [...原列表, 新文件夹]);
         if (!虚拟文件夹弹窗.items?.length) {
@@ -5470,11 +5529,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         note: 虚拟文件夹弹窗.mode === "note" ? 备注 : undefined,
       });
       if (!结果.ok) {
-        设置错误信息(结果.error.message);
+        设置书架编辑错误(结果.error.message);
         return;
       }
       设置虚拟文件夹列表((原列表) => 原列表.map((项目) => 项目.id === 结果.data.id ? 结果.data : 项目));
       打开虚拟文件夹弹窗(null);
+    } catch (原因) {
+      设置书架编辑错误(原因 instanceof Error ? 原因.message : "书架保存失败，请重试。");
     } finally {
       设置删除确认处理中(false);
     }
@@ -5504,14 +5565,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     }
   }
 
-  function 选择已有虚拟文件夹加入(items: VirtualFolderItemInput[], title: string, anchor?: { x: number; y: number }): void {
+  async function 选择已有虚拟文件夹加入(items: VirtualFolderItemInput[], title: string, anchor?: { x: number; y: number }): Promise<void> {
+    try {
+      items = await collectBookshelfItems(items);
+    } catch (原因) {
+      设置错误信息(原因 instanceof Error ? 原因.message : "文件夹读取失败，请重试。");
+      return;
+    }
+    if (!items.length) { 设置错误信息("所选文件夹中没有可加入书架的资源。"); return; }
     const 默认书架栏ID = 当前书架 && 当前书架文件夹列表.length > 0
       ? 当前书架.id
       : 书架列表.find((书架) => 虚拟文件夹列表.some((文件夹) => 文件夹.bookshelfId === 书架.id))?.id ?? 当前书架?.id ?? 书架列表[0]?.id;
-    if (虚拟文件夹列表.length === 0) {
-      打开虚拟文件夹弹窗({ mode: "create", items, bookshelfId: 默认书架栏ID });
-      return;
-    }
     设置加入书架搜索内容("");
     设置加入书架目标书架栏ID(默认书架栏ID ?? null);
     设置加入虚拟文件夹目标({ items, title, anchor });
@@ -5656,7 +5720,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       return;
     }
     if (可选目标列表.length === 0) {
-      关闭成功提示();
+
       设置移动到书架目标(null);
       设置转存书架搜索内容("");
       设置转存书架目标书架栏ID(null);
@@ -5707,7 +5771,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           items: 移动到书架目标.items,
         });
         if (!结果.ok) {
-          关闭成功提示();
+
           设置错误信息(结果.error.message);
           return;
         }
@@ -5732,7 +5796,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         items: 移动到书架目标.items,
       });
       if (!结果.ok) {
-        关闭成功提示();
+
         设置错误信息(结果.error.message);
         return;
       }
@@ -5759,6 +5823,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 关闭所有右键菜单(): void {
+    设置选择右键菜单(null);
     设置目录空白菜单(null); 设置资源菜单(null); 设置最近菜单(null); 设置收藏菜单(null);
     设置书签菜单(null); 设置书架菜单(null); 设置书架栏空白菜单(null); 设置虚拟文件夹菜单(null);
     设置书架空白菜单(null); 设置书架内部空白菜单(null); 设置整理空白菜单(null);
@@ -5799,6 +5864,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       设置整理标签输入(整理信息.tags.join(", "));
     }
     设置资源详情预览页(0);
+    资源详情文档预览源.current?.dispose();资源详情文档预览源.current=null;
     设置资源详情阅读资源(null);
     设置资源详情加载状态("loading");
     设置资源详情所选页(目标.kind === "bookmark" ? 目标.item.pageIndex : 0);
@@ -5810,19 +5876,28 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       return;
     }
     void window.omicomic.getResourcePages({ path: 路径, type: 类型 })
-      .then((结果) => {
+      .then(async (结果) => {
         if (本次加载序号 !== 资源详情加载序号.current) return;
         if (!结果.ok) {
           设置资源详情加载状态("error");
           设置整理错误(结果.error.message);
           return;
         }
-        设置资源详情阅读资源(结果.data);
-        设置资源详情所选页((原页) => Math.min(Math.max(原页, 0), (结果.data.sourceType === "pdf" || (结果.data.sourceType === "epub" || 结果.data.sourceType==="mobi") ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1))));
+        let 预览资源=结果.data;
+        if(预览资源.sourceType==='pdf'){
+          const {DocumentSource}=await import('../reader/documentSource');
+          if(本次加载序号!==资源详情加载序号.current)return;
+          const source=new DocumentSource(预览资源,'thumbnail');资源详情文档预览源.current=source;
+          预览资源=await source.open();
+          if(本次加载序号!==资源详情加载序号.current)return;
+        }
+        设置资源详情阅读资源(预览资源);
+        设置资源详情所选页((原页) => Math.min(Math.max(原页, 0), (预览资源.sourceType === "epub" || 预览资源.sourceType==="mobi" ? Number.MAX_SAFE_INTEGER : Math.max(0, 预览资源.total - 1))));
         设置资源详情加载状态("loaded");
       })
       .catch(() => {
         if (本次加载序号 !== 资源详情加载序号.current) return;
+        资源详情文档预览源.current?.dispose();
         设置资源详情加载状态("error");
         设置整理错误("页面缩略图加载失败，请稍后重试。");
       });
@@ -5832,6 +5907,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (手机布局 && 已转场 !== true) { void mobileNavigate(() => 关闭资源详情页面(true), 'detail-back', undefined, 手机详情封面起点.current); return; }
     if (整理保存中) return;
     资源详情加载序号.current += 1;
+    资源详情文档预览源.current?.dispose();资源详情文档预览源.current=null;
     设置资源信息目标(null);
     设置资源详情阅读资源(null);
     设置资源详情加载状态("idle");
@@ -6234,6 +6310,35 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (当前选择视图) 进入选择模式(当前选择视图);
   }
 
+  function 进入电脑书架选择(): void {
+    设置电脑书架选择中(true); 设置电脑已选书架(new Set()); 关闭所有右键菜单();
+  }
+
+  function 切换电脑书架选择(id: string): void {
+    设置电脑已选书架(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+
+  function 退出电脑书架选择(): void {
+    设置电脑书架选择中(false); 设置电脑已选书架(new Set()); 设置选择右键菜单(null);
+  }
+
+  function 渲染菜单选择文件(关闭: () => void, 书架根层 = false) {
+    return <button type="button" role="menuitem" disabled={书架根层 ? !筛选后书架文件夹列表.length : !当前选择视图Key列表.length} onClick={() => {
+      if (书架根层) 进入电脑书架选择(); else 进入当前视图选择模式(); 关闭();
+    }}>{t("选择文件")}</button>;
+  }
+
+  useEffect(() => { 退出电脑书架选择(); }, [当前视图, 当前书架ID]);
+  useEffect(() => {
+    if (!电脑书架选择中) return;
+    const key = (event: KeyboardEvent) => {
+      if (event.target instanceof Element && event.target.closest('input,textarea,select')) return;
+      if (event.key === 'Escape') { event.preventDefault(); 退出电脑书架选择(); }
+      else if (event.ctrlKey && event.key.toLowerCase() === 'a') { event.preventDefault(); 设置电脑已选书架(new Set(筛选后书架文件夹列表.map(item=>item.id))); }
+    };
+    window.addEventListener('keydown',key); return () => window.removeEventListener('keydown',key);
+  }, [电脑书架选择中, 筛选后书架文件夹列表]);
+
   function 获取框选矩形(状态: NonNullable<框选状态>): DOMRect {
     const startX = 状态.startX - (状态.container.scrollLeft - 状态.scrollLeft);
     const startY = 状态.startY - (状态.container.scrollTop - 状态.scrollTop);
@@ -6601,7 +6706,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   function 渲染手机资源卡片(文件: 文件条目, input: ResourceMetaInput, key: string, open: () => void,
     pages: string, tags: string[], bookmark?: BookmarkItem, index?: number) {
     const thumb = bookmark ? 书签预览表[bookmark.id] ?? (bookmark.thumbnailUrl ? {status:"loaded" as const,url:bookmark.thumbnailUrl} : undefined) : 缩略图表[文件.path];
-    const collection = !bookmark && 文件.type === "folder" && (Boolean(thumb?.itemCount) || !thumb || thumb.status === "loading");
+    const collection = 当前视图 !== 'virtual-folder' && !bookmark && 文件.type === "folder" && (Boolean(thumb?.itemCount) || !thumb || thumb.status === "loading");
     const progress = 阅读进度表[input.resourceKey] ?? 最近打开列表.find(item => item.resourceKey === input.resourceKey);
     const countKey = 获取可阅读页数Key(文件);
     const total = Math.max(0, Math.floor(bookmark?.totalPages ?? progress?.totalPages ?? (countKey ? 可阅读页数表[countKey]?.count : 0) ?? 0));
@@ -6627,6 +6732,21 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   function 渲染对话框(内容: ReactNode) {
     // Mobile drawers already live at body level; dialogs must share that layer.
     return 手机布局 ? createPortal(内容, document.body) : 内容;
+  }
+
+  function 关闭加入书架选择(): void {
+    if (删除确认处理中) return;
+    设置加入虚拟文件夹目标(null);设置加入书架搜索内容("");设置加入书架目标书架栏ID(null);
+  }
+
+  function 渲染加入书架选择器() {
+    if (!加入虚拟文件夹目标) return null;
+    const target=加入虚拟文件夹目标;
+    return <BookshelfTargetPicker mobile={手机布局} query={加入书架搜索内容} onQuery={设置加入书架搜索内容}
+      groups={加入书架目标组列表} categoryId={当前加入书架目标组?.bookshelf.id} onCategory={设置加入书架目标书架栏ID}
+      busy={删除确认处理中} state={folder=>获取书架目标加入状态(folder,target.items)} onChoose={id=>void 加入到虚拟文件夹(id,target.items)}
+      onCreateCategory={()=>打开书架弹窗({mode:'create'})}
+      onCreateShelf={()=>打开虚拟文件夹弹窗({mode:'create',items:target.items,bookshelfId:当前加入书架目标组?.bookshelf.id??加入书架目标书架栏ID??当前书架?.id??书架列表[0]?.id})}/>;
   }
 
   async function 打开资源所在目录(input: ResourceMetaInput): Promise<void> {
@@ -6674,7 +6794,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     } };
     const actions = target.view === "virtual-folder"
       ? [{label:"设为封面",icon:"▧",disabled:count !== 1,onClick:() => { void 设置当前书架封面(target.input.resourceKey); close(); }},rename,info]
-      : target.view === "bookmarks" || target.view === "favorites" ? [rename,info,remove] : [rename,info,add,remove];
+      : target.view === "bookmarks" ? [rename,info,remove] : [rename,info,add,remove];
     const floating: MobileAction[] = [];
     const openPath: MobileAction = {label:'打开路径',icon:'open-folder',disabled:count !== 1,onClick:() => { void 打开资源所在目录(target.input); }};
     if (target.view === 'recent') floating.push(openPath);
@@ -6707,7 +6827,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 渲染桌面卡片元信息(文件: 文件条目, 进度: ReadingProgress | null, 页数: number | null, 缩略图: 缩略图状态, 书签?: BookmarkItem) {
-    const 合集 = !书签 && 文件.type === "folder" && Boolean(缩略图.itemCount);
+    const 合集 = 当前视图 !== 'virtual-folder' && !书签 && 文件.type === "folder" && Boolean(缩略图.itemCount);
     const 总页数 = Math.max(0, Math.floor(书签?.totalPages ?? ((进度?.totalPages ?? 0) > 0 ? 进度!.totalPages : 页数 ?? 0)));
     const 已开始 = 进度 && (进度.hasStartedReading || 进度.currentPageIndex > 0 || 进度.completed);
     const 当前页 = 总页数 ? Math.min(总页数, Math.max(0, 书签 ? 书签.pageIndex + 1 : 已开始 ? 进度.currentPageIndex + 1 : 0)) : 0;
@@ -7491,12 +7611,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             <div className="resource-detail-section-heading">
               <div className="resource-detail-preview-title">
                 <h3 id="resource-preview-heading">{t("缩略预览")}</h3>
-                {!手机布局 ? (总页数 > 0 && <p>{tr`共 ${总页数} ${t(阅读单位)}`}</p>) : <p>{类型 === "pdf" || (类型 === "epub" || 类型==="mobi")
+                {!手机布局 ? (总页数 > 0 && <p>{tr`共 ${总页数} ${t(阅读单位)}`}</p>) : <p>{类型 === "epub" || 类型==="mobi"
                   ? (总页数 > 0 ? tr`共 ${总页数} ${t(阅读单位)} · 使用上方按钮继续阅读` : t("使用上方按钮开始阅读"))
                   : 总页数 > 0 ? tr`共 ${总页数} 页 · ${t(singleTapNavigation() ? "点击从该页阅读" : "单击选择，双击从该页阅读")}` : t("正在读取页面清单")}</p>}
               </div>
               <div className="resource-detail-preview-controls">
-                {手机布局 && 资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && <MobileDetailPager current={资源详情预览页+1} total={Math.ceil(资源详情阅读资源.pages.length/48)} onPage={page=>设置资源详情预览页(page-1)}/>}
+                {资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && (手机布局 ? <MobileDetailPager current={资源详情预览页+1} total={Math.ceil(资源详情阅读资源.pages.length/48)} onPage={page=>资源详情预览导航.current?.scrollToIndex((page-1)*48)}/> : (
+                  <nav className="detail-pagination" aria-label={t("预览分页")}>
+                    <button type="button" aria-label={t("上一组预览")} disabled={资源详情预览页===0} onClick={()=>资源详情预览导航.current?.scrollToIndex((资源详情预览页-1)*48)}><MobileIcon name="chevron" style={{transform:"rotate(180deg)"}}/></button>
+                    <span>{资源详情预览页+1} / {Math.ceil(资源详情阅读资源.pages.length/48)}</span>
+                    <button type="button" aria-label={t("下一组预览")} disabled={(资源详情预览页+1)*48>=资源详情阅读资源.pages.length} onClick={()=>资源详情预览导航.current?.scrollToIndex((资源详情预览页+1)*48)}><MobileIcon name="chevron"/></button>
+                  </nav>
+                ))}
                 <div className="resource-detail-path-control" ref={资源详情路径控件}>
                   <button
                     type="button"
@@ -7548,20 +7674,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   <span>{整理错误 ?? t("请返回后重新打开资源信息。")}</span>
                 </div>
               )}
-              {资源详情加载状态 === "loaded" && 资源详情阅读资源 && (类型 === "pdf" || (类型 === "epub" || 类型==="mobi")) && (
+              {资源详情加载状态 === "loaded" && 资源详情阅读资源 && (类型 === "epub" || 类型==="mobi") && (
                 <div className="resource-detail-preview-empty"><strong>{信息.label}{t(" 文档")}</strong><span>{t("使用上方阅读按钮打开，沿用当前阅读模式。")}</span></div>
               )}
-              {!手机布局 && 资源详情阅读资源 && <ContinuousDetailPreviews key={资源详情阅读资源.resourceKey} container={资源详情预览滚动容器} pages={资源详情阅读资源.pages} columns={获取卡片列数(详情缩略图缩放)} initialIndex={资源详情所选页} onOpen={index=>{设置资源详情所选页(index);打开资源详情阅读器(index);}}/>}
-              {手机布局 && 资源详情阅读资源?.pages.slice(资源详情预览页 * 48, (资源详情预览页 + 1) * 48).map((页面) => (
-                <资源详情缩略图
-                  key={`${资源详情阅读资源.resourceKey}:${页面.index}`}
-                  page={页面}
-                  selected={资源详情所选页 === 页面.index}
-                  selectable={手机布局}
-                  onSelect={() => 设置资源详情所选页(页面.index)}
-                  onOpen={() => { 设置资源详情所选页(页面.index); 打开资源详情阅读器(页面.index); }}
-                />
-              ))}
+              {isActive && 资源详情阅读资源 && <ContinuousDetailPreviews key={资源详情阅读资源.resourceKey} ref={资源详情预览导航} documentSource={资源详情文档预览源.current??undefined} container={资源详情预览滚动容器} scrollContainer={手机布局?资源详情滚动容器:undefined} pages={资源详情阅读资源.pages} columns={手机布局?3:获取卡片列数(详情缩略图缩放)} initialIndex={资源详情所选页} selectedIndex={手机布局?资源详情所选页:undefined} onSelect={手机布局?设置资源详情所选页:undefined} onGroupChange={设置资源详情预览页} onOpen={index=>{设置资源详情所选页(index);打开资源详情阅读器(index);}}/>}
             </div>
           </section>
 
@@ -7579,6 +7695,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   return (
     <section className={`library-layout ${手机布局 ? `is-mobile-library mobile-cards-${手机卡片布局}` : ""} ${手机筛选展开 ? "is-mobile-filters-open" : ""}`} ref={手机导航区域}
+      onContextMenuCapture={事件 => {
+        if (手机布局 || !(电脑书架选择中 || (选择模式 && 选择模式 === 当前选择视图)) || (事件.target instanceof Element && 事件.target.closest('.recent-context-menu'))) return;
+        事件.preventDefault(); 事件.stopPropagation(); 关闭所有右键菜单(); 设置选择右键菜单({x:事件.clientX,y:事件.clientY});
+      }}
       aria-labelledby="library-title" style={手机布局 ? { "--mobile-columns": 手机列数, "--mobile-list-columns": 手机自适应.listColumns, "--mobile-cover-size": `${手机封面尺寸}px`, "--mobile-preview-width": `${手机预览宽度}px` } as CSSProperties : undefined}>
       {手机布局 && !资源信息目标 && <MobileLibraryBar title={资源信息目标 ? t("漫画详情") : 当前视图 === "directory" ? 当前目录 ? (根目录列表.find(root => root.path === 当前目录.path)?.name ?? 获取目录名称(当前目录.path)) : t("资源库") : 当前视图 === "bookshelf" ? t("我的书架") : 当前视图 === "virtual-folder" ? 视图标题 : t(视图标题)}
         detail={Boolean(资源信息目标)}
@@ -7649,12 +7769,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             type="button"
             className={`sidebar-item ${当前视图 === "favorites" ? "is-active" : ""}`}
             aria-current={手机布局 && 当前视图 === 'favorites' ? 'page' : undefined}
-            onClick={() => {
-              if (资源信息目标) 关闭资源详情页面(手机布局);
-              重置栏目搜索(); 设置导航会话(value => value + 1); if(当前视图 === "favorites") { 随机浏览.stop(); 回到第一页(); 目录连续列表.reset(); }
-              if (手机布局) { 切换手机栏目('favorites', () => { 设置当前视图("favorites"); 设置错误信息(null); }); }
-              else { 设置当前视图("favorites"); 设置错误信息(null); }
-            }}
+            onClick={() => 切换手机栏目("favorites",()=>{重置栏目搜索();设置导航会话(value=>value+1);随机浏览.stop();设置当前视图("favorites");设置错误信息(null);回到第一页();})}
           >
             <SidebarIcon name="favorite" />
             <span>{t("收藏")}</span>
@@ -7664,12 +7779,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             type="button"
             className={`sidebar-item ${当前视图 === "bookmarks" ? "is-active" : ""}`}
             aria-current={手机布局 && 当前视图 === 'bookmarks' ? 'page' : undefined}
-            onClick={() => {
-              if (资源信息目标) 关闭资源详情页面(手机布局);
-              重置栏目搜索(); 设置导航会话(value => value + 1); if(当前视图 === "bookmarks") { 随机浏览.stop(); 回到第一页(); 目录连续列表.reset(); }
-              if (手机布局) { 切换手机栏目('bookmarks', () => { 设置当前视图("bookmarks"); 设置错误信息(null); }); }
-              else { 设置当前视图("bookmarks"); 设置错误信息(null); }
-            }}
+            onClick={() => 切换手机栏目("bookmarks",()=>{重置栏目搜索();设置导航会话(value=>value+1);随机浏览.stop();设置当前视图("bookmarks");设置错误信息(null);回到第一页();})}
           >
             <SidebarIcon name="bookmark" />
             <span>{t("书签")}</span>
@@ -7688,7 +7798,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             type="button"
             className={`sidebar-item ${当前视图 === "recent" && !是临时存放 ? "is-active" : ""}`}
             aria-current={手机布局 && 当前视图 === 'recent' && !是临时存放 ? 'page' : undefined}
-            onClick={() => { if(手机布局 && 当前视图==="recent") 回到第一页(); 切换阅读记录分类("recent"); }}
+            onClick={() => 切换阅读记录分类("recent")}
           >
             <SidebarIcon name="recent" />
             <span>{t("最近阅读")}</span>
@@ -7899,19 +8009,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         </div>}
         {资源信息目标 ? 渲染资源详情工作区() : <>
         <div className="library-body">
-          {错误信息 && (
-            <div className="error-banner" role="alert">
-              <span>{t(错误信息 ?? '')}</span>
-              <button onClick={() => 设置错误信息(null)} aria-label={t("关闭错误提示")}>×</button>
-            </div>
-          )}
-          {成功提示 && (
-            <div className="error-banner success-banner" style={错误信息 ? { top: 62 } : undefined} role="status">
-              <span>{成功提示}</span>
-              <button onClick={关闭成功提示} aria-label={t("关闭提示")}>×</button>
-            </div>
-          )}
-
           {当前视图 === 'directory' && (目录穿透搜索 || 随机模式) && 全库索引.error && <div className="library-opening-status" role="status">{全库索引.error}</div>}
           {随机模式 && 当前分页项目总数 === 0 ? <div className="empty-library compact-empty" role="status" aria-busy={全库索引.loading}>
             <div className="empty-illustration" aria-hidden="true"><RandomRefreshIcon/></div>
@@ -8165,6 +8262,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 )}
               </div>
 
+              {电脑书架选择中 && <div className="selection-toolbar" aria-label={t("书架选择")}>
+                <span>{tr`已选择 ${电脑已选书架.size} 项`}</span>
+                <button type="button" onClick={() => 设置电脑已选书架(new Set(筛选后书架文件夹列表.map(item => item.id)))}>{t("全选")}</button>
+                <button type="button" onClick={() => 设置电脑已选书架(new Set())}>{t("取消全选")}</button>
+                <button type="button" disabled={!电脑已选书架.size} onClick={() => {
+                  const selected=筛选后书架文件夹列表.filter(item=>电脑已选书架.has(item.id));
+                  if (selected[0]) 设置待删除虚拟文件夹({...selected[0],selection:selected});
+                  退出电脑书架选择();
+                }}>{t("删除书架")}</button>
+                <button type="button" onClick={退出电脑书架选择}>{t("退出选择")}</button>
+              </div>}
               {筛选后书架文件夹列表.length === 0 ? (
                 <div className="empty-library compact-empty">
                   <div className="empty-illustration" aria-hidden="true"><AppIcon name="shelf"/></div>
@@ -8208,10 +8316,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       <article
                         key={文件夹.id}
                         data-card-drag-scope="shelf" data-card-drag-key={文件夹.id}
-                        className={`bookshelf-folder-card ${书架文件夹拖拽Key === 文件夹.id ? "is-card-middle-drag-source" : ""} ${书架文件夹拖拽落点?.key === 文件夹.id ? `is-card-middle-drop-${书架文件夹拖拽落点.position}` : ""}`}
+                        className={`bookshelf-folder-card ${电脑已选书架.has(文件夹.id) ? "is-selected" : ""} ${书架文件夹拖拽Key === 文件夹.id ? "is-card-middle-drag-source" : ""} ${书架文件夹拖拽落点?.key === 文件夹.id ? `is-card-middle-drop-${书架文件夹拖拽落点.position}` : ""}`}
                         tabIndex={0}
-                        onClick={() => { if (singleTapNavigation()) 进入书架文件夹(文件夹); }}
-                        onDoubleClick={() => { if (!singleTapNavigation()) 进入书架文件夹(文件夹); }}
+                        role="button"
+                        aria-pressed={电脑书架选择中 ? 电脑已选书架.has(文件夹.id) : undefined}
+                        onClick={() => { if (电脑书架选择中) 切换电脑书架选择(文件夹.id); else if (singleTapNavigation()) 进入书架文件夹(文件夹); }}
+                        onDoubleClick={() => { if (!电脑书架选择中 && !singleTapNavigation()) 进入书架文件夹(文件夹); }}
                         onMouseDown={(事件) => 开始书架文件夹中键拖拽(事件, 文件夹)}
                         onMouseEnter={(事件) => 开始资源备注悬停(`bookshelf-folder:${文件夹.id}`, 文件夹.note, 事件)}
                         onMouseMove={(事件) => {
@@ -8224,7 +8334,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                         onKeyDown={(事件) => {
                           if (事件.key === "Enter" || 事件.key === " ") {
                             事件.preventDefault();
-                            进入书架文件夹(文件夹);
+                            if (电脑书架选择中) 切换电脑书架选择(文件夹.id); else 进入书架文件夹(文件夹);
                           }
                         }}
                         onContextMenu={(事件) => {
@@ -8834,6 +8944,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                         progressText: 进度显示状态.文本,
                         thumbnailUrl: 缩略图.url,
                         itemKey: 文件.id,
+                        collection: 文件.type === 'folder' && Boolean(缩略图表[文件.path]?.itemCount),
                       });
                     }}
 
@@ -9687,14 +9798,19 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           </div>,
           document.body,
         )}
+        {选择右键菜单 && <ContextMenu className="recent-context-menu" style={{left:选择右键菜单.x,top:选择右键菜单.y}} role="menu" onClick={事件 => 事件.stopPropagation()}>
+          <button type="button" role="menuitem" onClick={() => { if (电脑书架选择中) 设置电脑已选书架(new Set(筛选后书架文件夹列表.map(item=>item.id))); else 全选当前选择视图(); 设置选择右键菜单(null); }}>{t("全选")}</button>
+          <button type="button" role="menuitem" onClick={() => { if (电脑书架选择中) 设置电脑已选书架(new Set()); else 取消全选(); 设置选择右键菜单(null); }}>{t("取消全选")}</button>
+          <button type="button" role="menuitem" onClick={() => { if (电脑书架选择中) 退出电脑书架选择(); else 退出选择模式(); 设置选择右键菜单(null); }}>{t("退出选择")}</button>
+        </ContextMenu>}
         {根目录菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 根目录菜单.x, top: 根目录菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               onClick={() => {
@@ -9702,24 +9818,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置根目录菜单(null);
               }}
             >{t("移除此资源库目录")}</button>
-          </div>
+          </ContextMenu>
         )}
         {目录空白菜单 && 当前选择视图 === "directory" && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 目录空白菜单.x, top: 目录空白菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button
-              type="button"
-              role="menuitem"
-              disabled={当前选择视图Key列表.length === 0}
-              onClick={() => {
-                进入当前视图选择模式();
-                设置目录空白菜单(null);
-              }}
-            >{t("选择文件")}</button>
             {选择模式 === "directory" && 已选项目Key集合.size > 0 && (
               <button
                 type="button"
@@ -9730,10 +9837,20 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 }}
               >{t("加入收藏")}</button>
             )}
-          </div>
+            <div className="context-menu-separator" role="separator" />
+            <button
+              type="button"
+              role="menuitem"
+              disabled={当前选择视图Key列表.length === 0}
+              onClick={() => {
+                进入当前视图选择模式();
+                设置目录空白菜单(null);
+              }}
+            >{t("选择文件")}</button>
+          </ContextMenu>
         )}
         {整理空白菜单 && 当前选择视图 === 整理空白菜单.视图 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 整理空白菜单.x, top: 整理空白菜单.y }}
             role="menu"
@@ -9748,18 +9865,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置整理空白菜单(null);
               }}
             >{t("选择文件")}</button>
-          </div>
+          </ContextMenu>
         )}
         {资源菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 资源菜单.x, top: 资源菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(资源菜单.input); 设置资源菜单(null); }}>{t("打开路径")}</button>
-            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "rename" }); 设置资源菜单(null); }}>{t("重命名本地文件")}</button>
-            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "delete" }); 设置资源菜单(null); }}>{t("删除资源…")}</button>
+            {!资源菜单.collection && <>
             <button
               type="button"
               role="menuitem"
@@ -9775,15 +9890,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置资源菜单(null);
               }}
             >{t("查看资源信息")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                const 目标 = 获取目录资源右键整理目标(资源菜单.input, 资源菜单.itemKey);
-                void 批量加入收藏(目标.items, 目标.title);
-                设置资源菜单(null);
-              }}
-            >{t("加入收藏")}</button>
+            <div className="context-menu-separator" role="separator" />
             <button
               type="button"
               role="menuitem"
@@ -9793,26 +9900,31 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置资源菜单(null);
               }}
             >{t("加入书架")}</button>
-          </div>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const 目标 = 获取目录资源右键整理目标(资源菜单.input, 资源菜单.itemKey);
+                void 批量加入收藏(目标.items, 目标.title);
+                设置资源菜单(null);
+              }}
+            >{t("加入收藏")}</button>
+            <div className="context-menu-separator" role="separator" />
+            </>}
+            {渲染菜单选择文件(() => 设置资源菜单(null))}
+            <div className="context-menu-separator" role="separator" />
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "rename" }); 设置资源菜单(null); }}>{t("重命名本地文件")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive" type="button" role="menuitem" onClick={() => { 设置本地文件目标({ path: 资源菜单.localPath, title: 资源菜单.input.title, mode: "delete" }); 设置资源菜单(null); }}>{t("删除资源…")}</button>
+          </ContextMenu>
         )}
         {最近菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 最近菜单.x, top: 最近菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(最近菜单.项目); 设置最近菜单(null); }}>{t("打开路径")}</button>
-            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:最近菜单.项目.sourcePath,title:最近菜单.项目.title,mode:"rename"}); 设置最近菜单(null); }}>{t("重命名本地文件")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={当前选择视图Key列表.length === 0}
-              onClick={() => {
-                进入当前视图选择模式();
-                设置最近菜单(null);
-              }}
-            >{t("选择文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9832,6 +9944,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置最近菜单(null);
               }}
             >{t("查看资源信息")}</button>
+            {!是临时存放 && <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(最近菜单.项目); 设置最近菜单(null); }}>{t("打开路径")}</button>}
             <button
               type="button"
               role="menuitem"
@@ -9840,6 +9953,20 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置最近菜单(null);
               }}
             >{t("复制原路径")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                选择已有虚拟文件夹加入([{
+                  resourceKey: 最近菜单.项目.resourceKey,
+                  sourcePath: 最近菜单.项目.sourcePath,
+                  sourceType: 最近菜单.项目.sourceType,
+                  title: 最近菜单.项目.title,
+                }], 最近菜单.项目.title, { x: 最近菜单.x, y: 最近菜单.y });
+                设置最近菜单(null);
+              }}
+            >{t("加入书架")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9859,20 +9986,21 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置最近菜单(null);
               }}
             >{t("加入收藏")}</button>
+            {是临时存放 && <button type="button" role="menuitem" onClick={() => void 临时文件目录加入资源库(最近菜单.项目)}>{t("将所在目录加入资源库")}</button>}
+            <div className="context-menu-separator" role="separator" />
             <button
               type="button"
               role="menuitem"
+              disabled={当前选择视图Key列表.length === 0}
               onClick={() => {
-                选择已有虚拟文件夹加入([{
-                  resourceKey: 最近菜单.项目.resourceKey,
-                  sourcePath: 最近菜单.项目.sourcePath,
-                  sourceType: 最近菜单.项目.sourceType,
-                  title: 最近菜单.项目.title,
-                }], 最近菜单.项目.title, { x: 最近菜单.x, y: 最近菜单.y });
+                进入当前视图选择模式();
                 设置最近菜单(null);
               }}
-            >{t("加入书架")}</button>
-            <button
+            >{t("选择文件")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:最近菜单.项目.sourcePath,title:最近菜单.项目.title,mode:"rename"}); 设置最近菜单(null); }}>{t("重命名本地文件")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               onClick={() => {
@@ -9884,27 +10012,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 ? tr`删除选中的 ${已选项目Key集合.size} 条最近记录`
                 : t("删除此最近记录")}
             </button>
-            {是临时存放 && <button type="button" role="menuitem" onClick={() => void 临时文件目录加入资源库(最近菜单.项目)}>{t("将所在目录加入资源库")}</button>}
-          </div>
+          </ContextMenu>
         )}
         {收藏菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 收藏菜单.x, top: 收藏菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(收藏菜单.项目); 设置收藏菜单(null); }}>{t("打开路径")}</button>
-            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:收藏菜单.项目.sourcePath,title:收藏菜单.项目.title,mode:"rename"}); 设置收藏菜单(null); }}>{t("重命名本地文件")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={当前选择视图Key列表.length === 0}
-              onClick={() => {
-                进入当前视图选择模式();
-                设置收藏菜单(null);
-              }}
-            >{t("选择文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9924,6 +10040,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置收藏菜单(null);
               }}
             >{t("查看资源信息")}</button>
+            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(收藏菜单.项目); 设置收藏菜单(null); }}>{t("打开路径")}</button>
             <button
               type="button"
               role="menuitem"
@@ -9932,16 +10049,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置收藏菜单(null);
               }}
             >{t("复制原路径")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => void 调整收藏项目顺序(收藏菜单.项目.resourceKey, "top")}
-            >{t("置顶")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => void 调整收藏项目顺序(收藏菜单.项目.resourceKey, "bottom")}
-            >{t("置底")}</button>
+            <div className="context-menu-separator" role="separator" />
             <button
               type="button"
               role="menuitem"
@@ -9955,7 +10063,30 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置收藏菜单(null);
               }}
             >{t("加入书架")}</button>
+            <div className="context-menu-separator" role="separator" />
             <button
+              type="button"
+              role="menuitem"
+              onClick={() => void 调整收藏项目顺序(收藏菜单.项目.resourceKey, "top")}
+            >{t("置顶")}</button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => void 调整收藏项目顺序(收藏菜单.项目.resourceKey, "bottom")}
+            >{t("置底")}</button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={当前选择视图Key列表.length === 0}
+              onClick={() => {
+                进入当前视图选择模式();
+                设置收藏菜单(null);
+              }}
+            >{t("选择文件")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:收藏菜单.项目.sourcePath,title:收藏菜单.项目.title,mode:"rename"}); 设置收藏菜单(null); }}>{t("重命名本地文件")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               onClick={() => {
@@ -9967,10 +10098,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 ? tr`移除选中的 ${已选项目Key集合.size} 条收藏`
                 : t("移除收藏")}
             </button>
-          </div>
+          </ContextMenu>
         )}
         {书架菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 书架菜单.x, top: 书架菜单.y }}
             role="menu"
@@ -9984,7 +10115,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置书架菜单(null);
               }}
             >{t("重命名书架栏")}</button>
-            <button
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               onClick={() => {
@@ -9995,10 +10127,10 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 ? tr`删除选中的 ${获取已选书架栏列表().length} 个书架栏`
                 : t("删除书架栏")}
             </button>
-          </div>
+          </ContextMenu>
         )}
         {书架栏空白菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 书架栏空白菜单.x, top: 书架栏空白菜单.y }}
             role="menu"
@@ -10011,32 +10143,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 打开书架弹窗({ mode: "create" });
                 设置书架栏空白菜单(null);
               }}
-            >{t("新增书架栏")}</button>
-          </div>
+            >{t("新建书架分类")}</button>
+          </ContextMenu>
         )}
         {虚拟文件夹菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 虚拟文件夹菜单.x, top: 虚拟文件夹菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                打开虚拟文件夹弹窗({ mode: "rename", folder: 虚拟文件夹菜单.项目 });
-                设置虚拟文件夹菜单(null);
-              }}
-            >{t("重命名")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                打开虚拟文件夹弹窗({ mode: "note", folder: 虚拟文件夹菜单.项目 });
-                设置虚拟文件夹菜单(null);
-              }}
-            >{t("编辑备注")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10047,14 +10163,24 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               type="button"
               role="menuitem"
               onClick={() => {
+                打开虚拟文件夹弹窗({ mode: "rename", folder: 虚拟文件夹菜单.项目 });
+                设置虚拟文件夹菜单(null);
+              }}
+            >{t("重命名")}</button>
+            {渲染菜单选择文件(() => 设置虚拟文件夹菜单(null), true)}
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive"
+              type="button"
+              role="menuitem"
+              onClick={() => {
                 设置待删除虚拟文件夹(虚拟文件夹菜单.项目);
                 设置虚拟文件夹菜单(null);
               }}
             >{t("删除")}</button>
-          </div>
+          </ContextMenu>
         )}
         {书架空白菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 书架空白菜单.x, top: 书架空白菜单.y }}
             role="menu"
@@ -10068,24 +10194,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置书架空白菜单(null);
               }}
             >{t("新建书架")}</button>
-          </div>
+            {渲染菜单选择文件(() => 设置书架空白菜单(null), true)}
+          </ContextMenu>
         )}
         {书架内部空白菜单 && 当前虚拟文件夹 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 书架内部空白菜单.x, top: 书架内部空白菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button
-              type="button"
-              role="menuitem"
-              disabled={当前选择视图Key列表.length === 0}
-              onClick={() => {
-                进入当前视图选择模式();
-                设置书架内部空白菜单(null);
-              }}
-            >{t("选择文件")}</button>
             {选择模式 === "virtual-folder" && 已选项目Key集合.size > 0 && (
               <button
                 type="button"
@@ -10096,16 +10214,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 }}
               >{t("加入收藏")}</button>
             )}
+            <div className="context-menu-separator" role="separator" />
             <button
               type="button"
               role="menuitem"
-              disabled={当前虚拟文件夹.items.length === 0}
+              disabled={当前选择视图Key列表.length === 0}
               onClick={() => {
-                设置待清空虚拟文件夹({ folder: 当前虚拟文件夹 });
+                进入当前视图选择模式();
                 设置书架内部空白菜单(null);
               }}
-            >{t("清空书架")}</button>
-            <button
+            >{t("选择文件")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               disabled={当前虚拟文件夹无效资源项目.length === 0}
@@ -10118,17 +10238,24 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置书架内部空白菜单(null);
               }}
             >{t("清空无效资源")}</button>
-          </div>
+            <button className="context-menu-destructive"
+              type="button"
+              role="menuitem"
+              disabled={当前虚拟文件夹.items.length === 0}
+              onClick={() => {
+                设置待清空虚拟文件夹({ folder: 当前虚拟文件夹 });
+                设置书架内部空白菜单(null);
+              }}
+            >{t("清空书架")}</button>
+          </ContextMenu>
         )}
         {虚拟文件夹资源菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 虚拟文件夹资源菜单.x, top: 虚拟文件夹资源菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(虚拟文件夹资源菜单.项目); 设置虚拟文件夹资源菜单(null); }}>{t("打开路径")}</button>
-            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:虚拟文件夹资源菜单.项目.sourcePath,title:虚拟文件夹资源菜单.项目.title,mode:"rename"}); 设置虚拟文件夹资源菜单(null); }}>{t("重命名本地文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10149,6 +10276,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置虚拟文件夹资源菜单(null);
               }}
             >{t("查看资源信息")}</button>
+            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(虚拟文件夹资源菜单.项目); 设置虚拟文件夹资源菜单(null); }}>{t("打开路径")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10159,42 +10287,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置虚拟文件夹资源菜单(null);
               }}
             >{t("复制原路径")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={当前虚拟文件夹?.coverResourceKey === 虚拟文件夹资源菜单.项目.resourceKey}
-              onClick={() => {
-                const 项目 = 虚拟文件夹资源菜单?.项目;
-                if (项目) void 设置当前书架封面(项目.resourceKey);
-              }}
-            >{t("设为封面")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                const 项目 = 虚拟文件夹资源菜单?.项目;
-                if (项目) void 调整当前书架项目顺序(项目.resourceKey, "top");
-              }}
-            >{t("置顶")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                const 项目 = 虚拟文件夹资源菜单?.项目;
-                if (项目) void 调整当前书架项目顺序(项目.resourceKey, "bottom");
-              }}
-            >{t("置底")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                const 项目 = 虚拟文件夹资源菜单?.项目;
-                if (!项目) return;
-                const 目标 = 获取书架资源右键整理目标(项目);
-                void 批量加入收藏(目标.items, 目标.title);
-                设置虚拟文件夹资源菜单(null);
-              }}
-            >{t("加入收藏")}</button>
+            <div className="context-menu-separator" role="separator" />
             <button
               type="button"
               role="menuitem"
@@ -10217,6 +10310,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 const 项目 = 虚拟文件夹资源菜单?.项目;
                 if (!项目) return;
                 const 目标 = 获取书架资源右键整理目标(项目);
+                void 批量加入收藏(目标.items, 目标.title);
+                设置虚拟文件夹资源菜单(null);
+              }}
+            >{t("加入收藏")}</button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const 项目 = 虚拟文件夹资源菜单?.项目;
+                if (!项目) return;
+                const 目标 = 获取书架资源右键整理目标(项目);
                 打开批量转存到书架弹窗("move", 目标.items, 目标.title, { x: 虚拟文件夹资源菜单.x, y: 虚拟文件夹资源菜单.y });
                 设置虚拟文件夹资源菜单(null);
               }}
@@ -10232,7 +10336,37 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置虚拟文件夹资源菜单(null);
               }}
             >{t("复制到书架")}</button>
+            <div className="context-menu-separator" role="separator" />
             <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const 项目 = 虚拟文件夹资源菜单?.项目;
+                if (项目) void 调整当前书架项目顺序(项目.resourceKey, "top");
+              }}
+            >{t("置顶")}</button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const 项目 = 虚拟文件夹资源菜单?.项目;
+                if (项目) void 调整当前书架项目顺序(项目.resourceKey, "bottom");
+              }}
+            >{t("置底")}</button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={当前虚拟文件夹?.coverResourceKey === 虚拟文件夹资源菜单.项目.resourceKey}
+              onClick={() => {
+                const 项目 = 虚拟文件夹资源菜单?.项目;
+                if (项目) void 设置当前书架封面(项目.resourceKey);
+              }}
+            >{t("设为封面")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button type="button" role="menuitem" onClick={() => { 设置本地文件目标({path:虚拟文件夹资源菜单.项目.sourcePath,title:虚拟文件夹资源菜单.项目.title,mode:"rename"}); 设置虚拟文件夹资源菜单(null); }}>{t("重命名本地文件")}</button>
+            {渲染菜单选择文件(() => 设置虚拟文件夹资源菜单(null), false)}
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               onClick={() => {
@@ -10249,26 +10383,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 void 从当前虚拟文件夹移除(项目.resourceKey);
               }}
             >{t("从当前书架移除")}</button>
-          </div>
+          </ContextMenu>
         )}
         {书签菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu"
             style={{ left: 书签菜单.x, top: 书签菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(书签菜单.项目); 设置书签菜单(null); }}>{t("打开路径")}</button>
-            <button type="button" role="menuitem" onClick={() => { 设置书签重命名(书签菜单.项目); 设置书签菜单(null); }}>{t("重命名书签")}</button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={当前选择视图Key列表.length === 0}
-              onClick={() => {
-                进入当前视图选择模式();
-                设置书签菜单(null);
-              }}
-            >{t("选择文件")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10282,6 +10405,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置书签菜单(null);
               }}
             >{t("查看资源信息")}</button>
+            <button type="button" role="menuitem" onClick={() => { void 打开资源所在目录(书签菜单.项目); 设置书签菜单(null); }}>{t("打开路径")}</button>
             <button
               type="button"
               role="menuitem"
@@ -10290,6 +10414,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置书签菜单(null);
               }}
             >{t("复制原路径")}</button>
+            <div className="context-menu-separator" role="separator" />
             <button
               type="button"
               role="menuitem"
@@ -10300,7 +10425,18 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               role="menuitem"
               onClick={() => void 调整书签项目顺序(书签菜单.项目.id, "bottom")}
             >{t("置底")}</button>
+            <button type="button" role="menuitem" onClick={() => { 设置书签重命名(书签菜单.项目); 设置书签菜单(null); }}>{t("重命名书签")}</button>
             <button
+              type="button"
+              role="menuitem"
+              disabled={当前选择视图Key列表.length === 0}
+              onClick={() => {
+                进入当前视图选择模式();
+                设置书签菜单(null);
+              }}
+            >{t("选择文件")}</button>
+            <div className="context-menu-separator" role="separator" />
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               onClick={() => {
@@ -10312,16 +10448,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 ? tr`删除选中的 ${已选项目Key集合.size} 条书签`
                 : t("删除此书签")}
             </button>
-          </div>
+          </ContextMenu>
         )}
         {标签菜单 && (
-          <div
+          <ContextMenu
             className="recent-context-menu tag-context-menu"
             style={{ left: 标签菜单.x, top: 标签菜单.y }}
             role="menu"
             onClick={(事件) => 事件.stopPropagation()}
           >
-            <button
+            <button className="context-menu-destructive"
               type="button"
               role="menuitem"
               onClick={() => {
@@ -10329,7 +10465,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 设置标签菜单(null);
               }}
             >{t("删除此标签")}</button>
-          </div>
+          </ContextMenu>
         )}
         {移动到书架目标 && (
           <div
@@ -10414,7 +10550,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         )}
         {书架弹窗 && 渲染对话框(
           <ModalOverlay
-            className="root-delete-overlay"
+            className={`root-delete-overlay ${加入虚拟文件夹目标 ? "is-shelf-picker-editor" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="bookshelf-edit-title"
@@ -10423,7 +10559,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             }}
           >
             <div className="root-delete-dialog virtual-folder-dialog" onClick={(事件) => 事件.stopPropagation()}>
-              <h2 id="bookshelf-edit-title">{书架弹窗.mode === "create" ? t("新建书架栏") : t("重命名书架栏")}</h2>
+              <h2 id="bookshelf-edit-title">{书架弹窗.mode === "create" ? t("新建书架分类") : t("重命名书架栏")}</h2>
               <label className="virtual-folder-field">
                 <span>{t("名称")}</span>
                 <input
@@ -10432,7 +10568,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   autoFocus
                   onChange={(事件) => 设置书架名称输入(事件.target.value)}
                   onKeyDown={(事件) => {
-                    if (事件.key === "Enter") void 保存书架弹窗();
+                    if (事件.key !== "Enter") return;
+                    if (事件.nativeEvent.isComposing || 事件.keyCode === 229) { 事件.preventDefault(); return; }
+                    void 保存书架弹窗();
                   }}
                 />
               </label>
@@ -10479,172 +10617,20 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
             </div>
           </ModalOverlay>
         )}
-        {加入虚拟文件夹目标 && (
-          <div
-            className="bookshelf-target-context-layer"
-            onClick={() => {
-              设置加入虚拟文件夹目标(null);
-              设置加入书架搜索内容("");
-              设置加入书架目标书架栏ID(null);
-            }}
-            onContextMenu={(事件) => {
-              事件.preventDefault();
-              设置加入虚拟文件夹目标(null);
-              设置加入书架搜索内容("");
-              设置加入书架目标书架栏ID(null);
-            }}
-          >
-            <div
-              className="bookshelf-target-dialog"
-              style={加入书架菜单样式}
-              role="menu"
-              aria-label={t("加入书架")}
-              onClick={(事件) => 事件.stopPropagation()}
-            >
-              {使用分栏加入书架目标 ? (
-                <div className="bookshelf-target-cascade">
-                  <div className="bookshelf-target-menu bookshelf-target-bars" role="menu" aria-label={t("书架栏")}>
-                    <label className="virtual-folder-field virtual-folder-search-field">
-                      <span>{t("搜索书架")}</span>
-                      <input
-                        value={加入书架搜索内容}
-                        disabled={删除确认处理中}
-                        placeholder={t("输入书架名称")}
-                        onChange={(事件) => 设置加入书架搜索内容(事件.target.value)}
-                      />
-                    </label>
-                    <div className="bookshelf-target-bar-list">
-                      {加入书架目标组列表.length === 0 ? (
-                        <p className="drawer-muted">{t("没有匹配的书架栏。")}</p>
-                      ) : (
-                        加入书架目标组列表.map((组) => (
-                          <button
-                            type="button"
-                            key={组.bookshelf.id}
-                            className={当前加入书架目标组?.bookshelf.id === 组.bookshelf.id ? "is-active" : ""}
-                            onMouseEnter={() => 设置加入书架目标书架栏ID(组.bookshelf.id)}
-                            onFocus={() => 设置加入书架目标书架栏ID(组.bookshelf.id)}
-                            onClick={() => 设置加入书架目标书架栏ID(组.bookshelf.id)}
-                          >
-                            <span>{组.bookshelf.name}</span>
-                            <em>{组.total}</em>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className="bookshelf-target-menu-action bookshelf-target-bar-action"
-                      onClick={() => {
-                        设置加入虚拟文件夹目标(null);
-                        设置加入书架搜索内容("");
-                        设置加入书架目标书架栏ID(null);
-                        打开书架弹窗({ mode: "create" });
-                      }}
-                    >{t("新建书架栏")}</button>
-                  </div>
-                  <div className="virtual-folder-target-list bookshelf-target-submenu" role="menu" aria-label={t("书架")}>
-                    {加入书架可选目标列表.length === 0 ? (
-                      <p className="drawer-muted">{加入书架目标组列表.length === 0 ? t("没有匹配的书架。") : t("当前书架栏暂无可加入的书架。")}</p>
-                    ) : (
-                      加入书架可选目标列表.map((文件夹) => {
-                        const 加入状态 = 获取书架目标加入状态(文件夹, 加入虚拟文件夹目标.items);
-                        const 已全部加入 = 加入状态 === "all";
-                        return (
-                          <button
-                            type="button"
-                            key={文件夹.id}
-                            className={已全部加入 ? "is-already-added" : ""}
-                            disabled={删除确认处理中 || 已全部加入}
-                            onClick={() => void 加入到虚拟文件夹(文件夹.id, 加入虚拟文件夹目标.items)}
-                          >
-                            <span>{文件夹.name}</span>
-                            <em>
-                              {加入状态 === "all"
-                                ? t("已加入")
-                                : 加入状态 === "partial"
-                                  ? tr`部分已加入 · ${文件夹.items.length} 项`
-                                  : tr`${文件夹.items.length} 项`}
-                            </em>
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="bookshelf-target-menu-action bookshelf-target-shelf-action"
-                    onClick={() => {
-                      const 待加入项目 = 加入虚拟文件夹目标.items;
-                      const 目标书架栏ID = 当前加入书架目标组?.bookshelf.id ?? 当前书架?.id ?? 书架列表[0]?.id;
-                      设置加入虚拟文件夹目标(null);
-                      设置加入书架搜索内容("");
-                      设置加入书架目标书架栏ID(null);
-                      打开虚拟文件夹弹窗({ mode: "create", items: 待加入项目, bookshelfId: 目标书架栏ID });
-                    }}
-                  >{t("新建书架并加入")}</button>
-                </div>
-              ) : (
-                <>
-                  <div className="bookshelf-target-single-menu">
-                    <label className="virtual-folder-field virtual-folder-search-field">
-                      <span>{t("搜索书架")}</span>
-                      <input
-                        value={加入书架搜索内容}
-                        disabled={删除确认处理中}
-                        placeholder={t("输入书架名称")}
-                        onChange={(事件) => 设置加入书架搜索内容(事件.target.value)}
-                      />
-                    </label>
-                    <div className="virtual-folder-target-list">
-                      {加入书架可选目标列表.length === 0 ? (
-                        <p className="drawer-muted">{虚拟文件夹列表.length === 0 ? t("暂无书架，请先新建。") : t("没有匹配的书架。")}</p>
-                      ) : (
-                        加入书架可选目标列表.map((文件夹) => {
-                          const 加入状态 = 获取书架目标加入状态(文件夹, 加入虚拟文件夹目标.items);
-                          const 已全部加入 = 加入状态 === "all";
-                          return (
-                            <button
-                              type="button"
-                              key={文件夹.id}
-                              className={已全部加入 ? "is-already-added" : ""}
-                              disabled={删除确认处理中 || 已全部加入}
-                              onClick={() => void 加入到虚拟文件夹(文件夹.id, 加入虚拟文件夹目标.items)}
-                            >
-                              <span>{文件夹.name}</span>
-                              <em>
-                                {加入状态 === "all"
-                                  ? t("已加入")
-                                  : 加入状态 === "partial"
-                                    ? tr`部分已加入 · ${文件夹.items.length} 项`
-                                    : tr`${文件夹.items.length} 项`}
-                              </em>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className="bookshelf-target-menu-action bookshelf-target-single-action"
-                      onClick={() => {
-                        const 待加入项目 = 加入虚拟文件夹目标.items;
-                        const 目标书架栏ID = 当前加入书架目标组?.bookshelf.id ?? 当前书架?.id ?? 书架列表[0]?.id;
-                        设置加入虚拟文件夹目标(null);
-                        设置加入书架搜索内容("");
-                        设置加入书架目标书架栏ID(null);
-                        打开虚拟文件夹弹窗({ mode: "create", items: 待加入项目, bookshelfId: 目标书架栏ID });
-                      }}
-                    >{t("新建书架并加入")}</button>
-                  </div>
-                </>
-              )}
+        {加入虚拟文件夹目标 && (手机布局 ? (
+          <MobileSheet title={t("加入书架")} onClose={关闭加入书架选择} beforeClose={()=>!删除确认处理中}>
+            {渲染加入书架选择器()}
+          </MobileSheet>
+        ) : (
+          <div className="bookshelf-target-context-layer" onClick={关闭加入书架选择} onContextMenu={event=>{event.preventDefault();关闭加入书架选择();}}>
+            <div className="bookshelf-target-dialog" style={加入书架菜单样式} role="menu" aria-label={t("加入书架")} onClick={event=>event.stopPropagation()}>
+              {渲染加入书架选择器()}
             </div>
           </div>
-        )}
+        ))}
         {虚拟文件夹弹窗 && 渲染对话框(
           <ModalOverlay
-            className="root-delete-overlay"
+            className={`root-delete-overlay ${加入虚拟文件夹目标 ? "is-shelf-picker-editor" : ""}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="virtual-folder-edit-title"
@@ -10652,7 +10638,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
               if (!删除确认处理中) 打开虚拟文件夹弹窗(null);
             }}
           >
-            <div className="root-delete-dialog virtual-folder-dialog" onClick={(事件) => 事件.stopPropagation()}>
+            <form className="root-delete-dialog virtual-folder-dialog" onClick={(事件) => 事件.stopPropagation()} onSubmit={(事件) => { 事件.preventDefault(); void 保存虚拟文件夹弹窗(); }}>
               <h2 id="virtual-folder-edit-title">
                 {虚拟文件夹弹窗.mode === "create"
                   ? t("新建书架")
@@ -10667,14 +10653,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                     value={虚拟文件夹名称输入}
                     disabled={删除确认处理中}
                     autoFocus
+                    maxLength={180}
                     onChange={(事件) => 设置虚拟文件夹名称输入(事件.target.value)}
                     onKeyDown={(事件) => {
-                      if (事件.key === "Enter") void 保存虚拟文件夹弹窗();
+                      if (事件.key === "Enter" && (事件.nativeEvent.isComposing || 事件.keyCode === 229)) 事件.preventDefault();
                     }}
                   />
                 </label>
               )}
-              {(虚拟文件夹弹窗.mode === "create" || 虚拟文件夹弹窗.mode === "note") && (
+              {虚拟文件夹弹窗.mode === "note" && (
                 <label className="virtual-folder-field">
                   <span>{t("备注")}</span>
                   <textarea
@@ -10686,11 +10673,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                 </label>
               )}
               <p>{t("书架只保存 OmiComic 内部引用，不会创建真实文件夹，也不会移动、复制或修改漫画文件。")}</p>
+              {书架编辑错误 && <p role="alert">{t(书架编辑错误)}</p>}
               <div className="root-delete-actions">
                 <button type="button" disabled={删除确认处理中} onClick={() => 打开虚拟文件夹弹窗(null)}>{t("取消")}</button>
-                <button type="button" className="primary-action" disabled={删除确认处理中} onClick={() => void 保存虚拟文件夹弹窗()}>{t("保存")}</button>
+                <button type="submit" className="primary-action" disabled={删除确认处理中}>{t("保存")}</button>
               </div>
-            </div>
+            </form>
           </ModalOverlay>
         )}
         {待删除虚拟文件夹 && 渲染对话框(

@@ -1,0 +1,8 @@
+.notice-stack { position:fixed; z-index:1400; pointer-events:none; }
+.notice-stack .app-notice { position:absolute; top:0; left:0; right:auto; display:flex; align-items:center; justify-content:space-between; gap:16px; width:100%; max-width:none; min-height:44px; margin:0; padding:11px 14px; border:1px solid var(--控件边框); border-radius:10px; background:var(--面板色); color:var(--主文字); box-shadow:0 8px 22px color-mix(in srgb,var(--阴影基色) 8%,transparent); font-size:calc(13px * var(--desktop-font-scale,1)); line-height:1.5; pointer-events:auto; }
+.notice-stack .app-notice>span { min-width:0; overflow-wrap:anywhere; }
+.notice-stack .app-notice>button { flex:none; padding:0 4px; border:0; background:transparent; color:inherit; font-size:19px; cursor:pointer; }
+.notice-stack .notice-error { color:var(--危险色); border-color:var(--危险边框); background:var(--危险浅色); }
+.notice-stack .notice-success { color:var(--成功色); border-color:color-mix(in srgb,var(--成功色) 28%,transparent); background:var(--成功浅色); }
+.notice-stack .is-queued { height:var(--notice-height); overflow:hidden; pointer-events:none; }
+.notice-stack .is-queued>* { visibility:hidden; }

@@ -20,6 +20,19 @@ function nativeStore() {
 }
 
 describe('Android durable library adapter',()=>{
+  it('preserves untouched shelf fields through repeated renames, note edits and restart', async () => {
+    const store=nativeStore(),api=await createAndroidApi(store.native);
+    const created=await api.createVirtualFolder({name:'原名',note:'原备注'});if(!created.ok)throw new Error();
+    const id=created.data.id;
+    for(const name of ['改名一次','改名两次']){
+      const renamed=await api.updateVirtualFolder({id,name,note:undefined});
+      expect(renamed.ok&&renamed.data).toMatchObject({name,note:'原备注'});
+    }
+    const edited=await api.updateVirtualFolder({id,name:undefined,note:'新备注'});
+    expect(edited.ok&&edited.data).toMatchObject({name:'改名两次',note:'新备注'});
+    const restored=await(await createAndroidApi(store.native)).getAppData();
+    expect(restored.ok&&restored.data.virtualFolders[0]).toMatchObject({name:'改名两次',note:'新备注'});
+  });
   it('starts with single pages, left-to-right and panorama off, while retaining saved choices', async () => {
     const store = nativeStore(), api = await createAndroidApi(store.native);
     const initial = await api.getAppData(); if (!initial.ok) throw new Error();

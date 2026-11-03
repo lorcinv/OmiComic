@@ -97,19 +97,30 @@ test.describe('phone motion', () => {
     await expect(page.locator('.reader-swipe-preview')).toHaveCount(0);
     await info.attach('settle-frames', { body: JSON.stringify(captured), contentType: 'application/json' });
   });
+  for (const mode of ['single', 'double', 'double-rtl']) test(`${mode} accepts repeated light flicks after an initially diagonal thumb movement`, async ({ page, context }) => {
+    await open(page, true, mode);
+    const sign=mode==='double-rtl'?1:-1,{x,y,cdp}=await finger(page,context,sign>0),step=mode==='single'?1:2;
+    const touch=(type:string,dx=0,dy=0)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:x+sign*dx,y:y+dy,id:1}]});
+    for(let i=0;i<3;i++){
+      const before=Number(await progress(page));
+      await touch('touchStart');await touch('touchMove',8,10);await touch('touchMove',30,12);await touch('touchMove',55,14);await touch('touchEnd');
+      await expect.poll(async()=>Number(await progress(page))).toBe(before+step);
+      await expect.poll(()=>offset(page)).toBe(0);
+    }
+  });
   test('a delayed neighbour never holds the finger then jumps when decoding finishes', async ({ page, context }) => {
     await open(page, true, 'single', 12, true); const { x, touch } = await finger(page, context), first = await progress(page);
-    await touch('touchStart'); await touch('touchMove', x - 80); expect(await offset(page)).toBeCloseTo(-72, 0);
-    await page.waitForTimeout(150); expect(await offset(page)).toBeCloseTo(-72, 0);
+    await touch('touchStart'); await touch('touchMove', x - 80); expect(await offset(page)).toBeCloseTo(-74, 0);
+    await page.waitForTimeout(150); expect(await offset(page)).toBeCloseTo(-74, 0);
     await page.evaluate(() => (window as any).__releaseNeighbour());
-    await expect(page.locator('.reader-swipe-preview .has-display-raster')).toHaveCount(1); expect(await offset(page)).toBeCloseTo(-72, 0);
+    await expect(page.locator('.reader-swipe-preview .has-display-raster')).toHaveCount(1); expect(await offset(page)).toBeCloseTo(-74, 0);
     await page.waitForTimeout(160); await touch('touchEnd'); await expect.poll(() => offset(page)).toBe(0); expect(await progress(page)).toBe(first);
   });
   test('a short paused drag returns smoothly and does not fall through to the old swipe action', async ({ page, context }) => {
     await open(page, true); const first = await progress(page), { x, touch } = await finger(page, context);
     await touch('touchStart'); await touch('touchMove', x - 70); await page.waitForTimeout(180);
     await record(page); await touch('touchEnd'); const captured = await frames(page);
-    expect(new Set(captured.filter(f => f.offset < -.5 && f.offset > -62).map(f => f.offset)).size).toBeGreaterThanOrEqual(3);
+    expect(new Set(captured.filter(f => f.offset < -.5 && f.offset > -64).map(f => f.offset)).size).toBeGreaterThanOrEqual(3);
     expect(await progress(page)).toBe(first); expect(await offset(page)).toBe(0);
   });
   test('the first-page edge resists further pulling and returns without a turn', async ({ page, context }) => {

@@ -109,7 +109,7 @@ test('PDF and EPUB share the real reader, persist modes/bookmarks and leave sour
   assert.equal(pdfProgress.currentPageIndex, 1);
   assert.equal(pdfProgress.readerViewState.pageMode, 'double');
   assert.equal(pdfProgress.readerViewState.fitMode, 'fit-width');
-  assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1);
+  assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(window => window.isVisible()).length), 1);
   await electron.close(); electron = null;
 
   page = await launch(pdfPath);
@@ -166,7 +166,7 @@ test('PDF and EPUB share the real reader, persist modes/bookmarks and leave sour
   await page.locator('.resource-card').filter({ hasText: 'EPUB 测试.epub' }).dblclick();
   await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('2');
   await expect(page.locator('.reader-toolbar')).toHaveCount(1);
-  assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1);
+  assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter(window => window.isVisible()).length), 1);
   await electron.close(); electron = null;
 
   page = await launch(epubPath);

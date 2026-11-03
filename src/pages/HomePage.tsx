@@ -3,6 +3,7 @@ import MobileIcon from "../components/MobileIcon";
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail } from "../reader/thumbnailClient";
 import { warmReader } from '../reader/loadReader';
+import {beginReaderOpening,cancelReaderOpening} from '../android/readerOpening';
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { OmiComicAppData, RecentOpenedItem, 阅读资源结果, 阅读打开上下文 } from "../types";
@@ -58,6 +59,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
   const generation = useRef(0);
   const openRequest = useRef(0);
   const openingRef = useRef(false);
+  useEffect(()=>{if(!mobile)return;const cancel=(event:Event)=>{if(!openingRef.current)return;openRequest.current++;openingRef.current=false;setOpening(null);cancelReaderOpening();event.preventDefault();};window.addEventListener('omi-back',cancel);return()=>window.removeEventListener('omi-back',cancel);},[mobile]);
   const [heldBook, setHeldBook] = useState<string | null>(null);
   const hold = useRef<{ x: number; y: number; timer: number } | null>(null);
   const suppressHoldClick = useRef(false);
@@ -140,8 +142,9 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
     setOpening(book.resourceKey);
     setHeldBook(null); cancelHold();
     setError(null);
+    const openingTicket=mobile?beginReaderOpening(book.sourcePath):undefined;
     try {
-      warmReader();
+      warmReader(book.sourceType);
       const resource = await window.omicomic.getResourcePages({ path: book.sourcePath, type: book.sourceType });
       if (request !== openRequest.current) return;
       if (!resource.ok) throw new Error(resource.error.message);
@@ -160,6 +163,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
     } catch (cause) {
       if (request === openRequest.current) setError(cause instanceof Error ? cause.message : "打开失败，请检查文件是否已移动或删除。");
     } finally {
+      if(mobile)cancelReaderOpening(book.sourcePath,openingTicket);
       if (request === openRequest.current) { openingRef.current = false; setOpening(null); }
     }
   };
@@ -168,7 +172,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
     <div className={`omi-home${mobile ? ' is-mobile-home' : ''}`}>
       {!mobile && <HomeArtworkPalette id="omi-home-palette" />}
       <header className="omi-home__header">
-        <OmiPageBrand onActivate={browse} onRead={origin => resume(books[0], origin)} readDisabled={loading || books.length === 0 || opening !== null} />
+        <OmiPageBrand onActivate={browse} onRead={origin => resume(books[0], origin)} readDisabled={loading || books.length === 0} readBusy={opening !== null} />
         {!mobile && <button type="button" className="omi-home__library" aria-label={t("打开资源库")} onClick={browse}>{t("我的资源库 ")}<Arrow diagonal /></button>}
       </header>
       <div className="omi-home__stage" ref={stage}>

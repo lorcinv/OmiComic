@@ -1,5 +1,15 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "书架分类滚动条": ["Bookshelf category scrollbar", "本棚カテゴリのスクロールバー"],
+  "书架滚动条": ["Bookshelf scrollbar", "本棚のスクロールバー"],
+  "没有匹配的书架分类。": ["No matching bookshelf categories.", "一致する本棚カテゴリがありません。"],
+  "当前书架分类暂无可加入的书架。": ["This category has no bookshelves yet.", "このカテゴリには追加先の本棚がありません。"],
+  "所选文件夹中没有可加入书架的资源。": ["No readable books were found in the selected folder.", "選択したフォルダーに本棚へ追加できる本がありません。"],
+  "文件夹层级或数量过多，请分批加入书架。": ["Too many folders or nested levels. Add them in smaller batches.", "フォルダー数または階層が多すぎます。分けて本棚に追加してください。"],
+  "书架保存失败，请重试。": ["Could not save the bookshelf. Please try again.", "本棚を保存できませんでした。もう一度お試しください。"],
+  "文件夹读取失败，请重试。": ["Could not read the folder. Please try again.", "フォルダーを読み込めませんでした。もう一度お試しください。"],
+  "文档读取中断，请重新打开。": ["The document read was interrupted. Open it again.", "文書の読み込みが中断されました。開き直してください。"],
+  "文档读取失败，请重新打开。": ["Could not read the document. Open it again.", "文書を読み込めませんでした。開き直してください。"],
   "重试此页": ["Retry this page", "このページを再読み込み"],
   "全景点击翻页": ["Tap to turn pages in panorama", "パノラマでタップしてページ送り"],
   "缩放比例": ["Zoom level", "拡大率"],
@@ -1947,9 +1957,9 @@ export const messages: Record<string, readonly [string, string]> = {
     "Added",
     "追加済み"
   ],
-  "部分已加入 · {0} 项": [
-    "Partly added · {0} items",
-    "一部追加済み · {0} 件"
+  "部分已加入 · {0}": [
+    "Partly added · {0}",
+    "一部追加済み · {0}"
   ],
   "{0} 项": [
     "{0} items",

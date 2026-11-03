@@ -17,8 +17,13 @@ final class SceneTransition {
   private android.animation.Animator reveal;
   private View revealLayer;
   private int previousLayerType;
+  static final long READER_ENTER_MS=200;
+  private boolean readerPending,readerCapturing;
+  private String readerKey;
+  private final java.util.ArrayList<Runnable> readerCaptureReady=new java.util.ArrayList<>();
   SceneTransition(Window window,FrameLayout root,FrameLayout content){this.window=window;this.root=root;this.content=content;}
   void begin(long request,Runnable ready){
+    if(readerPending&&!suspended){id=request;if(readerCapturing)readerCaptureReady.add(ready);else if(snapshot!=null)FrameCommit.after(snapshot,ready);else ready.run();return;}
     boolean interrupted=snapshot!=null;
     cancel();id=request;
     if(suspended||content.getWidth()==0||content.getHeight()==0){ready.run();return;}
@@ -28,6 +33,19 @@ final class SceneTransition {
     if(interrupted)FrameCommit.after(content,()->capture(expected,ready));
     else capture(expected,ready);
   }
+  void readerIntent(String key){
+    if(suspended||content.getWidth()==0||content.getHeight()==0)return;
+    if(readerPending&&key.equals(readerKey))return;
+    cancel();readerKey=key;readerPending=true;readerCapturing=true;final int expected=generation;
+    // Hold the outgoing frame at its original size while the saved page loads.
+    // Scaling this snapshot makes the whole interface visibly pulse before entry.
+    capture(expected,()->{
+      if(expected!=generation)return;
+      if(snapshot!=null)snapshot.setClickable(true);
+      readerCapturing=false;java.util.ArrayList<Runnable> ready=new java.util.ArrayList<>(readerCaptureReady);readerCaptureReady.clear();for(Runnable callback:ready)callback.run();
+    });
+  }
+  void cancelReaderIntent(String key){if(readerPending&&key.equals(readerKey))cancel();}
   private void capture(int expected,Runnable ready){
     if(expected!=generation||suspended){ready.run();return;}
     try{
@@ -53,7 +71,8 @@ final class SceneTransition {
     if(suspended||request!=id)return;
     if(snapshot==null)return;
     ImageView old=snapshot;
-    long duration=direction.equals("replace")?140:240;
+    old.animate().cancel();
+    long duration=readerPending&&direction.equals("forward")?READER_ENTER_MS:direction.equals("replace")?140:240;
     // Slide opaque scenes. Alpha on the WebView group creates a full-screen
     // intermediate render target and can stall the first composited frame.
     if(direction.startsWith("home-")){
@@ -71,7 +90,9 @@ final class SceneTransition {
       content.bringToFront();content.setTranslationX(content.getWidth()*sign);
       old.animate().translationX(-content.getWidth()*sign).alpha(0).setDuration(210).setInterpolator(new LinearInterpolator()).start();
       content.animate().translationX(0).setDuration(210).setInterpolator(new LinearInterpolator()).withEndAction(()->{if(id==request&&snapshot==old)cancel();}).start();
-    }else if(direction.equals("folder")||direction.startsWith("detail")){
+    }else if(direction.equals("folder")){
+      old.animate().alpha(0).setDuration(180).setInterpolator(new LinearInterpolator()).withEndAction(()->{if(id==request&&snapshot==old)cancel();}).start();
+    }else if(direction.startsWith("detail")){
       content.setPivotX(content.getWidth()/2f);content.setPivotY(content.getHeight()/2f);content.setScaleX(.978f);content.setScaleY(.978f);
       content.animate().scaleX(1).scaleY(1).setDuration(180).setInterpolator(new LinearInterpolator()).start();
       old.animate().alpha(0).setDuration(180).setInterpolator(new LinearInterpolator()).withEndAction(()->{if(id==request&&snapshot==old)cancel();}).start();
@@ -97,7 +118,7 @@ final class SceneTransition {
   void afterFinished(long request,Runnable ready){
     final long deadline=android.os.SystemClock.uptimeMillis()+2000;
     new Runnable(){public void run(){
-      if(suspended||request!=id||snapshot==null||android.os.SystemClock.uptimeMillis()>=deadline){ready.run();return;}
+      if(suspended||request!=id||(snapshot==null&&!readerCapturing)||android.os.SystemClock.uptimeMillis()>=deadline){ready.run();return;}
       content.postDelayed(this,16);
     }}.run();
   }
@@ -108,6 +129,8 @@ final class SceneTransition {
     restoreRevealLayer();
     content.animate().cancel();content.setTranslationX(0);content.setAlpha(1);content.setScaleX(1);content.setScaleY(1);
     if(snapshot!=null){snapshot.animate().cancel();root.removeView(snapshot);snapshot.setImageDrawable(null);snapshot=null;}
+    readerPending=false;readerCapturing=false;readerKey=null;
+    java.util.ArrayList<Runnable> ready=new java.util.ArrayList<>(readerCaptureReady);readerCaptureReady.clear();for(Runnable callback:ready)callback.run();
     // RenderThread may still hold the old display list; release by reachability.
     bitmap=null;
   }

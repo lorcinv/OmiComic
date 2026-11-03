@@ -1,10 +1,10 @@
-import { initMobiFile } from '@lingo-reader/mobi-parser';
+import { initMobiFile, initKf8File } from '@lingo-reader/mobi-parser';
 import { inspectMobi, MAX_MOBI_BYTES } from './mobiLimits';
 import { documentRaster } from './documentRaster';
 
 const owned=new Set<string>(),create=URL.createObjectURL.bind(URL);
 URL.createObjectURL=blob=>{const url=create(blob);owned.add(url);return url;};
-let book:Awaited<ReturnType<typeof initMobiFile>>;
+let book:Awaited<ReturnType<typeof initMobiFile|typeof initKf8File>>;
 let rangeSequence=0;
 const ranges=new Map<number,{resolve:(data:Uint8Array)=>void;reject:(error:Error)=>void}>();
 async function readBook(size:number){
@@ -20,7 +20,7 @@ async function readBook(size:number){
 async function chapter(index:number){
   if(!Number.isInteger(index))throw Error('MOBI 章节编号无效。');
   const entry=book.getSpine()[index];if(!entry)throw Error('MOBI 章节不存在。');
-  const content=book.loadChapter(entry.id);if(!content||content.html.length>4*1024*1024)throw Error('MOBI 章节为空或过大。');
+  const content=await book.loadChapter(entry.id);if(!content||content.html.length>4*1024*1024)throw Error('MOBI 章节为空或过大。');
   const replacements=new Map<string,string>(),images:{name:string;type:string;data:ArrayBuffer}[]=[];let total=0;
   for(const match of content.html.matchAll(/\bsrc=["'](blob:[^"']+)["']/gi)){
     const url=match[1];if(replacements.has(url)||!owned.has(url)||images.length>=100)continue;
@@ -41,9 +41,9 @@ self.onmessage=event=>{
   }
   queue=queue.then(async()=>{try{
     if(method==='open'){
-      const contents=await readBook(size);inspectMobi(contents);
-      const file={name:'book.mobi',arrayBuffer:async()=>contents} as File;
-      book=await initMobiFile(file);
+      const contents=await readBook(size),format=inspectMobi(contents);
+      const file={name:format.kf8?'book.azw3':'book.mobi',arrayBuffer:async()=>contents} as File;
+      book=await (format.kf8?initKf8File(file):initMobiFile(file));
       const spine=book.getSpine();if(!spine.length||spine.length>5000)throw Error('MOBI 没有可阅读章节或章节过多。');
       self.postMessage({id,data:spine.map((_entry,n)=>({index:n,name:`第 ${n+1} 章`}))});
     }else{

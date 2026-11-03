@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { isAndroid, singleTapNavigation } from "../platform";
 import { requestMobilePagePreview, type MobilePagePreviewRequest } from "../reader/mobilePagePreviews";
 import type { 阅读页面项 } from "../types";
+import type { DocumentSource } from '../reader/documentSource';
 type 缩略图状态 = { status: "idle" | "loading" | "loaded" | "error"; url: string | null };
 
 interface 资源详情缩略图Props {
@@ -14,18 +15,21 @@ interface 资源详情缩略图Props {
   previewPriority?: number;
   eager?: boolean;
   nativeImage?: string | null;
+  documentSource?: DocumentSource;
 }
 
 interface 资源详情缩略图加载任务 {
   cancelled: () => boolean;
+  priority:()=>number;
   run: () => Promise<void>;
 }
 
 const 资源详情缩略图加载队列: 资源详情缩略图加载任务[] = [];
-const 资源详情缩略图最大并发数 = 4;
+const 资源详情缩略图最大并发数 = 2;
 let 资源详情缩略图加载中数量 = 0;
 
 function 推进资源详情缩略图加载队列(): void {
+  资源详情缩略图加载队列.sort((a,b)=>a.priority()-b.priority());
   while (资源详情缩略图加载中数量 < 资源详情缩略图最大并发数 && 资源详情缩略图加载队列.length > 0) {
     const 任务 = 资源详情缩略图加载队列.shift();
     if (!任务 || 任务.cancelled()) continue;
@@ -39,11 +43,11 @@ function 推进资源详情缩略图加载队列(): void {
   }
 }
 
-function 调度资源详情缩略图加载(run: () => Promise<void>): () => void {
+function 调度资源详情缩略图加载(run: () => Promise<void>,priority:()=>number): () => void {
   let 已取消 = false;
-  const 任务 = { cancelled: () => 已取消, run };
+  const 任务 = { cancelled: () => 已取消, run, priority };
   资源详情缩略图加载队列.push(任务);
-  推进资源详情缩略图加载队列();
+  queueMicrotask(推进资源详情缩略图加载队列);
   return () => {
     已取消 = true;
     const 索引 = 资源详情缩略图加载队列.indexOf(任务);
@@ -51,7 +55,7 @@ function 调度资源详情缩略图加载(run: () => Promise<void>): () => void
   };
 }
 
-export default function 资源详情缩略图({ page, selected, selectable = true, onSelect, onOpen, previewPriority, eager = false, nativeImage }: 资源详情缩略图Props) {
+export default function 资源详情缩略图({ page, selected, selectable = true, onSelect, onOpen, previewPriority, eager = false, nativeImage, documentSource }: 资源详情缩略图Props) {
   const 容器 = useRef<HTMLButtonElement>(null);
   const [状态, 设置状态] = useState<缩略图状态>({ status: "idle", url: null });
   const 手机请求 = useRef<MobilePagePreviewRequest>();
@@ -62,7 +66,6 @@ export default function 资源详情缩略图({ page, selected, selectable = tru
   useEffect(() => { 手机请求.current?.setPriority(优先级.current); }, [previewPriority, selected]);
 
   useEffect(() => {
-    if (nativeImage !== undefined) return;
     const 元素 = 容器.current;
     if (!元素) return;
     let 已取消 = false;
@@ -74,6 +77,17 @@ export default function 资源详情缩略图({ page, selected, selectable = tru
       if (已开始) return;
       已开始 = true;
       设置状态({ status: "loading", url: null });
+      if (page.type === 'pdf-page' && documentSource) {
+        const controller = new AbortController();
+        const cancelQueue=调度资源详情缩略图加载(async()=>{
+          try{
+            const url=await documentSource.readPreview(page.index,controller.signal);
+            if(!已取消&&!controller.signal.aborted){已完成=true;设置状态({status:'loaded',url});}
+          }catch{if(!已取消&&!controller.signal.aborted)设置状态({status:'error',url:null});}
+        },()=>优先级.current);
+        取消排队 = () => {cancelQueue();controller.abort();};
+        return;
+      }
       if (手机模式) {
         const 请求 = requestMobilePagePreview(page, 优先级.current);
         手机请求.current = 请求;
@@ -102,7 +116,7 @@ export default function 资源详情缩略图({ page, selected, selectable = tru
         } catch {
           if (!已取消) 设置状态({ status: "error", url: null });
         }
-      });
+      },()=>优先级.current);
     }
 
     if (eager || typeof IntersectionObserver !== "function") {
@@ -129,7 +143,7 @@ export default function 资源详情缩略图({ page, selected, selectable = tru
       取消排队?.();
       观察器.disconnect();
     };
-  }, [page.archiveInnerPath, page.sourcePath, page.type, page.virtualPath, 手机模式 ? page.modifiedAt : undefined, 手机模式 ? page.pageId : undefined, eager, nativeImage !== undefined]);
+  }, [page.archiveInnerPath, page.sourcePath, page.type, page.virtualPath, 手机模式 ? page.modifiedAt : undefined, 手机模式 ? page.pageId : undefined, page.type === 'pdf-page' ? page.index : undefined, documentSource, eager]);
 
   return (
     <button
@@ -144,8 +158,8 @@ export default function 资源详情缩略图({ page, selected, selectable = tru
       }}
       onDoubleClick={() => { if (!singleTapNavigation()) onOpen(); }}
     >
-      <span className={`resource-detail-thumbnail-image thumbnail-${nativeImage ? 'native' : 状态.status}`} data-native-preview={nativeImage || undefined}>
-        {nativeImage !== undefined ? null : 状态.status === "loaded" && 状态.url ? (
+      <span className={`resource-detail-thumbnail-image thumbnail-${状态.status === 'loaded' ? 'loaded' : nativeImage ? 'native' : 状态.status}`} data-native-preview={状态.status === 'loaded' ? undefined : nativeImage || undefined}>
+        {状态.status === "loaded" && 状态.url ? (
           <img src={状态.url} alt="" draggable={false} decoding="async" />
         ) : 状态.status === "error" ? (
           <span title={tr`预览不可用，${t(singleTapNavigation() ? "点击" : "双击")}仍可尝试阅读`} aria-hidden="true">!</span>

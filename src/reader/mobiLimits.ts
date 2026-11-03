@@ -27,6 +27,7 @@ export function inspectMobi(buffer:ArrayBuffer){
     if(start===undefined||end-start<248||ascii(start+16,4)!=='MOBI')throw Error('MOBI 书目无效。');
     if(view.getUint16(start+12)!==0)throw Error('暂不支持带 DRM 加密的 MOBI。');
     const compression=view.getUint16(start),text=view.getUint32(start+4),records=view.getUint16(start+8),version=view.getUint32(start+36),encoding=view.getUint32(start+28),length=view.getUint32(start+20);
+    if(version>=8&&length<264)throw Error('MOBI KF8 书目不完整。');
     if(![1,2].includes(compression))throw Error('本版暂不支持这种 MOBI 压缩方式，请先转换为 EPUB。');
     if(!text||text>MAX_MOBI_TEXT||!records||records>4096||index+records>=count)throw Error('MOBI 文本或章节超过本版上限。');
     if(![1252,65001].includes(encoding))throw Error('MOBI 文字编码暂不支持，请先转换为 EPUB。');
@@ -42,7 +43,11 @@ export function inspectMobi(buffer:ArrayBuffer){
     return {version,boundary};
   };
   const first=header(0);
-  if(first.version>=8||first.boundary>=0)throw Error('本版先支持传统 MOBI，KF8／双格式文件请先转换为 EPUB。');
-  if(offsets.some(offset=>ascii(offset,4)==='FONT'))throw Error('本版暂不支持此 MOBI 的内嵌字体，请先转换为 EPUB。');
+  if(first.version>=8)return {kf8:true};
+  if(first.boundary>=0){
+    if(first.boundary===0||first.boundary>=count)throw Error('MOBI 双格式边界无效。');
+    if(header(first.boundary).version<8)throw Error('MOBI 双格式缺少 KF8 书目。');
+    return {kf8:true};
+  }
   return {kf8:false};
 }

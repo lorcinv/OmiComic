@@ -1,6 +1,7 @@
 import type { 缩略图输入, 缩略图结果, 操作结果 } from "../types";
 import { isAndroid } from "../platform";
 import { clearMobilePagePreviews } from "./mobilePagePreviews";
+import {readPdfCover,savePdfCover,clearPdfCovers} from './pdfCoverStore';
 
 const cache = new Map<string, string>();
 const pending = new Map<string, Promise<string | null>>();
@@ -16,8 +17,9 @@ const androidWaiting: Array<() => void> = [];
 
 export function clearResourceThumbnailCache(path?: string): void {
   desktopGeneration++;
+  void clearPdfCovers(path);
   if (isAndroid()) clearMobilePagePreviews(path);
-  if (!path) { androidCache.clear(); cache.clear(); }
+  cache.clear(); if (!path) androidCache.clear();
   const target=path?.replace(/\\/g,'/').replace(/\/$/,'');
   const affected=(key:string)=>{
     const candidate=key.replace(/\\/g,'/').replace(/\/$/,'');
@@ -154,15 +156,18 @@ export async function getResourceThumbnail(input: 缩略图输入, signal?: Abor
   return completeCover(await sharedAndroidCover(input, signal, version));
 }
 async function completeCover(result: 操作结果<缩略图结果>): Promise<操作结果<缩略图结果>> {
+  if(result.ok&&result.data.pdfPath)void import('./pdfRuntime').then(runtime=>runtime.warmPdfWorker()).catch(()=>undefined);
   if (!result.ok || result.data.url || !result.data.pdfPath) return result;
   const key = `${result.data.pdfPath}:${result.data.sourceVersion ?? ""}`;
   let url = cache.get(key) ?? null;
+  if(!url)url=await readPdfCover(key);
   if (!url) {
     let task = pending.get(key);
     if (!task) { task = renderPdf(result.data.pdfPath); pending.set(key, task); }
     try { url = await task; } finally { if (pending.get(key) === task) pending.delete(key); }
     if (url) {
       cache.set(key, url);
+      void savePdfCover(key,result.data.pdfPath,url);
       while (cache.size > 96) cache.delete(cache.keys().next().value!);
     }
   }

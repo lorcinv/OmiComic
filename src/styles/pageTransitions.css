@@ -32,10 +32,9 @@ html[data-mobile-navigation]::view-transition-group(mobile-primary-nav) { z-inde
 html[data-mobile-navigation]::view-transition-old(mobile-primary-nav) { display:none; }
 html[data-mobile-navigation]::view-transition-new(mobile-primary-nav) { animation:none; opacity:1; }
 /* Directories dissolve at the centre without sliding like a new reading page. */
-html[data-mobile-navigation="folder"]::view-transition-new(root) { transform-origin:center; animation:mobile-folder-in 180ms ease-out both; }
-html[data-mobile-navigation="folder"]::view-transition-old(root) { animation:mobile-folder-out 180ms ease-out both; }
+html[data-mobile-navigation="folder"]::view-transition-new(root) { animation:mobile-scene-replace 180ms ease-out both; }
+html[data-mobile-navigation="folder"]::view-transition-old(root) { animation:mobile-detail-out 180ms ease-out both; }
 @keyframes mobile-folder-in { from { transform:scale(.978); opacity:0; } to { transform:none; opacity:1; } }
-@keyframes mobile-folder-out { to { transform:scale(1.012); opacity:.2; } }
 /* The cover retains its visual identity while its bounds change into details. */
 html[data-mobile-navigation^="detail"]::view-transition-group(mobile-detail-cover) { z-index:5; animation-duration:220ms; animation-timing-function:cubic-bezier(.2,.6,.3,1); }
 html[data-mobile-navigation^="detail"]::view-transition-old(mobile-detail-cover),

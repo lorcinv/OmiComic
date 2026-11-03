@@ -358,8 +358,8 @@ function ReaderPage({
   const [可显示页组, 设置可显示页组] = useState<可显示页组 | null>(null);
   const [页面解码完成, 设置页面解码完成] = useState<Record<number,string>>({});
   const [已呈现资源Key, 设置已呈现资源Key] = useState<string | null>(null);
-  const 漫画首屏优先 = resource?.sourceType !== 'pdf' && resource?.sourceType !== 'epub' && resource?.sourceType !== 'mobi';
-  const 后台预读已启用 = !漫画首屏优先 || isActive && interactive && recordProgress && 已呈现资源Key === resource?.resourceKey;
+  const 漫画首屏优先 = resource?.sourceType !== 'epub' && resource?.sourceType !== 'mobi';
+  const 后台预读已启用 = isActive && interactive && recordProgress && 已呈现资源Key === resource?.resourceKey;
   const 手机页面元素 = useRef(new Map<number,HTMLImageElement>());
   const [, 设置页组加载状态] = useState<页组加载状态>({
     status: "idle",
@@ -685,6 +685,9 @@ function ReaderPage({
   }, [原生图片核心,模式2,isActive,interactive,resource?.resourceKey,当前页组Key,原生窗口Key]);
   const 桌面预读窗口 = useRef(new Set<number>());
   const 桌面预读任务 = useRef(new Map<string, Promise<unknown>>());
+  // PDF on Android needs the same complete-spread read-ahead as PC. Alternating
+  // individual pages leaves half of a double-page neighbour cold at touch-down.
+  const 手机PDF成组预读 = isAndroid() && resource?.sourceType === 'pdf';
   const 桌面估计索引 = 模式2 ? [全景窗口中心索引-1,全景窗口中心索引,全景窗口中心索引+1] : 当前页组索引;
   const 已知页面 = 桌面估计索引.map(index=>页面图片状态表[index]).filter((state):state is 页面图片状态=>Boolean(state?.url));
   const 桌面单页预算 = 已知页面.length ? Math.max(1, ...已知页面.map(估算页面图片缓存字节)) : 16 * 1024 * 1024;
@@ -695,10 +698,10 @@ function ReaderPage({
   const 桌面预读索引 = 后台预读已启用 ? desktopPreloadWindow(当前页组索引,resource?.total??0,原生前进方向,预加载页数,内存缓存上限字节,桌面单页预算,桌面相邻页组) : [];
   const 桌面窗口Key = JSON.stringify([...当前页组索引,...桌面预读索引]);
   useLayoutEffect(() => {
-    if (isAndroid() || !isActive || !resource || 模式2) { 桌面预读窗口.current.clear(); return; }
+    if (isAndroid() && !手机PDF成组预读 || !isActive || !resource || 模式2) { 桌面预读窗口.current.clear(); return; }
     桌面预读窗口.current = new Set([...当前页组索引,...桌面预读索引]);
     保留页面图片加载调度(桌面预读窗口.current);
-  }, [isActive, resource?.resourceKey, 模式2, 桌面窗口Key]);
+  }, [isActive, resource?.resourceKey, 模式2, 桌面窗口Key, 手机PDF成组预读]);
   const 桌面自动隐藏 = !手机布局 && 阅读器设置.desktopReaderAutoHide === true;
   const 可隐藏工具栏 = 沉浸模式 || 桌面自动隐藏;
   const 桌面按住指针 = useRef(new Set<number>());
@@ -1232,6 +1235,24 @@ function ReaderPage({
   const 手机滑页已就绪=手机滑页页面.length>0&&手机滑页页面.every(page=>Boolean(page.url||page.error));
   const 手机滑页尺寸=手机滑页已就绪?fitSpread(手机滑页页面,可用区域,缩放模式).map(size=>({width:size.width*自由缩放.scale,height:size.height*自由缩放.scale})):[];
   const 手机邻页平移={x:手机滑页.screenDirection*Math.max(0,(手机滑页尺寸.reduce((sum,size)=>sum+size.width,0)-可用区域.width)/2),y:Math.max(-Math.max(0,(Math.max(0,...手机滑页尺寸.map(size=>size.height))-可用区域.height)/2),Math.min(Math.max(0,(Math.max(0,...手机滑页尺寸.map(size=>size.height))-可用区域.height)/2),自由缩放.y))};
+  const 手机滑页图组 = new Map<string,{index:number;direction:number;pages:typeof 手机滑页页面;sizes:typeof 手机滑页尺寸;active:boolean}>();
+  if (手机滑页已就绪 && 手机滑页.target) 手机滑页图组.set(手机滑页.target.key,{index:手机滑页.target.index,direction:手机滑页.screenDirection,pages:手机滑页页面,sizes:手机滑页尺寸,active:true});
+  if (手机PDF成组预读 && 手机布局 && !模式2 && 后台预读已启用 && 桌面相邻页组 && resource) {
+    let bytes = 0;
+    const budget = Math.min(64 * 1024 * 1024, 内存缓存上限字节 * .25);
+    for (const [direction,indices] of [[1,桌面相邻页组.next],[-1,桌面相邻页组.previous]] as const) {
+      const index=indices[0],key=`${resource.resourceKey}:${index}`;
+      if(index===undefined || 手机滑页图组.has(key) || indices.some(i=>当前页组索引.includes(i)||!桌面预读索引.includes(i)))continue;
+      const states=indices.map(i=>页面图片状态表[i]);
+      if(states.some(state=>!state?.canvas?.width||state.loading))continue;
+      const size=states.reduce((sum,state)=>sum+state.canvas!.width*state.canvas!.height*4,0);
+      if(bytes+size>budget)continue;
+      bytes+=size;
+      const order=从右到左阅读?[...indices].reverse():indices;
+      const pages=order.map(i=>({...resource.pages[i],...页面图片状态表[i],url:页面图片状态表[i].url,width:页面图片状态表[i].width??600,height:页面图片状态表[i].height??900}));
+      手机滑页图组.set(key,{index,direction:direction*(从右到左阅读?-1:1),pages,sizes:fitSpread(pages,可用区域,缩放模式).map(size=>({width:size.width*自由缩放.scale,height:size.height*自由缩放.scale})),active:false});
+    }
+  }
   useLayoutEffect(()=>{
     const pending=手机放大翻页位置.current;
     if(pending&&显示页组索引.includes(pending.index)){手机放大翻页位置.current=null;自由缩放.panTo(pending.x,pending.y);}
@@ -2725,7 +2746,7 @@ function ReaderPage({
     const 比例 = 读取进度条比例(事件);
     设置进度拖动比例(比例);
     实时拖动阅读比例(比例);
-    if (手机布局 && 阅读器设置.mobileReaderPreviews !== false && (resource?.sourceType !== 'epub' && resource?.sourceType!=='mobi') && resource?.sourceType !== 'pdf') 设置手机页面预览打开(true);
+    if (手机布局 && 阅读器设置.mobileReaderPreviews !== false && (resource?.sourceType !== 'epub' && resource?.sourceType!=='mobi')) 设置手机页面预览打开(true);
   }
 
   function 实时拖动阅读比例(比例: number): void {
@@ -2762,6 +2783,7 @@ function ReaderPage({
     原生进度拖动目标.current = -1;
     const 比例 = 读取进度条比例(事件);
     设置进度拖动比例(比例);
+    if(手机布局&&阅读器设置.mobileReaderPreviews!==false&&resource.sourceType!=='epub'&&resource.sourceType!=='mobi')设置手机页面预览打开(true);
     if (!模式2) 实时拖动阅读比例(比例);
   }
 
@@ -3559,7 +3581,7 @@ function ReaderPage({
       清除过期排队图片();
       return;
     }
-    if (!isAndroid()) {
+    if (!isAndroid() || 手机PDF成组预读) {
       if (!目标页组已准备) return;
       for (const index of 桌面预读索引) {
         const 页面 = resource.pages[index], state = 页面图片状态引用.current[index];
@@ -3636,6 +3658,7 @@ function ReaderPage({
     原生窗口Key,
     目标页组已准备,
     桌面窗口Key,
+    手机PDF成组预读,
   ]);
 
   useEffect(() => {
@@ -4406,7 +4429,7 @@ function ReaderPage({
                         ...(手机全景进入中 && 页面.index !== 显示阅读索引 ? {visibility:'hidden'} : {}),
                       }}
                     >
-                      <ReaderImageEffects nativeZoom={自由缩放.scale>1.001} samplingPriority={模式2 ? undefined : 当前页组索引.includes(页面.index)} layoutKey={[模式2, 阅读流向, 缩放模式, 可用区域.width, 可用区域.height].join(":")} alignmentKey={[模式2 ? 全景窗口中心索引 : 显示页组索引.join('|'), 阅读流向, 可用区域.width, 可用区域.height, 自由缩放.scale].join(":")} settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sampleable={!/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} sourceBytes={状态.encodedBytes} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${resource.resourceKey}:${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
+                      <ReaderImageEffects nativeZoom={自由缩放.scale>1.001} samplingPriority={模式2 ? undefined : 当前页组索引.includes(页面.index)} layoutKey={[模式2, 阅读流向, 缩放模式, 可用区域.width, 可用区域.height].join(":")} alignmentKey={[模式2 ? 全景窗口中心索引 : 显示页组索引.join('|'), 阅读流向, 可用区域.width, 可用区域.height, 自由缩放.scale].join(":")} settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sampleable={!状态.canvas && !/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} sourceBytes={状态.encodedBytes} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${resource.resourceKey}:${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
                       {状态.error ? (
                         <div className="reader-page-error" role="alert">
                           <span>{t("第 ")}{页面.index + 1} {阅读单位}{t("加载失败")}</span>
@@ -4475,12 +4498,12 @@ function ReaderPage({
                 })}
               </div>
             )}
-            {手机滑页已就绪&&手机滑页.target&&<ReaderSwipePreview key={手机滑页.target.key} groupKey={手机滑页.target.key} gammaId={伽马滤镜Id} pages={手机滑页页面} sizes={手机滑页尺寸} adjustments={原生图片核心?DEFAULT_ADJUSTMENTS:画面调整} onPrepared={手机滑页.onPrepared} onBytes={更新显示缩放缓存} pan={自由缩放.scale>1?手机邻页平移:undefined} style={{left:阅读区域.current?.scrollLeft??0,top:阅读区域.current?.scrollTop??0,width:可用区域.width,height:可用区域.height,transform:`translate3d(${手机滑页.screenDirection*可用区域.width+手机滑页.offset}px,0,0)`}}/>}
+            {[...手机滑页图组].map(([key,group])=><ReaderSwipePreview key={key} groupKey={key} active={group.active} gammaId={伽马滤镜Id} pages={group.pages} sizes={group.sizes} adjustments={原生图片核心?DEFAULT_ADJUSTMENTS:画面调整} onPrepared={手机滑页.onPrepared} onBytes={更新显示缩放缓存} pan={group.active&&自由缩放.scale>1?手机邻页平移:undefined} style={{left:阅读区域.current?.scrollLeft??0,top:阅读区域.current?.scrollTop??0,width:可用区域.width,height:可用区域.height,visibility:group.active?'visible':'hidden',transform:`translate3d(${group.direction*可用区域.width+(group.active?手机滑页.offset:0)}px,0,0)`}}/>)}
           </>
         )}
       </div>
 
-      {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews pages={resource.pages} current={进度预览索引} width={阅读器设置.mobilePreviewWidth ?? 88}
+      {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews pages={resource.pages} current={进度预览索引} currentGroup={进度预览组} followingProgress={进度拖动比例!==null} width={阅读器设置.mobilePreviewWidth ?? 88} documentSource={文档源}
         nativeImage={原生图片核心 && !/\.gif$/i.test(resource.pages[进度预览索引]?.name ?? '') ? 页面图片状态表[进度预览索引]?.url || null : undefined}
         nativeImages={页面图片状态表} nativePages={原生图片核心&&!模式2?原生窗口索引:undefined} nativeRadius={!模式2 && 内存缓存上限字节 > 0 ? Math.min(2,预加载页数) : 0}
         onPage={index => { 实时拖动阅读比例(index/Math.max(1,总页数-1)); if(模式2) 提交模式2自由位置(); }}/>}

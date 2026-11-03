@@ -1,0 +1,13 @@
+<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body><div id="test-root"></div><script type="module">
+import React,{useState} from 'react';import{createRoot}from'react-dom/client';
+import MobileReaderPreviews from '/src/components/MobileReaderPreviews.tsx';
+import '/src/styles/global.css';import '/src/styles/theme.css';import '/src/styles/mobile.css';
+document.documentElement.dataset.platform='android';
+const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mNQ8yoBAAF+AOUqTs0pAAAAAElFTkSuQmCC';
+window.omicomic={getPageImage:async()=>({ok:true,data:{url:image}})};
+const pages=Array.from({length:2500},(_,index)=>({index,name:index+'.png',sourcePath:'/book/'+index+'.png',type:'folder-image'}));
+window.__pages=[];window.__delay=0;window.__paired=false;
+function Harness(){const[current,setCurrent]=useState(20),[follow,setFollow]=useState(false),[width,setWidth]=useState(88);window.__width=value=>setWidth(value);window.__report=index=>setCurrent(index);window.__jump=index=>{setFollow(true);setCurrent(index);setTimeout(()=>setFollow(false),80);};window.__pendingJump=index=>{setFollow(true);setCurrent(index);setTimeout(()=>{setFollow(false);setCurrent(20);},40);setTimeout(()=>setCurrent(index),300);};
+return React.createElement(MobileReaderPreviews,{pages,current,currentGroup:window.__paired?[current,current+1]:[current],followingProgress:follow,width,onPage:index=>{window.__pages.push(index);setTimeout(()=>setCurrent(window.__paired?index-index%2:index),window.__delay);}});}
+createRoot(document.getElementById('test-root')).render(React.createElement(Harness));
+</script></body></html>

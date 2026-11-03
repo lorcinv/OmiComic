@@ -124,7 +124,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 640 
     }
     await grid.evaluate(element=>{element.scrollTop=element.scrollHeight*.55;});
     await expect.poll(()=>page.locator('.resource-detail-thumbnail').first().getAttribute('aria-label')).not.toMatch(/第 1 页/);
-    await expect(page.getByRole('button',{name:'下一组预览'})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'下一组预览'})).toBeVisible();
     const label=await grid.locator('.resource-detail-thumbnail').evaluateAll(nodes=>{const root=nodes[0].parentElement!.getBoundingClientRect();return nodes.find(node=>{const rect=node.getBoundingClientRect();return rect.top>=root.top&&rect.top<root.bottom-40;})!.getAttribute('aria-label')!;});
     await page.getByRole('button',{name:label,exact:true}).click({position:{x:20,y:30}});
     await expect(page.getByText(/已选择第 \d+ 页/)).toHaveCount(0);
@@ -158,5 +158,59 @@ test('detail thumbnails scroll continuously beyond groups 48 and 96 with bounded
   await expect(page.getByRole('button',{name:/第 224 页：/})).toBeInViewport();
   expect(await page.locator('.resource-detail-thumbnail').count()).toBeLessThan(48);
   await page.mouse.wheel(0,-100000);await expect(page.getByRole('button',{name:/第 1 页：/})).toBeInViewport();
-  await expect(page.getByRole('button',{name:'下一组预览'})).toHaveCount(0);
+  const pager=page.getByRole('navigation',{name:'预览分页',exact:true});
+  await expect(pager).toContainText('1 / 5');await pager.getByRole('button',{name:'下一组预览'}).click();
+  await expect(pager).toContainText('2 / 5');await expect(page.getByRole('button',{name:/第 49 页：/})).toBeInViewport();
+  await grid.hover();await page.mouse.wheel(0,800);await expect(pager).toContainText('2 / 5');
+  expect(await page.locator('.resource-detail-thumbnail').count()).toBeLessThan(48);
+  await pager.getByRole('button',{name:'上一组预览'}).click();await expect(pager).toContainText('1 / 5');
+  await page.screenshot({path:'test-results/detail-pager-desktop.png'});
+});
+
+test.describe('phone continuous detail previews',()=>{
+ test.use({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+ test('page navigation follows the rendered phone density',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await page.addInitScript(installMock,{count:224});await page.goto('/');await page.getByRole('button',{name:'打开资源库',exact:true}).click();
+  await page.locator('.mobile-resource-card').filter({has:page.locator('strong',{hasText:/^Book$/})}).getByRole('button',{name:'打开资源信息',exact:true}).click();
+  const detail=page.locator('.resource-detail-page'),grid=page.locator('.resource-detail-thumbnail-grid');await expect(grid.locator('.resource-detail-thumbnail').first()).toBeVisible();
+  for(const columns of[4,2,3]){
+   await grid.evaluate((el,columns)=>{el.style.gridTemplateColumns=`repeat(${columns},minmax(0,1fr))`;},columns);await detail.evaluate(el=>{el.scrollTop=0;});
+   const pager=page.getByRole('navigation',{name:'预览分页',exact:true});await expect(pager).toContainText('1 / 5');await pager.getByRole('button',{name:'下一组预览'}).click();
+   await expect(page.getByRole('navigation',{name:'浮动预览分页',exact:true})).toContainText('2 / 5');await expect(grid.getByRole('button',{name:/第 49 页：/}),`phone columns ${columns}`).toBeInViewport();
+  }
+ });
+ test('original pager follows continuous scrolling and supports arrows and page input',async({page})=>{
+  await page.emulateMedia({reducedMotion:'reduce'});await page.addInitScript(installMock,{count:224});
+  await page.goto('/');await page.getByRole('button',{name:'打开资源库',exact:true}).click();
+  await page.locator('.mobile-resource-card').filter({has:page.locator('strong',{hasText:/^Book$/})}).getByRole('button',{name:'打开资源信息',exact:true}).click();
+  const detail=page.locator('.resource-detail-page'),grid=page.locator('.resource-detail-thumbnail-grid');
+  const inline=page.getByRole('navigation',{name:'预览分页',exact:true});await expect(inline).toContainText('1 / 5');
+  await inline.getByRole('button',{name:'下一组预览'}).click();
+  const floating=page.getByRole('navigation',{name:'浮动预览分页',exact:true});await expect(floating).toContainText('2 / 5');
+  await expect(grid.getByRole('button',{name:/第 49 页：/})).toBeInViewport();
+  const before=await detail.evaluate(el=>el.scrollTop);await detail.hover({position:{x:100,y:300}});await page.mouse.wheel(0,450);
+  await expect.poll(()=>detail.evaluate(el=>el.scrollTop)).toBeGreaterThan(before);await expect(floating).toContainText('2 / 5');
+  await floating.getByRole('button',{name:/跳转页码/}).click();await page.getByRole('textbox',{name:'跳转页码输入'}).fill('4');await page.getByRole('button',{name:'跳转',exact:true}).click();
+  await expect(floating).toContainText('4 / 5');await expect(grid.getByRole('button',{name:/第 145 页：/})).toBeInViewport();
+  await detail.evaluate(el=>{el.scrollTop=el.scrollHeight;});await expect(grid.getByRole('button',{name:/第 224 页：/})).toBeInViewport();await expect(floating).toContainText('5 / 5');
+  expect(await grid.locator('.resource-detail-thumbnail').count()).toBeLessThan(48);await expect(floating.getByRole('button',{name:'下一组预览'})).toBeDisabled();
+  await page.screenshot({path:'test-results/detail-pager-mobile.png'});
+ });
+});
+
+test('detail group navigation works at every thumbnail column setting',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});await page.addInitScript(installMock,{count:224});
+ await page.goto('/');await page.getByRole('button',{name:'打开资源库',exact:true}).click();await page.locator('.resource-card').filter({hasText:'Book'}).getByRole('button',{name:'打开资源信息'}).click();
+ const grid=page.locator('.resource-detail-thumbnail-grid'),pager=page.getByRole('navigation',{name:'预览分页',exact:true});
+ for(const scale of[40,55,75,100,125,150,200]){
+  await setCardScale(page.getByRole('slider',{name:'缩略预览大小'}),scale);await grid.evaluate(el=>{el.scrollTop=0;});await expect(pager).toContainText('1 / 5');
+  await pager.getByRole('button',{name:'下一组预览'}).click();await expect(pager,`scale ${scale}`).toContainText('2 / 5');
+  await expect(grid.getByRole('button',{name:/第 49 页：/}),`scale ${scale}`).toBeInViewport();
+  await pager.getByRole('button',{name:'下一组预览'}).click();await expect(pager,`scale ${scale}`).toContainText('3 / 5');
+  await expect(grid.getByRole('button',{name:/第 97 页：/}),`scale ${scale}`).toBeInViewport();
+  for(const button of await pager.locator('button').all()){
+   const bounds=(await button.boundingBox())!,icon=(await button.locator('svg').boundingBox())!;
+   expect(Math.abs(icon.y+icon.height/2-bounds.y-bounds.height/2)).toBeLessThan(.5);
+  }
+ }
 });

@@ -1,18 +1,20 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import DesktopDirectoryDrop from '../src/components/DesktopDirectoryDrop';
+import NoticeStack from '../src/components/NoticeStack';
+import {getNoticeSnapshot,dismissNotice}from'../src/notifications';
 import { installMock } from './mock';
 import { setUiLanguage } from '../src/i18n';
 
 const file = () => new File(['native path is resolved by preload'], 'Comics');
 const transfer = (files: File[]) => ({ types: ['Files'], files, dropEffect: 'none' });
-afterEach(() => { delete document.documentElement.dataset.platform; setUiLanguage('zh-CN'); });
+afterEach(() => { act(()=>{for(const notice of getNoticeSnapshot())dismissNotice(notice.id);});delete document.documentElement.dataset.platform; setUiLanguage('zh-CN'); });
 
 it('handles native file drops globally, displays feedback and preserves internal text drags', async () => {
   installMock({ count: 0 });
   const importDirectory = vi.fn(async () => ({ ok: true as const, data: { root: { path: 'D:/Comics', name: 'Comics', addedAt: 1, lastOpenedAt: 1 }, alreadyAdded: false } }));
   window.omicomic.importDroppedDirectory = importDirectory;
-  const onAdded = vi.fn(); render(<DesktopDirectoryDrop onAdded={onAdded} />);
+  const onAdded = vi.fn(); render(<><DesktopDirectoryDrop onAdded={onAdded} /><NoticeStack/></>);
   const data = transfer([file()]);
   fireEvent.dragEnter(document.body, { dataTransfer: data });
   expect(document.querySelector('.directory-drop-overlay')).not.toBeNull();
@@ -32,7 +34,7 @@ it('rejects multiple drops and avoids overlapping writes; duplicates do not refr
   let resolve!: (result: any) => void;
   const importDirectory = vi.fn(() => new Promise<any>(done => { resolve = done; }));
   window.omicomic.importDroppedDirectory = importDirectory;
-  const onAdded = vi.fn(); render(<DesktopDirectoryDrop onAdded={onAdded} />);
+  const onAdded = vi.fn(); render(<><DesktopDirectoryDrop onAdded={onAdded} /><NoticeStack/></>);
   fireEvent.drop(document.body, { dataTransfer: transfer([file(), file()]) });
   expect(importDirectory).not.toHaveBeenCalled();
   expect(screen.getByRole('status').querySelector('span')?.textContent).toBe('请每次拖入一个文件夹');
@@ -41,6 +43,10 @@ it('rejects multiple drops and avoids overlapping writes; duplicates do not refr
   expect(importDirectory).toHaveBeenCalledTimes(1);
   await act(async () => resolve({ ok: true, data: { root: {}, alreadyAdded: true } }));
   expect(onAdded).not.toHaveBeenCalled();
+  expect(screen.getByRole('status').querySelector('span')?.textContent).toBe('请每次拖入一个文件夹');
+  fireEvent.click(screen.getByRole('button',{name:'关闭'}));
+  expect(screen.getByRole('status').querySelector('span')?.textContent).toBe('目录正在添加，请稍候');
+  fireEvent.click(screen.getByRole('button',{name:'关闭'}));
   expect(screen.getByRole('status').querySelector('span')?.textContent).toBe('该目录已在资源库中');
 });
 

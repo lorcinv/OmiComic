@@ -140,7 +140,13 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     reorderBookshelves: keys=>write(d=>(d.bookshelves=reorder(d.bookshelves,keys,i=>i.id))),
     deleteBookshelf: id=>write(d=>{if(d.bookshelves.length<=1)throw new Error("至少保留一个书架。");d.bookshelves=d.bookshelves.filter(i=>i.id!==id);d.virtualFolders=d.virtualFolders.filter(i=>i.bookshelfId!==id);return d;}),
     createVirtualFolder: input=>write(d=>{const i:VirtualFolder={id:crypto.randomUUID(),bookshelfId:input.bookshelfId??d.bookshelves[0].id,name:input.name,note:input.note??"",tags:[],items:[],createdAt:Date.now(),updatedAt:Date.now(),sortIndex:d.virtualFolders.length};d.virtualFolders.push(i);return i;}),
-    updateVirtualFolder: input=>write(d=>{const f=folder(d,input.id);Object.assign(f,input,{coverResourceKey:input.coverResourceKey===null?undefined:input.coverResourceKey??f.coverResourceKey,updatedAt:Date.now()});return f;}),
+    updateVirtualFolder: input=>write(d=>{
+      const f=folder(d,input.id);
+      if(input.name!==undefined)f.name=input.name;
+      if(input.note!==undefined)f.note=input.note;
+      if(input.coverResourceKey!==undefined)f.coverResourceKey=input.coverResourceKey??undefined;
+      f.updatedAt=Date.now();return f;
+    }),
     reorderVirtualFolders: keys=>write(d=>(d.virtualFolders=reorder(d.virtualFolders,keys,i=>i.id))),
     deleteVirtualFolder: id=>write(d=>(d.virtualFolders=d.virtualFolders.filter(i=>i.id!==id))),
     addVirtualFolderItems: input=>write(d=>{const f=folder(d,input.folderId);const n=addItems(f,input.items);return {folder:f,addedCount:n,skippedCount:input.items.length-n};}),
@@ -198,7 +204,17 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     releaseReaderResource: path=>call("releaseReaderResource",{path}),
     setReaderSession: async()=>ok(null),
     openDocument: input=>call("openDocument",input),
-    readDocumentRange: async(id,begin,end)=>{const result=await call<string>("readDocumentRange",{id,begin,end});return result.ok?ok(Uint8Array.from(atob(result.data),c=>c.charCodeAt(0))):result;},
+    readDocumentRange: async(id,begin,end)=>{
+      try {
+        // Keep document bytes binary. JSON/base64 decoding on the UI thread
+        // delayed PDF painting and every image chapter in large MOBI books.
+        const response=await fetch(`https://omi.local/documents/${encodeURIComponent(id)}?begin=${begin}&end=${end}`);
+        if(!response.ok)throw new Error('文档读取失败，请重新打开。');
+        const bytes=new Uint8Array(await response.arrayBuffer());
+        if(bytes.length!==end-begin)throw new Error('文档读取中断，请重新打开。');
+        return ok(bytes);
+      }catch(error){return failure(error);}
+    },
     readDocumentChapter: async(id,index)=>{try{return ok(await sanitizeAndroidChapter(await native<string>("readDocumentChapter",{id,index}),native));}catch(e){return failure(e);}},
     closeDocument: id=>call("closeDocument",{id}),
     takeExternalOpen: async()=>ok(external.shift()??null),

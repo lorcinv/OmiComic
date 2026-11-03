@@ -25,7 +25,7 @@
   --desktop-focus-halo: color-mix(in srgb, var(--强调色) 18%, transparent);
 }
 
-[data-omi-layout="desktop"] :is(button, summary, [role="button"]):not(.resource-card, .bookshelf-folder-card, .theme-option, .local-file-option) {
+[data-omi-layout="desktop"] :is(button, summary, [role="button"]):not(.resource-card, .bookshelf-folder-card, .theme-option, .local-file-option, .shelf-picker-surface) {
   border-color: transparent;
 }
 

@@ -5,7 +5,7 @@ const pdf = vi.hoisted(() => ({ load: vi.fn(), parse: vi.fn(), destroy: vi.fn(as
 vi.mock('../src/reader/pdfRuntime', () => {
   pdf.load();
   return {
-    PDFDataRangeTransport: class { abort() {} },
+    getSharedPdfWorker:()=>undefined, PDFDataRangeTransport: class { abort() {} },
     getDocument: (...args: unknown[]) => { pdf.parse(...args); return { promise: Promise.resolve({ numPages: 3 }), destroy: pdf.destroy }; },
   };
 });

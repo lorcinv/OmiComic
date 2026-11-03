@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 import { animateReaderMotion, pageSettleProgress } from '../reader/transitionAnimation';
 import { estimateReleaseVelocity, MOTION_SAMPLE_WINDOW_MS, type MotionSample } from '../reader/motion';
+import { noteDisplaySamplingMotion } from '../reader/displaySampling';
 
 type Target = { index: number; key: string };
 const resting = { offset: 0, direction: 0 as -1 | 0 | 1, target: null as Target | null, settling: false };
@@ -13,7 +14,7 @@ export default function useMobilePageSwipe(stage: RefObject<HTMLDivElement>, ena
   const [view, setView] = useState(resting), current = useRef(resting), ready = useRef(''), pending = useRef('');
   const animation = useRef(() => {});
   const waiting = useRef<{ key: string; run: () => void; timer: number } | null>(null);
-  const point = useRef<{ id: number; x: number; y: number; origin: number; slop: number; dragging: boolean; samples: MotionSample[] } | null>(null);
+  const point = useRef<{ id: number; x: number; y: number; origin: number; slop: number; dragging: boolean; overflow?: number; samples: MotionSample[] } | null>(null);
   const config = useRef({ enabled, rtl, getTarget, prepare, navigate }); config.current = { enabled, rtl, getTarget, prepare, navigate };
   const extent = () => Math.max(1, stage.current?.clientWidth ?? 1);
   const update = (next: typeof resting) => { current.current = next; setView(next); };
@@ -54,13 +55,18 @@ export default function useMobilePageSwipe(stage: RefObject<HTMLDivElement>, ena
   const move = (event: PointerEvent<HTMLDivElement>, overflow?: number) => {
     const start = point.current; if (!start || event.pointerId !== start.id) return false;
     const dx = overflow ?? event.clientX - start.x, dy = event.clientY - start.y;
+    if (overflow !== undefined) start.overflow = overflow;
     sample(event);
     if (!start.dragging) {
-      if (Math.abs(dx) < 8) return false;
-      if (Math.abs(dx) < Math.abs(dy) * 1.2) { point.current = null; return false; }
-      start.slop = Math.sign(dx) * 8;
+      if (Math.abs(dx) < 6) return false;
+      // A small diagonal start is undecided, not a rejected page gesture. Keep
+      // listening until either axis clearly wins; real thumbs rarely start flat.
+      if (Math.abs(dy) > Math.max(16, Math.abs(dx) * 1.5)) { point.current = null; return false; }
+      if (Math.abs(dx) < Math.abs(dy)) return false;
+      start.slop = Math.sign(dx) * 6;
       start.dragging = true; event.currentTarget.setPointerCapture(event.pointerId);
     }
+    noteDisplaySamplingMotion();
     const raw = start.origin + dx - start.slop;
     const direction = (raw < 0 ? 1 : -1) * (config.current.rtl ? -1 : 1) as 1 | -1;
     const target = config.current.getTarget(direction);
@@ -74,10 +80,14 @@ export default function useMobilePageSwipe(stage: RefObject<HTMLDivElement>, ena
   };
   const up = (event: PointerEvent<HTMLDivElement>) => {
     const start = point.current; if (!start || event.pointerId !== start.id) return false;
+    // Android can coalesce the last move into pointer-up. Its final coordinate
+    // still belongs to this drag and must count toward the turn distance.
+    const last = start.samples.at(-1);
+    if (start.dragging && start.overflow === undefined && last && (last.x !== event.clientX || last.y !== event.clientY)) move(event);
     sample(event); point.current = null; if (!start.dragging) return false;
     const snapshot = current.current, velocity = estimateReleaseVelocity(start.samples, false).x;
-    const fling = Math.abs(velocity) > .4 && Math.abs(snapshot.offset) > 25;
-    const commit = snapshot.target && (fling ? velocity * snapshot.offset > 0 : Math.abs(snapshot.offset) > extent() * .28);
+    const fling = Math.abs(velocity) > .3 && Math.abs(snapshot.offset) > 18;
+    const commit = snapshot.target && (fling ? velocity * snapshot.offset > 0 : Math.abs(snapshot.offset) > extent() * .22);
     const target = snapshot.target;
     if (commit && target) {
       const finish = () => settle(snapshot.direction * (config.current.rtl ? 1 : -1) * extent(), velocity, () => {

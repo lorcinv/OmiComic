@@ -30,9 +30,9 @@
 .directory-drop-notice {
   position: fixed;
   z-index: 2147483647;
-  top: var(--drop-center-y, 50%);
+  top: 64px;
   left: var(--drop-center-x, 50%);
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 16px;

@@ -1,17 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { t } from '../i18n';
 import { isAndroid } from '../platform';
+import {showNotice} from '../notifications';
 import '../styles/directoryDrop.css';
 
 export default function DesktopDirectoryDrop({ onAdded }: { onAdded: () => void }) {
   const [dragging, setDragging] = useState(false);
-  const [message, setMessage] = useState('');
   const [pane, setPane] = useState({ x: innerWidth / 2, y: innerHeight / 2, width: innerWidth });
   const added = useRef(onAdded);
   added.current = onAdded;
 
   useLayoutEffect(() => {
-    if (!dragging && !message) return;
+    if (!dragging) return;
     const target = document.querySelector<HTMLElement>('.page-panel.is-visible .library-main, .page-panel.is-visible .reader-layout')
       ?? document.querySelector<HTMLElement>('.omi-home, .app-content');
     const measure = () => {
@@ -33,12 +33,9 @@ export default function DesktopDirectoryDrop({ onAdded }: { onAdded: () => void 
     const importDirectory = window.omicomic.importDroppedDirectory;
     if (isAndroid() || !importDirectory) return;
     let live = true, busy = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const notify = (text: string) => {
       if (!live) return;
-      setMessage(text);
-      clearTimeout(timer);
-      timer = setTimeout(() => setMessage(''), 6000);
+      showNotice({owner:'directory-drop',text,kind:'info',duration:6000,closeLabel:'关闭',className:'directory-drop-notice'});
     };
     const reset = () => { if (live) setDragging(false); };
     const isFileDrop = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files');
@@ -106,7 +103,7 @@ export default function DesktopDirectoryDrop({ onAdded }: { onAdded: () => void 
     observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener('blur', reset);
     return () => {
-      live = false; clearTimeout(timer); unlisten(); observer.disconnect();
+      live = false; unlisten(); observer.disconnect();
       for (const dispose of frames.values()) dispose();
       window.removeEventListener('blur', reset);
     };
@@ -120,6 +117,5 @@ export default function DesktopDirectoryDrop({ onAdded }: { onAdded: () => void 
         <span>{t('每次拖入一个文件夹')}</span>
       </div>
     </div>}
-    {message && <div className="directory-drop-notice" style={paneStyle} role="status"><span>{t(message).replace(/[。．.]+$/u, '')}</span><button type="button" aria-label={t('关闭')} onClick={() => setMessage('')}>×</button></div>}
   </>;
 }

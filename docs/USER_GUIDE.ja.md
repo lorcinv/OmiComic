@@ -33,7 +33,7 @@
 <details>
 <summary>対応する漫画・画像形式は？</summary>
 
-画像フォルダー、JPG／JPEG／PNG／WebP／BMP／GIF、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、従来形式の DRM なし MOBI に対応。圧縮ファイルは解凍不要、EPUB／MOBI の進捗は章単位です。MOBI はファイル 256 MiB・本文 8 MiB まで。KF8／二重形式・DRM・HUFF/CDIC 圧縮は未対応のため、EPUB に変換してください。
+画像フォルダー、JPG／JPEG／PNG／WebP／BMP／GIF、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、DRM なし MOBI（従来形式・KF8・二重形式） に対応。圧縮ファイルは解凍不要、EPUB／MOBI の進捗は章単位です。MOBI はファイル 256 MiB・本文 8 MiB まで。DRM・HUFF/CDIC 圧縮は未対応のため、EPUB に変換してください。
 
 </details>
 
@@ -156,7 +156,7 @@ PC と Android は同じ検索構文を使用します。ライブラリでは�
 <details>
 <summary>EPUB・MOBI のページ送りは？</summary>
 
-EPUB・MOBI の進捗は章単位です。前・次のページや進捗バーで章を切り替え、章内はスクロールして読みます。画像だけの EPUB 章には追加の本文余白や独立したページ番号を表示せず、文章の章には通常の余白を残します。MOBI の表紙は現在形式アイコンです。従来形式の DRM なし MOBI の対応範囲は対応形式の項目を参照してください。
+EPUB・MOBI の進捗は章単位です。前・次のページや進捗バーで章を切り替え、章内はスクロールして読みます。画像だけの EPUB 章には追加の本文余白や独立したページ番号を表示せず、文章の章には通常の余白を残します。MOBI の表紙は現在形式アイコンです。DRM なし MOBI（従来形式・KF8・二重形式） の対応範囲は対応形式の項目を参照してください。
 
 </details>
 

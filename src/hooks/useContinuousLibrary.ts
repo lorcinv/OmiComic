@@ -17,9 +17,13 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
   const rowsPerPage = Math.max(1, Math.ceil(requestedPageSize / columns));
   const pageSize = exactPageSize ? requestedPageSize : rowsPerPage * columns;
   const pages = Math.max(1, Math.ceil(count / pageSize));
-  const page = view.bottom && view.count === count ? pages : Math.min(pages, Math.floor(view.row * columns / pageSize) + 1);
+  // Mount the destination's cards before measuring it. Reusing the outgoing row
+  // can leave a short folder empty or briefly show its old scrolled window.
+  const resetting = previous.current.key !== resetKey;
+  const visibleRow = resetting ? Math.floor(Math.min(positions.current.get(resetKey)?.index ?? 0, Math.max(0, count - 1)) / columns) : view.row;
+  const page = !resetting && view.bottom && view.count === count ? pages : Math.min(pages, Math.floor(visibleRow * columns / pageSize) + 1);
   const windowRows = Math.ceil(view.height / view.stride) + (exactPageSize ? 8 : 6);
-  const startRow = Math.max(0, Math.min(view.row - 3, rows - windowRows));
+  const startRow = Math.max(0, Math.min(visibleRow - 3, rows - windowRows));
   const endRow = Math.min(rows, startRow + windowRows);
   const height = Math.max(0, rows * view.stride - view.gap);
   const measureRef = useRef(() => {});
@@ -114,7 +118,7 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
     sync();
   }
   return { start: startRow * columns, end: Math.min(count, endRow * columns), offset: startRow * view.stride,
-    visibleStart:view.row*columns, visibleEnd:Math.min(count,(view.row+Math.ceil(view.height/view.stride)+1)*columns), columns,
+    visibleStart:visibleRow*columns, visibleEnd:Math.min(count,(visibleRow+Math.ceil(view.height/view.stride)+1)*columns), columns,
     height, bottom:Math.max(0,(rows-endRow)*view.stride), page, pages, pageSize, sync, jump,
     reset: () => { positions.current.delete(resetKey); jump(1); } };
 }

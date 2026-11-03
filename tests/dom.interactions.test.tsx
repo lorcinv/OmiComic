@@ -82,7 +82,7 @@ describe('OmiComic actual React DOM regressions', () => {
     grid.scrollTop=20000;fireEvent.scroll(grid);
     await waitFor(() => expect(document.querySelector('.resource-detail-thumbnail')?.getAttribute('aria-label')).not.toMatch(/第 1 页/));
     expect(document.querySelectorAll('.resource-detail-thumbnail').length).toBeLessThanOrEqual(48);
-    expect(screen.queryByRole('button',{name:'下一组预览'})).toBeNull();
+    expect(screen.getByRole('button',{name:'下一组预览'})).toBeTruthy();
     await waitFor(() => expect((window as any).__previewCalls).toBeGreaterThan(0));
     expect((window as any).__previewCalls).toBeLessThanOrEqual(96);
   });

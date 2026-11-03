@@ -1,5 +1,6 @@
 import { flushSync } from 'react-dom';
 import { androidCall, androidNotify, hasAndroidRenderer } from '../android/bridge';
+import {cancelReaderOpening} from '../android/readerOpening';
 
 type Direction = 'forward' | 'back' | 'replace' | 'tab-next' | 'tab-prev' | 'folder' | 'detail' | 'detail-back' | 'home-expand' | 'home-collapse';
 export type MobileNavigationOrigin = {left:number;top:number;width:number;height:number;selectionKey?:string};
@@ -17,6 +18,7 @@ export const mobileNavigationEpoch = (): number => motionEpoch;
  * when the existing Activity returns from the launcher or another app. */
 export function observeMobileNavigationLifecycle(): () => void {
   const pause = () => {
+    cancelReaderOpening();
     suspended = true;
     motionEpoch++;
     active?.skipTransition();
@@ -113,7 +115,11 @@ export async function mobileNavigate(update: () => void, direction: Direction = 
   // A previous native PixelCopy may still be pending. Invalidate its generation
   // before starting a web-only transition, so its late screenshot cannot cover
   // the new UI. A newer native beginScene performs this cleanup itself.
-  if(hasAndroidRenderer()&&webLibraryScene)androidNotify('cancelScene',{});
+  if(hasAndroidRenderer()&&webLibraryScene){
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches)androidNotify('cancelScene',{});
+    else try{await androidCall('cancelScene',{});}catch{androidNotify('cancelScene',{});}
+    if(id!==serial||suspended||epoch!==motionEpoch){clean();return;}
+  }
   if(hasAndroidRenderer()&&!webLibraryScene){
     let committed=false;
     try{
@@ -169,6 +175,7 @@ export async function mobileNavigate(update: () => void, direction: Direction = 
 }
 
 export function cancelMobileNavigation(): void {
+  cancelReaderOpening();
   serial++;
   active?.skipTransition();
   activeCleanup?.();activeCleanup=null;

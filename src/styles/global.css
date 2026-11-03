@@ -3330,7 +3330,7 @@ a,
 
 .recent-context-menu {
   position: fixed;
-  z-index: 20;
+  z-index: 44;
   width: max-content;
   min-width: 156px;
   max-width: min(220px, calc(100vw - 24px));
@@ -3356,6 +3356,11 @@ a,
 .recent-context-menu button:hover {
   background: color-mix(in srgb, var(--强调色) 10%, transparent);
 }
+
+.recent-context-menu { max-height:calc(100dvh - 16px); overflow-y:auto; }
+.context-menu-separator { height:1px; margin:5px 4px; background:var(--边框色); }
+.recent-context-menu button.context-menu-destructive { color:var(--危险色, #b84040); }
+.recent-context-menu button:disabled { opacity:.45; }
 
 .root-delete-overlay {
   position: fixed;
@@ -7677,9 +7682,12 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 .resource-detail-direct-tags { min-height: 34px; align-items: center; }
 .resource-detail-direct-editor.is-readonly { cursor: default; }
 .resource-detail-direct-summary > p { cursor: text; }
+.resource-detail-thumbnail-grid { overflow-anchor:none; }
 .detail-pagination { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
 .detail-pagination button { width: 30px; height: 30px; border: 1px solid color-mix(in srgb, var(--控件边框) 22%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--面板色) 70%, transparent); color: inherit; font-size: calc(20px * var(--desktop-font-scale, 1)); cursor: pointer; }
 .detail-pagination button:disabled { opacity: .3; cursor: default; }
+.detail-pagination button { display:inline-flex; align-items:center; justify-content:center; padding:0; line-height:1; }
+.detail-pagination button .mobile-svg-icon { display:block; width:16px; height:16px; }
 .resource-card { contain: layout style; }
 .resource-preview img { object-fit: cover; }
 .resource-detail-thumbnail-image img { object-fit: contain; }

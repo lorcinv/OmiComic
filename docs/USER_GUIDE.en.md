@@ -33,7 +33,7 @@ Reading progress is saved automatically. If Show home screen is off, use Recent 
 <details>
 <summary>Which comic and image formats are supported?</summary>
 
-Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI. Archives do not need extracting; EPUB/MOBI progress is shown by chapter. MOBI supports files up to 256 MiB and text up to 8 MiB, excluding KF8/dual-format, DRM and HUFF/CDIC compression. Convert unsupported files to EPUB first.
+Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and DRM-free MOBI (traditional, KF8 and dual-format). Archives do not need extracting; EPUB/MOBI progress is shown by chapter. MOBI supports files up to 256 MiB and text up to 8 MiB, excluding DRM and HUFF/CDIC compression. Convert unsupported files to EPUB first.
 
 </details>
 
@@ -156,7 +156,7 @@ In horizontal reading, click the left 40% or right 40% of the reading area, incl
 <details>
 <summary>How do EPUB and MOBI navigation work?</summary>
 
-EPUB and MOBI progress is chapter-based. Use Previous/Next and the progress bar to switch chapters, then scroll within each chapter. Image-only EPUB chapters add no text margins or separate page number; text chapters keep normal reading margins. MOBI currently uses a format placeholder cover. See supported formats for the limits of traditional DRM-free MOBI.
+EPUB and MOBI progress is chapter-based. Use Previous/Next and the progress bar to switch chapters, then scroll within each chapter. Image-only EPUB chapters add no text margins or separate page number; text chapters keep normal reading margins. MOBI currently uses a format placeholder cover. See supported formats for the limits of DRM-free MOBI (traditional, KF8 and dual-format).
 
 </details>
 

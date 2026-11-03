@@ -11,10 +11,12 @@ function CanvasCopy({source,title,style,onReady,onBytes}:{source:HTMLCanvasEleme
   useLayoutEffect(()=>{copy.width=source.width;copy.height=source.height;const context=copy.getContext('2d');if(context){context.drawImage(source,0,0);onBytes(copy.width*copy.height*4);onReady();}return()=>{copy.width=copy.height=0;onBytes(0);};},[source,copy]);
   return <ReaderCanvas canvas={copy} title={title} style={style}/>;
 }
-export default function ReaderSwipePreview({pages,groupKey,sizes,adjustments,gammaId,onPrepared,onBytes,style,pan}:{pages:SwipePreviewPage[];groupKey:string;sizes:{width:number;height:number}[];adjustments:ImageAdjustments;gammaId:string;onPrepared:(key:string)=>void;onBytes:(key:string,bytes:number)=>void;style:CSSProperties;pan?:{x:number;y:number}}){
+export default function ReaderSwipePreview({pages,groupKey,sizes,adjustments,gammaId,onPrepared,onBytes,style,pan,active=true}:{pages:SwipePreviewPage[];groupKey:string;sizes:{width:number;height:number}[];adjustments:ImageAdjustments;gammaId:string;onPrepared:(key:string)=>void;onBytes:(key:string,bytes:number)=>void;style:CSSProperties;pan?:{x:number;y:number};active?:boolean}){
   const ready=useRef(new Set<string>()),notify=useRef(onPrepared);notify.current=onPrepared;
-  const complete=(index:number,kind:'effects'|'content')=>{ready.current.add(`${index}:${kind}`);if(pages.every(page=>ready.current.has(`${page.index}:effects`)&&(page.native||page.error||ready.current.has(`${page.index}:content`))))notify.current(groupKey);};
-  return <div className="reader-swipe-preview" aria-hidden="true" data-swipe-group={groupKey} style={style}>
+  const prepared=()=>pages.every(page=>ready.current.has(`${page.index}:effects`)&&(page.native||page.error||ready.current.has(`${page.index}:content`)));
+  const complete=(index:number,kind:'effects'|'content')=>{ready.current.add(`${index}:${kind}`);if(active&&prepared())notify.current(groupKey);};
+  useLayoutEffect(()=>{if(active&&prepared())notify.current(groupKey);},[active,groupKey]);
+  return <div className="reader-swipe-preview" aria-hidden="true" data-swipe-group={groupKey} data-swipe-active={active} style={style}>
     <div className="reader-swipe-group" style={pan?{translate:`${pan.x}px ${pan.y}px`}:undefined}>
       {pages.map((page,index)=>{const size=sizes[index];if(!size)return null;const imageStyle={width:size.width,height:size.height,maxWidth:'none',maxHeight:'none'};
         return <div key={page.index} data-swipe-page={page.index} style={{width:size.width,height:size.height}}><ReaderImageEffects settings={adjustments} gammaId={gammaId} sourceKey={`swipe:${groupKey}:${page.index}:${page.url}`} sourceWidth={page.width} sourceHeight={page.height} processable={!page.native&&!page.canvas&&!page.html&&!page.error} sampleable={!/\.gif$/i.test(page.name)} onPrepared={()=>complete(page.index,'effects')} onRasterBytes={bytes=>onBytes(`swipe:${page.index}`,bytes)}>

@@ -16,6 +16,7 @@ class PendingImage {
 }
 const page = (index: number, modifiedAt = 1): 阅读页面项 => ({ index, sourcePath: '/book.cbz', archiveInnerPath: `${index}.png`, name: `${index}.png`, type: 'archive-image', modifiedAt });
 const flush = async () => { await act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); }); };
+const finishAll = async () => { for(let i=0;i<8;i++){PendingImage.all.forEach(image=>image.finish());await flush();} };
 const BrowserImage = globalThis.Image;
 let reads: string[];
 
@@ -37,8 +38,8 @@ describe('Android page preview scheduling', () => {
     const nativeImages=Object.fromEntries([9,10,11,12,13].map(index=>[index,{url:`native:${index}`,native:true}]));
     render(<MobileReaderPreviews pages={pages} current={10} width={88} onPage={()=>{}} nativeImage="native:10" nativeImages={nativeImages} nativePages={[10,11,9,12,13]} nativeRadius={2}/>);
     await flush();
-    expect(reads).toContain('8.png');
-    expect(reads).not.toContain('9.png');
+    expect(reads).toEqual(['10.png','9.png']);
+    await finishAll();expect(reads).toContain('8.png');
   });
   it('allows thumbnail fallback when speculative clear decoding fails',async()=>{
     vi.spyOn(HTMLElement.prototype,'clientWidth','get').mockReturnValue(390);
@@ -46,8 +47,7 @@ describe('Android page preview scheduling', () => {
     const nativeImages={10:{url:'native:10',native:true},11:{url:'',prefetchFailed:true}};
     render(<MobileReaderPreviews pages={pages} current={10} width={88} onPage={()=>{}} nativeImage="native:10" nativeImages={nativeImages} nativePages={[10,11]} nativeRadius={2}/>);
     await flush();
-    expect(reads).toContain('11.png');
-    PendingImage.all.forEach(image=>image.finish());await flush();
+    await finishAll();expect(reads).toContain('11.png');
     expect(reads).toContain('8.png');
   });
   it('keeps following native momentum after a delayed scroll event',async()=>{
@@ -82,14 +82,16 @@ describe('Android page preview scheduling', () => {
       expect(onPage).toHaveBeenLastCalledWith(40);
     }finally{raf.mockRestore();cancel.mockRestore();}
   });
-  it('shares both neighbours on each side without a second thumbnail request',async()=>{
+  it('keeps decoded WebView thumbnails after the native preview layer is replaced',async()=>{
     vi.spyOn(HTMLElement.prototype,'clientWidth','get').mockReturnValue(390);
     const pages=Array.from({length:40},(_,index)=>page(index));
     const nativeImages=Object.fromEntries([18,19,20,21,22].map(index=>[index,{url:`native-${index}`,native:true}]));
     const view=render(<MobileReaderPreviews pages={pages} current={20} width={88} nativeImage="native-20" nativeImages={nativeImages} nativeRadius={2} onPage={()=>{}}/>);
     await flush();
     expect([...view.container.querySelectorAll('[data-native-preview]')].map(node=>node.getAttribute('data-native-preview'))).toEqual(['native-18','native-19','native-20','native-21','native-22']);
-    expect(reads.some(name=>/^(18|19|20|21|22)\.png$/.test(name))).toBe(false);
+    expect(reads).toEqual(['20.png','19.png']);await finishAll();
+    expect(view.container.querySelectorAll('img').length).toBeGreaterThanOrEqual(5);
+    expect(view.container.querySelectorAll('[data-native-preview]')).toHaveLength(0);
   });
   it('prioritizes a newly adjacent page over distant reads even when the selected image is native',async()=>{
     requestMobilePagePreview(page(1),4);requestMobilePagePreview(page(2),3);await flush();
@@ -103,27 +105,28 @@ describe('Android page preview scheduling', () => {
     const pages=Array.from({length:40},(_,index)=>page(index));
     const props={pages,current:20,width:88,nativeImage:'native-20',nativeRadius:2,onPage:()=>{}};
     const view=render(<MobileReaderPreviews {...props} nativeImages={{20:{url:'native-20',native:true}}}/>);
-    await flush();expect(reads).toEqual(['19.png','21.png']);
+    await flush();expect(reads).toEqual(['20.png','19.png']);
     const nativeImages=Object.fromEntries([18,19,20,21].map(index=>[index,{url:`native-${index}`,native:true}]));
     view.rerender(<MobileReaderPreviews {...props} nativeImages={{...nativeImages,22:{url:'',error:'unreadable'}}}/>);
-    await flush();expect(reads).toContain('22.png');expect(reads.some(name=>/^(16|17|23|24)\.png$/.test(name))).toBe(true);
+    await finishAll();expect(reads).toContain('22.png');expect(reads.some(name=>/^(16|17|23|24)\.png$/.test(name))).toBe(true);
   });
   it('falls back to bounded thumbnails if a neighbour was discarded under a small memory budget',async()=>{
     const pages=Array.from({length:40},(_,index)=>page(index));
     const props={pages,current:20,width:88,nativeImage:'native-20',nativeRadius:2,onPage:()=>{}};
     const nativeImages=Object.fromEntries([18,19,20,21,22].map(index=>[index,{url:`native-${index}`,native:true}]));
-    const view=render(<MobileReaderPreviews {...props} nativeImages={nativeImages}/>);await flush();
+    const view=render(<MobileReaderPreviews {...props} nativeImages={nativeImages}/>);await flush();await finishAll();const before=reads.length;
     view.rerender(<MobileReaderPreviews {...props} nativeImages={{20:nativeImages[20]}}/>);await flush();
-    expect(reads.slice(-2)).toEqual(['19.png','21.png']);
+    expect(reads.length).toBe(before);expect(view.container.querySelectorAll('img').length).toBeGreaterThanOrEqual(3);
   });
-  it('uses the displayed native image without another selected-page read, including while pending', async () => {
+  it('loads a bounded fallback while native pixels are pending and retains it when native pixels are lost', async () => {
     const view=render(<DetailPagePreview page={page(7)} selected eager nativeImage={null} onSelect={()=>{}} onOpen={()=>{}}/>);
-    await flush();expect(reads).toEqual([]);expect(PendingImage.all).toHaveLength(0);
+    await flush();expect(reads).toEqual(['7.png']);expect(PendingImage.all).toHaveLength(1);
     view.rerender(<DetailPagePreview page={page(7)} selected eager nativeImage="https://omi.local/media/body-page-7" onSelect={()=>{}} onOpen={()=>{}}/>);
     expect(document.querySelector('[data-native-preview]')?.getAttribute('data-native-preview')).toBe('https://omi.local/media/body-page-7');
-    expect(document.querySelector('img')).toBeNull();await flush();expect(reads).toEqual([]);
+    await finishAll();expect(document.querySelector('img')?.getAttribute('src')).toContain('/7.png');
     view.rerender(<DetailPagePreview page={page(7)} selected={false} eager onSelect={()=>{}} onOpen={()=>{}}/>);
     await flush();expect(reads).toEqual(['7.png']);
+    expect(document.querySelector('img')?.getAttribute('src')).toContain('/7.png');
   });
   it('starts the selected page first and holds slots until image decode, not URL registration', async () => {
     requestMobilePagePreview(page(8), 2);

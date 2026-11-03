@@ -7,7 +7,10 @@ import type { OmiBrandOriginGetter } from "./OmiBrandIcon";
 import HomePage from "./pages/HomePage";
 import WindowControls from "./WindowControls";
 import DesktopDirectoryDrop from './components/DesktopDirectoryDrop';
+import NoticeStack from './components/NoticeStack';
+import {useNoticeState} from './notifications';
 import { loadReader, warmReader } from './reader/loadReader';
+import {beginReaderOpening,cancelReaderOpening,readerOpeningCurrent} from './android/readerOpening';
 import { 应用主题配色, applyDesktopTypography } from './theme';
 import { isAndroid } from "./platform";
 import { androidCall, hasAndroidRenderer } from './android/bridge';
@@ -62,7 +65,7 @@ function App() {
     };
   }, [mobile]);
   useEffect(()=>{
-    const prepare = warmReader;
+    const prepare = () => warmReader();
     if (!isAndroid() && window.requestIdleCallback) {
       const idle = window.requestIdleCallback(prepare, { timeout: 1500 });
       return () => window.cancelIdleCallback(idle);
@@ -79,7 +82,7 @@ function App() {
   const [阅读打开序号, 设置阅读打开序号] = useState(0);
   const [进度刷新令牌, 设置进度刷新令牌] = useState(0);
   const 主界面转场中 = useRef(false);
-  const [外部打开错误, 设置外部打开错误] = useState<string | null>(null);
+  const [, 设置外部打开错误] = useNoticeState('error',0,'关闭打开提示');
   const 外部请求处理中 = useRef(false);
   const 应用已挂载 = useRef(false);
   const [阅读器准备中, 设置阅读器准备中] = useState(false);
@@ -119,6 +122,7 @@ function App() {
   });
 
   function 取消阅读准备(): void {
+    if(mobile)cancelReaderOpening();
     阅读打开请求.current++;
     const pending = 等待阅读画面.current;
     pending?.finish(false);
@@ -339,6 +343,7 @@ function App() {
     获取转场原点?: OmiBrandOriginGetter,
     motion = mobileNavigationEpoch(),
   ): Promise<void> {
+    const openingTicket=mobile?beginReaderOpening(资源.sourcePath):undefined;
     const request = ++阅读打开请求.current;
     等待阅读画面.current?.finish(false);
     const first=资源.pages[起始页];
@@ -347,7 +352,7 @@ function App() {
       void androidCall('readerPrepare',{sourcePath:first.sourcePath,archiveInnerPath:first.archiveInnerPath,type:first.type,width:Math.round(innerWidth*devicePixelRatio),height:Math.round(innerHeight*devicePixelRatio)}).catch(()=>undefined);
     }
     await 加载阅读器();
-    if (!应用已挂载.current || request !== 阅读打开请求.current) return;
+    if (!应用已挂载.current || request !== 阅读打开请求.current || !readerOpeningCurrent(openingTicket)) {if(mobile)cancelReaderOpening(资源.sourcePath,openingTicket);return;}
     const 准备后显示 = mobile || 当前页面 !== '阅读器';
     if (准备后显示) {
       // Keep the outgoing screen until the actual fitted first frame is ready.
@@ -374,8 +379,9 @@ function App() {
       if (nativeTransition) await nativeTransition;
       if (request !== 阅读打开请求.current || !应用已挂载.current) return;
       等待阅读画面.current = null;
-      if (!ready) { 设置阅读器准备中(false); 设置手机阅读转场中(false); 设置阅读资源(null); 设置外部打开错误("漫画页面读取超时，请重试。"); return; }
+      if (!ready) { if(mobile)cancelReaderOpening(资源.sourcePath);设置阅读器准备中(false); 设置手机阅读转场中(false); 设置阅读资源(null); 设置外部打开错误("漫画页面读取超时，请重试。"); return; }
       if (nativeTransition) {
+        cancelReaderOpening(资源.sourcePath);
         设置手机阅读转场中(false);
         if (!nativeRevealed) { 设置阅读器准备中(false); 设置阅读资源(null); }
         return;
@@ -467,7 +473,7 @@ function App() {
       </main>
       {mobile && homeSettings && MobileSettings && BookReaderSettings && <MobileSettings settings={homeSettings} displayScope="recent" onSaved={settings => { setHomeSettings(settings); 应用主题配色(settings.colorTheme); }} onClose={() => void mobileNavigate(() => { setHomeSettings(null); 设置进度刷新令牌(value => value + 1); }, 'back')} bookSettings={<BookReaderSettings preferred={null} onSaved={() => 设置进度刷新令牌(value => value + 1)} />} />}
       {!mobile && <GlobalTooltip />}
-      {外部打开错误 && <div className="external-open-error" role="alert">{t(外部打开错误 ?? '')}<button aria-label={t("关闭打开提示")} onClick={() => 设置外部打开错误(null)}>×</button></div>}
+      <NoticeStack/>
       <WindowControls />
       <DesktopDirectoryDrop onAdded={() => {
         // A future first library mount must not reuse the pre-import snapshot.

@@ -115,6 +115,7 @@ public final class MainActivity extends Activity {
         if(!isApp(uri)) return response("text/plain",new ByteArrayInputStream(new byte[0]),403,"Blocked");
         try {
           if(uri.getPath().startsWith("/media/")) return library.media(uri.getLastPathSegment());
+          if(uri.getPath().startsWith("/documents/")) return library.documentRange(uri.getLastPathSegment(),Integer.parseInt(uri.getQueryParameter("begin")),Integer.parseInt(uri.getQueryParameter("end")));
           String file=uri.getPath().substring(1);
           if(file.isEmpty())file="index.html";
           if(file.contains("..")||file.contains("\\")) throw new IOException("Invalid asset");
@@ -143,6 +144,8 @@ public final class MainActivity extends Activity {
               if(method.equals("readerPrepare")){readerSurface.prepare(args,(value,error)->reply(id,value,error==null?null:explain(error),ReaderCancelledException.causedBy(error)?"READER_CANCELLED":null));return;}
               if(method.equals("readerStats")){reply(id,readerSurface.stats(),null);return;}
               if(method.equals("beginScene")){sceneTransition.begin(args.optLong("request"),()->reply(id,true,null));return;}
+              if(method.equals("readerIntent")){sceneTransition.readerIntent(args.optString("key"));if(id!=0)reply(id,true,null);return;}
+              if(method.equals("cancelReaderIntent")){sceneTransition.cancelReaderIntent(args.optString("key"));if(id!=0)reply(id,true,null);return;}
               if(method.equals("commitScene")){long request=args.optLong("request");String direction=args.optString("direction","forward");JSONObject origin=args.optJSONObject("origin");float scale=web.getWidth()/(float)args.optDouble("viewportWidth",web.getWidth());float x=origin==null?36:(float)origin.optDouble("x")*scale,y=origin==null?40:(float)origin.optDouble("y")*scale;web.postVisualStateCallback(request,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){readerSurface.afterFrameReady(()->FrameCommit.after(web,()->{sceneTransition.commit(request,direction,x,y);reply(id,true,null);}));}});return;}
               if(method.equals("cancelScene")){sceneTransition.cancel();if(id!=0)reply(id,true,null);return;}
               if(method.equals("waitScene")){sceneTransition.afterFinished(args.optLong("request"),()->reply(id,true,null));return;}

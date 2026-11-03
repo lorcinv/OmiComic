@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react
 interface OmiBrandIconProps {
   onActivate: (getOrigin: OmiBrandOriginGetter) => void | Promise<void>;
   disabled?: boolean;
+  busy?: boolean;
   ariaLabel?: string;
 }
 
@@ -39,6 +40,10 @@ const OMI_BRAND_ICON_STYLES = `
 
 .omi-brand-icon:disabled {
   cursor: default;
+  opacity: 1;
+}
+
+.omi-brand-icon:disabled:not([aria-busy="true"]) {
   opacity: 0.58;
 }
 
@@ -94,6 +99,7 @@ const OMI_BRAND_ICON_STYLES = `
 function OmiBrandIcon({
   onActivate,
   disabled = false,
+  busy = false,
   ariaLabel = "继续上次阅读",
 }: OmiBrandIconProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -222,7 +228,7 @@ function OmiBrandIcon({
   }, [disabled, startGazeAnimation]);
 
   const handleActivate = (event: MouseEvent<HTMLButtonElement>): void => {
-    if (disabled || activatingRef.current) return;
+    if (disabled || busy || activatingRef.current) return;
     // A painted SVG or WebView-adjusted touch target must not activate the
     // shortcut outside its actual button. Keyboard activation has detail 0.
     if (event.detail > 0) {
@@ -264,8 +270,8 @@ function OmiBrandIcon({
           isActivating ? " is-activating" : ""
         }`}
         aria-label={ariaLabel}
-        aria-busy={isActivating}
-        disabled={disabled}
+        aria-busy={busy || isActivating}
+        disabled={disabled || busy}
         onClick={handleActivate}
       >
         <svg
@@ -287,7 +293,6 @@ function OmiBrandIcon({
               strokeWidth="8.2"
             />
             <circle cx="32" cy="32" r="28.25" fill="none" stroke="#d4d9de" strokeWidth="0.7" />
-            <circle className="omi-brand-icon__inner-rim" cx="32" cy="32" r="17.75" fill="none" stroke="#c8cfd5" strokeWidth="0.7" />
           </g>
 
           {/* A deliberately asymmetric C-shell makes rotation legible. It is flat, matte and
@@ -303,20 +308,8 @@ function OmiBrandIcon({
               stroke="#5f6a75"
               strokeWidth="0.8"
             />
-            <path
-              className="omi-brand-icon__inner-rim"
-              d="M44.02 19.98A17 17 0 1 0 44.02 44.02"
-              stroke="#aab2ba"
-              strokeWidth="0.8"
-            />
             <path d="M44.02 19.98L52.51 11.49" stroke="#68737e" strokeWidth="1.1" />
             <path d="M44.02 44.02L52.51 52.51" stroke="#68737e" strokeWidth="1.1" />
-            <path
-              d="M47.55 16.45A22 22 0 0 0 16.45 47.55"
-              stroke="#9099a2"
-              strokeWidth="0.75"
-              opacity="0.58"
-            />
           </g>
 
           <g className="omi-brand-icon__eyes">

@@ -3,6 +3,7 @@ package io.github.lorcinv.omicomic;
 import android.content.*;
 import android.database.Cursor;
 import android.graphics.*;
+import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.provider.DocumentsContract;
 import android.util.AtomicFile;
@@ -47,7 +48,7 @@ final class LocalLibrary {
   private final Object coverLock=new Object();
   private final Map<String,CoverScan> coverScans=new LinkedHashMap<String,CoverScan>(16,.75f,true);
   private volatile long metadataGeneration;
-  private long folderCoverHits,folderCoverSteps;
+  private long folderCoverHits,folderCoverSteps,pdfCoverHits,pdfCoverRenders;
   private volatile boolean closed;
   private volatile String cacheSession=UUID.randomUUID().toString();
   private volatile long mediaEpoch;
@@ -59,7 +60,7 @@ final class LocalLibrary {
   private volatile android.os.CancellationSignal catalogQuery;
   void pauseCatalog(boolean paused){catalogPaused=paused;if(paused){android.os.CancellationSignal query=catalogQuery;if(query!=null)query.cancel();}}
   private void foregroundActivity(){foregroundUntil=System.currentTimeMillis()+220;android.os.CancellationSignal query=catalogQuery;if(query!=null)query.cancel();}
-  private final Map<String,Doc> documents=new HashMap<>();
+  private final Map<String,Doc> documents=new java.util.concurrent.ConcurrentHashMap<>();
   private final Map<String,Media> media=new LinkedHashMap<>();
   private final NativeArchives nativeArchives,previewArchives;
   private static final long MAX_FILE=1024L*1024*1024,MAX_IMAGE=64L*1024*1024;
@@ -629,7 +630,19 @@ final class LocalLibrary {
     if(entry.cachedAt==0)entry=resolve(entry.path);
     JSONObject result=new JSONObject().put("url",JSONObject.NULL).put("itemCount",count);
     String type=type(entry);
-    if(type.equals("pdf"))return result.put("pdfPath",entry.path).put("sourceVersion",identity(entry));
+    if(type.equals("pdf")){
+      result.put("pdfPath",entry.path).put("sourceVersion",identity(entry));
+      String key=hash("pdf-cover-v1:"+identity(entry)+":"+mediaEpoch);
+      byte[] bytes=thumbnails.get(key);
+      if(bytes!=null)pdfCoverHits++;
+      if(bytes==null)try(android.os.ParcelFileDescriptor descriptor=resolver.openFileDescriptor(entry.uri,"r");PdfRenderer pdf=new PdfRenderer(descriptor);PdfRenderer.Page page=pdf.openPage(0)){
+        float scale=360f/Math.max(page.getWidth(),page.getHeight());
+        Bitmap bitmap=Bitmap.createBitmap(Math.max(1,Math.round(page.getWidth()*scale)),Math.max(1,Math.round(page.getHeight()*scale)),Bitmap.Config.ARGB_8888);
+        try{bitmap.eraseColor(Color.WHITE);page.render(bitmap,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);ByteArrayOutputStream output=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,80,output);bytes=output.toByteArray();thumbnails.put(key,bytes);pdfCoverRenders++;}finally{bitmap.recycle();}
+      }catch(Exception unsupported){/* Non-seekable providers and unsupported PDFs retain the PDF.js fallback. */}
+      if(bytes!=null)result.put("url","data:image/jpeg;base64,"+Base64.encodeToString(bytes,Base64.NO_WRAP));
+      return result;
+    }
     if(type.equals("unknown")||type.equals("mobi"))return result;
     return result.put("url",registerMedia(entry,null,true));
   }
@@ -792,7 +805,16 @@ final class LocalLibrary {
       default:throw new IOException("未知本地操作："+method);
     }
   }
-  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)doc.source.close();}
+  WebResourceResponse documentRange(String id,int begin,int end)throws Exception {
+    Doc doc=documents.get(id);if(doc==null)throw new IOException("文档已关闭。");
+    byte[] bytes;
+    // The response owns its bytes, so a concurrent reader close cannot invalidate
+    // an in-flight WebView stream or keep the source descriptor alive afterward.
+    synchronized(doc){bytes=doc.source.range(begin,end);}
+    Map<String,String> headers=new HashMap<>();headers.put("Cache-Control","no-store");headers.put("X-Content-Type-Options","nosniff");headers.put("Content-Length",String.valueOf(bytes.length));
+    return new WebResourceResponse("application/octet-stream",null,200,"OK",headers,new ByteArrayInputStream(bytes));
+  }
+  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)synchronized(doc){doc.source.close();}}
   synchronized void close(){
     fileAccess.writeLock().lock();try{
       closed=true;

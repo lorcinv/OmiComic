@@ -233,6 +233,7 @@ describe('mobile transition interruption and cover identity', () => {
     let generation = 0, snapshot = false, release!: () => void;
     native.notify.mockImplementation(method => { if (method === 'cancelScene') { generation++; snapshot = false; } });
     native.call.mockImplementation(method => {
+      if (method === 'cancelScene') { generation++; snapshot = false; return Promise.resolve(); }
       if (method !== 'beginScene') return Promise.resolve();
       const expected = generation;
       return new Promise<void>(resolve => { release = () => { if (expected === generation) snapshot = true; resolve(); }; });
@@ -240,12 +241,12 @@ describe('mobile transition interruption and cover identity', () => {
     const oldUpdate = vi.fn(), newUpdate = vi.fn();
     const pending = mobileNavigate(oldUpdate, 'forward');
     await mobileNavigate(newUpdate, 'tab-next');
-    expect(native.notify).toHaveBeenCalledWith('cancelScene', {});
+    expect(native.call).toHaveBeenCalledWith('cancelScene', {});
     release(); await pending;
     expect(snapshot).toBe(false);
     expect(oldUpdate).not.toHaveBeenCalled();
     expect(newUpdate).toHaveBeenCalledOnce();
-    expect(native.call.mock.calls.map(call => call[0])).toEqual(['beginScene']);
+    expect(native.call.mock.calls.map(call => call[0])).toEqual(['beginScene','cancelScene']);
     expect(document.documentElement.dataset.mobileNavigation).toBeUndefined();
   });
 
@@ -253,7 +254,7 @@ describe('mobile transition interruption and cover identity', () => {
     native.available = true;
     let snapshot = false, release!: () => void;
     const prepared = new Promise<void>(resolve => { release = resolve; });
-    native.call.mockImplementation(async method => { if (method === 'beginScene') snapshot = true; });
+    native.call.mockImplementation(async method => { if (method === 'beginScene') snapshot = true; if (method === 'cancelScene') snapshot = false; });
     native.notify.mockImplementation(method => { if (method === 'cancelScene') snapshot = false; });
     const oldUpdate = vi.fn();
     const old = mobileNavigate(oldUpdate, 'forward', () => prepared);
