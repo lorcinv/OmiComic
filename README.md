@@ -27,7 +27,7 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.85：累计完善 1.1.79–1.1.85 的 PDF、EPUB、MOBI 加载与翻页、平板适配、目录读取和点击反馈；新增默认关闭的系统主题跟随。本次安卓包包含同版 EPUB 启动修复。[本版更新](docs/releases/v1.1.85.md) · [逐版说明](docs/releases/README.md)。
+1.1.85：累计完善 1.1.79–1.1.85 的 PDF、EPUB、MOBI 加载与翻页、平板适配、目录读取和点击反馈；新增默认关闭的系统主题跟随。本次安卓包包含同版 EPUB 启动修复。[本版更新](docs/releases/v1.1.85.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 
