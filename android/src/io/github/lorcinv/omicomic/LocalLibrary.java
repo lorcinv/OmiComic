@@ -66,8 +66,8 @@ final class LocalLibrary {
   private static final long MAX_FILE=1024L*1024*1024,MAX_IMAGE=64L*1024*1024;
   private static final String[] COLUMNS={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE,DocumentsContract.Document.COLUMN_LAST_MODIFIED};
   private static final class Entry {String name,path,mime;Uri uri;long size,modified,cachedAt;boolean directory;}
-  private static final class Media {String path,inner,identity;boolean preview;Media(String p,String i,boolean t,String id){path=p;inner=i;preview=t;identity=id;}}
-  private static final class Doc {String path;SeekableSource source;List<String> chapters=new ArrayList<>();}
+  private static final class Media {Doc pdfDoc;int pdfPage;File encodedFile;String encodedKey,bodyUrl;android.graphics.Rect region;int targetWidth;String path,inner,identity;boolean preview;Media(String p,String i,boolean t,String id){path=p;inner=i;preview=t;identity=id;}}
+  private static final class Doc {String path;SeekableSource source;PdfRenderer pdf;int pdfPageCount;final Map<Integer,int[]> pdfSizes=new java.util.concurrent.ConcurrentHashMap<>();boolean closed;File imageDirectory;List<String> chapters=new ArrayList<>();}
   private static final class CoverScan {
     final Deque<Entry> remaining=new ArrayDeque<>();
     final Set<String> visited=new HashSet<>();
@@ -444,7 +444,7 @@ final class LocalLibrary {
   private byte[] decodedReaderPreview(Media item)throws Exception{
     ReaderPreviewSource source=readerPreviewSource;if(source==null)return null;
     String key=hash(item.identity+"\n"+item.inner+"\nfalse");
-    try{return source.preview("https://omi.local/media/"+key+"?v="+mediaEpoch);}
+    try{return source.preview(item.bodyUrl!=null?item.bodyUrl:"https://omi.local/media/"+key+"?v="+mediaEpoch);}
     catch(Exception|OutOfMemoryError unavailable){return null;/* A derived fast path must not make the actual page unreadable. */}
   }
   WebResourceResponse media(String key)throws Exception{
@@ -488,6 +488,80 @@ final class LocalLibrary {
     Media item;synchronized(media){item=media.get(uri.getLastPathSegment());}if(item==null||item.preview)throw new FileNotFoundException();
     fileAccess.readLock().lock();try{if(closed)throw new IOException("文件服务已关闭。");return imageBytes(item);}finally{fileAccess.readLock().unlock();}
   }
+  static final class DocumentRaster {
+    final Bitmap bitmap;final int width,height,sample;final boolean exactFit;
+    DocumentRaster(Bitmap bitmap,int width,int height,int sample){this(bitmap,width,height,sample,false);}
+    DocumentRaster(Bitmap bitmap,int width,int height,int sample,boolean exactFit){this.bitmap=bitmap;this.width=width;this.height=height;this.sample=sample;this.exactFit=exactFit;}
+  }
+  private Media documentMedia(String url){
+    Uri uri=Uri.parse(url);if(!MainActivity.isApp(uri)||!uri.getPath().startsWith("/media/"))return null;
+    synchronized(media){Media item=media.get(uri.getLastPathSegment());return item!=null&&(item.pdfDoc!=null||item.region!=null)&&!item.preview?item:null;}
+  }
+  boolean isDocumentPage(String url){return documentMedia(url)!=null;}
+  /** Keep PDF pixels native from render to Canvas. URLs identify pages, not PNGs. */
+  DocumentRaster readerDocument(String url,int targetW,int targetH,android.graphics.Rect region,int regionSample)throws Exception{
+    return readerDocument(url,targetW,targetH,region,regionSample,false);
+  }
+  DocumentRaster readerDocument(String url,int targetW,int targetH,android.graphics.Rect region,int regionSample,boolean fitWindow)throws Exception{
+    Media item=documentMedia(url);if(item==null)return null;
+    fileAccess.readLock().lock();
+    try{
+      if(closed)throw new IOException("文件服务已关闭。");
+      if(item.region!=null){
+        Media original=new Media(item.path,item.inner,false,item.identity);original.encodedFile=item.encodedFile;
+        byte[] data=imageBytes(original);BitmapRegionDecoder decoder=BitmapRegionDecoder.newInstance(data,0,data.length,false);
+        try{
+          int width=item.region.width(),height=item.region.height(),sample=1;
+          if(region==null){double ratio=Math.max(width/(double)Math.max(1,targetW),height/(double)Math.max(1,targetH));while(sample*2<=ratio)sample*=2;while((long)((width+sample-1)/sample)*((height+sample-1)/sample)>4_000_000L)sample*=2;}else sample=Math.max(1,regionSample);
+          android.graphics.Rect area=region==null?new android.graphics.Rect(0,0,width,height):new android.graphics.Rect(region);
+          if(!area.intersect(0,0,width,height))throw new IOException("图片区域无效。");
+          if((long)((area.width()+sample-1)/sample)*((area.height()+sample-1)/sample)>6_000_000L)throw new IOException("图片区域尺寸超出上限。");
+          area.offset(item.region.left,item.region.top);
+          return new DocumentRaster(ReaderBitmapDecoder.region(decoder,area,sample,false),width,height,sample);
+        }finally{decoder.recycle();}
+      }
+      Doc doc=item.pdfDoc;
+      synchronized(doc){
+        if(doc.closed||doc.pdf==null)throw new IOException("文档已关闭。");
+        try(PdfRenderer.Page page=doc.pdf.openPage(item.pdfPage)){
+          // A stable eight-pixels-per-point space supports sharp zoom tiles;
+          // only the viewport-sized level is allocated for the first paint.
+          int width=Math.multiplyExact(page.getWidth(),8),height=Math.multiplyExact(page.getHeight(),8),sample=Math.max(1,regionSample);
+          doc.pdfSizes.put(item.pdfPage,new int[]{page.getWidth(),page.getHeight()});
+          android.graphics.Rect area=region==null?new android.graphics.Rect(0,0,width,height):new android.graphics.Rect(region);
+          if(!area.intersect(0,0,width,height))throw new IOException("PDF 区域无效。");
+          int bitmapW=Math.max(1,(area.width()+sample-1)/sample),bitmapH=Math.max(1,(area.height()+sample-1)/sample);
+          if(region==null){
+            // PDF can render directly at the display size. Power-of-two image
+            // sampling otherwise overshoots the budget, then drops below fit
+            // resolution and starts a second region render during a drag.
+            if(fitWindow){
+              // Warm against the whole app window, so hiding its system bars
+              // does not immediately require another PDF region. Tiny preview
+              // requests keep their own size and never take this body path.
+              android.util.DisplayMetrics metrics=context.getResources().getDisplayMetrics();
+              targetW=Math.max(targetW,metrics.widthPixels);targetH=Math.max(targetH,metrics.heightPixels);
+              if(android.os.Build.VERSION.SDK_INT>=30){try{android.graphics.Rect bounds=((android.view.WindowManager)context.getSystemService(Context.WINDOW_SERVICE)).getCurrentWindowMetrics().getBounds();targetW=Math.max(targetW,bounds.width());targetH=Math.max(targetH,bounds.height());}catch(RuntimeException unavailable){/* Retain the display-metrics fallback. */}}
+              else targetH+=Math.round(24*metrics.density);
+            }
+            double scale=Math.min(1d,Math.min(Math.max(1,targetW)/(double)width,Math.max(1,targetH)/(double)height));
+            scale=Math.min(scale,Math.sqrt(6_000_000d/((double)width*height)));
+            bitmapW=Math.max(1,(int)Math.floor(width*scale));bitmapH=Math.max(1,(int)Math.floor(height*scale));
+            sample=Math.max(1,(int)Math.ceil(1d/scale));
+          }
+          if((long)bitmapW*bitmapH>6_000_000L)throw new IOException("PDF 区域尺寸超出上限。");
+          Bitmap bitmap=Bitmap.createBitmap(bitmapW,bitmapH,Bitmap.Config.ARGB_8888);
+          try{
+            bitmap.eraseColor(Color.WHITE);android.graphics.Matrix matrix=new android.graphics.Matrix();
+            if(region==null)matrix.setScale(8f*bitmapW/width,8f*bitmapH/height);
+            else{matrix.setScale(8f/sample,8f/sample);matrix.postTranslate(-area.left/(float)sample,-area.top/(float)sample);}
+            page.render(bitmap,null,matrix,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+            return new DocumentRaster(bitmap,width,height,sample,region==null);
+          }catch(Throwable error){bitmap.recycle();throw error;}
+        }
+      }
+    }finally{fileAccess.readLock().unlock();}
+  }
   ReaderPreview readerPreview(String url)throws Exception{
     Media item;synchronized(media){item=media.get(Uri.parse(url).getLastPathSegment());}
     // Only an exact page identity is eligible; an archive's unrelated cover is
@@ -513,7 +587,9 @@ final class LocalLibrary {
   JSONObject readerRasterInfo(String url){
     try{
       Media item;synchronized(media){item=media.get(Uri.parse(url).getLastPathSegment());}
-      if(item==null||!identity(resolve(item.path)).equals(item.identity))return null;
+      // PDF bases depend on the current viewport, unlike sampled image files.
+      // Older releases may have saved a generic PNG level for this same URL.
+      if(item==null||item.pdfDoc!=null||!identity(resolve(item.path)).equals(item.identity))return null;
       byte[] saved=readerRasters.get("adaptive-raster-info-v3:"+Uri.parse(url).getLastPathSegment());
       return saved==null?null:new JSONObject(new String(saved,java.nio.charset.StandardCharsets.UTF_8));
     }catch(Exception invalid){return null;}
@@ -528,12 +604,15 @@ final class LocalLibrary {
     headers.put("Cache-Control","private, max-age=86400, immutable");result.setResponseHeaders(headers);return result;
   }
   private byte[] imageBytes(Media m)throws Exception{
+      if(m.region!=null)return imageRegionBytes(m);
+      if(m.encodedFile!=null)return bytes(new FileInputStream(m.encodedFile),8L*1024*1024);
+      if(m.pdfDoc!=null)return pdfPageBytes(m);
       Entry entry=resolve(m.path);
       if(!identity(entry).equals(m.identity))throw new IOException("文件已改变，请刷新目录。");
       byte[] bytes;
       if(m.inner!=null||type(entry).equals("archive")||type(entry).equals("epub")){
         try(SeekableSource source=source(entry,!m.preview)){
-          if(type(entry).equals("epub"))bytes=NativeArchives.entry(source,m.inner==null?epubCover(source):m.inner,MAX_IMAGE);
+          if(type(entry).equals("epub"))bytes=(m.preview?previewArchives:nativeArchives).read(source,m.identity,m.inner==null?epubCover(source):m.inner);
           else bytes=m.inner==null?previewArchives.cover(source,m.identity):(m.preview?previewArchives:nativeArchives).read(source,m.identity,m.inner);
         }
       }else {
@@ -643,7 +722,13 @@ final class LocalLibrary {
       if(bytes!=null)result.put("url","data:image/jpeg;base64,"+Base64.encodeToString(bytes,Base64.NO_WRAP));
       return result;
     }
-    if(type.equals("unknown")||type.equals("mobi"))return result;
+    if(type.equals("mobi")){
+      String key=hash("mobi-cover-v1:"+identity(entry)+":"+mediaEpoch);byte[] bytes=thumbnails.get(key);
+      if(bytes==null)try{bytes=mobiCover(entry);if(bytes!=null)thumbnails.put(key,bytes);}catch(Exception unsupported){/* A missing cover never prevents reading. */}
+      if(bytes!=null)result.put("url","data:image/jpeg;base64,"+Base64.encodeToString(bytes,Base64.NO_WRAP));
+      return result;
+    }
+    if(type.equals("unknown"))return result;
     return result.put("url",registerMedia(entry,null,true));
   }
   private void refreshThumbnails(){
@@ -662,6 +747,37 @@ final class LocalLibrary {
     for(Tag tag:tags)if(tag.name.equals("item")&&image(tag.get("href"))&&(Arrays.asList(tag.get("properties").split("\\s+")).contains("cover-image")||tag.get("id").equals(coverId)))return resolveZip(opf,tag.get("href"));
     for(Tag tag:tags)if(tag.name.equals("item")&&image(tag.get("href"))&&tag.get("href").toLowerCase(Locale.ROOT).contains("cover"))return resolveZip(opf,tag.get("href"));
     throw new IOException("EPUB 未提供封面图片。");
+  }
+  private static long mobiUint(byte[] bytes,int at)throws IOException{
+    if(at<0||at>bytes.length-4)throw new IOException("MOBI 书目无效。");
+    return ((bytes[at]&255L)<<24)|((bytes[at+1]&255L)<<16)|((bytes[at+2]&255L)<<8)|(bytes[at+3]&255L);
+  }
+  private byte[] mobiCover(Entry entry)throws Exception{
+    try(SeekableSource source=source(entry,false)){
+      byte[] header=source.range(0,78);if(!new String(header,60,8,StandardCharsets.US_ASCII).equals("BOOKMOBI"))return null;
+      int count=((header[76]&255)<<8)|(header[77]&255);if(count<2||count>20000)return null;
+      byte[] table=source.range(78,78+count*8);long first=mobiUint(table,0),next=mobiUint(table,8);
+      if(first<78+count*8||next<=first||next-first>1024*1024||next>source.size())return null;
+      byte[] record=source.readAt(first,(int)(next-first));long resourceStart=mobiUint(record,108),length=mobiUint(record,20);
+      if(length<232||length>record.length-28)return null;int exth=(int)(16+length);
+      if(!new String(record,exth,4,StandardCharsets.US_ASCII).equals("EXTH"))return null;
+      long end=exth+mobiUint(record,exth+4),records=mobiUint(record,exth+8);if(end>record.length||records>1000)return null;
+      long cover=-1,thumbnail=-1;int cursor=exth+12;
+      for(int n=0;n<records;n++){
+        long kind=mobiUint(record,cursor),size=mobiUint(record,cursor+4);if(size<8||size>end-cursor)return null;
+        if(size>=12&&kind==201)cover=mobiUint(record,cursor+8);if(size>=12&&kind==202)thumbnail=mobiUint(record,cursor+8);cursor+=(int)size;
+      }
+      long offset=cover>=0&&cover<0xffffffffL?cover:thumbnail;
+      long index=resourceStart+offset;if(offset<0||index<0||index>=count)return null;
+      long start=mobiUint(table,(int)index*8),stop=index+1<count?mobiUint(table,((int)index+1)*8):source.size();
+      if(start<78+count*8||stop<=start||stop>source.size()||stop-start>8*1024*1024)return null;
+      byte[] encoded=new byte[(int)(stop-start)];for(int at=0;at<encoded.length;at+=1024*1024){byte[] part=source.readAt(start+at,Math.min(1024*1024,encoded.length-at));System.arraycopy(part,0,encoded,at,part.length);}
+      BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(encoded,0,encoded.length,bounds);
+      if(bounds.outWidth<=0||bounds.outHeight<=0||(long)bounds.outWidth*bounds.outHeight>100_000_000L)return null;
+      BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(Math.max(bounds.outWidth,bounds.outHeight)/options.inSampleSize>480)options.inSampleSize*=2;
+      Bitmap bitmap=BitmapFactory.decodeByteArray(encoded,0,encoded.length,options);if(bitmap==null)return null;
+      try{ByteArrayOutputStream out=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,80,out);return out.toByteArray();}finally{bitmap.recycle();}
+    }
   }
   private JSONObject change(JSONObject input)throws Exception{
     String path=input.getString("path"),action=input.getString("action");Entry e=resolve(path);
@@ -719,7 +835,7 @@ final class LocalLibrary {
   private JSONObject openDocument(JSONObject input)throws Exception{
     if(documents.size()>=6)throw new IOException("打开的文档过多，请先返回资源库。");
     Doc d=new Doc();d.path=input.getString("path");Entry documentEntry=resolve(d.path);boolean mobi=input.getString("type").equals("mobi");
-    if(mobi&&documentEntry.size>256L*1024*1024)throw new IOException("MOBI 超过本版 256 MiB 上限。");
+    if(mobi&&documentEntry.size>Integer.MAX_VALUE)throw new IOException("MOBI 文件超过 2 GiB。");
     if(mobi){d.source=SeekableSource.open(resolver,documentEntry.uri);if(d.source==null)throw new IOException("请先将 MOBI 保存到手机本地目录再打开。");}
     else d.source=source(documentEntry,!input.optString("purpose").equals("thumbnail"));JSONArray chapters=new JSONArray();
     try {
@@ -727,16 +843,97 @@ final class LocalLibrary {
       String opf=null;for(Tag tag:xml(NativeArchives.entry(d.source,"META-INF/container.xml",2*1024*1024)))if(tag.name.equals("rootfile")){opf=tag.get("full-path");break;}
       if(opf==null||opf.isEmpty())throw new IOException("EPUB 缺少书目。");
       List<Tag> packageDoc=xml(NativeArchives.entry(d.source,opf,4*1024*1024));Map<String,String> manifest=new HashMap<>();
+      boolean fixedLayout=false;for(Tag tag:packageDoc)if(tag.name.equals("meta")&&tag.get("name").equals("fixed-layout")&&tag.get("content").equals("true"))fixedLayout=true;
       for(Tag item:packageDoc)if(item.name.equals("item"))manifest.put(item.get("id"),resolveZip(opf,item.get("href")));
       for(Tag item:packageDoc)if(item.name.equals("itemref")){
         if(d.chapters.size()>=5000)throw new IOException("EPUB 章节过多。");
-        String entry=manifest.get(item.get("idref"));if(entry!=null){d.chapters.add(entry);chapters.put(new JSONObject().put("name","第 "+d.chapters.size()+" 章").put("index",d.chapters.size()-1));}
+        String entry=manifest.get(item.get("idref"));if(entry!=null){d.chapters.add(entry);chapters.put(new JSONObject().put("name","第 "+d.chapters.size()+" 章").put("index",d.chapters.size()-1).put("fixedLayout",fixedLayout));}
       }
       if(d.chapters.isEmpty())throw new IOException("EPUB 没有可阅读章节。");
     }
-    if(mobi){long length=d.source.size();if(length<78||length>256L*1024*1024)throw new IOException("MOBI 文件为空或超过本版 256 MiB 上限。");byte[] header=d.source.range(0,78);if(!new String(header,60,8,StandardCharsets.US_ASCII).equals("BOOKMOBI"))throw new IOException("文件不是有效的 MOBI。");}
-    String id=input.getString("id");closeDocument(id);documents.put(id,d);return new JSONObject().put("size",d.source.size()).put("chapters",chapters);
-    }catch(Exception error){d.source.close();throw error;}
+    if(mobi){long length=d.source.size();if(length<78||length>Integer.MAX_VALUE)throw new IOException("MOBI 文件大小无效或超过 2 GiB。");byte[] header=d.source.range(0,78);if(!new String(header,60,8,StandardCharsets.US_ASCII).equals("BOOKMOBI"))throw new IOException("文件不是有效的 MOBI。");}
+    JSONObject opened=new JSONObject().put("size",d.source.size()).put("chapters",chapters);
+    if(input.getString("type").equals("pdf")){
+      android.os.ParcelFileDescriptor descriptor=null;
+      try{descriptor=d.source.duplicate();d.pdf=new PdfRenderer(descriptor);descriptor=null;int count=d.pdf.getPageCount();if(count<1||count>10000)throw new IOException("PDF 页数无效。");d.pdfPageCount=count;for(int n=0;n<count;n++)chapters.put(new JSONObject().put("name","第 "+(n+1)+" 页").put("index",n));opened.put("nativePdf",true);}
+      catch(Exception|LinkageError failure){if(descriptor!=null)descriptor.close();if(d.pdf!=null)d.pdf.close();d.pdf=null;chapters=new JSONArray();opened.put("chapters",chapters);}
+    }
+    if(mobi&&d.source.size()>256L*1024*1024){
+      byte[] header=d.source.range(0,78);int count=((header[76]&255)<<8)|(header[77]&255);
+      if(count<2||count>20000||78L+count*8>d.source.size())throw new IOException("MOBI 记录表无效。");
+      byte[] table=d.source.range(78,78+count*8),signatures=new byte[count*4];long previous=-1;
+      for(int n=0;n<count;n++){int at=n*8;long offset=((long)(table[at]&255)<<24)|((long)(table[at+1]&255)<<16)|((long)(table[at+2]&255)<<8)|(table[at+3]&255);
+        if(offset<78L+count*8||offset<=previous||offset>d.source.size()-4)throw new IOException("MOBI 记录范围无效。");
+        byte[] signature=d.source.range((int)offset,(int)offset+4);System.arraycopy(signature,0,signatures,n*4,4);previous=offset;
+      }
+      opened.put("recordSignatures",Base64.encodeToString(signatures,Base64.NO_WRAP));
+    }
+    String id=input.getString("id");closeDocument(id);documents.put(id,d);return opened;
+    }catch(Exception error){if(d.pdf!=null)d.pdf.close();d.source.close();throw error;}
+  }
+  private JSONObject documentImageInfo(String url,String preview,byte[] bytes)throws Exception{
+    BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+    if(options.outWidth<1||options.outHeight<1||(long)options.outWidth*options.outHeight>100000000L)throw new IOException("图片尺寸超出上限。");
+    return new JSONObject().put("url",url).put("preview",preview).put("width",options.outWidth).put("height",options.outHeight);
+  }
+  private JSONObject registerDocumentImage(JSONObject input)throws Exception{
+    Doc d=documents.get(input.getString("id"));if(d==null||d.closed)throw new IOException("文档已关闭。");
+    String base64=input.getString("data");if(base64.length()>12*1024*1024)throw new IOException("章节图片过大。");byte[] bytes=Base64.decode(base64,Base64.DEFAULT);if(bytes.length>8*1024*1024)throw new IOException("章节图片过大。");
+    String digest=hashBytes(bytes),encoded="document-image-v1:"+digest;
+    synchronized(d){if(d.closed)throw new IOException("文档已关闭。");if(d.imageDirectory==null){d.imageDirectory=new File(context.getCacheDir(),"document-images/"+hash(input.getString("id")));d.imageDirectory.mkdirs();}File imageFile=new File(d.imageDirectory,digest);if(!imageFile.isFile())try(FileOutputStream out=new FileOutputStream(imageFile)){out.write(bytes);}}
+    String identity=identity(resolve(d.path));String key=hash(identity+"\n"+encoded),previewKey=key+"p";
+    Media body=new Media(d.path,"@"+encoded,false,identity),small=new Media(d.path,"@"+encoded,true,identity);body.encodedFile=small.encodedFile=new File(d.imageDirectory,digest);
+    small.bodyUrl="https://omi.local/media/"+key;
+    synchronized(media){media.put(key,body);media.put(previewKey,small);while(media.size()>4000)media.remove(media.keySet().iterator().next());}
+    return documentImageInfo("https://omi.local/media/"+key,"https://omi.local/media/"+previewKey,bytes);
+  }
+  private String hashBytes(byte[] bytes)throws Exception{
+    byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(bytes);StringBuilder text=new StringBuilder();for(byte b:digest)text.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return text.toString();
+  }
+  private JSONObject documentImageRegion(JSONObject input)throws Exception{
+    Uri uri=Uri.parse(input.getString("url"));if(!MainActivity.isApp(uri)||!uri.getPath().startsWith("/media/"))throw new SecurityException("Invalid image URL");
+    Media original;synchronized(media){original=media.get(uri.getLastPathSegment());}if(original==null||original.preview||original.pdfDoc!=null||original.region!=null)throw new IOException("图片来源无效。");
+    byte[] bytes=imageBytes(original);BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+    int tile=input.getInt("tile"),pitch=(int)Math.ceil(options.outWidth*1.5),top=tile*pitch;if(tile<0||options.outWidth<1||pitch<1||top<0||top>=options.outHeight)throw new IOException("图片分页无效。");
+    boolean preview=input.optBoolean("preview");Media item=new Media(original.path,original.inner,preview,original.identity);item.encodedFile=original.encodedFile;item.region=new android.graphics.Rect(0,top,options.outWidth,Math.min(options.outHeight,top+pitch));item.targetWidth=preview?360:Math.min(2400,Math.max(1200,context.getResources().getDisplayMetrics().widthPixels));
+    String key=hash(original.identity+"\n"+original.inner+"\nregion:"+tile+":"+item.targetWidth);
+    if(preview)item.bodyUrl="https://omi.local/media/"+hash(original.identity+"\n"+original.inner+"\nregion:"+tile+":"+Math.min(2400,Math.max(1200,context.getResources().getDisplayMetrics().widthPixels)));
+    synchronized(media){media.put(key,item);while(media.size()>4000)media.remove(media.keySet().iterator().next());}
+    return new JSONObject().put("url","https://omi.local/media/"+key).put("width",item.region.width()).put("height",item.region.height());
+  }
+  private byte[] imageRegionBytes(Media item)throws Exception{
+    String key="document-region-v1:"+hash(item.identity+"\n"+item.inner+"\n"+item.region.toString()+":"+item.targetWidth);byte[] saved=readerPages.get(key);if(saved!=null)return saved;
+    Media original=new Media(item.path,item.inner,false,item.identity);original.encodedFile=item.encodedFile;byte[] bytes=imageBytes(original);
+    android.graphics.BitmapRegionDecoder decoder=android.graphics.BitmapRegionDecoder.newInstance(bytes,0,bytes.length,false);if(decoder==null)throw new IOException("图片分块解码失败。");
+    try{BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(item.region.width()/options.inSampleSize>item.targetWidth*1.5||(long)item.region.width()*item.region.height()/options.inSampleSize/options.inSampleSize>6000000L)options.inSampleSize*=2;
+      Bitmap bitmap=decoder.decodeRegion(item.region,options);if(bitmap==null)throw new IOException("图片分块解码失败。");
+      try{ByteArrayOutputStream out=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,92,out);byte[] result=out.toByteArray();readerPages.put(key,result);return result;}finally{bitmap.recycle();}
+    }finally{decoder.recycle();}
+  }
+  private JSONObject nativePdfPage(JSONObject input)throws Exception{
+    Doc d=documents.get(input.getString("id"));if(d==null||d.pdf==null)throw new IOException("原生 PDF 会话不可用。");
+    int index=input.getInt("index");boolean preview=input.optBoolean("preview");
+    if(d.closed)throw new IOException("文档已关闭。");if(index<0||index>=d.pdfPageCount)throw new IOException("PDF 页码无效。");
+    // Registering a destination must not wait for an unrelated preview or
+    // speculative page holding PdfRenderer's serial lock. The actual raster
+    // supplies its dimensions; cached point sizes help non-native consumers.
+    int[] size=d.pdfSizes.get(index);int width=size==null?0:size[0],height=size==null?0:size[1];
+    String identity=identity(resolve(d.path)),key=hash(identity+"\nPDF:"+index+":"+preview);Media item=new Media(d.path,"@pdf:"+index,preview,identity);item.pdfDoc=d;item.pdfPage=index;
+    item.bodyUrl="https://omi.local/media/"+hash(identity+"\nPDF:"+index+":false")+"?v="+mediaEpoch;
+    synchronized(media){media.put(key,item);while(media.size()>4000)media.remove(media.keySet().iterator().next());}
+    return new JSONObject().put("url","https://omi.local/media/"+key+"?v="+mediaEpoch).put("width",width).put("height",height);
+  }
+  private byte[] pdfPageBytes(Media item)throws Exception{
+    Doc d=item.pdfDoc;int edge=item.preview?360:Math.min(3200,Math.max(1600,Math.max(context.getResources().getDisplayMetrics().widthPixels,context.getResources().getDisplayMetrics().heightPixels)));
+    String key="pdf-native-v1:"+hash(item.identity)+":"+item.pdfPage+":"+edge;byte[] saved=readerPages.get(key);if(saved!=null)return saved;
+    synchronized(d){
+      if(d.closed||d.pdf==null)throw new IOException("文档已关闭。");
+      try(PdfRenderer.Page page=d.pdf.openPage(item.pdfPage)){
+        double scale=Math.min((double)edge/Math.max(page.getWidth(),page.getHeight()),Math.sqrt(6000000d/((double)page.getWidth()*page.getHeight())));
+        Bitmap bitmap=Bitmap.createBitmap(Math.max(1,(int)Math.ceil(page.getWidth()*scale)),Math.max(1,(int)Math.ceil(page.getHeight()*scale)),Bitmap.Config.ARGB_8888);
+        try{bitmap.eraseColor(Color.WHITE);page.render(bitmap,null,null,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);ByteArrayOutputStream out=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.PNG,100,out);byte[] bytes=out.toByteArray();readerPages.put(key,bytes);return bytes;}finally{bitmap.recycle();}
+      }
+    }
   }
   private String chapter(Doc d,int index)throws Exception{
     if(index<0||index>=d.chapters.size())throw new IOException("章节不存在。");String entry=d.chapters.get(index);String html=new String(NativeArchives.entry(d.source,entry,8*1024*1024),StandardCharsets.UTF_8);
@@ -810,8 +1007,11 @@ final class LocalLibrary {
       case "openDocument":return openDocument(input);
       case "closeDocument":closeDocument(input.getString("id"));return null;
       case "readDocumentRange":{Doc d=documents.get(input.getString("id"));if(d==null)throw new IOException("文档已关闭。");return Base64.encodeToString(d.source.range(input.getInt("begin"),input.getInt("end")),Base64.NO_WRAP);}
+      case "registerDocumentImage":return registerDocumentImage(input);
+      case "renderDocumentImage":return documentImageRegion(input);
+      case "renderDocumentPage":return nativePdfPage(input);
       case "readDocumentChapter":{Doc d=documents.get(input.getString("id"));if(d==null)throw new IOException("文档已关闭。");return chapter(d,input.getInt("index"));}
-      case "epubImage":{String entry=resolveZip(input.getString("entry"),input.getString("href"));if(!image(entry))return null;return registerMedia(input.getString("path"),entry,true);}
+      case "epubImage":{String entry=resolveZip(input.getString("entry"),input.getString("href"));if(!image(entry))return null;String path=input.getString("path"),url=registerMedia(path,entry,false);String preview=registerMedia(path,entry,true);Media item;synchronized(media){item=media.get(Uri.parse(url).getLastPathSegment());}return documentImageInfo(url,preview,imageBytes(item));}
       default:throw new IOException("未知本地操作："+method);
     }
   }
@@ -824,7 +1024,7 @@ final class LocalLibrary {
     Map<String,String> headers=new HashMap<>();headers.put("Cache-Control","no-store");headers.put("X-Content-Type-Options","nosniff");headers.put("Content-Length",String.valueOf(bytes.length));
     return new WebResourceResponse("application/octet-stream",null,200,"OK",headers,new ByteArrayInputStream(bytes));
   }
-  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)synchronized(doc){doc.source.close();}}
+  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)synchronized(doc){doc.closed=true;if(doc.pdf!=null)doc.pdf.close();doc.source.close();if(doc.imageDirectory!=null){File[] files=doc.imageDirectory.listFiles();if(files!=null)for(File image:files)image.delete();doc.imageDirectory.delete();}}}
   synchronized void close(){
     fileAccess.writeLock().lock();try{
       closed=true;

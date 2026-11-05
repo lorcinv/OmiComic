@@ -11,7 +11,7 @@ import NoticeStack from './components/NoticeStack';
 import {useNoticeState} from './notifications';
 import { loadReader, warmReader } from './reader/loadReader';
 import {beginReaderOpening,cancelReaderOpening,readerOpeningCurrent} from './android/readerOpening';
-import { 应用主题配色, applyDesktopTypography } from './theme';
+import { 应用主题设置, applyDesktopTypography } from './theme';
 import { isAndroid } from "./platform";
 import { androidCall, hasAndroidRenderer } from './android/bridge';
 import useMobileLayout from "./hooks/useMobileLayout";
@@ -223,7 +223,7 @@ function App() {
     void request.then(async result => {
       if (cancelled) return;
       if (!result.ok) throw new Error(result.error.message);
-      应用主题配色(result.data.settings.colorTheme); applyDesktopTypography(result.data.settings);
+      应用主题设置(result.data.settings); applyDesktopTypography(result.data.settings);
       setUiLanguage(result.data.settings.language);
       const enabled = result.data.settings.showHomePage !== false;
       主界面开关.current = enabled; 设置显示主界面(enabled);
@@ -471,7 +471,7 @@ function App() {
           />}
         </div>
       </main>
-      {mobile && homeSettings && MobileSettings && BookReaderSettings && <MobileSettings settings={homeSettings} displayScope="recent" onSaved={settings => { setHomeSettings(settings); 应用主题配色(settings.colorTheme); }} onClose={() => void mobileNavigate(() => { setHomeSettings(null); 设置进度刷新令牌(value => value + 1); }, 'back')} bookSettings={<BookReaderSettings preferred={null} onSaved={() => 设置进度刷新令牌(value => value + 1)} />} />}
+      {mobile && homeSettings && MobileSettings && BookReaderSettings && <MobileSettings settings={homeSettings} displayScope="recent" onSaved={settings => { setHomeSettings(settings); 应用主题设置(settings); }} onClose={() => void mobileNavigate(() => { setHomeSettings(null); 设置进度刷新令牌(value => value + 1); }, 'back')} bookSettings={<BookReaderSettings preferred={null} onSaved={() => 设置进度刷新令牌(value => value + 1)} />} />}
       {!mobile && <GlobalTooltip />}
       <NoticeStack/>
       <WindowControls />

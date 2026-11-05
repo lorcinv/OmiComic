@@ -13,7 +13,7 @@ import { useMobileScrim } from '../hooks/mobileScrim';
 import DataManagement from './DataManagement';
 import { FontSizeControl } from './FontSizeControl';
 import { mobileTypography } from '../../electron/shared/desktopTypography';
-import { applyDesktopTypography } from '../theme';
+import { applyDesktopTypography, 应用主题设置, effectiveColorTheme, normalizeThemePreferences, useSystemDarkMode, 主题选项 } from '../theme';
 
 const categories: Array<{id:string;title:string;note:string;icon:MobileIconName}> = [
   {id:'appearance',title:'外观与主题',note:'配色、卡片布局与缩略预览',icon:'grid'},
@@ -30,7 +30,10 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
   const [displayPage,setDisplayPage]=useState<MobileDisplayScope>(displayScope);
   const display=getMobileDisplay(value,displayPage);
   const fonts=mobileTypography(value);
+  const systemDark=useSystemDarkMode(), themePreferences=normalizeThemePreferences(value);
+  const selectedTheme=effectiveColorTheme(value,systemDark);
   useEffect(()=>{applyDesktopTypography(value);},[value]);
+  useEffect(()=>{应用主题设置(value);},[value.colorTheme,value.followSystemTheme,value.dayColorTheme]);
   const [cacheInfo,setCacheInfo]=useState<AndroidCacheInfo|null>(null), [clearing,setClearing]=useState(false);
   useEffect(() => { let cancelled=false; if(category==='performance')void queue.current.then(()=>window.omicomic.getAndroidCacheInfo?.()).then(r=>{if(!cancelled&&r?.ok)setCacheInfo(r.data);}).catch(()=>{});return()=>{cancelled=true;}; },[category,value.androidReaderDiskCacheSizeMb,value.androidThumbnailCacheSizeMb]);
   const queue=useRef(Promise.resolve()), mounted=useRef(true);
@@ -52,7 +55,9 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         <div className="settings-row"><span>{t('全局字号')}</span><FontSizeControl label={t('全局字号')} value={fonts.mobileGlobalFontSize} onChange={mobileGlobalFontSize=>save({mobileGlobalFontSize})}/></div>
         <div className="settings-row"><span>{t('页码与信息字号')}</span><FontSizeControl label={t('页码与信息字号')} value={fonts.mobileInfoFontSize} onChange={mobileInfoFontSize=>save({mobileInfoFontSize})}/></div>
         <label className="settings-toggle"><span>{t("显示主界面")}</span><input type="checkbox" checked={value.showHomePage !== false} onChange={event => save({showHomePage:event.target.checked})}/></label>
-        {select('colorTheme',t("界面主题"),[{value:'mist',label:'雾蓝'},{value:'nord',label:'北境'},{value:'sand',label:'暖沙'},{value:'night',label:'夜色'}])}
+        {toggle('followSystemTheme',t('跟随系统主题'))}
+        {themePreferences.followSystemTheme && <p className="settings-hint">{t('日间配色')}：{t(themePreferences.dayColorTheme==='mist'?'雾蓝':主题选项.find(theme=>theme.id===themePreferences.dayColorTheme)!.label)}{t('；深色模式自动使用夜色。')}</p>}
+        <div className="settings-row"><span>{t('界面主题')}</span><GlassSelect ariaLabel={t('界面主题')} value={selectedTheme} options={uiOptions([{value:'mist',label:'雾蓝'},{value:'nord',label:'北境'},{value:'sand',label:'暖沙'},{value:'night',label:'夜色',disabled:themePreferences.followSystemTheme&&!systemDark}])} onChange={colorTheme=>save(normalizeThemePreferences({...value,colorTheme}))}/></div>
         <div className="settings-row"><span>{t("显示设置页面")}</span><GlassSelect ariaLabel={t("显示设置页面")} value={displayPage} options={uiOptions(Object.entries(mobileDisplayLabels).map(([key,label])=>({value:key as MobileDisplayScope,label})))} onChange={setDisplayPage}/></div>
         <div className="settings-row"><span>{t("卡片布局")}</span><GlassSelect ariaLabel={t("卡片布局")} value={display.layout} options={uiOptions([{value:'grid' as const,label:'网格'},{value:'list' as const,label:'缩略图与说明'}])} onChange={layout=>save(patchMobileDisplay(value,displayPage,{layout}))}/></div>
         <label className="mobile-option-row"><span>{t("网格列数")}<output>{display.columns}</output></span><input type="range" aria-label={t("网格列数")} min="2" max="6" step="1" value={display.columns} onChange={event=>save(patchMobileDisplay(value,displayPage,{columns:Number(event.target.value)}))}/></label>
@@ -82,6 +87,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {range('readerVolumePanoramaPages',t("全景音量键翻页间隔"),.25,2,.25,1,' 页')}
       </>}
       {category==='book' && <>
+        {select('bookSwitchButtonOpacity',t('上/下一篇按钮透明度'),[20,30,40,50,60,70,80].map(value=>({value,label:`${value}%`})),40)}
         <label className="settings-toggle"><span>{t('阅读工具栏 3 秒自动隐藏')}</span><input type="checkbox" checked={value.mobileReaderAutoHide !== false} onChange={event=>save({mobileReaderAutoHide:event.target.checked})}/></label>
         {bookSettings}
       </>}

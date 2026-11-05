@@ -21,19 +21,20 @@ export default function MobileLibraryDrawer(p: {
   });
   const [nodes, setNodes] = useState<Record<string, TreeNode[]>>(initial.nodes);
   const [expanded, setExpanded] = useState<Set<string>>(initial.expanded);
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Set<string>>(new Set());
   const loading = useRef(new Set<string>());
   const mounted = useRef(true);
   async function load(path: string) {
     if (loading.current.has(path)) return;
     loading.current.add(path);
+    setErrors(old => { const next=new Set(old); next.delete(path); return next; });
     const cached = cachedMobileTree(path);
     if (cached) { setNodes(old => ({ ...old, [path]: cached })); loading.current.delete(path); return; }
     try {
       const children = await loadMobileTree(path);
       if (!mounted.current) return;
       setNodes(old => ({ ...old, [path]: children }));
-    } catch { if (mounted.current) setError('目录读取失败，请重试。'); }
+    } catch { if (mounted.current) setErrors(old => new Set(old).add(path)); }
     finally { loading.current.delete(path); }
   }
   useEffect(() => {
@@ -61,12 +62,12 @@ export default function MobileLibraryDrawer(p: {
         <button style={{ fontSize: Math.max(12, 16 - depth) }} onClick={() => dismissMobileSheet(() => p.onOpen(path, root))}>{name}</button>
         {depth === 0 && <button className="mobile-tree-manage" aria-label={tr`管理资源库 ${name}`} onClick={() => { const item=p.roots.find(item=>item.path===root); if(item)p.onManage(item); }}><MobileIcon name="more"/></button>}
       </div>
+      {errors.has(path) && <div className="mobile-tree-error" role="status"><span>{t("目录暂不可用，请检查存储设备")}</span><button onClick={() => void load(path)}>{t("重试")}</button></div>}
       {canExpand && expanded.has(path) && <div className="mobile-tree-children" aria-busy={!children}>{children?.map(child => row(child.path, child.name, root, depth + 1,child.expandable))}</div>}
     </div>;
   }
   return <MobileSheet side title={t("资源库")} onClose={p.onClose}>
     <MobileReorderList items={p.roots} itemKey={root => root.path} onReorder={p.onReorder} render={root => row(root.path, root.name, root.path, 0)} />
-    {error && <p role="alert">{t(error ?? '')}</p>}
     {!p.roots.length && <p>{t("添加漫画目录后即可开始阅读。")}</p>}
     <div className="mobile-drawer-footer"><button onClick={p.onAdd}><MobileIcon name="add"/>{t("添加目录")}</button><button onClick={p.onFile}><MobileIcon name="library"/>{t("打开文件")}</button></div>
   </MobileSheet>;

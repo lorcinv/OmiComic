@@ -4771,6 +4771,8 @@ a,
 }
 
 .theme-option:hover { background: var(--面板色); }
+.theme-option.is-disabled { opacity: .42; cursor: not-allowed; }
+.theme-option.is-disabled:hover { background: color-mix(in srgb, var(--面板色) 60%, transparent); }
 .theme-option.is-selected {
   border-color: var(--强调色);
   background: color-mix(in srgb, var(--强调浅色) 55%, var(--面板色));
@@ -5541,13 +5543,14 @@ a,
   border: 1px solid color-mix(in srgb, var(--控件边框) 78%, transparent); border-radius: 8px;
   background: color-mix(in srgb, var(--玻璃基色) 76%, transparent);
   box-shadow: none; transform: translateY(-50%);
-  color: var(--控件文字); opacity: max(.45, var(--book-switch-opacity, .7));
+  color: var(--控件文字); opacity: var(--book-switch-opacity, .4);
   backdrop-filter: blur(18px) saturate(1.16);
   -webkit-backdrop-filter: blur(18px) saturate(1.16);
   transition: opacity 120ms ease, background-color 120ms ease;
 }
 .reader-book-switch svg { display: block; width: 16px; height: 16px; fill: currentColor; stroke: none; }
-.reader-book-switch:hover, .reader-book-switch:focus-visible { opacity: 1; background: color-mix(in srgb, var(--玻璃基色) 90%, transparent); }
+.reader-book-switch:focus-visible { opacity: 1; background: color-mix(in srgb, var(--玻璃基色) 90%, transparent); }
+@media (hover:hover) { .reader-book-switch:hover { opacity: 1; background: color-mix(in srgb, var(--玻璃基色) 90%, transparent); } }
 .reader-book-switch-left { left: 8px; }
 .reader-book-switch-right { right: 8px; }
 .resource-placeholder-icon { display: block; width: 64px; height: 64px; opacity: .68; }

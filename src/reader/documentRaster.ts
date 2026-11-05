@@ -1,5 +1,5 @@
 /** Raster metadata only; never decode unbounded document resources. */
-export function documentRaster(data:Uint8Array):string|null {
+export function documentRasterInfo(data:Uint8Array){
   const v=new DataView(data.buffer,data.byteOffset,data.byteLength),ascii=(offset:number,n:number)=>String.fromCharCode(...data.subarray(offset,offset+n));
   let width=0,height=0,mime='';
   if(data.length>=24&&data[0]===137&&ascii(1,3)==='PNG'){width=v.getUint32(16);height=v.getUint32(20);mime='image/png';}
@@ -14,5 +14,9 @@ export function documentRaster(data:Uint8Array):string|null {
     mime='image/jpeg';let i=2;const sof=new Set([192,193,194,195,197,198,199,201,202,203,205,206,207]);
     while(i+8<data.length){if(data[i++]!==255)continue;while(data[i]===255)i++;const marker=data[i++];if(marker===218||marker===217)break;if(marker===1||marker>=208&&marker<=216)continue;if(i+2>data.length)break;const size=v.getUint16(i);if(size<2||i+size>data.length)break;if(sof.has(marker)&&size>=7){height=v.getUint16(i+3);width=v.getUint16(i+5);break;}i+=size;}
   }
-  return width>0&&height>0&&width<=16384&&height<=16384&&width*height<=16_000_000?mime:null;
+  return {width,height,mime};
+}
+
+export function documentRaster(data:Uint8Array,maxPixels=16_000_000):string|null{
+  const {width,height,mime}=documentRasterInfo(data);return width>0&&height>0&&width<=16384&&height<=(maxPixels>16_000_000?100000:16384)&&width*height<=maxPixels?mime:null;
 }

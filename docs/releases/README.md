@@ -4,10 +4,14 @@
 
 旧版下载与更新记录。
 
-[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.55)
+[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.85)
 
 | 版本 | 平台 | 发行页 |
 | --- | --- | --- |
+| v1.1.85 | PC · Windows x64 / Android 1.1.85 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.85) |
+| v1.1.78 | PC · Windows x64 / Android 1.1.78 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.78) |
+| v1.1.75 | PC · Windows x64 / Android 1.1.75 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.75) |
+| v1.1.68 | PC · Windows x64 / Android 1.1.68 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.68) |
 | v1.1.55 | PC · Windows x64 / Android 1.1.55 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.55) |
 | v1.1.50 | PC · Windows x64 / Android 1.1.50 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.50) |
 | v1.1.49 | PC · Windows x64 / Android 1.1.49 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.49) |
@@ -28,3 +32,11 @@
 | v1.0.1 | PC · Windows x64 / Android | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.1) |
 | v1.0.0 | PC · Windows x64 / Android | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.0.0) |
 | v0.2.0 | PC · Windows x64 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v0.2.0) |
+
+## 逐版补充说明
+
+[1.1.79](v1.1.79.md) · [1.1.80](v1.1.80.md) · [1.1.81](v1.1.81.md) · [1.1.82](v1.1.82.md) · [1.1.83](v1.1.83.md) · [1.1.84](v1.1.84.md) · [1.1.85](v1.1.85.md)
+
+[1.1.68](v1.1.68.md) · [1.1.69](v1.1.69.md) · [1.1.70](v1.1.70.md) · [1.1.71](v1.1.71.md) · [1.1.72](v1.1.72.md) · [1.1.73](v1.1.73.md) · [1.1.74](v1.1.74.md) · [1.1.75](v1.1.75.md) · [1.1.76](v1.1.76.md) · [1.1.77](v1.1.77.md) · [1.1.78](v1.1.78.md)
+
+[1.1.56](v1.1.56.md) · [1.1.57](v1.1.57.md) · [1.1.58](v1.1.58.md) · [1.1.59](v1.1.59.md) · [1.1.60](v1.1.60.md) · [1.1.61](v1.1.61.md) · [1.1.62](v1.1.62.md) · [1.1.63](v1.1.63.md) · [1.1.64](v1.1.64.md) · [1.1.65](v1.1.65.md) · [1.1.66](v1.1.66.md) · [1.1.67](v1.1.67.md)

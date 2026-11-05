@@ -11,6 +11,11 @@ export function pdfAssets(): Plugin {
       for (const folder of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
         cpSync(path.resolve("node_modules/pdfjs-dist", folder), path.join(destination, folder), { recursive: true });
       }
+      const compatibleDestination = path.resolve('public/pdfjs-compat');
+      mkdirSync(compatibleDestination, {recursive:true});
+      for(const folder of ['cmaps','standard_fonts','image_decoders']) {
+        cpSync(path.resolve('node_modules/pdfjs-compat',folder),path.join(compatibleDestination,folder),{recursive:true});
+      }
     },
   };
 }

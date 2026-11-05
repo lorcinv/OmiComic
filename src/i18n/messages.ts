@@ -1,5 +1,8 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "跟随系统主题": ["Follow system theme", "システムのテーマに合わせる"],
+  "日间配色": ["Daytime palette", "ライトモードの配色"],
+  "；深色模式自动使用夜色。": ["; dark mode automatically uses Night.", "。ダークモードでは夜色に切り替わります。"],
   "安全与备份": ["Safety and backup", "確認とバックアップ"],
   "删除确认、数据导出与导入": ["Deletion confirmation, data export and import", "削除の確認・データの書き出しと読み込み"],
   "导出阅读进度、收藏、书签、书架、标签、备注和设置。": ["Export reading progress, favorites, bookmarks, shelves, tags, notes and settings.", "読書の進捗、お気に入り、しおり、本棚、タグ、メモ、設定を書き出します。"],

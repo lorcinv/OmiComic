@@ -298,7 +298,17 @@ final class NativeReaderSurface extends View {
         publishRaster(url,restored,work,0,SystemClock.uptimeMillis()-restoreStart);
         return work.future;
       }
-      long start=SystemClock.uptimeMillis();byte[] data=library.readerImage(url);long readTime=SystemClock.uptimeMillis()-start;start=SystemClock.uptimeMillis();
+      long start=SystemClock.uptimeMillis();
+      LocalLibrary.DocumentRaster pdf=library.readerDocument(url,targetW,targetH,null,1,true);
+      if(pdf!=null){
+        try{checkWork(work);}catch(Exception cancelled){pdf.bitmap.recycle();throw cancelled;}
+        Raster raster=new Raster(url,pdf.bitmap,pdf.width,pdf.height,pdf.sample,1);raster.request=work;raster.fullSample=pdf.sample;
+        // An exact-fit PDF base needs no mip pyramid for a 1:1 page drag.
+        // Keep image/region sampling unchanged, without first-use GPU work.
+        if(!pdf.exactFit)pdf.bitmap.setHasMipMap(true);pdf.bitmap.prepareToDraw();
+        publishRaster(url,raster,work,0,SystemClock.uptimeMillis()-start);return work.future;
+      }
+      byte[] data=library.readerImage(url);long readTime=SystemClock.uptimeMillis()-start;start=SystemClock.uptimeMillis();
       checkWork(work);
       BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(data,0,data.length,bounds);
       if(bounds.outWidth<=0||bounds.outHeight<=0||(long)bounds.outWidth*bounds.outHeight>100000000L)throw new IOException("图片尺寸超出上限。");
@@ -712,7 +722,7 @@ final class NativeReaderSurface extends View {
     float scale=Math.max(slot.rect.width()/raster.width,slot.rect.height()/raster.height);
     // At fit size the filtered base already supplies the screen's detail. Never
     // force a sharper level merely because the source was sampled at decode.
-    if(raster.sample*scale<=1.001f)return null;
+    if(slot.rect.width()<=raster.bitmap.getWidth()*1.001f&&slot.rect.height()<=raster.bitmap.getHeight()*1.001f)return null;
     int sample=1;while(sample*2<=raster.sample&&sample*2*scale<=1)sample*=2;
     RectF visible=new RectF(slot.rect);if(!visible.intersect(clip))return null;
     Rect required=new Rect(Math.max(0,(int)Math.floor((visible.left-slot.rect.left)/slot.rect.width()*raster.width)),Math.max(0,(int)Math.floor((visible.top-slot.rect.top)/slot.rect.height()*raster.height)),Math.min(raster.width,(int)Math.ceil((visible.right-slot.rect.left)/slot.rect.width()*raster.width)),Math.min(raster.height,(int)Math.ceil((visible.bottom-slot.rect.top)/slot.rect.height()*raster.height)));
@@ -755,13 +765,14 @@ final class NativeReaderSurface extends View {
       List<Tile> decoded=new ArrayList<>();List<String> decodedKeys=new ArrayList<>();
       try{
         synchronized(cacheLock){if(stopped||expected!=generation||Collections.disjoint(visibleTiles,keys))return;}
-        byte[] data=library.readerImage(raster.url);decoder=BitmapRegionDecoder.newInstance(data,0,data.length,false);
-        boolean nativeSampling=ReaderBitmapDecoder.useNativeSampling(data.length,decoder.getWidth(),decoder.getHeight());
+        boolean pdf=library.isDocumentPage(raster.url);byte[] data=pdf?null:library.readerImage(raster.url);
+        if(!pdf)decoder=BitmapRegionDecoder.newInstance(data,0,data.length,false);
+        boolean nativeSampling=pdf||ReaderBitmapDecoder.useNativeSampling(data.length,decoder.getWidth(),decoder.getHeight());
         for(int i=0;i<missing.size();i++){
           synchronized(cacheLock){if(stopped||expected!=generation||!visibleTiles.contains(keys.get(i)))break;}
           Rect content=missing.get(i),coverage=new Rect(content);
-          RectF raw=new RectF(coverage);raster.toOriginal.mapRect(raw);Rect region=new Rect();raw.roundOut(region);region.intersect(0,0,decoder.getWidth(),decoder.getHeight());
-          Bitmap bitmap=ReaderBitmapDecoder.region(decoder,region,resolution,false,()->{checkGeneration(expected);synchronized(cacheLock){if(Collections.disjoint(visibleTiles,keys))throw new IOException("阅读请求已取消。");}});if(bitmap==null)continue;bitmap=orient(bitmap,raster.orientation);
+          RectF raw=new RectF(coverage);raster.toOriginal.mapRect(raw);Rect region=new Rect();raw.roundOut(region);region.intersect(0,0,pdf?raster.width:decoder.getWidth(),pdf?raster.height:decoder.getHeight());
+          Bitmap bitmap=pdf?library.readerDocument(raster.url,1,1,region,resolution).bitmap:ReaderBitmapDecoder.region(decoder,region,resolution,false,()->{checkGeneration(expected);synchronized(cacheLock){if(Collections.disjoint(visibleTiles,keys))throw new IOException("阅读请求已取消。");}});if(bitmap==null)continue;bitmap=orient(bitmap,raster.orientation);
           bitmap.setHasMipMap(true);bitmap.prepareToDraw();Tile tile=new Tile();tile.bitmap=bitmap;tile.source=content;
           decoded.add(tile);decodedKeys.add(keys.get(i));
         }
@@ -811,16 +822,21 @@ final class NativeReaderSurface extends View {
           checkGeneration(request.generation);
           synchronized(cacheLock){if(previewRestoring.get(url)!=request||cache.containsKey(url)||previewCache.containsKey(url))return;}
           // Recover a tiny preview, never a full body raster just for the strip.
-          byte[] data=library.readerImage(url);BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;
-          BitmapFactory.decodeByteArray(data,0,data.length,options);int w=options.outWidth,h=options.outHeight;
-          if(w<=0||h<=0||(long)w*h>100000000L)throw new IOException("图片尺寸无效。");
-          options.inJustDecodeBounds=false;options.inSampleSize=1;while(Math.max(w,h)/options.inSampleSize>320)options.inSampleSize*=2;
-          Bitmap bitmap=BitmapFactory.decodeByteArray(data,0,data.length,options);if(bitmap==null)throw new IOException("预览无法读取。");
-          int orientation=1;try{orientation=new android.media.ExifInterface(new ByteArrayInputStream(data)).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION,1);}catch(IOException ignored){}
+          LocalLibrary.DocumentRaster document=library.readerDocument(url,320,320,null,1);
+          int w,h,sample,orientation=1;Bitmap bitmap;
+          if(document!=null){bitmap=document.bitmap;w=document.width;h=document.height;sample=document.sample;}
+          else{
+            byte[] data=library.readerImage(url);BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;
+            BitmapFactory.decodeByteArray(data,0,data.length,options);w=options.outWidth;h=options.outHeight;
+            if(w<=0||h<=0||(long)w*h>100000000L)throw new IOException("图片尺寸无效。");
+            options.inJustDecodeBounds=false;options.inSampleSize=1;while(Math.max(w,h)/options.inSampleSize>320)options.inSampleSize*=2;
+            sample=options.inSampleSize;bitmap=BitmapFactory.decodeByteArray(data,0,data.length,options);if(bitmap==null)throw new IOException("预览无法读取。");
+            try{orientation=new android.media.ExifInterface(new ByteArrayInputStream(data)).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION,1);}catch(IOException ignored){}
+          }
           if(orientation<1||orientation>8)orientation=1;bitmap=orient(bitmap,orientation);
           synchronized(cacheLock){
             if(previewRestoring.get(url)!=request||!validGeneration(request.generation)){bitmap.recycle();return;}
-            Raster small=new Raster(url,bitmap,w,h,options.inSampleSize,orientation),old=previewCache.put(url,small);
+            Raster small=new Raster(url,bitmap,w,h,sample,orientation),old=previewCache.put(url,small);
             previewBytes+=bitmap.getAllocationByteCount()-(old==null?0:old.bitmap.getAllocationByteCount());
             Iterator<Raster> it=previewCache.values().iterator();while(previewBytes>4L*1024*1024&&it.hasNext()){previewBytes-=it.next().bitmap.getAllocationByteCount();it.remove();}
             previewRestores++;

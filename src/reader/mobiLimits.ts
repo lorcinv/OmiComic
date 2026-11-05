@@ -1,4 +1,5 @@
 import { MAX_MOBI_BYTES, MAX_MOBI_TEXT } from '../../electron/shared/mobiLimits';
+import type { MobiBuffer } from './mobiRangeBuffer';
 export { MAX_MOBI_BYTES, MAX_MOBI_TEXT };
 function textRecordLength(input:Uint8Array,compression:number,flags:number){
   let data=input;
@@ -16,14 +17,17 @@ function textRecordLength(input:Uint8Array,compression:number,flags:number){
   return length;
 }
 /** Bound records before invoking the third-party decompressor. */
-export function inspectMobi(buffer:ArrayBuffer){
-  const bytes=new Uint8Array(buffer),view=new DataView(buffer),ascii=(start:number,count:number)=>String.fromCharCode(...bytes.subarray(start,start+count));
-  if(bytes.length<78||bytes.length>MAX_MOBI_BYTES||ascii(60,8)!=='BOOKMOBI')throw Error('文件不是有效的 MOBI，或超过本版 256 MiB 上限。');
-  const count=view.getUint16(76);if(count<2||count>20000||78+count*8>bytes.length)throw Error('MOBI 记录表无效。');
+export function inspectMobi(buffer:ArrayBuffer | MobiBuffer){
+  const bytes=buffer instanceof ArrayBuffer?new Uint8Array(buffer):undefined;
+  const slice=(start:number,end:number)=>bytes?bytes.subarray(start,end):new Uint8Array(buffer.slice(start,end));
+  const view=bytes?new DataView(buffer as ArrayBuffer):{getUint16:(at:number)=>new DataView(buffer.slice(at,at+2)).getUint16(0),getUint32:(at:number)=>new DataView(buffer.slice(at,at+4)).getUint32(0)};
+  const size=buffer.byteLength,ascii=(start:number,count:number)=>String.fromCharCode(...slice(start,start+count));
+  if(size<78||bytes&&size>MAX_MOBI_BYTES||ascii(60,8)!=='BOOKMOBI')throw Error('文件不是有效的 MOBI，或超过本版 256 MiB 上限。');
+  const count=view.getUint16(76);if(count<2||count>20000||78+count*8>size)throw Error('MOBI 记录表无效。');
   const offsets=Array.from({length:count},(_,n)=>view.getUint32(78+n*8));
-  if(offsets.some((offset,n)=>offset<78+count*8||offset>=bytes.length||n>0&&offset<=offsets[n-1]))throw Error('MOBI 记录范围无效。');
+  if(offsets.some((offset,n)=>offset<78+count*8||offset>=size||n>0&&offset<=offsets[n-1]))throw Error('MOBI 记录范围无效。');
   const header=(index:number)=>{
-    const start=offsets[index],end=offsets[index+1]??bytes.length;
+    const start=offsets[index],end=offsets[index+1]??size;
     if(start===undefined||end-start<248||ascii(start+16,4)!=='MOBI')throw Error('MOBI 书目无效。');
     if(view.getUint16(start+12)!==0)throw Error('暂不支持带 DRM 加密的 MOBI。');
     const compression=view.getUint16(start),text=view.getUint32(start+4),records=view.getUint16(start+8),version=view.getUint32(start+36),encoding=view.getUint32(start+28),length=view.getUint32(start+20);
@@ -39,7 +43,7 @@ export function inspectMobi(buffer:ArrayBuffer){
     for(let n=0;n<exthCount;n++){if(cursor+8>exthEnd)throw Error('MOBI 扩展书目损坏。');const kind=view.getUint32(cursor),size=view.getUint32(cursor+4);if(size<8||cursor+size>exthEnd)throw Error('MOBI 扩展记录损坏。');if(kind===121&&size>=12){const candidate=view.getUint32(cursor+8);if(candidate!==0xffffffff)boundary=candidate;}cursor+=size;}
     // Every record is bounded, including a malicious compression stream. HUFF
     // is deliberately excluded from this first integration.
-    let encoded=0,decoded=0;for(let n=1;n<=records;n++){const begin=offsets[index+n],end=offsets[index+n+1]??bytes.length,size=end-begin;if(size>16384)throw Error('MOBI 文本记录过大。');encoded+=size;decoded+=textRecordLength(bytes.subarray(begin,end),compression,view.getUint32(start+240));if(decoded>MAX_MOBI_TEXT||decoded>text+16384)throw Error('MOBI 解压文本超过本版上限。');}if(encoded>MAX_MOBI_TEXT*2)throw Error('MOBI 压缩文本过大。');
+    let encoded=0,decoded=0;for(let n=1;n<=records;n++){const begin=offsets[index+n],end=offsets[index+n+1]??size,recordSize=end-begin;if(recordSize>16384)throw Error('MOBI 文本记录过大。');encoded+=recordSize;decoded+=textRecordLength(slice(begin,end),compression,view.getUint32(start+240));if(decoded>MAX_MOBI_TEXT||decoded>text+16384)throw Error('MOBI 解压文本超过本版上限。');}if(encoded>MAX_MOBI_TEXT*2)throw Error('MOBI 压缩文本过大。');
     return {version,boundary};
   };
   const first=header(0);

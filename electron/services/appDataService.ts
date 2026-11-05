@@ -1,4 +1,5 @@
 import { desktopTypography, mobileTypography } from "../shared/desktopTypography";
+import { normalizeThemePreferences } from '../shared/colorTheme';
 import os from 'node:os';
 import { desktopPerformance, type DesktopPerformanceProfile } from '../shared/desktopPerformance';
 import type { ReaderPreferences, PageSort } from "../shared/readerPreferences";
@@ -52,6 +53,8 @@ export interface AppSettings {
   desktopPerformanceRevision?: number;
 
   colorTheme: 主题配色;
+  followSystemTheme?: boolean;
+  dayColorTheme?: Exclude<主题配色, 'night'>;
   cardSize: 卡片尺寸;
   cardScale: number;
   detailThumbnailScale: number;
@@ -267,6 +270,8 @@ const 资源类型选项 = new Set<string>(["folder", "image", "archive", "pdf",
 const 默认设置: AppSettings = {
   showHomePage: true,
   colorTheme: "mist",
+  followSystemTheme: false,
+  dayColorTheme: "mist",
   cardSize: "medium",
   cardScale: 100,
   detailThumbnailScale: 100,
@@ -479,7 +484,7 @@ function 修正设置(输入: unknown): AppSettings {
     desktopReaderAutoHide: 设置.desktopReaderAutoHide === true,
     desktopPerformanceProfile,
     desktopPerformanceRevision: 2,
-    colorTheme,
+    ...normalizeThemePreferences({ ...设置, colorTheme }),
     cardSize,
     cardScale: 读取范围整数(设置.cardScale, 默认设置.cardScale, 40, 200),
     detailThumbnailScale: 读取范围整数(设置.detailThumbnailScale, 默认设置.detailThumbnailScale, 40, 200),

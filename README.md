@@ -6,7 +6,7 @@
 
 **整理你的漫画，接着上次阅读。**
 
-OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android 双端漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和传统无 DRM 的 MOBI 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
+OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android 双端漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和无 DRM 的 MOBI 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
 
 ## [支持作者](docs/support.md)
 
@@ -22,20 +22,20 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.55 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Portable-1.1.55-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Setup-1.1.55-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.55 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-1.1.55-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.85 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Portable-1.1.85-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Setup-1.1.85-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.85 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-1.1.85-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.55：累计整理 1.1.50–1.1.55 的阅读改进，扩大 PC 横向点击翻页范围，优化双端缩放还原、手机拖拽及 PC 翻页响应，补齐内置操作说明。[逐版更新说明](docs/releases/v1.1.55.md)。
+1.1.85：累计完善 1.1.79–1.1.85 的 PDF、EPUB、MOBI 加载与翻页、平板适配、目录读取和点击反馈；新增默认关闭的系统主题跟随。本次安卓包包含同版 EPUB 启动修复。[本版更新](docs/releases/v1.1.85.md) · [逐版说明](docs/releases/README.md)。
 
 ## 功能
 
-- 直接阅读图片文件夹、单张图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和传统无 DRM 的 MOBI。
+- 直接阅读图片文件夹、单张图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和无 DRM 的 MOBI。
 - 用书架、分类、标签、收藏和搜索整理漫画，用书签标记喜欢的页面。
 - 单页、双页、全景、沉浸和自动阅读，按内容与习惯选择阅读方式。
 - 自动保存阅读进度，首页快速继续阅读。
-- 雾灰、北境、暖沙、夜色四种主题，支持简体中文、English、日本語。
+- 雾灰、北境、暖沙、夜色四种主题，可选择跟随系统浅色／深色模式（默认关闭），支持简体中文、English、日本語。
 
 ## Windows 版
 
@@ -81,7 +81,7 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 <tr>
 <td width="50%" valign="top">
 <h3>设置</h3>
-<p>调整主题、字号和首页图案，也可设置阅读方式、图片缓存与预加载。首页图案支持裁剪和效果预览。</p>
+<p>调整主题、字号、阅读方式、图片缓存与预加载；可开启系统主题跟随。</p>
 <a href="docs/images/v1.1.36/windows-settings.png"><img src="docs/images/v1.1.36/windows-settings.png" width="100%" alt="设置"></a>
 </td>
 <td width="50%" valign="top">

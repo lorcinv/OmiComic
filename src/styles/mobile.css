@@ -7,6 +7,10 @@ html[data-platform="android"] .reader-stage:not(.is-panorama) { touch-action:non
 html[data-platform="android"] .reader-stage.is-panorama { touch-action:none; }
 html[data-platform="android"] .reader-stage { scrollbar-width:none; }
 html[data-platform="android"] .reader-stage::-webkit-scrollbar { display:none; }
+/* Hide native scrollbars on every Android surface, including wide dialogs.
+   Scrolling and the small bottom-sheet gesture handle remain available. */
+html[data-platform="android"],html[data-platform="android"] * { scrollbar-width:none !important; }
+html[data-platform="android"]::-webkit-scrollbar,html[data-platform="android"] *::-webkit-scrollbar { display:none !important; width:0 !important; height:0 !important; }
 .library-opening-status { position:absolute; z-index:90; top:12px; left:50%; transform:translateX(-50%); max-width:calc(100% - 24px); padding:10px 16px; border:1px solid var(--边框色); border-radius:14px; background:var(--面板色); color:var(--主文字); font-size:calc(13px * var(--desktop-font-scale, 1)); overflow-wrap:anywhere; pointer-events:none; }
 @media (pointer:coarse) {
   button,input,select,textarea { touch-action:manipulation; }
@@ -186,7 +190,7 @@ html[data-platform="android"] .reader-stage::-webkit-scrollbar { display:none; }
 .root-delete-overlay[data-shared-scrim="true"] { background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; }
 .mobile-sheet { position:relative; width:min(100%,560px); max-height:calc(100dvh - 24px); overflow:auto; overscroll-behavior:contain; padding:8px 18px 20px; border:1px solid var(--控件边框); border-radius:24px; background:var(--面板色); backdrop-filter:none; box-shadow:var(--阴影); color:var(--主文字); outline:none; contain:layout style; transform:translate3d(0,0,0); }
 .mobile-sheet-handle { width:32px; height:4px; margin:0 auto 6px; border-radius:9px; background:var(--边框色); }
-.mobile-sheet-grab-area { display:flex; flex:none; align-items:center; justify-content:center; height:24px; margin:-8px 0 -6px; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; }
+.mobile-sheet-grab-area { display:flex; flex:none; align-items:center; justify-content:center; height:32px; margin:-8px 0 8px; touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab; }
 .mobile-sheet-grab-area:active { cursor:grabbing; }
 .mobile-sheet-grab-area > .mobile-sheet-handle { margin:0; }
 .mobile-sheet-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:12px; }
@@ -220,6 +224,7 @@ body:has(.mobile-sheet-overlay) .glass-select-options.is-portal { z-index:1120; 
 .reader-layout.is-mobile-reader { position:relative; }
 .reader-layout.is-mobile-reader .reader-stage { position:absolute; inset:0; height:100%; padding:0; }
 .reader-layout.is-mobile-reader .reader-toolbar { position:absolute; inset:0 0 auto; height:56px; min-height:56px; flex-wrap:nowrap; gap:8px; padding:6px 10px; background:color-mix(in srgb,var(--面板色) 92%,transparent); backdrop-filter:blur(18px); }
+html[data-platform="android"] .reader-layout.is-mobile-reader .reader-toolbar { height:calc(56px + var(--android-reader-status-inset,0px)); min-height:calc(56px + var(--android-reader-status-inset,0px)); padding-top:calc(6px + var(--android-reader-status-inset,0px)); }
 .reader-layout.is-mobile-reader .reader-toolbar-leading { gap:4px; }
 .mobile-reader-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:calc(13px * var(--desktop-font-scale, 1)); color:var(--主文字); }
 .mobile-reader-more { min-height:40px; padding:8px 12px; border:1px solid var(--控件边框); border-radius:12px; background:var(--控件背景); color:var(--控件文字); font:inherit; font-size:calc(13px * var(--desktop-font-scale, 1)); }
@@ -431,6 +436,8 @@ body:has(.mobile-sheet-overlay) .glass-select-options.is-portal { z-index:1120; 
 .is-mobile-library .library-main.is-resource-detail { padding-top:0; }
 .is-mobile-library:has(.is-resource-detail) { padding-bottom:0; }
 .is-mobile-library:has(.is-resource-detail) .sidebar-primary-nav { display:none; }
+.is-mobile-library.is-detail-open { padding-top:0; padding-bottom:0; }
+.is-mobile-library.is-detail-open .sidebar-primary-nav { display:none; }
 
 /* Shared mobile controls: one stroke weight and optical box throughout Omi. */
 .mobile-svg-icon { width:24px; height:24px; flex:none; vertical-align:middle; pointer-events:none; }
@@ -536,7 +543,7 @@ body:has(.mobile-settings-surface,.root-delete-overlay) .glass-select-options.is
 @media (max-width:900px) {
   .mobile-home-nav { height:64px; padding:4px 16px 6px; gap:16px; background:color-mix(in srgb,var(--面板色) 94%,transparent); backdrop-filter:blur(20px); }
   .mobile-home-nav button { border-radius:16px; gap:4px; font-size:calc(11px * var(--desktop-font-scale, 1)); }
-  .mobile-home-nav button:first-child { background:var(--强调浅色); color:var(--强调色); }
+  .mobile-home-nav button:first-child { color:var(--强调色); }
 }
 
 .is-mobile-library .empty-illustration .mobile-svg-icon { width:44px; height:44px; }
@@ -684,15 +691,84 @@ html[data-platform="android"][data-native-reader="on"] .reader-stage .reader-pag
   .is-mobile-library .resource-list-scroll { padding-left:16px; padding-right:16px; }
 }
 @media (min-width:768px) {
-  [data-omi-layout="mobile"] .omi-home__body { width:100%; max-width:1120px; margin:0 auto; display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr); gap:24px; align-items:center; }
-  [data-omi-layout="mobile"] .omi-home__art { width:100%; height:min(48dvh,440px); min-height:0; max-height:none; margin:0; }
-  [data-omi-layout="mobile"] :is(.omi-home__header,.omi-home__footer) { width:100%; max-width:1120px; margin:0 auto; }
-  [data-omi-layout="mobile"] .omi-home__books { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .mobile-settings-page > header,.mobile-settings-body { width:100%; max-width:960px; margin:0 auto; }
   .mobile-settings-body > nav:has(> .mobile-setting-category) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:28px; align-content:start; }
   .is-mobile-library .resource-detail-hero { grid-template-columns:min(28vw,220px) minmax(0,1fr); }
 }
 
+/* A touch device keeps the mobile composition even with a keyboard or mouse. */
+.omi-home.is-mobile-home .omi-home__book-format { display:none; }
+.is-mobile-library .sidebar-primary-nav .sidebar-item,
+.is-mobile-library .sidebar-primary-nav .sidebar-item:hover { background:transparent; box-shadow:none; border-color:transparent; color:var(--次文字); }
+.is-mobile-library .sidebar-primary-nav .sidebar-item { opacity:.68; }
+.is-mobile-library .sidebar-primary-nav .sidebar-item.is-active { color:var(--主文字); background:transparent; box-shadow:none; opacity:1; font-weight:700; }
+.is-mobile-library .sidebar-primary-nav .sidebar-item.is-active svg { stroke-width:2.5; }
+.omi-home.is-mobile-home .mobile-home-nav { display:grid; grid-template-columns:1.8fr 1fr 1fr; gap:8px; }
+.omi-home.is-mobile-home .mobile-home-nav button.is-primary { background:var(--强调色); color:var(--强调文字); border-radius:16px; box-shadow:none; }
+
+/* Two covers share each row equally; each cover and its text use one width. */
+@media (min-width:600px) {
+  .omi-home.is-mobile-home { padding-bottom:64px; }
+  .omi-home.is-mobile-home .omi-home__header { width:100%; max-width:none; margin:0; min-height:76px; padding:14px 24px; align-items:center; }
+  .omi-home.is-mobile-home .omi-home__body { display:block; width:100%; max-width:none; margin:0; padding:12px 24px 24px; }
+  .omi-home.is-mobile-home .omi-home__content { padding:8px 0; background:transparent; border:0; border-radius:0; backdrop-filter:none; }
+  .omi-home.is-mobile-home .omi-home__section-label { margin-bottom:16px; }
+  .omi-home.is-mobile-home .omi-home__section-label > span:not(.omi-home__section-line) { display:none; }
+  .omi-home.is-mobile-home .omi-home__books { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px 24px; padding:0; overflow:visible; }
+  .omi-home.is-mobile-home .omi-home__book { display:grid; grid-template-columns:minmax(0,1fr); justify-self:center; width:100%; max-width:340px; }
+  .omi-home.is-mobile-home .omi-home__cover { width:100%; height:auto; min-height:0; max-height:none; aspect-ratio:2/3; }
+  .omi-home.is-mobile-home .omi-home__progress-track { display:none; }
+  .omi-home.is-mobile-home .omi-home__book-title { margin-top:8px; font-size:calc(14px * var(--desktop-font-scale,1)); }
+  .omi-home.is-mobile-home .omi-home__book-progress { width:100%; margin-top:4px; font-size:calc(12px * var(--desktop-font-scale,1)); }
+  .omi-home.is-mobile-home .mobile-home-nav { position:fixed; inset:auto 0 0; display:grid; grid-template-columns:1.8fr 1fr 1fr; height:64px; padding:4px 16px 6px; gap:8px; border-top:1px solid var(--边框色); background:var(--面板色); }
+  .omi-home.is-mobile-home .mobile-home-nav button { display:flex; flex:1; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:0; font-size:calc(11px * var(--desktop-font-scale,1)); }
+}
+@media (min-width:600px) and (orientation:portrait) {
+  .omi-home.is-mobile-home .omi-home__book { max-width:min(340px,calc((100dvh - 344px) / 3)); }
+}
+
+/* Landscape tablets use the requested cover + details layout over the full
+   content area: 2 columns + 24px gap, with equal top/bottom and side gutters. */
+@media (min-width:600px) and (min-height:500px) and (orientation:landscape) {
+  .omi-home.is-mobile-home { overflow:hidden; }
+  .omi-home.is-mobile-home .omi-home__body { flex:1; display:flex; min-height:0; padding-bottom:20px; }
+  .omi-home.is-mobile-home .omi-home__reading-column,
+  .omi-home.is-mobile-home .omi-home__recent-shell,
+  .omi-home.is-mobile-home .omi-home__content,
+  .omi-home.is-mobile-home .omi-home__recent { display:flex; flex:1; flex-direction:column; min-height:0; width:100%; }
+  .omi-home.is-mobile-home .omi-home__books { flex:1; min-height:0; grid-auto-rows:minmax(0,1fr); gap:20px 24px; }
+  .omi-home.is-mobile-home .omi-home__book { max-width:none; min-height:0; height:100%; grid-template-columns:min(36%,calc((100dvh - 244px) / 3)) minmax(0,1fr); grid-template-rows:auto 1fr auto; column-gap:16px; align-content:start; }
+  .omi-home.is-mobile-home .omi-home__cover { grid-column:1; grid-row:1/4; height:auto; width:100%; max-width:100%; max-height:100%; align-self:center; }
+  .omi-home.is-mobile-home .omi-home__book-title { grid-column:2; grid-row:1; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; line-height:1.5; margin:0; white-space:normal; }
+  .omi-home.is-mobile-home .omi-home__book-format { display:block; grid-column:2; grid-row:2; margin-top:8px; color:var(--次文字); font-size:calc(12px * var(--desktop-font-scale,1)); }
+  .omi-home.is-mobile-home .omi-home__book-progress { grid-column:2; grid-row:3; align-self:end; display:flex; flex-wrap:wrap; gap:4px 10px; margin:0; padding-bottom:4px; }
+}
+
 /* Mobile text preferences are independent of desktop typography. */
 [data-omi-layout="mobile"] :is(.mobile-card-pages,.mobile-bookmark-date,.mobile-reader-current,.mobile-reader-total,.mobile-page-pill output,.resource-detail-progress-copy,.resource-detail-thumbnail-caption strong) { font-size:calc(var(--mobile-info-size,12px) * var(--desktop-font-scale,1)); }
 [data-omi-layout="mobile"] .mobile-settings-page .font-size-control > :is(button,input) { box-sizing:border-box; flex:0 0 40px; width:40px; min-width:40px; max-width:40px; height:40px; min-height:40px; max-height:40px; padding:0; border:1px solid var(--控件边框); border-radius:7px; background:var(--控件背景); color:var(--主文字); font:inherit; line-height:1; text-align:center; }
+
+/* Explicit press feedback also works in WebViews without the native tap flash. */
+html[data-platform="android"] button:not(:disabled):active,
+html[data-platform="android"] button[data-omi-pressed="true"] { opacity:.62!important; }
+.mobile-home-nav button[aria-busy="true"] svg { animation:omi-refresh-spin .8s linear infinite; }
+@keyframes omi-refresh-spin { to { transform:rotate(360deg); } }
+.mobile-tree-error { margin:2px 14px 8px; display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--次文字); font-size:12px; }
+.mobile-tree-error button { color:var(--强调色); padding:6px 10px; }
+
+.omi-home.is-mobile-home > [role="status"] { position:fixed; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+
+/* Side-drawer rows align the SVG box and the text box independently of font metrics. */
+.mobile-tree-row .mobile-tree-toggle { display:flex; align-items:center; justify-content:center; align-self:stretch; line-height:1; }
+.mobile-tree-row > button:not(.mobile-tree-toggle):not(.mobile-tree-manage) { display:flex; align-items:center; line-height:1.45; }
+html[data-platform="android"] .mobile-resource-card:not(:disabled):active,
+html[data-platform="android"] .omi-home__book:not(:disabled):active,
+html[data-platform="android"] .mobile-resource-card[data-omi-pressed="true"],
+html[data-platform="android"] .omi-home__book[data-omi-pressed="true"] { opacity:1!important; }
+html[data-platform="android"] :is(.mobile-resource-card,.omi-home__book) { position:relative; --card-press-color:rgba(95,125,175,.17); }
+html[data-platform="android"][data-color-theme="sand"] :is(.mobile-resource-card,.omi-home__book) { --card-press-color:rgba(153,114,73,.17); }
+html[data-platform="android"][data-color-theme="night"] :is(.mobile-resource-card,.omi-home__book) { --card-press-color:rgba(187,205,234,.15); }
+html[data-platform="android"] :is(.mobile-resource-card,.omi-home__book)::before { content:""; position:absolute; inset:0; z-index:4; border-radius:inherit; pointer-events:none; background:var(--card-press-color); opacity:0; transition:opacity 180ms ease-out; }
+html[data-platform="android"] :is(.mobile-resource-card,.omi-home__book)[data-omi-pressed="true"]::before { opacity:1; transition-duration:65ms; }
+
+html[data-platform="android"] .mobile-resource-card { -webkit-tap-highlight-color:transparent; }

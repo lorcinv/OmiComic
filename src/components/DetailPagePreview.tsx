@@ -77,7 +77,7 @@ export default function 资源详情缩略图({ page, selected, selectable = tru
       if (已开始) return;
       已开始 = true;
       设置状态({ status: "loading", url: null });
-      if (page.type === 'pdf-page' && documentSource) {
+      if (documentSource && (page.type === 'pdf-page' || page.type === 'epub-chapter')) {
         const controller = new AbortController();
         const cancelQueue=调度资源详情缩略图加载(async()=>{
           try{
@@ -143,7 +143,7 @@ export default function 资源详情缩略图({ page, selected, selectable = tru
       取消排队?.();
       观察器.disconnect();
     };
-  }, [page.archiveInnerPath, page.sourcePath, page.type, page.virtualPath, 手机模式 ? page.modifiedAt : undefined, 手机模式 ? page.pageId : undefined, page.type === 'pdf-page' ? page.index : undefined, documentSource, eager]);
+  }, [page.archiveInnerPath, page.sourcePath, page.type, page.virtualPath, 手机模式 ? page.modifiedAt : undefined, 手机模式 ? page.pageId : undefined, documentSource ? page.index : undefined, documentSource, eager]);
 
   return (
     <button

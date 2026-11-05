@@ -32,7 +32,7 @@ $version = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | Conver
 $licenseTarget = Join-Path $assetTarget 'licenses'
 New-Item -ItemType Directory -Force -Path $licenseTarget | Out-Null
 $noticeLines = @('OmiComic Android third-party notices', 'Android System WebView is provided by the device.', '')
-foreach ($packageName in @('react','react-dom','scheduler','pdfjs-dist','@lingo-reader/mobi-parser','@lingo-reader/shared','fflate','events','path-browserify','sax')) {
+foreach ($packageName in @('react','react-dom','scheduler','core-js','pdfjs-dist','pdfjs-compat','@lingo-reader/mobi-parser','@lingo-reader/shared','fflate','events','path-browserify','sax')) {
   $packageDir = Join-Path (Join-Path $projectRoot 'node_modules') $packageName
   $packageInfo = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $packageDir 'package.json') | ConvertFrom-Json
   $noticeLines += ($packageName + ' ' + $packageInfo.version + ' - ' + $packageInfo.license)

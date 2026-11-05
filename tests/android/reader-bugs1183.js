@@ -1,0 +1,47 @@
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const assert=(ok,label)=>{if(!ok)throw Error(label);};
+const wait=async(fn,label,timeout=60000)=>{const end=performance.now()+timeout;while(!await fn()){if(performance.now()>end)throw Error(label+' '+document.body.innerText.slice(-300));await pause(20);}};
+const api=window.omicomic,value=async promise=>{const result=await promise;if(!result.ok)throw Error(result.error.message);return result.data;};
+const active=s=>document.querySelector('.page-panel.is-visible '+s),root=window.__omiTabletRoot,checks={};
+const button=name=>[...document.querySelectorAll('button')].find(el=>el.getClientRects().length&&(el.getAttribute('aria-label')===name||el.textContent.trim()===name));
+const probe=async()=>{window.__omiNativeProbe=true;await wait(()=>!window.__omiNativeProbe,'native probe');return window.__omiNativeStats;};
+const tap=async(x,y)=>{window.__omiTap={x,y,viewport:innerWidth};await wait(()=>!window.__omiTap,'touch tap');};
+const index=()=>Number(active('[aria-label="阅读进度"]')?.getAttribute('aria-valuenow'))-1;
+const module=await import(new URL(window.__omiDocumentModule,'https://omi.local').href),DocumentClass=Object.values(module).find(value=>typeof value==='function'&&value.prototype?.readPreview);
+const acquire=DocumentClass.acquirePrepared;DocumentClass.acquirePrepared=async function(...args){const result=await acquire.apply(this,args);if(result)window.__currentDocument=result.source;return result;};
+const open=DocumentClass.prototype.open;DocumentClass.prototype.open=async function(...args){const result=await open.apply(this,args);if(this.purpose==='reader')window.__currentDocument=this;return result;};
+await value(api.updateSettings({readerMemoryCacheSizeMb:100,readerPreloadPages:3,readerImageLoadConcurrency:2,mobileReaderAutoHide:false,mobileReaderPreviews:true,bookSwitchButtonOpacity:20,readerPageMode:'single',readerDefaultPanorama:false,readerDefaultImmersive:false}));
+if(button('打开资源库'))button('打开资源库').click();
+const card=()=>[...document.querySelectorAll('.page-panel.is-visible .mobile-resource-card')].find(c=>c.querySelector('strong')?.textContent==='Large.mobi');
+await wait(()=>card(),'large MOBI card');await pause(400);
+checks.libraryBars=await probe();const tabletLandscape=innerWidth>innerHeight&&innerHeight>=600;
+window.__omiSnapshotSizeProbe=true;await wait(()=>!window.__omiSnapshotSizeProbe,'snapshot inset resize');checks.snapshotSizing=window.__omiSnapshotSizing;assert(Math.abs(checks.snapshotSizing.scaleX-1)<.001&&Math.abs(checks.snapshotSizing.scaleY-1)<.001,'system bar resize stretched the outgoing scene');
+window.__omiLegacyPdfProbe=true;await wait(()=>!window.__omiLegacyPdfProbe,'legacy PDF cache probe');assert(window.__omiLegacyPdfIgnored,'legacy PDF image-cache metadata reused');checks.legacyPdfCacheIgnored=true;
+assert(!checks.libraryBars.webZoomSupported,'WebView page zoom still enabled');
+assert(checks.libraryBars.statusBarVisible!==tabletLandscape,'library status-bar policy');
+checks.libraryScaleBefore=visualViewport.scale;window.__omiPinch={x:innerWidth/2,y:innerHeight/2,from:35,to:95,viewport:innerWidth};await wait(()=>!window.__omiPinch,'library pinch');await pause(500);checks.libraryScaleAfter=visualViewport.scale;assert(Math.abs(visualViewport.scale-1)<.01,'library browser zoom changed '+checks.libraryScaleBefore+' -> '+checks.libraryScaleAfter);
+const c=card(),r=c.getBoundingClientRect();c.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch',pointerId:71,isPrimary:true,button:0,clientX:r.x+r.width/2,clientY:r.y+30}));await pause(90);
+checks.press={down:Number(getComputedStyle(c,'::before').opacity),color:getComputedStyle(c,'::before').backgroundColor,pressed:c.dataset.omiPressed,platform:document.documentElement.dataset.platform,content:getComputedStyle(c,'::before').content,rect:{width:r.width,height:r.height}};assert(checks.press.down>.7,'card theme overlay missing '+JSON.stringify(checks.press));
+c.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerType:'touch',pointerId:71,isPrimary:true,button:0,clientX:r.x+r.width/2,clientY:r.y+30}));await pause(100);checks.press.afterUp=Number(getComputedStyle(c,'::before').opacity);assert(checks.press.afterUp>.7,'card feedback disappeared immediately');await pause(300);checks.press.released=Number(getComputedStyle(c,'::before').opacity);assert(checks.press.released<.01,'card feedback retained too long');
+const resource=await value(api.getResourcePages({path:root+'/Large.mobi'}));await value(api.saveReadingProgress({resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:'Large.mobi',currentPageIndex:0,totalPages:546,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:'horizontal',panorama:false,immersive:false}}));
+card().querySelector('strong').click();await wait(()=>active('.reader-native-image')&&document.documentElement.dataset.nativeReader==='on','MOBI native page');await pause(350);
+checks.hiddenBars=await probe();assert(!checks.hiddenBars.statusBarVisible,'hidden reader chrome left status bar visible');
+active('[aria-label="阅读进度"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));await wait(()=>index()===0,'first MOBI page');
+const stage=()=>active('.reader-stage');let box=stage().getBoundingClientRect();await tap(box.x+box.width/2,box.y+box.height/2);await wait(()=>active('.reader-layout.is-mobile-chrome-visible'),'reader chrome shown');await pause(350);
+checks.visibleBars=await probe();assert(checks.visibleBars.statusBarVisible!==tabletLandscape,'shown reader chrome status-bar policy');
+box=stage().getBoundingClientRect();await tap(box.x+box.width/2,box.y+box.height/2);await wait(()=>!active('.reader-layout.is-mobile-chrome-visible'),'reader chrome hidden');await pause(350);
+checks.beforeReveal=await probe();window.__omiShot='status1183-hidden';await wait(()=>!window.__omiShot,'hidden status screenshot');window.__omiStatusSwipe=true;await wait(()=>!window.__omiStatusSwipe,'edge status reveal');checks.revealedBars=await probe();assert(checks.revealedBars.rootTopPadding===checks.beforeReveal.rootTopPadding,'transient status bar resized reader');assert(checks.revealedBars.systemBarsBehavior===2,'transient edge-swipe behavior missing');
+await pause(3300);
+box=stage().getBoundingClientRect();window.__omiPinch={x:box.x+box.width/2,y:box.y+box.height/2,from:35,to:95,viewport:innerWidth};await wait(()=>!window.__omiPinch,'reader pinch');await wait(()=>Number(stage().dataset.readerZoom)>1.8,'reader custom zoom');const before=index();await tap(box.x+box.width*.92,box.y+box.height/2);await wait(()=>index()===before+1&&stage().dataset.readerZoom==='1','zoomed page tap');checks.zoomTap={from:before,to:index(),scale:stage().dataset.readerZoom};
+await wait(()=>window.__currentDocument?.mobi,'MOBI parser');const mobi=window.__currentDocument.mobi,chapters=[180,24,420,250,500,66,300,34,199,10,544];
+const jumpStart=performance.now(),requests=chapters.map(chapter=>mobi.chapter(chapter));mobi.focus(544);const results=await Promise.all(requests),content=results.map((html,i)=>{const body=new DOMParser().parseFromString(html,'text/html').body;return{index:chapters[i],images:body.querySelectorAll('img').length,text:body.textContent.trim().slice(0,80)};});assert(content.every(page=>page.images||page.text),'quick chapter jump lost content '+JSON.stringify(content));checks.quickMobi={count:results.length,ms:performance.now()-jumpStart,content};
+// Exercise real progress jumps as well as overlapping parser requests.
+box=stage().getBoundingClientRect();if(!active('.reader-layout.is-mobile-chrome-visible'))await tap(box.x+box.width/2,box.y+box.height/2);await wait(()=>active('.reader-layout.is-mobile-chrome-visible'),'progress controls');
+const errors=[];for(const destination of [120,400,36,500,180,540]){
+  const rail=active('[aria-label="阅读进度"]'),rect=rail.getBoundingClientRect(),x=rect.left+rect.width*destination/545,y=rect.top+rect.height/2;
+  await tap(x,y);
+  await pause(50);const error=active('.reader-page-error');if(error)errors.push(error.textContent);
+}
+await wait(()=>{const frame=active('.reader-page-frame[data-reader-page-index="'+index()+'"]:not([aria-hidden="true"])'),painted=frame?.querySelector('.reader-native-image')||frame?.querySelector('.reader-chapter>div')?.shadowRoot?.querySelector('body')?.textContent.trim();return index()>=Number(active('[aria-label="阅读进度"]').getAttribute('aria-valuemax'))*.9&&painted&&!active('.reader-page-error');},'last rapid jump');assert(!errors.length,'quick jump page failure: '+errors.join());checks.progressJumps={last:index(),total:Number(active('[aria-label="阅读进度"]').getAttribute('aria-valuemax')),errors};
+window.dispatchEvent(new Event('omi-reader-back',{cancelable:true}));await pause(200);if(active('.reader-layout'))window.dispatchEvent(new Event('omi-reader-back',{cancelable:true}));await wait(()=>!active('.reader-layout'),'close reader');await pause(350);checks.returnBars=await probe();assert(checks.returnBars.statusBarVisible!==tabletLandscape,'reader exit left system bar policy behind');
+return {checks,viewport:{width:innerWidth,height:innerHeight}};

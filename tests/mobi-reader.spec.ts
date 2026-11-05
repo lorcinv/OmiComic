@@ -13,10 +13,12 @@ test(`isolated ${mobile?'phone':'desktop'} MOBI reader keeps Chinese, images, pa
     api.openDocument=async()=>({ok:true,data:{size:bytes.length,chapters:[]}});api.readDocumentRange=async(_id,begin,end)=>({ok:true,data:new Uint8Array(bytes.slice(begin,end))});api.closeDocument=async()=>({ok:true,data:null});
   },{bytes:[...bytes]});
   await page.goto('/');
-  if(mobile){await page.getByRole('button',{name:'打开资源库',exact:true}).click();await page.locator('.mobile-resource-card').filter({has:page.getByText('Book',{exact:true})}).click();}
-  else await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
-  const iframe=page.locator('.reader-page-frame:not([aria-hidden]) iframe');await expect(iframe).toHaveCount(1,{timeout:20000});await expect(iframe.contentFrame().locator('img')).toHaveCount(1);
-  expect(await iframe.contentFrame().locator('body').evaluate(body=>({padding:getComputedStyle(body).padding,image:body.dataset.omiImagePage}))).toEqual({padding:'0px',image:'true'});
+  // Exercise the resource entry directly, independently of the home mascot's blink timer.
+  await page.getByRole('button',{name:'打开资源库',exact:true}).click();
+  const book=page.locator('.page-panel.is-visible .resource-card').filter({has:page.getByText('Book',{exact:true})});
+  if(mobile)await book.click();else await book.dblclick();
+  const iframe=page.locator('.reader-page-frame:not([aria-hidden]) iframe');
+  const image=page.locator('.reader-page-frame:not([aria-hidden]) img.reader-image');await expect(image).toHaveCount(1,{timeout:20000});expect(await image.evaluate(img=>(img as HTMLImageElement).naturalWidth)).toBe(1);
   if(mobile)await page.locator('.reader-stage').tap({position:{x:350,y:300}});else await page.getByRole('button',{name:'下一页',exact:true}).click();
   await expect(iframe.contentFrame().locator('body')).toContainText('你好，Omi。');await expect(iframe.contentFrame().locator('script,iframe')).toHaveCount(0);expect(await page.evaluate(()=>(window as any).__mobiInjected)).toBeUndefined();
 });

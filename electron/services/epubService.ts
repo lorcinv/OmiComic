@@ -1,7 +1,7 @@
 import { Worker } from "node:worker_threads";
 import path from "node:path";
 
-export interface EPUBChapter { name: string; index: number }
+export interface EPUBChapter { name: string; index: number; fixedLayout?: boolean }
 export class EPUBDocumentSource {
   private worker: Worker;
   private counter = 0;

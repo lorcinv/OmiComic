@@ -58,6 +58,8 @@ export interface AppSettings {
   mobilePreviewWidth?: number;
   mobilePageSize?: 50 | 100 | 150 | 200 | 500;
   colorTheme: 主题配色;
+  followSystemTheme?: boolean;
+  dayColorTheme?: Exclude<主题配色, 'night'>;
   cardSize: 卡片尺寸;
   cardScale: number;
   detailThumbnailScale: number;
@@ -298,6 +300,8 @@ export interface 阅读页面项 {
 export interface 阅读资源结果 {
   readerInit?: { settings: AppSettings; progress: ReadingProgress | null };
   requestedPageId?: string;
+  documentPaginated?: boolean;
+  documentIndexing?: boolean;
   key: string;
   resourceKey: string;
   title: string;
@@ -417,7 +421,11 @@ export interface OmiComicApi {
   chooseExternalFiles(): Promise<操作结果<null>>;
   removeTemporaryOpened(resourceKey: string): Promise<操作结果<null>>;
   promoteTemporaryOpened(resourceKey: string): Promise<操作结果<OmiComicAppData>>;
-  openDocument(input: { path: string; type: "pdf" | "epub" | "mobi"; id: string; purpose?: "reader" | "thumbnail" }): Promise<操作结果<{ size: number; chapters: { name: string; index: number }[] }>>;
+  openDocument(input: { path: string; type: "pdf" | "epub" | "mobi"; id: string; purpose?: "reader" | "thumbnail" }): Promise<操作结果<{ size: number; chapters: { name: string; index: number; fixedLayout?: boolean }[]; recordSignatures?: string; nativePdf?: boolean }>>;
+  registerDocumentImage?(id:string,data:string):Promise<操作结果<{url:string;preview:string;width:number;height:number}>>;
+  renderDocumentImage?(url:string,tile:number,preview:boolean):Promise<操作结果<{url:string;width:number;height:number}>>;
+  setDocumentPurpose?(id:string,purpose:"reader"|"thumbnail"):Promise<操作结果<null>>;
+  renderDocumentPage?(id:string,index:number,preview:boolean):Promise<操作结果<{url:string;width:number;height:number}>>;
   readDocumentRange(id: string, begin: number, end: number): Promise<操作结果<Uint8Array>>;
   readDocumentChapter(id: string, index: number): Promise<操作结果<string>>;
   closeDocument(id: string): Promise<操作结果<null>>;
@@ -498,6 +506,8 @@ export interface OmiComicApi {
   isWindowMaximized(): Promise<操作结果<boolean>>;
   closeWindow(): void;
   setFullscreen(enabled: boolean): Promise<操作结果<boolean>>;
+  setReaderChrome?(hidden: boolean, active?: boolean): Promise<操作结果<boolean>>;
+  prepareEpubReaderViewport?(path: string): Promise<操作结果<boolean>>;
   setReaderVolumeKeys?(enabled: boolean): Promise<操作结果<boolean>>;
   isFullscreen(): Promise<操作结果<boolean>>;
 }

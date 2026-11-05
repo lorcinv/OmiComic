@@ -31,12 +31,25 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
     const scene=element?.closest('.reader-layout') ?? element?.parentElement;
     const mark=()=>{dirty=true;settleFrames=2;};
     const resize=new ResizeObserver(mark);
+    const resizeSelector='.reader-page-spread,[data-native-image]';
+    let observed=new Set<Element>();
     const observeLayout=()=>{
-      resize.disconnect();if(!element)return;resize.observe(element);
-      element.querySelectorAll<HTMLElement>('.reader-page-spread,[data-native-image]').forEach(node=>resize.observe(node));
+      if(!element)return;
+      const next=new Set<Element>([element,...element.querySelectorAll<HTMLElement>(resizeSelector)]);
+      for(const node of observed)if(!next.has(node))resize.unobserve(node);
+      for(const node of next)if(!observed.has(node))resize.observe(node);
+      observed=next;
     };
-    const observer=new MutationObserver(records=>{mark();if(records.some(record=>record.type==='childList'))observeLayout();});
-    if(scene)observer.observe(scene,{attributes:true,childList:true,subtree:true});
+    const observer=new MutationObserver(records=>{
+      mark();
+      const changed=records.some(record=>{
+        if(record.type==='attributes')return record.attributeName==='data-native-image';
+        if(record.type!=='childList'||!element?.contains(record.target))return false;
+        return [...record.addedNodes,...record.removedNodes].some(node=>node instanceof Element&&(node.matches(resizeSelector)||!!node.querySelector(resizeSelector)));
+      });
+      if(changed)observeLayout();
+    });
+    if(scene)observer.observe(scene,{attributes:true,childList:true,subtree:true,attributeFilter:['style','class','hidden','aria-hidden','width','height','data-native-image','data-native-preview','data-native-work-key','data-reader-zoom','data-reader-restoring','data-reader-scrubbing','data-reader-entry-pending','data-viewport-ready','data-panorama-jump-phase','data-panorama-entry-phase','data-panorama-jump-direction','data-panorama-transition-role','data-swipe-active']});
     const overlays=new MutationObserver(mark);overlays.observe(document.body,{childList:true});
     observeLayout();
     element?.addEventListener('scroll',mark);window.addEventListener('resize',mark);window.visualViewport?.addEventListener('resize',mark);
@@ -49,27 +62,32 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
         dirty=false;
         if(settleFrames>0)settleFrames--;
         const clip=element.getBoundingClientRect();
+        // Read each ancestor style/rectangle once per frame. Several pages in
+        // a spread share ancestors; these caches never cross animation frames.
+        const styles=new Map<Element,CSSStyleDeclaration>(),rects=new Map<Element,DOMRect>([[element,clip]]);
+        const styleFor=(node:Element)=>{let value=styles.get(node);if(!value){value=getComputedStyle(node);styles.set(node,value);}return value;};
+        const rectFor=(node:Element)=>{let value=rects.get(node);if(!value){value=node.getBoundingClientRect();rects.set(node,value);}return value;};
         const slots:Array<{url:string;rect:number[];alpha:number}>=[];
         const expected:number[][]=[];
         const visible=new Set<string>();
         const nodes=element.querySelectorAll<HTMLElement>('[data-native-image]');
         for(const node of nodes){
-          if(getComputedStyle(node).visibility==='hidden')continue;
-          const r=node.getBoundingClientRect();
+          const r=rectFor(node);
           if(r.width<=0||r.height<=0||r.right<=clip.left||r.left>=clip.right||r.bottom<=clip.top||r.top>=clip.bottom)continue;
+          if(styleFor(node).visibility==='hidden')continue;
           let alpha=1;
-          for(let parent:HTMLElement|null=node;parent&&parent!==element;parent=parent.parentElement)alpha*=Number(getComputedStyle(parent).opacity);
+          for(let parent:HTMLElement|null=node;parent&&parent!==element;parent=parent.parentElement)alpha*=Number(styleFor(parent).opacity);
           if(alpha>0){const rect=nativeRasterRectangle(r,window.devicePixelRatio||1);slots.push({url:node.dataset.nativeImage!,rect,alpha});expected.push(rect);const key=node.closest<HTMLElement>('[data-native-work-key]')?.dataset.nativeWorkKey;if(key)visible.add(key);}
         }
         // Unprepared figures have no native URL yet. Their visible geometry
         // still belongs to this frame; omitting it used to commit a blank edge.
         element.querySelectorAll<HTMLElement>('.reader-page-loading').forEach(node=>{
-          const page=node.closest<HTMLElement>('.reader-page-frame');if(!page||getComputedStyle(page).visibility==='hidden')return;
-          const r=page.getBoundingClientRect();if(r.width>0&&r.height>0&&r.right>clip.left&&r.left<clip.right&&r.bottom>clip.top&&r.top<clip.bottom){expected.push(nativeRasterRectangle(r,window.devicePixelRatio||1));if(page.dataset.nativeWorkKey)visible.add(page.dataset.nativeWorkKey);}
+          const page=node.closest<HTMLElement>('.reader-page-frame');if(!page)return;
+          const r=rectFor(page);if(r.width>0&&r.height>0&&r.right>clip.left&&r.left<clip.right&&r.bottom>clip.top&&r.top<clip.bottom&&styleFor(page).visibility!=='hidden'){expected.push(nativeRasterRectangle(r,window.devicePixelRatio||1));if(page.dataset.nativeWorkKey)visible.add(page.dataset.nativeWorkKey);}
         });
         const previews:Array<{url:string;rect:number[];clip:number[]}>=[];
         scene?.querySelectorAll<HTMLElement>('[data-native-preview]').forEach(node=>{
-          const r=node.getBoundingClientRect(),rail=node.closest('.mobile-reader-filmstrip')?.getBoundingClientRect();
+          const r=rectFor(node),railNode=node.closest('.mobile-reader-filmstrip'),rail=railNode?rectFor(railNode):undefined;
           if(!rail||r.width<=0||r.height<=0)return;
           const left=Math.max(r.left,rail.left),right=Math.min(r.right,rail.right),top=Math.max(r.top,rail.top),bottom=Math.min(r.bottom,rail.bottom);
           if(right<=left||bottom<=top)return;

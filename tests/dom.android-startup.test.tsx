@@ -7,6 +7,7 @@ const control = vi.hoisted(() => ({
 vi.mock('../src/App', () => ({ default: () => null }));
 vi.mock('react-dom/client', () => ({ default: { createRoot: () => ({ render: control.render }) } }));
 vi.mock('../src/android/bridge', () => ({ connectAndroid: control.connect }));
+vi.mock('../src/theme', () => ({ initializeSystemTheme: vi.fn(async () => undefined) }));
 vi.mock('../src/android/data', () => {
   control.moduleLoaded = true;
   return { createAndroidApi: control.createApi };

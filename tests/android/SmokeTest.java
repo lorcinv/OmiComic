@@ -14,6 +14,10 @@ import java.util.concurrent.*;
 public final class SmokeTest extends Instrumentation {
   private Bundle args;
   private WebView web;
+  private final java.util.List<Long> frameTotals=new java.util.ArrayList<>(),frameDraws=new java.util.ArrayList<>();
+  private Window.OnFrameMetricsAvailableListener frameListener;
+  private long percentile(java.util.List<Long> values,double fraction){if(values.isEmpty())return 0;java.util.List<Long> sorted=new java.util.ArrayList<>(values);java.util.Collections.sort(sorted);return sorted.get(Math.min(sorted.size()-1,(int)Math.floor(sorted.size()*fraction)));}
+  private JSONObject frameMetrics()throws JSONException{synchronized(frameTotals){int over33=0;for(long value:frameTotals)if(value>33333333L)over33++;return new JSONObject().put("count",frameTotals.size()).put("p95Ms",percentile(frameTotals,.95)/1000000d).put("worstMs",percentile(frameTotals,1)/1000000d).put("over33",over33).put("drawP95Ms",percentile(frameDraws,.95)/1000000d);}}
   @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); args=arguments; start(); }
   private WebView find(View view) {
     if(view instanceof WebView)return (WebView)view;
@@ -32,19 +36,24 @@ public final class SmokeTest extends Instrumentation {
     catch(NoSuchFieldException legacy){View cover=(View)field(activity,"launchCover");return cover==null?-1f:1f-cover.getAlpha();}
   }
   private final class ReaderMotionFrames implements Choreographer.FrameCallback {
-    final Object surface,scene;final JSONArray frames=new JSONArray();boolean stopped,lastCovered,lastSnapshot;float lastSceneTranslation=Float.NaN,lastSourceScale=Float.NaN,lastContentScale=Float.NaN;int callbacks;long lastDrawn=-1,lastEmpty=-1;
+    final Object surface,scene;final JSONArray frames=new JSONArray();boolean stopped,lastCovered,lastSnapshot,lastStatusVisible;float lastSceneTranslation=Float.NaN,lastSourceScale=Float.NaN,lastContentScale=Float.NaN;int callbacks,lastTop=-1,lastStatusTop=-1;long lastDrawn=-1,lastEmpty=-1;
     ReaderMotionFrames(Activity activity)throws Exception{surface=field(activity,"readerSurface");scene=field(activity,"sceneTransition");}
     public void doFrame(long time){
       if(stopped)return;
       try{
         long drawn=(Long)field(surface,"drawnFrames"),empty=(Long)field(surface,"emptyFrames");
         ViewGroup sceneRoot=(ViewGroup)field(scene,"root");View snapshot=(View)field(scene,"snapshot"),content=(View)field(scene,"content");
+        WindowInsets statusInsets=sceneRoot.getRootWindowInsets();
+        boolean statusVisible=Build.VERSION.SDK_INT>=30&&statusInsets!=null&&statusInsets.isVisible(WindowInsets.Type.statusBars());
+        int statusTop=Build.VERSION.SDK_INT>=30&&statusInsets!=null?statusInsets.getInsets(WindowInsets.Type.statusBars()).top:0;
         View opening=null;try{opening=(View)field(scene,"readerOpening");}catch(NoSuchFieldException legacy){}
         boolean covered=snapshot!=null&&sceneRoot.indexOfChild(snapshot)>sceneRoot.indexOfChild(content)||opening!=null&&opening.getTranslationX()<1&&opening.getAlpha()>.7f;
         float sceneTranslation=opening==null?content.getTranslationX():opening.getTranslationX();boolean hasSnapshot=snapshot!=null||opening!=null;
         float sourceScale=snapshot==null?1:snapshot.getScaleX();
         float contentScale=content.getScaleX();
-        if(drawn==lastDrawn&&empty==lastEmpty&&covered==lastCovered&&sceneTranslation==lastSceneTranslation&&hasSnapshot==lastSnapshot&&sourceScale==lastSourceScale&&contentScale==lastContentScale){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
+        if(drawn==lastDrawn&&empty==lastEmpty&&covered==lastCovered&&sceneTranslation==lastSceneTranslation&&hasSnapshot==lastSnapshot&&sourceScale==lastSourceScale&&contentScale==lastContentScale&&lastTop==sceneRoot.getPaddingTop()&&lastStatusVisible==statusVisible&&lastStatusTop==statusTop){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
+        lastStatusVisible=statusVisible;lastStatusTop=statusTop;
+        lastTop=sceneRoot.getPaddingTop();
         lastSourceScale=sourceScale;
         lastContentScale=contentScale;
         lastDrawn=drawn;lastEmpty=empty;lastCovered=covered;lastSceneTranslation=sceneTranslation;lastSnapshot=hasSnapshot;
@@ -64,6 +73,9 @@ public final class SmokeTest extends Instrumentation {
         JSONObject recorded=new JSONObject().put("time",time/1000000).put("zoom",current==null?0:field(current,"zoom")).put("pixels",pixels).put("slots",slots).put("drawnFrames",field(surface,"drawnFrames")).put("emptyFrames",field(surface,"emptyFrames")).put("sceneCovered",covered).put("sceneTranslationX",sceneTranslation).put("sceneWidth",content.getWidth()).put("sceneSnapshot",hasSnapshot).put("active",field(surface,"active")).put("readerOpening",opening!=null);
         recorded.put("sourceScale",sourceScale);
         recorded.put("contentScale",contentScale);
+        recorded.put("statusBarVisible",statusVisible).put("statusBarTop",statusTop);
+        int[] contentOrigin=new int[2];content.getLocationInWindow(contentOrigin);recorded.put("contentY",contentOrigin[1]).put("rootTopPadding",sceneRoot.getPaddingTop()).put("contentHeight",content.getHeight());
+        if(snapshot!=null){int[] snapshotOrigin=new int[2];snapshot.getLocationInWindow(snapshotOrigin);recorded.put("snapshotY",snapshotOrigin[1]).put("snapshotHeight",snapshot.getHeight()).put("snapshotLaidOut",snapshot.isLaidOut());}
         try{recorded.put("readerDuration",field(scene,"READER_ENTER_MS"));}catch(NoSuchFieldException legacy){}
         try{synchronized(field(surface,"cacheLock")){
           JSONArray decoding=new JSONArray();java.util.Map<?,?> pending=(java.util.Map<?,?>)field(surface,"pending"),ranks=(java.util.Map<?,?>)field(surface,"workingKeys");
@@ -626,12 +638,28 @@ public final class SmokeTest extends Instrumentation {
       String startupSelector="mobile-preview-speed".equals(args.getString("mode"))?".omi-home,.library-layout":("launch1145".equals(args.getString("mode"))||"display-sampling1149".equals(args.getString("mode"))||"interaction1152".equals(args.getString("mode"))||"motion1153".equals(args.getString("mode"))||"presentation1154".equals(args.getString("mode"))||"quality1155".equals(args.getString("mode")))?".library-layout":".omi-home";
       if((args.getString("fixture","").startsWith("tagdata1176")||args.getString("fixture","").startsWith("tagpolish1177")))startupSelector=".omi-home,.library-layout";
       if(args.getString("fixture","").startsWith("bottom1178"))startupSelector=".omi-home,.library-layout";
+      if(args.getString("fixture","").startsWith("tablet1179"))startupSelector=".omi-home,.library-layout";
       while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('"+startupSelector+"')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
       // DOM existence precedes the first composed frame. Do not inject taps
       // through the launch cover while observing its initial reveal.
       long launchDeadline=SystemClock.uptimeMillis()+6000;
       while(true){boolean[] covered={false};runOnMainSync(()->{try{covered[0]=launchProgress(activity)>=0;}catch(NoSuchFieldException legacy){}catch(Exception error){throw new RuntimeException(error);}});if(!covered[0])break;if(SystemClock.uptimeMillis()>launchDeadline)throw new IOException("Launch cover did not close");Thread.sleep(20);}
       long launchReadyMs=SystemClock.uptimeMillis()-launchStarted;
+      if(args.getString("fixture","").startsWith("tablet1179")){
+        Object local=field(activity,"library");java.lang.reflect.Method grant=local.getClass().getDeclaredMethod("addGrant",android.net.Uri.class,boolean.class),call=local.getClass().getDeclaredMethod("call",String.class,JSONObject.class);grant.setAccessible(true);call.setAccessible(true);
+        String root=(String)grant.invoke(local,android.provider.DocumentsContract.buildTreeDocumentUri("io.github.lorcinv.omicomic.test.tablet","root"),true);
+        call.invoke(local,"refreshThumbnails",new JSONObject());Thread.sleep(300);
+        JSONObject data=(JSONObject)call.invoke(local,"loadData",new JSONObject());JSONObject lib=data.getJSONObject("library");
+        String savedRoot=(args.getString("fixture","").contains("1180")||args.getString("fixture","").contains("1181")||args.getString("fixture","").contains("mobile1182")||args.getString("fixture","").contains("mobile1183"))?root+"/DisconnectedDrive":root;
+          JSONArray roots=new JSONArray();if(!savedRoot.equals(root))roots.put(new JSONObject().put("path",savedRoot).put("name","Offline drive").put("addedAt",0).put("lastOpenedAt",0));
+          roots.put(new JSONObject().put("path",root).put("name","Tablet1179").put("addedAt",0).put("lastOpenedAt",0));
+          lib.put("roots",roots).put("lastActiveRootPath",savedRoot).put("lastCurrentPath",savedRoot);
+        data.getJSONObject("settings").put("showHomePage",true).put("mobileReaderAutoHide",false).put("mobileReaderPreviews",true).put("readerPageMode","single").put("readerDefaultPanorama",false).put("mobileCardLayout","grid").put("doublePageFirstSingle",false);
+        call.invoke(local,"saveData",new JSONObject().put("data",data));eval("window.__omiReloadToken=true");runOnMainSync(()->web.reload());long reloadDeadline=SystemClock.uptimeMillis()+15000;
+        while(!"true".equals(eval("!window.__omiReloadToken&&!!window.omicomic&&!!document.querySelector('.omi-home')"))){if(SystemClock.uptimeMillis()>reloadDeadline)throw new IOException("Tablet reload failed");Thread.sleep(100);}
+        eval("window.__omiTabletRoot="+JSONObject.quote(root));
+        for(String asset:getTargetContext().getAssets().list("web/assets"))if(asset.startsWith("documentSource-")&&asset.endsWith(".js"))eval("window.__omiDocumentModule="+JSONObject.quote("/assets/"+asset));
+      }
       if((args.getString("fixture","").startsWith("tagdata1176")||args.getString("fixture","").startsWith("tagpolish1177"))){
         Object local=field(activity,"library");java.lang.reflect.Method grant=local.getClass().getDeclaredMethod("addGrant",android.net.Uri.class,boolean.class);grant.setAccessible(true);
         String fixtureRoot=(String)grant.invoke(local,android.provider.DocumentsContract.buildTreeDocumentUri("io.github.lorcinv.omicomic.test.catalog","root"),true);
@@ -683,6 +711,14 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("tagdata1176"))scriptAsset="android-tagdata1176";
       if(fixture.startsWith("tagpolish1177"))scriptAsset="android-tagpolish1177";
       if(fixture.startsWith("bottom1178"))scriptAsset="android-bottom-sheet1178";
+      if(fixture.startsWith("tablet1179"))scriptAsset="android-tablet1179";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("perf1182"))scriptAsset="document-perf1182";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("drag1183"))scriptAsset="pdf-drag1183";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("bugs1183"))scriptAsset="reader-bugs1183";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("insets1184"))scriptAsset="reader-insets1184";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("insets1185"))scriptAsset="reader-insets1185";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("theme1185"))scriptAsset="system-theme1185";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("epubEntry1185"))scriptAsset="epub-entry1185";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
       deadline=System.currentTimeMillis()+((mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
@@ -705,6 +741,11 @@ public final class SmokeTest extends Instrumentation {
       ReaderMotionFrames[] readerMotionFrames={null};
       while("null".equals(result=eval("JSON.stringify(window.__omiResult)"))||"\"null\"".equals(result)){
         if(System.currentTimeMillis()>deadline)throw new IOException("Smoke timed out: "+eval("document.body.innerText"));
+        Object nightMode=new JSONTokener(eval("window.__omiNightMode||null")).nextValue();
+        if("yes".equals(nightMode)||"no".equals(nightMode)){
+          try(android.os.ParcelFileDescriptor command=getUiAutomation().executeShellCommand("cmd uimode night "+nightMode);InputStream input=new java.io.FileInputStream(command.getFileDescriptor())){while(input.read()!=-1){}}
+          eval("window.__omiNightMode=null");
+        }
         if("true".equals(eval("window.__omiWaitScene===true"))){awaitSceneSettled(activity);CountDownLatch frame=new CountDownLatch(1);runOnMainSync(()->web.postVisualStateCallback(SystemClock.uptimeMillis(),new WebView.VisualStateCallback(){@Override public void onComplete(long id){frame.countDown();}}));if(!frame.await(4,TimeUnit.SECONDS))throw new IOException("Web scene frame did not commit");SystemClock.sleep(100);eval("window.__omiWaitScene=false");}
         if("true".equals(eval("window.__omiReaderMotionStart===true"))){runOnMainSync(()->{try{readerMotionFrames[0]=new ReaderMotionFrames(activity);Choreographer.getInstance().postFrameCallback(readerMotionFrames[0]);}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiReaderMotionStart=false");}
         if("true".equals(eval("window.__omiReaderMotionStop===true"))){String[] captured={null};runOnMainSync(()->{readerMotionFrames[0].stopped=true;captured[0]=readerMotionFrames[0].frames.toString();});eval("window.__omiReaderMotionFrames="+captured[0]+";window.__omiReaderMotionStop=false");}
@@ -830,6 +871,44 @@ public final class SmokeTest extends Instrumentation {
           for(int i=0;i<count;i++){last=SystemClock.uptimeMillis();final long at=last;runOnMainSync(()->{activity.dispatchKeyEvent(new KeyEvent(at,at,KeyEvent.ACTION_DOWN,code,0));activity.dispatchKeyEvent(new KeyEvent(at,SystemClock.uptimeMillis(),KeyEvent.ACTION_UP,code,0));});SystemClock.sleep(request.optInt("stepMs",25));}
           eval("window.__omiKeyBurstResult={lastKeyUptime:"+last+"};window.__omiKeyBurst=null");
         }
+        if("true".equals(eval("window.__omiSnapshotSizeProbe===true"))){
+          Object scene=field(activity,"sceneTransition");java.lang.reflect.Method begin=scene.getClass().getDeclaredMethod("readerIntent",String.class),cancel=scene.getClass().getDeclaredMethod("cancelReaderIntent",String.class);begin.setAccessible(true);cancel.setAccessible(true);
+          runOnMainSync(()->{try{begin.invoke(scene,"size-probe-1183");}catch(Exception error){throw new RuntimeException(error);}});
+          long captureDeadline=SystemClock.uptimeMillis()+5000;while(field(scene,"snapshot")==null){if(SystemClock.uptimeMillis()>captureDeadline)throw new IOException("Snapshot capture timeout");Thread.sleep(15);}
+          View root=(View)field(activity,"rootFrame");int[] padding={root.getPaddingLeft(),root.getPaddingTop(),root.getPaddingRight(),root.getPaddingBottom()};
+          final JSONObject sizing=new JSONObject();
+          try{
+            runOnMainSync(()->root.setPadding(padding[0],padding[1],padding[2],padding[3]+48));Thread.sleep(100);
+            runOnMainSync(()->{try{android.widget.ImageView view=(android.widget.ImageView)field(scene,"snapshot");android.graphics.drawable.BitmapDrawable image=(android.graphics.drawable.BitmapDrawable)view.getDrawable();android.graphics.Bitmap bitmap=image.getBitmap();float[] values=new float[9];view.getImageMatrix().getValues(values);sizing.put("scaleX",image.getBounds().width()/(double)bitmap.getWidth()*values[0]).put("scaleY",image.getBounds().height()/(double)bitmap.getHeight()*values[4]);}catch(Exception error){throw new RuntimeException(error);}});
+          }finally{runOnMainSync(()->{root.setPadding(padding[0],padding[1],padding[2],padding[3]);try{cancel.invoke(scene,"size-probe-1183");}catch(Exception error){throw new RuntimeException(error);}});}
+          eval("window.__omiSnapshotSizing="+sizing+";window.__omiSnapshotSizeProbe=false");
+        }
+        if("true".equals(eval("window.__omiLegacyPdfProbe===true"))){
+          Object local=field(activity,"library");java.lang.reflect.Method call=local.getClass().getDeclaredMethod("call",String.class,JSONObject.class),save=local.getClass().getDeclaredMethod("saveReaderRasterInfo",String.class,int.class,int.class,int.class),info=local.getClass().getDeclaredMethod("readerRasterInfo",String.class);call.setAccessible(true);save.setAccessible(true);info.setAccessible(true);
+          String root=(String)new JSONTokener(eval("window.__omiTabletRoot")).nextValue(),id="legacy-pdf-1183";boolean ignored=false;
+          try{call.invoke(local,"openDocument",new JSONObject().put("id",id).put("type","pdf").put("path",root+"/Document.pdf"));JSONObject page=(JSONObject)call.invoke(local,"renderDocumentPage",new JSONObject().put("id",id).put("index",0));String url=page.getString("url");save.invoke(local,url,4760,6728,1);ignored=info.invoke(local,url)==null;}
+          finally{call.invoke(local,"closeDocument",new JSONObject().put("id",id));}
+          eval("window.__omiLegacyPdfIgnored="+ignored+";window.__omiLegacyPdfProbe=false");
+        }
+        if("true".equals(eval("window.__omiStatusSwipe===true"))){
+          int[] width={0};runOnMainSync(()->width[0]=web.getRootView().getWidth());
+          shell("input swipe "+width[0]/2+" 1 "+width[0]/2+" 160 240");
+          android.graphics.Bitmap image=getUiAutomation().takeScreenshot();if(image!=null){try(FileOutputStream out=new FileOutputStream(new File(getTargetContext().getExternalFilesDir(null),"status1183-edge.png"))){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}image.recycle();}
+          eval("window.__omiStatusSwipe=false");
+        }
+        String frameRequest=eval("window.__omiFrameMetrics||null");
+        if(!"null".equals(frameRequest)){
+          boolean start=frameRequest.equals("\"start\"");
+          runOnMainSync(()->{
+            if(frameListener!=null)activity.getWindow().removeOnFrameMetricsAvailableListener(frameListener);
+            if(start){
+              synchronized(frameTotals){frameTotals.clear();frameDraws.clear();}
+              frameListener=(window,metrics,dropped)->{synchronized(frameTotals){if(frameTotals.size()<2000){frameTotals.add(metrics.getMetric(FrameMetrics.TOTAL_DURATION));frameDraws.add(metrics.getMetric(FrameMetrics.DRAW_DURATION));}}};
+              activity.getWindow().addOnFrameMetricsAvailableListener(frameListener,new Handler(Looper.getMainLooper()));
+            }else frameListener=null;
+          });
+          eval("window.__omiFrameStats="+frameMetrics()+";window.__omiFrameMetrics=null");
+        }
         if("true".equals(eval("window.__omiNativeProbe===true"))){
           Object surface=field(activity,"readerSurface");java.lang.reflect.Method stats=surface.getClass().getDeclaredMethod("stats");stats.setAccessible(true);
           Object library=field(activity,"library");java.lang.reflect.Method stored=null;
@@ -839,6 +918,12 @@ public final class SmokeTest extends Instrumentation {
             JSONObject state=(JSONObject)stats.invoke(surface);Object current=field(surface,"current");JSONArray rasters=new JSONArray();
             if(current!=null)for(Object slot:(java.util.List<?>)field(current,"slots")){Object raster=field(slot,"raster");android.graphics.Bitmap bitmap=(android.graphics.Bitmap)field(raster,"bitmap"),adjusted=(android.graphics.Bitmap)((java.util.Map<?,?>)field(surface,"adjusted")).get((String)field(raster,"url")+":"+field(raster,"sample")+(String)field(surface,"effectsKey"));rasters.put(new JSONObject().put("left",((android.graphics.RectF)field(slot,"rect")).left).put("top",((android.graphics.RectF)field(slot,"rect")).top).put("url",field(raster,"url")).put("width",field(raster,"width")).put("height",field(raster,"height")).put("sample",field(raster,"sample")).put("orientation",field(raster,"orientation")).put("preview",field(raster,"preview")).put("bitmapWidth",bitmap.getWidth()).put("bitmapHeight",bitmap.getHeight()).put("color",bitmap.getPixel(bitmap.getWidth()/4,bitmap.getHeight()/4)).put("adjustedColor",adjusted==null?JSONObject.NULL:adjusted.getPixel(adjusted.getWidth()/4,adjusted.getHeight()/4)));}
             state.put("rasters",rasters).put("adjustedCount",((java.util.Map<?,?>)field(surface,"adjusted")).size());
+            Object scene=field(activity,"sceneTransition");state.put("sceneCovered",field(scene,"snapshot")!=null||field(scene,"reveal")!=null||(Boolean)field(scene,"readerCapturing"));
+            WindowInsets insets=web.getRootWindowInsets();
+            if(Build.VERSION.SDK_INT>=30&&insets!=null)state.put("statusBarVisible",insets.isVisible(WindowInsets.Type.statusBars())).put("systemBarsBehavior",web.getWindowInsetsController().getSystemBarsBehavior());
+            state.put("systemTheme",field(activity,"systemTheme"));
+            state.put("webZoomSupported",web.getSettings().supportZoom()).put("rootTopPadding",((View)field(activity,"rootFrame")).getPaddingTop());
+            int[] webOrigin=new int[2];web.getLocationInWindow(webOrigin);state.put("webY",webOrigin[1]).put("webHeight",web.getHeight());
             try{state.put("detailPlanReuses",field(surface,"detailPlanReuses")).put("detailPlansCreated",field(surface,"detailPlansCreated"));}catch(NoSuchFieldException legacy){/* Earlier APK baseline. */}
             try{state.put("windowReheats",field(surface,"windowReheats"));}catch(NoSuchFieldException legacy){}
             try{state.put("queuedBodyCancellations",field(surface,"queuedBodyCancellations")).put("joinedBodyLoads",field(surface,"joinedBodyLoads"));}catch(NoSuchFieldException legacy){}

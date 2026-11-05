@@ -21,7 +21,7 @@ async function seedDocument(page: Page, fail = false, delay = false, colorTheme 
     };
     api.getReadingProgress = async (id: string) => ({ ok: true, data: progress[id] ?? null });
     api.saveReadingProgress = async (input: any) => { progress[input.resourceKey] = input; (window as any).__saved.push(input); return { ok: true, data: input }; };
-    api.getResourcePages = async () => ({ ok: true, data: { key, resourceKey: key, sourcePath: '/comics/sample.epub', sourceType: 'epub', title: 'EPUB 测试书', pages: [], total: 0 } });
+    api.getResourcePages = async () => ({ ok: true, data: {readerInit:{settings:(await api.getAppData()).data.settings,progress:progress[key]??null}, key, resourceKey: key, sourcePath: '/comics/sample.epub', sourceType: 'epub', title: 'EPUB 测试书', pages: [], total: 0 } });
     api.openDocument = async () => {
       if (delay) await new Promise(resolve => setTimeout(resolve, 500));
       return fail ? { ok: false, error: { message: 'EPUB 章节缺失。' } } : { ok: true, data: { size: 2000, chapters: Array.from({ length: 30 }, (_, index) => ({ index, name: `第 ${index + 1} 章` })) } };
@@ -37,33 +37,55 @@ async function seedDocument(page: Page, fail = false, delay = false, colorTheme 
     api.setFullscreen = async (value: boolean) => { (window as any).__fullscreen.push(value); return { ok: true, data: value }; };
   }, { fail, delay, colorTheme });
   await page.goto('/');
-  await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
+  const book=page.getByRole('button', { name: /继续阅读 EPUB 测试书/ });
+  if(await page.evaluate(()=>document.documentElement.dataset.omiLayout==='mobile'))await book.click();else await book.dblclick();
 }
 
 test('EPUB opens and turns chapters even when the PDF runtime is unavailable', async ({ page }) => {
   const pdfRequests: string[] = [];
   await page.route(/pdfjs|pdfRuntime/, route => { pdfRequests.push(route.request().url()); return route.abort(); });
   await seedDocument(page);
-  const chapter = page.frameLocator('.reader-chapter iframe');
+  const chapter = page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe');
   await expect(chapter.getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(chapter.getByRole('heading', { name: '章节 3', exact: true })).toBeVisible();
   expect(pdfRequests).toEqual([]);
 });
 
+for(const narrow of [false,true])test(`${narrow?'narrow':'desktop'} EPUB keeps the painted page until the destination iframe fonts are ready`,async({page})=>{
+  if(narrow)await page.setViewportSize({width:600,height:900});
+  await page.addInitScript(()=>{
+    const parent=window.parent as any;
+    if(window!==window.parent&&window.frameElement?.closest('.reader-page-frame')&&parent.__holdChapter){
+      Object.defineProperty(document,'fonts',{value:{ready:new Promise<void>(resolve=>(parent.__releaseChapter??=[]).push(resolve))}});
+    }
+  });
+  await seedDocument(page);
+  await expect(page.locator('[data-reader-page-index="1"]')).toBeVisible();
+  await page.evaluate(()=>{(window as any).__holdChapter=true;(window as any).__releaseChapter=[];});
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(()=>page.evaluate(()=>(window as any).__releaseChapter.length)).toBeGreaterThan(0);
+  await expect(page.locator('[data-reader-page-index="1"]')).toBeVisible();
+  await expect(page.locator('[data-reader-page-index="2"]')).toHaveAttribute('aria-hidden','true');
+  await expect(page.locator('[data-reader-page-index="2"]')).toHaveCSS('opacity','0.001');
+  await page.evaluate(()=>{(window as any).__holdChapter=false;for(const resolve of (window as any).__releaseChapter)resolve();});
+  await expect(page.locator('[data-reader-page-index="2"]')).toBeVisible();
+  await expect(page.frameLocator('[data-reader-page-index="2"] iframe').getByRole('heading',{name:'章节 3',exact:true})).toBeVisible();
+});
+
 test('dark EPUB text follows the soft dark theme and retains shared reading controls', async ({ page }) => {
   await seedDocument(page, false, false, 'night');
-  const chapter = page.frameLocator('.reader-chapter iframe');
+  const chapter = page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe');
   await expect(chapter.getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
   await expect(chapter.locator('body')).toHaveCSS('background-color', 'rgb(54, 62, 76)');
   await expect(chapter.locator('body')).toHaveCSS('color', 'rgb(229, 233, 240)');
-  await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('2');
+  await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
   await page.screenshot({ path: 'test-results/theme-night-epub.png' });
 });
 
 test('EPUB retains document order, supports display effects and explicitly disables raster processing', async ({ page }) => {
   await seedDocument(page);
-  await expect(page.getByRole('textbox',{name:'跳转到章节'})).toBeEnabled();
+  await expect(page.getByRole('textbox',{name:'跳转到页码'})).toBeEnabled();
   await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'画面调整',exact:true}).click();
   await expect(page.getByRole('slider',{name:'锐化',exact:true})).toBeDisabled();
@@ -74,24 +96,24 @@ test('EPUB retains document order, supports display effects and explicitly disab
   await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'开始自动阅读',exact:true}).click();
   await expect(page.getByRole('button',{name:'暂停自动阅读',exact:true})).toBeVisible();
-  await page.frameLocator('.reader-chapter iframe').locator('body').click();
+  await page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').locator('body').click();
   await expect(page.getByRole('button',{name:'开始自动阅读',exact:true})).toBeVisible();
 });
 
 test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view state', async ({ page }) => {
   await seedDocument(page);
-  const jump = page.getByRole('textbox', { name: '跳转到章节' });
+  const jump = page.getByRole('textbox', { name: '跳转到页码' });
   await expect(jump).toHaveValue('2');
-  await expect(page.frameLocator('.reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
+  await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
   await expect(page.locator('.document-reader')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).__chapterRequests[0])).toBe(1);
-  await page.getByRole('button', { name: '添加当前章书签', exact: true }).click();
-  await expect(page.getByRole('button', { name: '取消当前章书签', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '添加当前页书签', exact: true }).click();
+  await expect(page.getByRole('button', { name: '取消当前页书签', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '当前单页，点击切换双页', exact: true }).click();
   await expect(page.locator('.reader-chapter')).toHaveCount(2);
   await page.getByRole('button', { name: '当前双页，点击切换单页', exact: true }).click();
   await jump.fill('3'); await jump.press('Enter');
-  await expect(page.frameLocator('.reader-chapter iframe').getByRole('heading', { name: '章节 3', exact: true })).toBeVisible();
+  await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').getByRole('heading', { name: '章节 3', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: '缩放方式' }).click(); await page.getByRole('option', { name: '适应宽度', exact: true }).click();
   await expect.poll(() => page.locator('.reader-stage').evaluate(element => element.scrollHeight / element.clientHeight)).toBeGreaterThan(2);
   await page.locator('.reader-stage').hover(); await page.mouse.wheel(0, 650);
@@ -104,7 +126,7 @@ test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view stat
   await jump.fill('20'); await jump.press('Enter');
   await expect(jump).toHaveValue('20');
   await expect(page.locator('[data-reader-page-index="19"]')).toHaveClass(/is-current-page/);
-  await expect(page.frameLocator('[data-reader-page-index="19"] iframe').getByRole('heading', { name: '章节 20', exact: true })).toBeVisible();
+  await expect(page.frameLocator('[data-reader-page-index="19"] iframe').locator('body')).toContainText('段落');
   await page.getByRole('button', { name: '当前横向阅读，点击切换纵向阅读', exact: true }).click();
   await page.getByRole('button', { name: '沉浸', exact: true }).click();
   await expect(page.locator('.reader-layout')).toHaveClass(/is-immersive/);
@@ -118,7 +140,7 @@ test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view stat
   await expect(jump).toHaveValue('20');
   await expect(page.locator('.reader-layout')).toHaveClass(/is-flow-vertical/);
   await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
-  await expect(page.frameLocator('[data-reader-page-index="19"] iframe').getByRole('heading', { name: '章节 20', exact: true })).toBeVisible();
+  await expect(page.frameLocator('[data-reader-page-index="19"] iframe').locator('body')).toContainText('段落');
 });
 
 test('failed documents and cancellation retain the normal return path and release sessions', async ({ page }) => {
@@ -144,7 +166,7 @@ test('failed documents and cancellation retain the normal return path and releas
 
 test('panorama loads the visible chapter without waiting for a stalled prefetch batch', async ({ page }) => {
   await seedDocument(page);
-  await expect(page.frameLocator('.reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
+  await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await page.evaluate(() => {
     const api = (window as any).omicomic, chapter = api.readDocumentChapter, bookmark = api.toggleBookmark;
@@ -153,7 +175,7 @@ test('panorama loads the visible chapter without waiting for a stalled prefetch 
   });
   await page.getByRole('button', { name: 'OmiComic', exact: true }).click();
   await page.getByRole('button', { name: /继续阅读 EPUB 测试书/ }).dblclick();
-  await expect(page.frameLocator('.reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
+  await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await page.evaluate(async () => {
     const stage = document.querySelector('.reader-stage')!;
@@ -166,7 +188,7 @@ test('panorama loads the visible chapter without waiting for a stalled prefetch 
   expect(Number(chapter)).toBeGreaterThan(8);
   const index = Number(chapter) - 1;
   await expect(page.frameLocator(`[data-reader-page-index="${index}"] iframe`).getByRole('heading', { name: `章节 ${chapter}`, exact: true })).toBeVisible({ timeout: 1500 });
-  await page.getByRole('button', { name: '添加当前章书签', exact: true }).click();
+  await page.getByRole('button', { name: '添加当前页书签', exact: true }).click();
   expect(await page.evaluate(() => (window as any).__lastBookmark.pageIndex)).toBe(index);
   await expect(page.locator('.reader-filename-strip')).toContainText(`第 ${chapter} 章`);
   await page.getByRole('button', { name: '返回', exact: true }).click();
@@ -175,11 +197,11 @@ test('panorama loads the visible chapter without waiting for a stalled prefetch 
 
 test('EPUB details and home use chapter labels and the shared reading entry', async ({ page }) => {
   await seedDocument(page);
-  await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('2');
+  await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
   await page.keyboard.press('PageDown');
-  await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('3');
+  await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('3');
   await page.keyboard.press('PageUp');
-  await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('2');
+  await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await page.getByRole('button', { name: /^最近阅读/ }).click();
   await page.locator('.resource-card').filter({ hasText: 'EPUB 测试书' }).getByRole('button', { name: '打开资源信息' }).click();
@@ -187,7 +209,7 @@ test('EPUB details and home use chapter labels and the shared reading entry', as
   await expect(page.getByRole('group', { name: '缩略预览大小' })).toHaveCount(0);
   await expect(page.getByText('已选择第 1 页', { exact: true })).toHaveCount(0);
   await page.locator('.resource-detail-reading-launch').getByRole('button', { name: '继续阅读', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: '跳转到章节' })).toHaveValue('2');
+  await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('2');
   await expect(page.locator('.reader-toolbar')).toHaveCount(1);
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await page.getByRole('button', { name: 'OmiComic', exact: true }).click();
@@ -196,9 +218,9 @@ test('EPUB details and home use chapter labels and the shared reading entry', as
 
 test('panorama navigation and mode changes keep the page visible during scrolling', async ({ page }) => {
   await seedDocument(page);
-  await expect(page.frameLocator('.reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
+  await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').getByRole('heading', { name: '章节 2', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
-  const jump = page.getByRole('textbox', { name: '跳转到章节' });
+  const jump = page.getByRole('textbox', { name: '跳转到页码' });
   const scrollThenClick = (buttonName: string) => page.evaluate(async name => {
     const stage = document.querySelector('.reader-stage')!;
     for (let i = 0; i < 12; i++) {
@@ -224,7 +246,7 @@ test('panorama navigation and mode changes keep the page visible during scrollin
   const beforeExit = await scrollThenClick('关闭全景连环画');
   await expect(page.locator('.reader-stage')).not.toHaveClass(/(^|\s)is-panorama(\s|$)/);
   await expect(jump).toHaveValue(String(beforeExit));
-  await expect(page.frameLocator('.reader-chapter iframe').getByRole('heading', { name: `章节 ${beforeExit}`, exact: true })).toBeVisible();
+  await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').locator('body')).toContainText('段落');
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await expect(page.getByRole('combobox', { name: '缩放方式' })).toBeDisabled();
   await expect(page.getByRole('combobox', { name: '缩放方式' })).toContainText('适应高度');

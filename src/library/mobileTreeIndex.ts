@@ -33,7 +33,7 @@ export function cachedMobileTree(path:string):TreeNode[]|undefined{
 }
 export async function loadMobileTree(path:string):Promise<TreeNode[]>{
   const cached=cachedMobileTree(path);if(cached)return cached;const generation=epoch;
-  const entry=await read(path),children=await Promise.all(entry.folders.map(folder=>read(folder.path)));
-  const nodes=entry.folders.flatMap((folder,index)=>{const child=children[index];return child.folders.length||child.hasBooks?[{...folder,expandable:child.folders.length>0}]:[];}).sort((a,b)=>a.name.localeCompare(b.name,'zh-CN',{numeric:true}));
+  const entry=await read(path),children=await Promise.allSettled(entry.folders.map(folder=>read(folder.path)));
+  const nodes=entry.folders.flatMap((folder,index)=>{const result=children[index];if(result.status==='rejected')return [{...folder,expandable:true}];const child=result.value;return child.folders.length||child.hasBooks?[{...folder,expandable:child.folders.length>0}]:[];}).sort((a,b)=>a.name.localeCompare(b.name,'zh-CN',{numeric:true}));
   if(generation===epoch){trees.set(path,nodes);persist();}return nodes;
 }

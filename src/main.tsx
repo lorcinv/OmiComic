@@ -1,3 +1,4 @@
+import './android/webviewCompat';
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -8,16 +9,22 @@ import "./styles/mobile.css";
 import "./styles/desktopTheme.css";
 import "./styles/tagData.css";
 import { connectAndroid } from "./android/bridge";
+import { initializeSystemTheme } from './theme';
 
 async function start() {
   if (import.meta.env.MODE === "android") {
     document.documentElement.dataset.platform = "android";
+    // Reader pinch zoom is handled by its own gesture layer. Keep the app
+    // shell at device scale even in WebViews that retain browser page zoom.
+    document.querySelector('meta[name="viewport"]')?.setAttribute('content','width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+    document.documentElement.style.touchAction='pan-x pan-y';
     const [native, { createAndroidApi }] = await Promise.all([
       connectAndroid(),
       import('./android/data'),
     ]);
     window.omicomic = await createAndroidApi(native);
   }
+  await initializeSystemTheme();
   ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

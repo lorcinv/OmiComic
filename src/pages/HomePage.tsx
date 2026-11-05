@@ -1,7 +1,7 @@
 import { t, tr } from '../i18n';
 import MobileIcon from "../components/MobileIcon";
 import { pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
-import { getResourceThumbnail } from "../reader/thumbnailClient";
+import { clearResourceThumbnailCache, getResourceThumbnail } from "../reader/thumbnailClient";
 import { warmReader } from '../reader/loadReader';
 import {beginReaderOpening,cancelReaderOpening} from '../android/readerOpening';
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
@@ -13,6 +13,8 @@ import OmiSignature from "../components/OmiSignature";
 import { HomeArtworkPalette, HomeMascot } from '../components/HomeArtworkDecor';
 import useMobileLayout from "../hooks/useMobileLayout";
 import { defaultHomeArtwork, useHomeArtwork } from '../hooks/useHomeArtwork';
+import { clearMobileTreeCache } from '../library/mobileTreeIndex';
+import { invalidateLibraryCatalog } from '../library/libraryCatalog';
 import { mobileNavigationEpoch } from '../hooks/mobileNavigation';
 import { 应用主题配色, applyDesktopTypography } from "../theme";
 import "../styles/home.css";
@@ -56,6 +58,18 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState('');
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true); setRefreshStatus('正在刷新…'); setError(null);
+    try {
+      clearResourceThumbnailCache(); clearMobileTreeCache(); invalidateLibraryCatalog();
+      const result = await window.omicomic.refreshThumbnails?.();
+      if (result && !result.ok) throw new Error(result.error.message);
+      setRetry(value => value + 1);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '刷新失败，请重试。'); setRefreshing(false); setRefreshStatus('刷新失败'); }
+  };
   const generation = useRef(0);
   const openRequest = useRef(0);
   const openingRef = useRef(false);
@@ -116,10 +130,11 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
             setBooks(items => items.map(book => book.resourceKey === item.resourceKey ? { ...book, thumbnail: thumbnail.data.url } : book));
           } catch { /* A missing cover never prevents opening a book. */ }
         }));
+        if (generation.current === current) { setRefreshing(false); if (retry > 0) setRefreshStatus('已刷新'); }
       } catch (cause) {
         if (generation.current !== current) return;
         setBooks([]);
-        setLoading(false);
+        setLoading(false); setRefreshing(false); setRefreshStatus('刷新失败');
         setError(cause instanceof Error ? cause.message : "暂时无法读取最近阅读记录。");
       }
     };
@@ -207,6 +222,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
                     </div>
                     <span className="omi-home__progress-track" aria-hidden="true"><span style={{ width: `${progress}%`, minWidth: progress > 0 ? 'max(2px, calc(2.05px / var(--omi-home-scale, 1)))' : 0 }} /></span>
                     <span className="omi-home__book-title" title={mobile ? undefined : book.title}>{book.title}</span>
+                    {mobile && <span className="omi-home__book-format">{book.sourceType === 'epub' || book.sourceType === 'mobi' || book.sourceType === 'pdf' ? book.sourceType.toUpperCase() : t('漫画')}</span>}
                     <span className="omi-home__book-progress">{total ? `${page} / ${total}${unit === '页' ? '' : ` ${t(unit)}`}` : t("打开阅读")}<span>{total ? `${percent}%` : ""}</span></span>
                   </button>;
                 })}
@@ -224,7 +240,8 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
         </aside>}
       </div>
       </div>
-      {mobile ? <nav className="mobile-home-nav" aria-label={t("首页导航")}><button aria-label={t("打开资源库")} onClick={browse}><MobileIcon name="library"/>{t("进入资源库")}</button><button onClick={() => setRetry(value => value + 1)} disabled={loading}><MobileIcon name="refresh"/>{t("刷新")}</button><button onClick={onSettings}><MobileIcon name="settings"/>{t("设置")}</button></nav> : null}
+      {mobile && refreshStatus && <span className="sr-only" role="status">{t(refreshStatus)}</span>}
+      {mobile ? <nav className="mobile-home-nav" aria-label={t("首页导航")}><button className="is-primary" aria-label={t("打开资源库")} onClick={browse}><MobileIcon name="library"/>{t("进入资源库")}</button><button onClick={() => void refresh()} disabled={refreshing} aria-busy={refreshing}><MobileIcon name="refresh"/>{t(refreshing ? "刷新中…" : "刷新")}</button><button onClick={onSettings}><MobileIcon name="settings"/>{t("设置")}</button></nav> : null}
     </div>
   );
 }

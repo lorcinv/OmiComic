@@ -6,7 +6,7 @@
 
 **Organize your comics. Pick up where you left off.**
 
-OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI, with bookshelves, categories, tags and favorites to organize your local collection.
+OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and DRM-free MOBI, with bookshelves, categories, tags and favorites to organize your local collection.
 
 ## [Support the author](docs/support.md)
 
@@ -22,20 +22,20 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.55 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Portable-1.1.55-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-Setup-1.1.55-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.55 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.55/OmiComic-1.1.55-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.85 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Portable-1.1.85-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Setup-1.1.85-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.85 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-1.1.85-android.apk) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.55 includes the 1.1.50–1.1.55 reader updates: wider PC horizontal click zones, smoother zoom/reset on both platforms, mobile page dragging and faster PC page turns. The offline guide now covers the added controls. [Version-by-version notes](docs/releases/v1.1.55.md).
+1.1.85 includes the 1.1.79–1.1.85 updates: PDF, EPUB and MOBI loading and paging, tablet layouts, directory recovery and touch feedback. Optional system theme following is off by default. The Android package includes the same-version EPUB startup fix. [Release notes](docs/releases/v1.1.85.md) · [Version history](docs/releases/README.en.md).
 
 ## Features
 
-- Read image folders, individual images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and traditional DRM-free MOBI.
+- Read image folders, individual images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and DRM-free MOBI.
 - Organize comics with bookshelves, categories, tags, favorites and search. Bookmark pages you want to return to.
 - Choose single-page, double-page, panorama, immersive or automatic reading.
 - Reading progress is saved automatically, with quick access from the home screen.
-- Choose Mist, Nord, Sand or Night. The interface supports Simplified Chinese, English and Japanese.
+- Choose Mist, Nord, Sand or Night, with optional system light/dark theme following (off by default). The interface supports Simplified Chinese, English and Japanese.
 
 ## Windows
 
@@ -81,7 +81,7 @@ Browse and organize a full comic library with controls designed for a mouse and 
 <tr>
 <td width="50%" valign="top">
 <h3>Settings</h3>
-<p>Customize themes, text size and home artwork, plus reading preferences, image caching and preloading. Crop home artwork with a live preview.</p>
+<p>Customize themes, text size, reading preferences, image caching and preloading. Optional system theme following is available.</p>
 <a href="docs/images/v1.1.36/windows-settings.png"><img src="docs/images/v1.1.36/windows-settings.png" width="100%" alt="Settings"></a>
 </td>
 <td width="50%" valign="top">

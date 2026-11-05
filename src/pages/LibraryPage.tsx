@@ -66,7 +66,7 @@ import GlassSelect from "../GlassSelect";
 import type { GlassSelectOption } from "../GlassSelect";
 import type { OmiBrandOriginGetter } from "../OmiBrandIcon";
 import OmiPageBrand from "../components/OmiPageBrand";
-import { 应用主题配色, 主题选项, applyDesktopTypography } from "../theme";
+import { 应用主题设置, 主题选项, applyDesktopTypography, effectiveColorTheme, normalizeThemePreferences, useSystemDarkMode } from "../theme";
 import type {
   AppSettings,
   Bookshelf,
@@ -85,7 +85,6 @@ import type {
   目录结果,
   进度条粗细,
   进度文本模式,
-  主题配色,
   每页数量,
   双页阅读方向,
   沉浸自动隐藏延迟,
@@ -1015,7 +1014,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [已选标签列表, 设置已选标签列表] = useState<string[]>([]);
   const [标签搜索内容, 设置标签搜索内容] = useState("");
   const [标签搜索建议可见, 设置标签搜索建议可见] = useState(false);
-  const [当前主题配色, 设置当前主题配色] = useState<主题配色>(默认设置.colorTheme);
+  const 系统深色模式 = useSystemDarkMode();
+  const 主题设置 = normalizeThemePreferences(手机显示设置);
+  const 当前主题配色 = effectiveColorTheme(手机显示设置, 系统深色模式);
   const [显示主界面, 设置显示主界面] = useState(true);
   const [排序, 设置排序] = useState<排序方式>(默认设置.sortMode);
   const [卡片缩放, 设置卡片缩放] = useState(默认设置.cardScale);
@@ -1196,7 +1197,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 资源详情预览滚动容器 = useRef<HTMLDivElement>(null);
   const 资源详情预览导航 = useRef<DetailPreviewNavigation>(null);
   const 资源详情文档预览源 = useRef<DocumentSource|null>(null);
-  useEffect(()=>()=>{资源详情文档预览源.current?.dispose();},[]);
+  useEffect(()=>()=>{const source=资源详情文档预览源.current;资源详情文档预览源.current=null;source?.dispose();},[]);
   const 资源详情编辑快照 = useRef<{ note: string; tags: string } | null>(null);
   const 资源详情加载序号 = useRef(0);
   const 手机详情封面起点 = useRef<MobileNavigationOrigin>();
@@ -1333,7 +1334,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     设置手机预览宽度(设置.mobilePreviewWidth ?? 88);
     设置音量键翻页(Boolean(设置.readerVolumeKeys));
     设置反转音量键(Boolean(设置.readerVolumeKeysReversed));
-    设置当前主题配色(应用主题配色(设置.colorTheme));
+    应用主题设置(设置);
     设置显示主界面(设置.showHomePage !== false);
     setUiLanguage(设置.language); 设置界面语言(normalizeLanguage(设置.language));
     const 字号 = applyDesktopTypography(设置);
@@ -2858,12 +2859,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       ) ?? 结果.data.library.roots[0];
 
       if (恢复根目录) {
-        const 恢复目录 = 结果.data.library.lastCurrentPath ?? 恢复根目录.path;
-        const 已恢复 = await 打开目录(恢复目录, 恢复根目录.path, "none", false);
-        if (!已恢复 && !已取消) {
-          await 打开目录(恢复根目录.path, 恢复根目录.path, "none", false);
-          设置错误信息("上次打开的目录不存在或无法访问。");
+        const 候选根目录 = [恢复根目录, ...结果.data.library.roots.filter(root => root.path !== 恢复根目录.path)];
+        let 已恢复 = false;
+        for (const 根目录 of 候选根目录) {
+          if (已取消) break;
+          const 保存目录 = 根目录 === 恢复根目录 ? 结果.data.library.lastCurrentPath : undefined;
+          if (保存目录) 已恢复 = await 打开目录(保存目录, 根目录.path, "none", false);
+          if (!已恢复 && 保存目录 !== 根目录.path) 已恢复 = await 打开目录(根目录.path, 根目录.path, "none", false);
+          if (已恢复) break;
         }
+        if (!已恢复 && !已取消) 设置错误信息("已添加的目录暂不可用，请检查存储设备或添加其他目录。");
       }
     }
 
@@ -4407,6 +4412,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       }
 
       const 起始页 = 结果.data.sourceType === "pdf" || (结果.data.sourceType === "epub" || 结果.data.sourceType==="mobi") ? Math.max(0, 项目.pageIndex) : resolvePageIndex(结果.data.pages, 项目.pageId, 项目.archiveInnerPath ?? 项目.pageName, 项目.pageIndex);
+      if(项目.pageId)结果.data.requestedPageId=项目.pageId;
       if (项目.pageIndex >= 结果.data.total && !项目.pageId && !项目.pageName) {
         设置错误信息("书签页码已超出当前资源页数，已跳转到最后一页。");
       }
@@ -5888,11 +5894,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           return;
         }
         let 预览资源=结果.data;
-        if(预览资源.sourceType==='pdf'){
+        if(['pdf','epub','mobi'].includes(预览资源.sourceType)){
           const {DocumentSource}=await import('../reader/documentSource');
           if(本次加载序号!==资源详情加载序号.current)return;
           const source=new DocumentSource(预览资源,'thumbnail');资源详情文档预览源.current=source;
           预览资源=await source.open();
+          source.subscribe(({before})=>{if(本次加载序号!==资源详情加载序号.current)return;设置资源详情所选页(index=>{const id=before[index]?.pageId;const next=id?预览资源.pages.findIndex(page=>page.pageId===id):index;return Math.max(0,next);});设置资源详情阅读资源({...预览资源});});
+          source.startIndexing();
           if(本次加载序号!==资源详情加载序号.current)return;
         }
         设置资源详情阅读资源(预览资源);
@@ -5938,7 +5946,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (!资源详情阅读资源) return;
     const 起始页 = Math.min(Math.max(页码, 0), (资源详情阅读资源.sourceType === "pdf" || (资源详情阅读资源.sourceType === "epub" || 资源详情阅读资源.sourceType==="mobi") ? Number.MAX_SAFE_INTEGER : Math.max(0, 资源详情阅读资源.total - 1)));
     void 保存资源当前进度(资源详情阅读资源, 起始页);
-    打开阅读器(资源详情阅读资源, 起始页);
+    打开阅读器({...资源详情阅读资源,requestedPageId:资源详情阅读资源.pages[起始页]?.pageId}, 起始页);
   }
 
   async function 打开详情文件操作(mode: "rename" | "delete"): Promise<void> {
@@ -7638,7 +7646,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   <span>{整理错误 ?? t("请返回后重新打开资源信息。")}</span>
                 </div>
               )}
-              {资源详情加载状态 === "loaded" && 资源详情阅读资源 && (类型 === "epub" || 类型==="mobi") && (
+              {资源详情加载状态 === "loaded" && 资源详情阅读资源 && !资源详情文档预览源.current && (类型 === "epub" || 类型==="mobi") && (
                 <div className="resource-detail-preview-empty"><strong>{信息.label}{t(" 文档")}</strong><span>{t("使用上方阅读按钮打开，沿用当前阅读模式。")}</span></div>
               )}
               {isActive && 资源详情阅读资源 && <ContinuousDetailPreviews key={资源详情阅读资源.resourceKey} ref={资源详情预览导航} documentSource={资源详情文档预览源.current??undefined} container={资源详情预览滚动容器} scrollContainer={手机布局?资源详情滚动容器:undefined} pages={资源详情阅读资源.pages} columns={手机布局?3:获取卡片列数(详情缩略图缩放)} initialIndex={资源详情所选页} selectedIndex={手机布局?资源详情所选页:undefined} onSelect={手机布局?设置资源详情所选页:undefined} onGroupChange={设置资源详情预览页} onOpen={index=>{设置资源详情所选页(index);打开资源详情阅读器(index);}}/>}
@@ -7659,7 +7667,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   });
 
   return (
-    <section className={`library-layout ${手机布局 ? `is-mobile-library mobile-cards-${手机卡片布局}` : ""} ${手机筛选展开 ? "is-mobile-filters-open" : ""}`} ref={手机导航区域}
+    <section className={`library-layout ${手机布局 ? `is-mobile-library mobile-cards-${手机卡片布局}` : ""} ${资源信息目标 ? 'is-detail-open' : ''} ${手机筛选展开 ? "is-mobile-filters-open" : ""}`} ref={手机导航区域}
       onContextMenuCapture={事件 => {
         if (手机布局 || !(电脑书架选择中 || (选择模式 && 选择模式 === 当前选择视图)) || (事件.target instanceof Element && 事件.target.closest('.recent-context-menu'))) return;
         事件.preventDefault(); 事件.stopPropagation(); 关闭所有右键菜单(); 设置选择右键菜单({x:事件.clientX,y:事件.clientY});
@@ -9194,14 +9202,15 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   <h3>{t("主题配色")}</h3>
                   <div className="theme-options" role="radiogroup" aria-label={t("主题配色")}>
                     {主题选项.map((配色) => (
-                      <label className={`theme-option ${当前主题配色 === 配色.id ? "is-selected" : ""}`} key={配色.id}>
+                      <label className={`theme-option ${当前主题配色 === 配色.id ? "is-selected" : ""} ${配色.id === 'night' && 主题设置.followSystemTheme && !系统深色模式 ? 'is-disabled' : ''}`} key={配色.id}>
                         <input
                           type="radio"
                           name="color-theme"
                           value={配色.id}
                           aria-label={t(配色.label)}
                           checked={当前主题配色 === 配色.id}
-                          onChange={() => 保存界面设置({ colorTheme: 配色.id })}
+                          disabled={配色.id === 'night' && 主题设置.followSystemTheme && !系统深色模式}
+                          onChange={() => 保存界面设置(normalizeThemePreferences({ ...界面设置快照.current, colorTheme: 配色.id }))}
                         />
                         <span className="theme-option-preview" data-color-theme={配色.id} aria-hidden="true">
                           <span className="theme-preview-sidebar"><i /><i /><i /></span>
@@ -9213,6 +9222,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       </label>
                     ))}
                   </div>
+                  <label className="settings-toggle"><input type="checkbox" checked={主题设置.followSystemTheme} onChange={event => 保存界面设置({followSystemTheme:event.target.checked})}/><span>{t('跟随系统主题')}</span></label>
+                  {主题设置.followSystemTheme && <p className="settings-hint">{t('日间配色')}：{t(主题选项.find(theme=>theme.id===主题设置.dayColorTheme)!.label)}{t('；深色模式自动使用夜色。')}</p>}
                 </section>
                 <section
                   id="settings-section-library"

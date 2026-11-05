@@ -31,6 +31,14 @@ beforeEach(() => {
 });
 afterEach(() => { clearMobilePagePreviews(); delete document.documentElement.dataset.platform; globalThis.Image = BrowserImage; });
 
+it('desktop EPUB and MOBI previews use the live document session',async()=>{
+  delete document.documentElement.dataset.platform;
+  const documentSource={readPreview:vi.fn(async()=> 'data:image/jpeg;base64,ready')};
+  const result=render(<DetailPagePreview page={{index:0,sourcePath:'/book.epub',name:'First',type:'epub-chapter'}} documentSource={documentSource as any} eager selected onSelect={()=>{}} onOpen={()=>{}}/>);
+  await waitFor(()=>expect(result.container.querySelector('img')?.getAttribute('src')).toBe('data:image/jpeg;base64,ready'));
+  expect(documentSource.readPreview).toHaveBeenCalledWith(0,expect.any(AbortSignal));expect(window.omicomic.getPageImage).not.toHaveBeenCalled();
+});
+
 describe('Android page preview scheduling', () => {
   it('does not wait for pages outside the directional native preload window',async()=>{
     vi.spyOn(HTMLElement.prototype,'clientWidth','get').mockReturnValue(390);

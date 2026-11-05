@@ -22,6 +22,24 @@ async function panorama(page:Page,mobile=false){
   if(mobile)await page.evaluate(()=>window.dispatchEvent(new Event('omi-back')));
   await expect(page.locator('.reader-stage')).toHaveClass(/is-panorama/);
 }
+
+for(const mobile of [false,true])test(`a zoomed ${mobile?'Android touch':'desktop mouse'} page tap restores fit and turns one page`,async({page,context})=>{
+  if(mobile)await page.setViewportSize({width:390,height:844});
+  await open(page,mobile);
+  const stage=page.locator('.reader-stage'),box=(await stage.boundingBox())!,x=box.x+box.width/2,y=box.y+box.height/2;
+  if(mobile){
+    const cdp=await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:x-35,y,id:1},{x:x+35,y,id:2}]});
+    for(let n=1;n<=6;n++){const distance=35+45*n/6;await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x-distance,y,id:1},{x:x+distance,y,id:2}]});}
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }else{
+    await page.mouse.move(x,y);await page.keyboard.down('Control');await page.mouse.wheel(0,-400);await page.keyboard.up('Control');
+  }
+  await expect.poll(async()=>Number(await stage.getAttribute('data-reader-zoom'))).toBeGreaterThan(1.5);
+  const before=Number(await index(page));
+  if(mobile){const cdp=await context.newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width*.92,y,id:1}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}else await page.mouse.click(box.x+box.width*.92,y);
+  await expect.poll(async()=>Number(await index(page))).toBe(before+1);await expect(stage).toHaveAttribute('data-reader-zoom','1');
+});
 const index=(page:Page)=>page.locator('[role="slider"][aria-label="阅读进度"]').getAttribute('aria-valuenow');
 for(const flow of ['horizontal','vertical'])test(`desktop ${flow} panorama keeps adjacent geometry and drag after shrink, enlarge and reset`,async({page})=>{
   await open(page);await panorama(page);if(flow==='vertical')await page.getByRole('button',{name:'当前横向阅读，点击切换纵向阅读',exact:true}).click();

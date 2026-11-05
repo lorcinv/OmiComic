@@ -21,6 +21,13 @@ export function registerDocumentIpc(findRoot: (filePath: string) => string | nul
       return { ok: true, data: await fn(event, ...args) };
     } catch (error) { return { ok: false, error: { code: "DOCUMENT_READ_FAILED", message: error instanceof Error ? error.message : "文档读取失败。" } }; }
   });
+  handle("document:purpose",async(event,id:unknown,purpose:unknown)=>{
+    if(purpose!=="reader"&&purpose!=="thumbnail")throw Error("文档用途无效。");
+    const currentKey=key(event,id),session=sessions.get(currentKey);if(!session||session.closed||!session.source)throw Error("文档会话已关闭。");
+    session.purpose=purpose;
+    if(purpose==='reader')for(const [other,owned] of sessions)if(other!==currentKey&&owned.owner===event.sender.id){sessions.delete(other);await close(owned);}
+    return null;
+  });
   handle("document:open", async (event, input: unknown) => {
     if (!input || typeof input !== "object" || !("path" in input) || typeof input.path !== "string" || !("type" in input) || !["pdf", "epub", "mobi"].includes(String(input.type)) || !("id" in input)) throw new Error("文档参数无效。");
     const id = key(event, input.id);
@@ -50,7 +57,7 @@ export function registerDocumentIpc(findRoot: (filePath: string) => string | nul
       const source = input.type === "pdf" ? await PDFDocumentSource.open(realTarget) : input.type==='mobi'?await MobiBinarySource.open(realTarget):new EPUBDocumentSource(realTarget);
       session.source = source;
       if (session.closed) { await source.close(); throw new Error("文档会话已取消。"); }
-      if (source instanceof PDFDocumentSource || source instanceof MobiBinarySource) return { size: source.size, chapters: [] };
+      if (source instanceof PDFDocumentSource || source instanceof MobiBinarySource) return { size: source.size, chapters: [], ...(source instanceof MobiBinarySource?{recordSignatures:await source.signatures()}:{}) };
       const chapters = await source.request<EPUBChapter[]>("index");
       return { size: info.size, chapters };
     } catch (error) { if (sessions.get(id) === session) sessions.delete(id); await close(session); event.sender.removeListener("destroyed", onDestroyed); throw error; }

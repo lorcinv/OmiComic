@@ -3,7 +3,7 @@ import path from "node:path";
 import yauzl from "yauzl";
 import { XMLParser } from "fast-xml-parser";
 import sanitizeHtml from "sanitize-html";
-import { safeRasterImage } from "./documentImageSafety";
+import { safeRasterImage, rasterDimensions } from "./documentImageSafety";
 
 const MAX_ENTRY = 16 * 1024 * 1024;
 const MAX_CHAPTER = 32 * 1024 * 1024;
@@ -32,9 +32,9 @@ export function resolveEpubPath(base: string, reference: string): string {
 export function sanitizeChapter(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: ["p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr", "strong", "em", "b", "i", "u", "s", "blockquote", "pre", "code", "ul", "ol", "li", "dl", "dt", "dd", "table", "thead", "tbody", "tr", "th", "td", "caption", "img", "ruby", "rt", "rp", "sup", "sub"],
-    allowedAttributes: { img: ["src", "alt"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
+    allowedAttributes: { img: ["src", "alt", "width", "height"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
     allowedSchemes: ["data"], allowedSchemesByTag: { img: ["data"] }, allowProtocolRelative: false,
-    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...( /^data:image\/(png|jpeg|gif|webp);base64,[a-z\d+/=]+$/i.test(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
+    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...(/^[1-9]\d{0,5}$/.test(attrs.width||"")?{width:attrs.width}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.height||"")?{height:attrs.height}:{}), ...( /^data:image\/(png|jpeg|gif|webp);base64,[a-z\d+/=]+$/i.test(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
   });
 }
 async function createBook(filePath: string) {
@@ -68,7 +68,7 @@ async function createBook(filePath: string) {
     const chapters = list<any>(opf?.spine?.itemref).filter(item => item.linear !== "no").map((item, index) => {
       const resource = manifest.get(String(item.idref));
       if (!resource || !["application/xhtml+xml", "text/html"].includes(resource["media-type"])) throw new Error("EPUB 章节格式不受支持。");
-      return { name: `第 ${index + 1} 章`, index, path: resolveEpubPath(opfPath, resource.href) };
+      return { name: `第 ${index + 1} 章`, index, fixedLayout:list<any>(opf?.metadata?.meta).some(meta=>meta.name==="fixed-layout"&&meta.content==="true"), path: resolveEpubPath(opfPath, resource.href) };
     });
     if (!chapters.length || chapters.length > 10000) throw new Error("EPUB 没有可阅读章节或章节过多。");
     async function chapter(index: number) {
@@ -76,8 +76,8 @@ async function createBook(filePath: string) {
       const current = chapters[index];
       let html = (await read(current.path, 4 * 1024 * 1024)).toString("utf8");
       // First sanitize to inert image placeholders; never preserve publisher CSS, URLs, or SVG.
-      html = sanitizeHtml(html, { allowedTags: [...sanitizeHtml.defaults.allowedTags, "img", "ruby", "rt", "rp"], allowedAttributes: { img: ["src", "alt"] }, allowedSchemes: [], allowProtocolRelative: false, transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { src: attrs.src || "", alt: attrs.alt || "" } }) } });
-      const replacements = new Map<string, string>(); let bytes = 0;
+      html = sanitizeHtml(html, { allowedTags: [...sanitizeHtml.defaults.allowedTags, "img", "ruby", "rt", "rp"], allowedAttributes: { img: ["src", "alt", "width", "height"] }, allowedSchemes: [], allowProtocolRelative: false, transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { src: attrs.src || "", alt: attrs.alt || "" } }), image: (_tag,attrs)=>({tagName:"img",attribs:{src:attrs["xlink:href"]||attrs.href||"",alt:""}}) } });
+      const replacements = new Map<string, string>(),dimensions=new Map<string,{width:number;height:number}>(); let bytes = 0;
       for (const match of html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)) {
         const reference = match[1]; if (replacements.has(reference)) continue;
         if (replacements.size >= 100) break;
@@ -88,10 +88,11 @@ async function createBook(filePath: string) {
           if (!mime[extension]) continue;
           const data = await read(imagePath, 8 * 1024 * 1024); bytes += data.length;
           if (bytes > MAX_CHAPTER) throw new Error("EPUB 章节图片超过安全上限。");
-          if (!safeRasterImage(data)) continue;
+          if (!safeRasterImage(data,100_000_000,100000)) continue;dimensions.set(reference,rasterDimensions(data));
           replacements.set(reference, `data:image/${mime[extension]};base64,${data.toString("base64")}`);
         } catch (error) { if (bytes > MAX_CHAPTER) throw error; }
       }
+      html=html.replace(/<img[^>]*\ssrc="([^"]*)"[^>]*>/g,(tag,reference)=>{const size=dimensions.get(reference);return size?tag.replace(/>$/,` width="${size.width}" height="${size.height}">`):tag;});
       html = embedChapterImages(html, replacements);
       const content = sanitizeChapter(html);
       if (Buffer.byteLength(content, "utf8") > MAX_SERIALIZED_CHAPTER - DOCUMENT_WRAPPER_RESERVE) throw new Error("EPUB 章节序列化内容超过安全上限。");
@@ -117,7 +118,7 @@ async function createBook(filePath: string) {
       }
       return null;
     }
-    return { chapters: chapters.map(({ name, index }) => ({ name, index })), chapter, cover };
+    return { chapters: chapters.map(({ name, index, fixedLayout }) => ({ name, index, fixedLayout })), chapter, cover };
   } catch (error) { zip.close(); throw error; }
 }
 if (parentPort) {

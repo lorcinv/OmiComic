@@ -6,13 +6,14 @@ import { version as appVersion } from "../../package.json";
 import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
 import { backupFilename, createDataBackup, parseDataBackup, mergeBackup, autoMatchBackupLocations, type DataImportPreview } from '../../electron/shared/dataBackup';
 import { mobileTypography } from '../../electron/shared/desktopTypography';
+import { normalizeThemePreferences } from '../../electron/shared/colorTheme';
 
 const defaults: AppSettings = {
   showHomePage: true,
   language: 'zh-CN',
   mobileReaderAutoHide: true,
   mobileLibraryLayout: "grid", mobileGridColumns: 2, mobileListCoverSize: 82, readerVolumeKeys: false, readerVolumeKeysReversed: false, mobilePanoramaTapPaging:false,
-  colorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
+  colorTheme: "mist", followSystemTheme: false, dayColorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
   pageSize: 50, sortMode: "name-asc", sortDirection: "asc", folderFirst: true,
   hideBookshelfItemsInLibrary: true, showProgressBar: true, showProgressText: true,
   progressTextMode: "page", progressBarThickness: "normal", readerDefaultFitMode: "fit-window",
@@ -48,6 +49,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     ...stored,
   };
   data.settings = { ...defaults, ...stored?.settings };
+  Object.assign(data.settings, normalizeThemePreferences(data.settings));
   data.settings.showHomePage = data.settings.showHomePage !== false;
   if (![50,100,150,200,500].includes(Number(data.settings.pageSize))) data.settings.pageSize = 50;
   data.settings.searchSplitSpaces = data.settings.searchSplitSpaces === true;
@@ -143,7 +145,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     getAndroidCacheInfo: () => call("getAndroidCacheInfo"),
     clearAndroidReadCache: () => call("clearAndroidReadCache"),
     getAppData: () => read(() => data),
-    updateSettings: input => write(d => (d.settings = {...d.settings,...input,...mobileTypography({...d.settings,...input})})),
+    updateSettings: input => write(d => (d.settings = {...d.settings,...input,...normalizeThemePreferences({...d.settings,...input}),...mobileTypography({...d.settings,...input})})),
     addLibraryRoot: input => write(d => {
       const root = d.library.roots.find(r => r.path === input.path);
       if (root) return root;
@@ -250,6 +252,9 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     releaseReaderResource: path=>call("releaseReaderResource",{path}),
     setReaderSession: async()=>ok(null),
     openDocument: input=>call("openDocument",input),
+    registerDocumentImage:(id,data)=>call("registerDocumentImage",{id,data}),
+    renderDocumentImage:(url,tile,preview)=>call("renderDocumentImage",{url,tile,preview}),
+    renderDocumentPage:(id,index,preview)=>call("renderDocumentPage",{id,index,preview}),
     readDocumentRange: async(id,begin,end)=>{
       try {
         // Keep document bytes binary. JSON/base64 decoding on the UI thread
@@ -294,6 +299,8 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     toggleMaximizeWindow:async()=>ok(false),isWindowMaximized:async()=>ok(false),
     setReaderVolumeKeys:enabled=>call("setReaderVolumeKeys",{enabled}),
     setFullscreen:enabled=>call("setFullscreen",{enabled}),isFullscreen:()=>call("isFullscreen"),
+    setReaderChrome:(hidden,active=true)=>call("setReaderChrome",{hidden,active}),
+    prepareEpubReaderViewport:path=>call("prepareEpubReaderViewport",{key:path}),
   };
   return api;
 }

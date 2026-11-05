@@ -353,6 +353,7 @@ contextBridge.exposeInMainWorld("omicomic", {
   chooseExternalFiles: (): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:选择"),
   removeTemporaryOpened: (key: string): Promise<操作结果<null>> => ipcRenderer.invoke("外部文件:移除引用", key),
   promoteTemporaryOpened: (key: string): Promise<操作结果<OmiComicAppData>> => ipcRenderer.invoke("外部文件:加入资源库", key),
+  setDocumentPurpose:(id:string,purpose:"reader"|"thumbnail")=>ipcRenderer.invoke("document:purpose",id,purpose),
   openDocument: (input: { path: string; type: "pdf" | "epub" | "mobi"; id: string; purpose?: "reader" | "thumbnail" }) => ipcRenderer.invoke("document:open", input),
   readDocumentRange: (id: string, begin: number, end: number) => ipcRenderer.invoke("document:range", id, begin, end),
   readDocumentChapter: (id: string, index: number) => ipcRenderer.invoke("document:chapter", id, index),

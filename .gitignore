@@ -23,6 +23,7 @@ dist-electron/
 
 # Generated offline PDF.js fonts, maps, and decoders
 public/pdfjs/
+public/pdfjs-compat/
 
 # Reproducible test outputs
 test-results/

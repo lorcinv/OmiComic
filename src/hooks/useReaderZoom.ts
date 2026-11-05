@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { animateReaderMotion, zoomRestoreProgress } from '../reader/transitionAnimation';
+import { readerMotionStyle } from '../reader/cssMotion';
 import { noteDisplaySamplingMotion } from '../reader/displaySampling';
 
 type View = { scale: number; x: number; y: number };
@@ -95,8 +96,8 @@ export default function useReaderZoom(stage: RefObject<HTMLDivElement>, resetKey
       return false;
     }
     if(current.current.scale>1){
-      // Capture reserves panning, but a stationary mouse is still a page tap.
-      if(e.pointerType==='mouse'&&Math.hypot(a.x-start.x,a.y-start.y)<4)return false;
+      // Capturing a zoomed page reserves panning, without consuming a tap.
+      if(!pinching.current&&Math.hypot(a.x-start.x,a.y-start.y)<(e.pointerType==='mouse'?4:8))return false;
       const x=start.view.x+a.x-start.x;
       apply({...current.current,x,y:start.view.y+a.y-start.y});
       if(config.current.pageSwipe&&!pinching.current&&e.pointerType==='touch')pageOverflow.current=x-current.current.x;
@@ -113,9 +114,9 @@ export default function useReaderZoom(stage: RefObject<HTMLDivElement>, resetKey
       else lastTap.current={time:e.timeStamp,x:e.clientX,y:e.clientY};
     }
     points.current.delete(e.pointerId);if(points.current.size)base();else{drag.current=null;gesture.current=false;pinching.current=false;}
-    const mouseTap=e.pointerType==='mouse'&&!wasPinch&&start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)<4;
-    return (wasGesture&&!mouseTap)||restored;
+    const tap=!wasPinch&&start&&Math.hypot(e.clientX-start.x,e.clientY-start.y)<(e.pointerType==='mouse'?4:8);
+    return (wasGesture&&!tap)||restored;
   };
   const cancel=(e:ReactPointerEvent<HTMLDivElement>)=>{points.current.delete(e.pointerId);if(!points.current.size){drag.current=null;gesture.current=false;pinching.current=false;}};
-  return {active:Math.abs(view.scale-1)>.001,scale:view.scale,x:view.x,y:view.y,setScale,panTo:(x:number,y:number)=>apply({...current.current,x,y}),pageOverflow:()=>pageOverflow.current,reset:()=>reset(),down,move,up,cancel,style:{scale:String(options.panorama?1:view.scale),translate:`${view.x}px ${view.y}px`} as CSSProperties};
+  return {active:Math.abs(view.scale-1)>.001,scale:view.scale,x:view.x,y:view.y,setScale,panTo:(x:number,y:number)=>apply({...current.current,x,y}),pageOverflow:()=>pageOverflow.current,reset:()=>reset(),down,move,up,cancel,style:(options.panorama?{scale:'1',translate:`${view.x}px ${view.y}px`}:readerMotionStyle(view.x,view.y,view.scale)) as CSSProperties};
 }

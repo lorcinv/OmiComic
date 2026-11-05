@@ -35,13 +35,17 @@ export function connectAndroid(): Promise<NativeCall> {
         pending.set(id, { resolve: value => resolveCall(value as T), reject: rejectCall, timer });
         port.postMessage(JSON.stringify({ id, method, args }));
       });
+      let lastTheme = '';
       const syncTheme = () => {
         const theme = document.documentElement.dataset.colorTheme;
-        if (theme) void call('setColorTheme', { theme }).catch(() => undefined);
+        const followSystemTheme = document.documentElement.dataset.followSystemTheme === 'true';
+        const dayColorTheme = document.documentElement.dataset.dayColorTheme || 'mist';
+        const key = JSON.stringify([theme, followSystemTheme, dayColorTheme]);
+        if (theme && key !== lastTheme) { lastTheme = key; void call('setColorTheme', { theme, followSystemTheme, dayColorTheme }).catch(() => { lastTheme = ''; }); }
       };
       connected=call;
       notify=(method,args)=>port.postMessage(JSON.stringify({id:0,method,args}));
-      new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-theme'] });
+      new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-theme', 'data-follow-system-theme', 'data-day-color-theme'] });
       syncTheme();
       resolve(call);
     });

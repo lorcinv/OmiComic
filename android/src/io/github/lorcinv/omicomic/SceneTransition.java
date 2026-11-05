@@ -20,6 +20,9 @@ final class SceneTransition {
   static final long READER_ENTER_MS=200;
   private boolean readerPending,readerCapturing;
   private String readerKey;
+  private int snapshotLeft,snapshotTop;
+  private boolean readerRevealed;
+  private Runnable readerBarsReady;
   private final java.util.ArrayList<Runnable> readerCaptureReady=new java.util.ArrayList<>();
   SceneTransition(Window window,FrameLayout root,FrameLayout content){this.window=window;this.root=root;this.content=content;}
   void begin(long request,Runnable ready){
@@ -46,17 +49,39 @@ final class SceneTransition {
     });
   }
   void cancelReaderIntent(String key){if(readerPending&&key.equals(readerKey))cancel();}
+  void afterReaderCapture(String key,java.util.function.Consumer<Boolean> ready){
+    Runnable check=()->ready.accept(readerPending&&!suspended&&key.equals(readerKey)&&snapshot!=null);
+    if(readerPending&&!suspended&&key.equals(readerKey)&&readerCapturing)readerCaptureReady.add(check);else check.run();
+  }
+  boolean deferReaderBars(Runnable ready){
+    if(!readerPending||readerRevealed)return false;
+    readerBarsReady=ready;return true;
+  }
+  private void revealReaderBars(){
+    readerRevealed=true;
+    Runnable ready=readerBarsReady;readerBarsReady=null;if(ready!=null)ready.run();
+  }
   private void capture(int expected,Runnable ready){
     if(expected!=generation||suspended){ready.run();return;}
     try{
-      Bitmap capture=Bitmap.createBitmap(content.getWidth(),content.getHeight(),Bitmap.Config.ARGB_8888);
-      int[] origin=new int[2];content.getLocationInWindow(origin);
-      Rect area=new Rect(origin[0],origin[1],origin[0]+content.getWidth(),origin[1]+content.getHeight());
+      // Reader entry also covers the background behind the time bar. Otherwise
+      // the new full-height page peeks through this strip before the slide starts.
+      View captured=readerPending?root:content;
+      Bitmap capture=Bitmap.createBitmap(captured.getWidth(),captured.getHeight(),Bitmap.Config.ARGB_8888);
+      int[] origin=new int[2];captured.getLocationInWindow(origin);
+      Rect area=new Rect(origin[0],origin[1],origin[0]+captured.getWidth(),origin[1]+captured.getHeight());
       // Copy the already composed frame asynchronously; WebView.draw(Canvas)
       // forces a software repaint of the entire scene on the UI thread.
       PixelCopy.request(window,area,capture,result->{
         if(expected==generation&&result==PixelCopy.SUCCESS){
-          bitmap=capture;snapshot=new ImageView(root.getContext());snapshot.setImageBitmap(bitmap);snapshot.setScaleType(ImageView.ScaleType.FIT_XY);root.addView(snapshot,new FrameLayout.LayoutParams(-1,-1));
+          // Showing/hiding system bars changes the available height during a
+          // transition. Keep the outgoing scene at its captured pixel size.
+          bitmap=capture;bitmap.setDensity(Bitmap.DENSITY_NONE);
+          snapshot=new ImageView(root.getContext());snapshot.setImageBitmap(bitmap);snapshot.setScaleType(ImageView.ScaleType.MATRIX);
+          if(root.getBackground() instanceof android.graphics.drawable.ColorDrawable)snapshot.setBackgroundColor(((android.graphics.drawable.ColorDrawable)root.getBackground()).getColor());
+          int[] rootOrigin=new int[2];root.getLocationInWindow(rootOrigin);
+          snapshotLeft=origin[0]-rootOrigin[0];snapshotTop=origin[1]-rootOrigin[1];
+          root.addView(snapshot,snapshotLayout());
           // Do not clear the native reader until its replacement snapshot has
           // actually been submitted to the window compositor.
           FrameCommit.after(snapshot,ready);
@@ -64,11 +89,22 @@ final class SceneTransition {
       },content.getHandler());
     }catch(IllegalArgumentException|OutOfMemoryError ignored){ready.run();}
   }
+  private FrameLayout.LayoutParams snapshotLayout(){
+    FrameLayout.LayoutParams layout=new FrameLayout.LayoutParams(bitmap.getWidth(),bitmap.getHeight(),Gravity.TOP|Gravity.LEFT);
+    layout.leftMargin=snapshotLeft-root.getPaddingLeft();layout.topMargin=snapshotTop-root.getPaddingTop();return layout;
+  }
+  void insetsChanged(){
+    // FrameLayout padding applies to every child. Anchor the old scene to its
+    // captured window coordinates instead of moving it with the new reader.
+    if(snapshot!=null&&bitmap!=null)snapshot.setLayoutParams(snapshotLayout());
+  }
   void commit(long request,String direction){
     commit(request,direction,36,40);
   }
   void commit(long request,String direction,float x,float y){
     if(suspended||request!=id)return;
+    // A failed PixelCopy still has to release the deferred bar policy.
+    if(readerPending)revealReaderBars();
     if(snapshot==null)return;
     ImageView old=snapshot;
     old.animate().cancel();
@@ -130,6 +166,7 @@ final class SceneTransition {
     content.animate().cancel();content.setTranslationX(0);content.setAlpha(1);content.setScaleX(1);content.setScaleY(1);
     if(snapshot!=null){snapshot.animate().cancel();root.removeView(snapshot);snapshot.setImageDrawable(null);snapshot=null;}
     readerPending=false;readerCapturing=false;readerKey=null;
+    revealReaderBars();readerRevealed=false;
     java.util.ArrayList<Runnable> ready=new java.util.ArrayList<>(readerCaptureReady);readerCaptureReady.clear();for(Runnable callback:ready)callback.run();
     // RenderThread may still hold the old display list; release by reachability.
     bitmap=null;

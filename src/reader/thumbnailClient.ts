@@ -2,6 +2,7 @@ import type { 缩略图输入, 缩略图结果, 操作结果 } from "../types";
 import { isAndroid } from "../platform";
 import { clearMobilePagePreviews } from "./mobilePagePreviews";
 import {readPdfCover,savePdfCover,clearPdfCovers} from './pdfCoverStore';
+import {loadPdfRuntime} from './loadPdfRuntime';
 
 const cache = new Map<string, string>();
 const pending = new Map<string, Promise<string | null>>();
@@ -156,8 +157,10 @@ export async function getResourceThumbnail(input: 缩略图输入, signal?: Abor
   return completeCover(await sharedAndroidCover(input, signal, version));
 }
 async function completeCover(result: 操作结果<缩略图结果>): Promise<操作结果<缩略图结果>> {
-  if(result.ok&&result.data.pdfPath)void import('./pdfRuntime').then(runtime=>runtime.warmPdfWorker()).catch(()=>undefined);
   if (!result.ok || result.data.url || !result.data.pdfPath) return result;
+  // A native/cached cover is complete. PDF.js belongs only to the fallback
+  // render below; prewarming it for every visible PDF stalls a cold library.
+  if(!isAndroid())void loadPdfRuntime().then(runtime=>runtime.warmPdfWorker()).catch(()=>undefined);
   const key = `${result.data.pdfPath}:${result.data.sourceVersion ?? ""}`;
   let url = cache.get(key) ?? null;
   if(!url)url=await readPdfCover(key);

@@ -1,7 +1,7 @@
 {
   "name": "omicomic",
-  "version": "1.1.78",
-  "desktopVersion": "1.1.78",
+  "version": "1.1.85",
+  "desktopVersion": "1.1.85",
   "private": true,
   "description": "OmiComic Windows 与 Android 本地漫画阅读器",
   "main": "dist-electron/main.js",
@@ -29,7 +29,9 @@
   "dependencies": {
     "@lingo-reader/mobi-parser": "0.4.6",
     "7zip-bin-full": "26.4.1",
+    "core-js": "3.50.0",
     "fast-xml-parser": "^5.11.2",
+    "pdfjs-compat": "npm:pdfjs-dist@4.10.38",
     "pdfjs-dist": "^6.4.299",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -52,6 +54,7 @@
     "electron-builder": "26.15.3",
     "esbuild": "0.25.12",
     "jsdom": "^26.1.0",
+    "postcss": "8.5.29",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vitest": "5.0.3",

@@ -1,6 +1,8 @@
 # 当前项目状态
 
-**Android 1.1.36 / Windows 1.1.36 · 2026-10-17**。两端共用 Omi 介绍、版本和 GitHub 链接，PC 设置新增关于页；GitHub README、发布说明与 Omi 占位图同步交付。[发布说明](docs/releases/v1.1.36.md) · [验证记录](docs/verification-1.1.36.md)。
+**Android 1.1.85 同版 EPUB 热修复 · 2026-11-05**。安卓 EPUB 提前准备最终阅读窗口，并将其他章节后台分页延后至入场完成；版本仍为 1.1.85 / 10185。新包与源码位于 `release/OmiComic-1.1.85-EPUB启动热修复版/`。Windows 保持此前的 1.1.85 交付。[热修复报告与验证边界](docs/status/2026-11-05-1.1.85-epub-hotfix.md)。
+
+**Android / Windows 1.1.85 本地交付 · 2026-11-05**。完善平板阅读入场顶部衔接、略微加深安卓漫画卡片蒙版；双端增加默认关闭的系统主题跟随，记住日间配色并自动切换夜色。[本轮工作报告](docs/status/2026-11-05-1.1.85-work-report.md) · [1.1.84 状态栏与 PDF 入场修复](docs/status/2026-11-05-1.1.84-work-report.md) · [1.1.83 阅读细节修复](docs/status/2026-11-05-1.1.83-work-report.md)。本次发布双端安装包、便携版与源码，安卓沿用原签名。
 
 ## 手机界面与阅读
 
@@ -35,9 +37,9 @@
 
 ## 验证与交付
 
-Android 最新交付路径为 `release/OmiComic-1.1.23-android.apk`，此前结果见 [1.1.23 验证](docs/verification-1.1.23.md)。Windows 使用 `release/OmiComic-Portable-1.1.34-x64.zip`，本轮结果见 [1.1.34 验证](docs/verification-1.1.34-windows.md)。
+Android 最新包为 `release/OmiComic-1.1.85-EPUB启动热修复版/OmiComic-1.1.85-android.apk`，结果见 [EPUB 热修复报告](docs/status/2026-11-05-1.1.85-epub-hotfix.md)。Windows 保持 `release/OmiComic-1.1.85-主题跟随与交互修复版/` 中的 1.1.85 安装版与便携版。
 
-Android 保持原发布签名与递增 versionCode，可直接覆盖安装，不要先卸载。运行测试使用 Android 15 x86_64 模拟器与系统 WebView 124；没有连接实体手机。Windows 验证运行从交付 ZIP 解压的实际 EXE，并使用隔离测试数据。
+Android 沿用原发布签名，本次热修复的 versionCode 保持 10185，可直接覆盖安装，不要先卸载。本次通过类型、构建、核心、DOM 和浏览器回归；模拟器启动失败，没有完成此热修复 APK 的运行验证，也没有连接实体设备。此前 1.1.85 的运行验证记录见原工作报告。
 
 ## 当前边界
 

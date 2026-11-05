@@ -41,7 +41,15 @@ public final class MainActivity extends Activity {
   private int pickerId = -1;
   private String pendingDataExport;
   private boolean fullscreen;
+  private boolean readerChromeHidden;
+  private boolean readerActive;
+  private boolean epubViewportPrepared;
+  private String epubViewportKey;
+  private long epubViewportRequest;
   private boolean keyboardVisible;
+  private int readerStatusInset=-1;
+  private Boolean requestedStatusHidden,requestedNavigationHidden;
+  private boolean systemThemeApplied;
 
   @Override public void onCreate(Bundle state) {
     super.onCreate(state);
@@ -64,6 +72,8 @@ public final class MainActivity extends Activity {
     // Keep one compositor mode throughout navigation and background restore.
     // Root/theme surfaces paint the background; only the reader DOM is clear.
     web.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+    web.setVerticalScrollBarEnabled(false);
+    web.setHorizontalScrollBarEnabled(false);
     content.addView(web, new FrameLayout.LayoutParams(-1,-1));
     // Only thumbnail pixels live above the WebView. This view is not clickable:
     // Omi's filmstrip still owns scrolling, selection, borders and captions.
@@ -72,25 +82,32 @@ public final class MainActivity extends Activity {
     sceneTransition=new SceneTransition(getWindow(),frame,content);
     resumeDrawGate=new ResumeDrawGate(getWindow(),frame,content,web);
     setContentView(frame);
-    applySystemTheme(getPreferences(MODE_PRIVATE).getString("colorTheme", "mist"));
-    if (Build.VERSION.SDK_INT >= 30) {
-      getWindow().setDecorFitsSystemWindows(false);
-      frame.setOnApplyWindowInsetsListener((v,insets)->{
-        boolean visible=insets.isVisible(WindowInsets.Type.ime());
+    applySystemTheme(savedSystemTheme());
+    if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
+    frame.setOnApplyWindowInsetsListener((v,insets)->{
+        boolean visible=Build.VERSION.SDK_INT>=30?insets.isVisible(WindowInsets.Type.ime()):insets.getSystemWindowInsetBottom()>120*getResources().getDisplayMetrics().density;
         if(keyboardVisible&&!visible)event("keyboard-hidden");
         keyboardVisible=visible;
-        android.graphics.Insets padding = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
-        v.setPadding(padding.left,padding.top,padding.right,padding.bottom); return insets;
-      });
-    } else {
-      frame.getViewTreeObserver().addOnGlobalLayoutListener(()->{
-        android.graphics.Rect visibleFrame=new android.graphics.Rect();
-        frame.getWindowVisibleDisplayFrame(visibleFrame);
-        boolean visible=frame.getRootView().getHeight()-visibleFrame.bottom>120*getResources().getDisplayMetrics().density;
-        if(keyboardVisible&&!visible)event("keyboard-hidden");
-        keyboardVisible=visible;
-      });
-    }
+        int left=0,top=0,right=0,bottom,status;
+        if(Build.VERSION.SDK_INT>=30){
+          android.graphics.Insets safe=insets.getInsets(WindowInsets.Type.displayCutout()|WindowInsets.Type.ime()|(fullscreen?0:WindowInsets.Type.navigationBars()));
+          left=safe.left;top=safe.top;right=safe.right;bottom=safe.bottom;
+          status=insets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top;
+        }else{
+          bottom=fullscreen&&!visible?0:insets.getSystemWindowInsetBottom();status=insets.getStableInsetTop();
+          if(!fullscreen){left=insets.getSystemWindowInsetLeft();right=insets.getSystemWindowInsetRight();}
+          if(Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){android.view.DisplayCutout cutout=insets.getDisplayCutout();left=Math.max(left,cutout.getSafeInsetLeft());top=cutout.getSafeInsetTop();right=Math.max(right,cutout.getSafeInsetRight());bottom=Math.max(bottom,cutout.getSafeInsetBottom());}
+        }
+        // A reader always keeps the same canvas, whether its controls/time bar
+        // are shown or hidden. Only the toolbar needs the stable status inset.
+        int toolbarInset=fullscreen||tabletLandscape()?0:Math.max(0,status-top);
+        if(readerStatusInset!=toolbarInset){readerStatusInset=toolbarInset;publishReaderStatusInset();}
+        if(!readerActive&&!epubViewportPrepared&&!hideStatusBar())top=Math.max(top,status);
+        if(v.getPaddingLeft()!=left||v.getPaddingTop()!=top||v.getPaddingRight()!=right||v.getPaddingBottom()!=bottom){
+          v.setPadding(left,top,right,bottom);sceneTransition.insetsChanged();
+        }
+        return insets;
+    });
     WebSettings settings = web.getSettings();
     settings.setJavaScriptEnabled(true);
     settings.setDomStorageEnabled(true);
@@ -100,6 +117,9 @@ public final class MainActivity extends Activity {
     settings.setSupportMultipleWindows(false);
     settings.setMediaPlaybackRequiresUserGesture(true);
     settings.setTextZoom(100);
+    settings.setSupportZoom(false);
+    settings.setBuiltInZoomControls(false);
+    settings.setDisplayZoomControls(false);
     web.setWebChromeClient(new WebChromeClient());
     web.setWebViewClient(new WebViewClient() {
       @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
@@ -126,6 +146,7 @@ public final class MainActivity extends Activity {
       }
       @Override public void onPageFinished(WebView v,String url) {
         if(!url.equals("https://omi.local/index.html"))return;
+        publishReaderStatusInset();
         // A failed frontend must still reveal its startup error; normal entry
         // releases this cover as soon as React has committed its first frame.
         v.postDelayed(()->revealLaunch(false),4000);
@@ -146,20 +167,30 @@ public final class MainActivity extends Activity {
               if(method.equals("readerStats")){reply(id,readerSurface.stats(),null);return;}
               if(method.equals("beginScene")){sceneTransition.begin(args.optLong("request"),()->reply(id,true,null));return;}
               if(method.equals("readerIntent")){sceneTransition.readerIntent(args.optString("key"));if(id!=0)reply(id,true,null);return;}
-              if(method.equals("cancelReaderIntent")){sceneTransition.cancelReaderIntent(args.optString("key"));if(id!=0)reply(id,true,null);return;}
+              if(method.equals("cancelReaderIntent")){if(args.optString("key").equals(epubViewportKey))resetEpubReaderViewport();sceneTransition.cancelReaderIntent(args.optString("key"));if(id!=0)reply(id,true,null);return;}
+              if(method.equals("prepareEpubReaderViewport")){prepareEpubReaderViewport(args.optString("key"),id);return;}
               if(method.equals("commitScene")){long request=args.optLong("request");String direction=args.optString("direction","forward");JSONObject origin=args.optJSONObject("origin");float scale=web.getWidth()/(float)args.optDouble("viewportWidth",web.getWidth());float x=origin==null?36:(float)origin.optDouble("x")*scale,y=origin==null?40:(float)origin.optDouble("y")*scale;web.postVisualStateCallback(request,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){readerSurface.afterFrameReady(()->FrameCommit.after(web,()->{sceneTransition.commit(request,direction,x,y);reply(id,true,null);}));}});return;}
-              if(method.equals("cancelScene")){sceneTransition.cancel();if(id!=0)reply(id,true,null);return;}
+              if(method.equals("cancelScene")){resetEpubReaderViewport();sceneTransition.cancel();if(id!=0)reply(id,true,null);return;}
               if(method.equals("waitScene")){sceneTransition.afterFinished(args.optLong("request"),()->reply(id,true,null));return;}
               if(method.equals("chooseFolder")||method.equals("chooseFile")){choose(id,method.equals("chooseFolder"));return;}
               if(method.equals("exportBackupFile")||method.equals("readBackupFile")){chooseBackup(id,method.equals("exportBackupFile"),args);return;}
               if(method.equals("close")){reply(id,null,null);finish();return;}
               if(method.equals("background")){reply(id,null,null);moveTaskToBack(true);return;}
-              if(method.equals("setColorTheme")){applySystemTheme(args.optString("theme"));reply(id,true,null);return;}
+              if(method.equals("setColorTheme")){
+                getPreferences(MODE_PRIVATE).edit().putBoolean("followSystemTheme",args.optBoolean("followSystemTheme")).putString("dayColorTheme",dayTheme(args.optString("dayColorTheme"))).apply();
+                applySystemTheme(args.optString("theme"));reply(id,true,null);return;
+              }
+              if(method.equals("isSystemDark")){reply(id,isSystemDark(),null);return;}
               if(method.equals("setFullscreen")){
                 fullscreen=args.optBoolean("enabled");
-                if(Build.VERSION.SDK_INT>=30){if(fullscreen)web.getWindowInsetsController().hide(WindowInsets.Type.systemBars());else web.getWindowInsetsController().show(WindowInsets.Type.systemBars());}
-                else { web.setSystemUiVisibility(fullscreen?5894:0); applySystemTheme(systemTheme); }
+                applySystemBars();
                 reply(id,fullscreen,null);return;
+              }
+              if(method.equals("setReaderChrome")){
+                readerActive=args.optBoolean("active",true);readerChromeHidden=readerActive&&args.optBoolean("hidden");
+                resetEpubReaderViewport();
+                if(!readerActive||!sceneTransition.deferReaderBars(MainActivity.this::applySystemBars))applySystemBars();
+                reply(id,readerChromeHidden,null);return;
               }
               if(method.equals("isFullscreen")){reply(id,fullscreen,null);return;}
               if(method.equals("setReaderVolumeKeys")){readerVolumeKeys=args.optBoolean("enabled");reply(id,readerVolumeKeys,null);return;}
@@ -173,11 +204,79 @@ public final class MainActivity extends Activity {
         web.postWebMessage(new WebMessage("omi-native",new WebMessagePort[]{ports[1]}),Uri.parse("https://omi.local"));
       }
     });
+    web.post(this::applySystemBars);
     web.loadUrl("https://omi.local/index.html");
   }
 
+  private boolean tabletLandscape(){
+    android.content.res.Configuration config=getResources().getConfiguration();
+    return config.smallestScreenWidthDp>=600&&config.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+  }
+  private boolean hideStatusBar(){return fullscreen||readerChromeHidden||tabletLandscape();}
+  private void resetEpubReaderViewport(){
+    epubViewportRequest++;epubViewportKey=null;
+    if(epubViewportPrepared){epubViewportPrepared=false;rootFrame.requestApplyInsets();}
+  }
+  private void prepareEpubReaderViewport(String key,int id){
+    final long request=++epubViewportRequest;
+    final java.util.concurrent.atomic.AtomicBoolean replied=new java.util.concurrent.atomic.AtomicBoolean();
+    final java.util.function.Consumer<Boolean> finish=ready->{if(replied.compareAndSet(false,true))reply(id,ready&&request==epubViewportRequest,null);};
+    // An optional layout handshake must never hold a book behind an old frame.
+    web.postDelayed(()->finish.accept(false),100);
+    sceneTransition.afterReaderCapture(key,covered->{
+      if(replied.get()||!covered||readerActive||request!=epubViewportRequest){finish.accept(false);return;}
+      epubViewportKey=key;epubViewportPrepared=true;
+      boolean alreadyFull=rootFrame.getPaddingTop()==0||readerStatusInset<=0;
+      rootFrame.requestApplyInsets();
+      if(alreadyFull){finish.accept(true);return;}
+      // The library remains covered at its original coordinates. Settle EPUB's
+      // final viewport before parsing/layout; the system time bar stays visible.
+      FrameCommit.after(rootFrame,()->web.postVisualStateCallback(id,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){finish.accept(true);}}));
+    });
+  }
+  private void publishReaderStatusInset(){
+    if(web!=null)web.evaluateJavascript("document.documentElement.style.setProperty('--android-reader-status-inset','"+(Math.max(0,readerStatusInset)/getResources().getDisplayMetrics().density)+"px')",null);
+  }
+  private void applySystemBars(){
+    if(web==null)return;
+    boolean hideStatus=hideStatusBar();
+    if(Build.VERSION.SDK_INT>=30){
+      android.view.WindowInsetsController controller=getWindow().getInsetsController();
+      if(controller!=null){
+        controller.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        if(requestedStatusHidden==null||requestedStatusHidden!=hideStatus){
+          if(hideStatus)controller.hide(WindowInsets.Type.statusBars());else controller.show(WindowInsets.Type.statusBars());
+          requestedStatusHidden=hideStatus;
+        }
+        if(requestedNavigationHidden==null||requestedNavigationHidden!=fullscreen){
+          if(fullscreen)controller.hide(WindowInsets.Type.navigationBars());else controller.show(WindowInsets.Type.navigationBars());
+          requestedNavigationHidden=fullscreen;
+        }
+      }
+      rootFrame.requestApplyInsets();
+    }else{
+      int flags=View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+      if(hideStatus)flags|=View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+      if(fullscreen)flags|=View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+      if(!systemTheme.equals("night"))flags|=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+      if(web.getSystemUiVisibility()!=flags)web.setSystemUiVisibility(flags);
+      rootFrame.requestApplyInsets();
+    }
+  }
+  @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);refreshSystemTheme();event("system-theme-changed");applySystemBars();}
+  @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(focused)applySystemBars();}
+
+  private boolean isSystemDark(){return (getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES;}
+  private String dayTheme(String theme){return Arrays.asList("mist","nord","sand").contains(theme)?theme:"mist";}
+  private String savedSystemTheme(){
+    android.content.SharedPreferences saved=getPreferences(MODE_PRIVATE);
+    return saved.getBoolean("followSystemTheme",false)?isSystemDark()?"night":dayTheme(saved.getString("dayColorTheme","mist")):saved.getString("colorTheme","mist");
+  }
+  private void refreshSystemTheme(){if(getPreferences(MODE_PRIVATE).getBoolean("followSystemTheme",false))applySystemTheme(savedSystemTheme());}
   private void applySystemTheme(String requested) {
     String theme = Arrays.asList("mist", "nord", "sand", "night").contains(requested) ? requested : "mist";
+    if(systemThemeApplied&&systemTheme.equals(theme))return;
+    systemThemeApplied=true;
     systemTheme = theme;
     boolean dark = theme.equals("night");
     int color = dark ? 0xff2e3440 : theme.equals("nord") ? 0xffe2e8f2 : theme.equals("sand") ? 0xfff3efe9 : 0xfff8f8f7;
@@ -289,8 +388,8 @@ public final class MainActivity extends Activity {
     super.onStart();
     if(webStopped){resumeDrawGate.begin();web.onResume();webStopped=false;}
   }
-  @Override protected void onResume(){super.onResume();library.pauseCatalog(false);sceneTransition.resume();event("app-resume");event("resume");resumeDrawGate.readyWhenWebIsReady();}
-  @Override protected void onPause(){library.pauseCatalog(true);readerVolumeKeys=false;capturedVolumeKeys.clear();sceneTransition.pause();launchReveal.finish();event("app-pause");event("pause");resumeDrawGate.pause();super.onPause();}
+  @Override protected void onResume(){super.onResume();refreshSystemTheme();library.pauseCatalog(false);sceneTransition.resume();event("app-resume");event("resume");resumeDrawGate.readyWhenWebIsReady();}
+  @Override protected void onPause(){resetEpubReaderViewport();library.pauseCatalog(true);readerVolumeKeys=false;capturedVolumeKeys.clear();sceneTransition.pause();launchReveal.finish();event("app-pause");event("pause");resumeDrawGate.pause();super.onPause();}
   // onPause can run while the launcher is still animating the app window.
   // Suspend WebView only once it is invisible, keeping that outgoing frame.
   @Override protected void onStop(){web.onPause();webStopped=true;super.onStop();}
