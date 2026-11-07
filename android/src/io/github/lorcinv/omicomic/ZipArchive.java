@@ -29,6 +29,13 @@ final class ZipArchive {
     }
   }
   static ZipArchive open(SeekableSource source)throws IOException {
+    return open(source,false);
+  }
+  /** EPUB sessions need XML/XHTML as well as images; the comic index stays unchanged. */
+  static ZipArchive openDocument(SeekableSource source)throws IOException {
+    return open(source,true);
+  }
+  private static ZipArchive open(SeekableSource source,boolean document)throws IOException {
     long length=source.size();if(length<22)return null;
     byte[] tail=source.readAt(Math.max(0,length-65557),(int)Math.min(65557,length));int end=-1;
     for(int p=tail.length-22;p>=0;p--)if(u32(tail,p)==0x06054b50L&&p+22+u16(tail,p+20)==tail.length){end=p;break;}
@@ -58,14 +65,15 @@ final class ZipArchive {
       // Some older writers store UTF-8 names without the language flag. Preserve
       // those names when the entire byte sequence is valid UTF-8; otherwise CP437.
       if((flags&2048)==0)try{name=StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes,0,nameLength)).toString();}catch(CharacterCodingException legacy){}
-      Long modified=dosTime(u16(header,14),u16(header,12));
+      // Document entries are read by spine order and never sorted by timestamps.
+      Long modified=document?null:dosTime(u16(header,14),u16(header,12));
       for(int p=nameLength;p+4<=bytes.length;){int kind=u16(bytes,p),len=u16(bytes,p+2);p+=4;if(p+len>bytes.length)throw new IOException("ZIP 附加信息损坏。");
         if(kind==1){int q=p;
           if(size==0xffffffffL){if(q+8>p+len)throw new IOException("ZIP64 大小缺失。");size=u64(bytes,q);q+=8;}
           if(packed==0xffffffffL){if(q+8>p+len)throw new IOException("ZIP64 长度缺失。");packed=u64(bytes,q);q+=8;}
           if(offset==0xffffffffL){if(q+8>p+len)throw new IOException("ZIP64 位置缺失。");offset=u64(bytes,q);}
         }else if(kind==0x7075&&len>=5&&bytes[p]==1){CRC32 nameCrc=new CRC32();nameCrc.update(bytes,0,nameLength);if(nameCrc.getValue()==u32(bytes,p+1))name=new String(bytes,p+5,len-5,StandardCharsets.UTF_8);}
-        else if(kind==0x5455&&len>=5&&(bytes[p]&1)!=0)modified=u32(bytes,p+1)*1000;
+        else if(!document&&kind==0x5455&&len>=5&&(bytes[p]&1)!=0)modified=u32(bytes,p+1)*1000;
         p+=len;
       }
       names.add(name);
@@ -73,7 +81,7 @@ final class ZipArchive {
       check(offset,30,central);
       // Other ZIP methods retain the libarchive compatibility path for the entire book.
       if(method!=0&&method!=8)return null;
-      if((NativeArchives.image(name)&&size<=MAX_IMAGE)||NativeArchives.archive(name)){
+      if((document&&!name.endsWith("/"))||(NativeArchives.image(name)&&size<=MAX_IMAGE)||NativeArchives.archive(name)){
         if(index.entries.put(name,new Entry(name,offset,packed,size,crc,method,flags,modified))!=null)throw new IOException("压缩包中存在重复的图片路径。");
       }
       cursor+=46L+nameLength+extraLength+comment;

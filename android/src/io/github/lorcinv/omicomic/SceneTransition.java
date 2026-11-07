@@ -26,6 +26,9 @@ final class SceneTransition {
   private final java.util.ArrayList<Runnable> readerCaptureReady=new java.util.ArrayList<>();
   SceneTransition(Window window,FrameLayout root,FrameLayout content){this.window=window;this.root=root;this.content=content;}
   void begin(long request,Runnable ready){
+    begin(request,false,ready);
+  }
+  void begin(long request,boolean coverRoot,Runnable ready){
     if(readerPending&&!suspended){id=request;if(readerCapturing)readerCaptureReady.add(ready);else if(snapshot!=null)FrameCommit.after(snapshot,ready);else ready.run();return;}
     boolean interrupted=snapshot!=null;
     cancel();id=request;
@@ -33,8 +36,8 @@ final class SceneTransition {
     final int expected=generation;
     // Rapid back/forward must capture the settled page, not the previous
     // transition's translated or half-faded buffer.
-    if(interrupted)FrameCommit.after(content,()->capture(expected,ready));
-    else capture(expected,ready);
+    if(interrupted)FrameCommit.after(content,()->capture(expected,coverRoot,ready));
+    else capture(expected,coverRoot,ready);
   }
   void readerIntent(String key){
     if(suspended||content.getWidth()==0||content.getHeight()==0)return;
@@ -49,6 +52,7 @@ final class SceneTransition {
     });
   }
   void cancelReaderIntent(String key){if(readerPending&&key.equals(readerKey))cancel();}
+  void cancel(long request){if(request==id)cancel();}
   void afterReaderCapture(String key,java.util.function.Consumer<Boolean> ready){
     Runnable check=()->ready.accept(readerPending&&!suspended&&key.equals(readerKey)&&snapshot!=null);
     if(readerPending&&!suspended&&key.equals(readerKey)&&readerCapturing)readerCaptureReady.add(check);else check.run();
@@ -62,11 +66,14 @@ final class SceneTransition {
     Runnable ready=readerBarsReady;readerBarsReady=null;if(ready!=null)ready.run();
   }
   private void capture(int expected,Runnable ready){
+    capture(expected,readerPending,ready);
+  }
+  private void capture(int expected,boolean coverRoot,Runnable ready){
     if(expected!=generation||suspended){ready.run();return;}
     try{
       // Reader entry also covers the background behind the time bar. Otherwise
       // the new full-height page peeks through this strip before the slide starts.
-      View captured=readerPending?root:content;
+      View captured=coverRoot?root:content;
       Bitmap capture=Bitmap.createBitmap(captured.getWidth(),captured.getHeight(),Bitmap.Config.ARGB_8888);
       int[] origin=new int[2];captured.getLocationInWindow(origin);
       Rect area=new Rect(origin[0],origin[1],origin[0]+captured.getWidth(),origin[1]+captured.getHeight());
@@ -106,6 +113,9 @@ final class SceneTransition {
     // A failed PixelCopy still has to release the deferred bar policy.
     if(readerPending)revealReaderBars();
     if(snapshot==null)return;
+    // A reader layout replacement is already fully composed behind the old
+    // frame. Reveal it once, without sliding or rescaling either canvas.
+    if(direction.equals("reader-layout")){cancel();return;}
     ImageView old=snapshot;
     old.animate().cancel();
     long duration=readerPending&&direction.equals("forward")?READER_ENTER_MS:direction.equals("replace")?140:240;

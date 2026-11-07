@@ -719,9 +719,13 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("tablet1179")&&fixture.contains("insets1185"))scriptAsset="reader-insets1185";
       if(fixture.startsWith("tablet1179")&&fixture.contains("theme1185"))scriptAsset="system-theme1185";
       if(fixture.startsWith("tablet1179")&&fixture.contains("epubEntry1185"))scriptAsset="epub-entry1185";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("epubStartup1186"))scriptAsset="epub-startup1186";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("panorama1186"))scriptAsset="panorama1186";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("bugs1187"))scriptAsset="panorama-bugs1187";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("startupFormats1186"))scriptAsset="startup-formats1186";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
-      deadline=System.currentTimeMillis()+((mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
+      deadline=System.currentTimeMillis()+(fixture.contains("bugs1187")?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
       String result;
       if(mode.equals("authorize1141")){
         // A background WebView pauses JavaScript callbacks while SAF owns the window.
@@ -923,6 +927,9 @@ public final class SmokeTest extends Instrumentation {
             if(Build.VERSION.SDK_INT>=30&&insets!=null)state.put("statusBarVisible",insets.isVisible(WindowInsets.Type.statusBars())).put("systemBarsBehavior",web.getWindowInsetsController().getSystemBarsBehavior());
             state.put("systemTheme",field(activity,"systemTheme"));
             state.put("webZoomSupported",web.getSettings().supportZoom()).put("rootTopPadding",((View)field(activity,"rootFrame")).getPaddingTop());
+            View rootView=(View)field(activity,"rootFrame");
+            state.put("rootLeftPadding",rootView.getPaddingLeft()).put("rootRightPadding",rootView.getPaddingRight()).put("rootBottomPadding",rootView.getPaddingBottom());
+            if(Build.VERSION.SDK_INT>=28&&insets!=null&&insets.getDisplayCutout()!=null){android.view.DisplayCutout cutout=insets.getDisplayCutout();state.put("cutoutTop",cutout.getSafeInsetTop()).put("cutoutLeft",cutout.getSafeInsetLeft()).put("cutoutRight",cutout.getSafeInsetRight());}
             int[] webOrigin=new int[2];web.getLocationInWindow(webOrigin);state.put("webY",webOrigin[1]).put("webHeight",web.getHeight());
             try{state.put("detailPlanReuses",field(surface,"detailPlanReuses")).put("detailPlansCreated",field(surface,"detailPlansCreated"));}catch(NoSuchFieldException legacy){/* Earlier APK baseline. */}
             try{state.put("windowReheats",field(surface,"windowReheats"));}catch(NoSuchFieldException legacy){}
@@ -1026,6 +1033,7 @@ public final class SmokeTest extends Instrumentation {
             MotionEvent.PointerCoords position=new MotionEvent.PointerCoords();position.pressure=1;position.size=1;
             position.x=origin[0]+(float)(from.getDouble("x")+(to.getDouble("x")-from.getDouble("x"))*fraction)*scale;
             position.y=origin[1]+(float)(from.getDouble("y")+(to.getDouble("y")-from.getDouble("y"))*fraction)*scale;
+            if(step==12){position.x+=request.optDouble("releaseCorrectionX",0)*scale;position.y+=request.optDouble("releaseCorrectionY",0)*scale;}
             MotionEvent motion=MotionEvent.obtain(down,SystemClock.uptimeMillis(),step==0?MotionEvent.ACTION_DOWN:step==12?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE,1,new MotionEvent.PointerProperties[]{finger},new MotionEvent.PointerCoords[]{position},0,0,1,1,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
             if(step==12)lastUp=motion.getEventTime();getUiAutomation().injectInputEvent(motion,!request.optBoolean("async",false));motion.recycle();SystemClock.sleep(step==0?request.optInt("holdMs",80):Math.max(1,request.optInt("stepMs",24)));
           }
@@ -1122,6 +1130,12 @@ public final class SmokeTest extends Instrumentation {
       }catch(NoSuchFieldException legacy){} // The same workload can measure the published 1.0.0 baseline.
       output.putString("result",resultObject.toString());
       File shots=getTargetContext().getExternalFilesDir(null);
+      if(args.getString("fixture","").contains("bugs1187")){
+        File trace=new File(shots,"android-bugs1187-result.json");
+        try(FileOutputStream file=new FileOutputStream(trace)){file.write(resultObject.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+        // Full frame traces exceed Binder's instrumentation result limit.
+        output.putString("result",new JSONObject().put("ok",resultObject.optBoolean("ok")).put("resultFile",trace.getAbsolutePath()).toString());
+      }
       android.graphics.Bitmap iconBitmap=android.graphics.Bitmap.createBitmap(432,432,android.graphics.Bitmap.Config.ARGB_8888);
       icon.setBounds(0,0,432,432);icon.draw(new android.graphics.Canvas(iconBitmap));
       try(FileOutputStream file=new FileOutputStream(new File(shots,"android-icon.png"))){iconBitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,file);}iconBitmap.recycle();

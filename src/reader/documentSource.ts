@@ -54,6 +54,7 @@ export class DocumentSource {
   private mobi?: import('./mobiClient').MobiClient;
   private compatibilityPdf = false;
   private nativePdf=false;
+  get nativePdfEnabled(){return this.nativePdf;}
   private pdfSize=0;
   private pdfFallback?:Promise<void>;
   private documentPages?: {chapter:number;slice:number;image:boolean;name:string}[];
@@ -67,7 +68,8 @@ export class DocumentSource {
   private indexing=false;
   private indexingTimer?:ReturnType<typeof setTimeout>;
   private readerSession?:number;
-  setReaderSession(session:number){this.readerSession=session;}
+  private nativeFitAxis?:'width'|'height';
+  setReaderSession(session:number,fitAxis?:'width'|'height'){this.readerSession=session;this.nativeFitAxis=fitAxis;}
   subscribe(listener:(change:{from:number;before:阅读资源结果['pages']})=>void){this.listeners.add(listener);return()=>{this.listeners.delete(listener);};}
   private rebuildPages(){
     const resource=this.openedResource,before=resource?.pages??[];
@@ -338,7 +340,7 @@ export class DocumentSource {
     const workKey=this.nativeWorkKey(index);
     if(this.nativePdf){
       try{
-        const result=await window.omicomic.renderDocumentPage!(this.id,index,thumbnail);if(!result.ok)throw Error(result.error.message);
+        const result=await window.omicomic.renderDocumentPage!(this.id,index,thumbnail,thumbnail?undefined:this.nativeFitAxis);if(!result.ok)throw Error(result.error.message);
         if(!thumbnail&&this.readerSession!==undefined&&hasAndroidRenderer()){
           return await this.nativePage(result.data.url,signal,workKey,prefetch);
         }

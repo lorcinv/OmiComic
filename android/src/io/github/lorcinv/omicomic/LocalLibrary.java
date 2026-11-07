@@ -66,8 +66,8 @@ final class LocalLibrary {
   private static final long MAX_FILE=1024L*1024*1024,MAX_IMAGE=64L*1024*1024;
   private static final String[] COLUMNS={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE,DocumentsContract.Document.COLUMN_LAST_MODIFIED};
   private static final class Entry {String name,path,mime;Uri uri;long size,modified,cachedAt;boolean directory;}
-  private static final class Media {Doc pdfDoc;int pdfPage;File encodedFile;String encodedKey,bodyUrl;android.graphics.Rect region;int targetWidth;String path,inner,identity;boolean preview;Media(String p,String i,boolean t,String id){path=p;inner=i;preview=t;identity=id;}}
-  private static final class Doc {String path;SeekableSource source;PdfRenderer pdf;int pdfPageCount;final Map<Integer,int[]> pdfSizes=new java.util.concurrent.ConcurrentHashMap<>();boolean closed;File imageDirectory;List<String> chapters=new ArrayList<>();}
+  private static final class Media {Doc pdfDoc;int pdfPage;String fitAxis;File encodedFile;String encodedKey,bodyUrl;android.graphics.Rect region;int targetWidth;String path,inner,identity;boolean preview;Media(String p,String i,boolean t,String id){path=p;inner=i;preview=t;identity=id;}}
+  private static final class Doc {String path;SeekableSource source;ZipArchive epubZip;PdfRenderer pdf;int pdfPageCount;final Map<Integer,int[]> pdfSizes=new java.util.concurrent.ConcurrentHashMap<>();boolean closed;File imageDirectory;List<String> chapters=new ArrayList<>();}
   private static final class CoverScan {
     final Deque<Entry> remaining=new ArrayDeque<>();
     final Set<String> visited=new HashSet<>();
@@ -544,7 +544,10 @@ final class LocalLibrary {
               if(android.os.Build.VERSION.SDK_INT>=30){try{android.graphics.Rect bounds=((android.view.WindowManager)context.getSystemService(Context.WINDOW_SERVICE)).getCurrentWindowMetrics().getBounds();targetW=Math.max(targetW,bounds.width());targetH=Math.max(targetH,bounds.height());}catch(RuntimeException unavailable){/* Retain the display-metrics fallback. */}}
               else targetH+=Math.round(24*metrics.density);
             }
-            double scale=Math.min(1d,Math.min(Math.max(1,targetW)/(double)width,Math.max(1,targetH)/(double)height));
+            // Panorama fills one axis. An ordinary fit-window body is too
+            // small and would request another region for each scrolling page.
+            double widthScale=Math.max(1,targetW)/(double)width,heightScale=Math.max(1,targetH)/(double)height;
+            double scale=Math.min(1d,"width".equals(item.fitAxis)?widthScale:"height".equals(item.fitAxis)?heightScale:Math.min(widthScale,heightScale));
             scale=Math.min(scale,Math.sqrt(6_000_000d/((double)width*height)));
             bitmapW=Math.max(1,(int)Math.floor(width*scale));bitmapH=Math.max(1,(int)Math.floor(height*scale));
             sample=Math.max(1,(int)Math.ceil(1d/scale));
@@ -840,9 +843,12 @@ final class LocalLibrary {
     else d.source=source(documentEntry,!input.optString("purpose").equals("thumbnail"));JSONArray chapters=new JSONArray();
     try {
     if(input.getString("type").equals("epub")){
-      String opf=null;for(Tag tag:xml(NativeArchives.entry(d.source,"META-INF/container.xml",2*1024*1024)))if(tag.name.equals("rootfile")){opf=tag.get("full-path");break;}
+      // Reuse one bounded ZIP directory for package metadata and every chapter.
+      // Unusual ZIP variants keep the existing libarchive compatibility path.
+      try{d.epubZip=ZipArchive.openDocument(d.source);}catch(IOException unsupported){d.epubZip=null;}
+      String opf=null;for(Tag tag:xml(epubEntry(d,"META-INF/container.xml",2*1024*1024)))if(tag.name.equals("rootfile")){opf=tag.get("full-path");break;}
       if(opf==null||opf.isEmpty())throw new IOException("EPUB 缺少书目。");
-      List<Tag> packageDoc=xml(NativeArchives.entry(d.source,opf,4*1024*1024));Map<String,String> manifest=new HashMap<>();
+      List<Tag> packageDoc=xml(epubEntry(d,opf,4*1024*1024));Map<String,String> manifest=new HashMap<>();
       boolean fixedLayout=false;for(Tag tag:packageDoc)if(tag.name.equals("meta")&&tag.get("name").equals("fixed-layout")&&tag.get("content").equals("true"))fixedLayout=true;
       for(Tag item:packageDoc)if(item.name.equals("item"))manifest.put(item.get("id"),resolveZip(opf,item.get("href")));
       for(Tag item:packageDoc)if(item.name.equals("itemref")){
@@ -919,6 +925,7 @@ final class LocalLibrary {
     // supplies its dimensions; cached point sizes help non-native consumers.
     int[] size=d.pdfSizes.get(index);int width=size==null?0:size[0],height=size==null?0:size[1];
     String identity=identity(resolve(d.path)),key=hash(identity+"\nPDF:"+index+":"+preview);Media item=new Media(d.path,"@pdf:"+index,preview,identity);item.pdfDoc=d;item.pdfPage=index;
+    item.fitAxis=preview?null:input.optString("fitAxis");
     item.bodyUrl="https://omi.local/media/"+hash(identity+"\nPDF:"+index+":false")+"?v="+mediaEpoch;
     synchronized(media){media.put(key,item);while(media.size()>4000)media.remove(media.keySet().iterator().next());}
     return new JSONObject().put("url","https://omi.local/media/"+key+"?v="+mediaEpoch).put("width",width).put("height",height);
@@ -935,8 +942,14 @@ final class LocalLibrary {
       }
     }
   }
+  private byte[] epubEntry(Doc d,String entry,long limit)throws IOException{
+    if(d.closed)throw new IOException("文档已关闭。");
+    // Keep libarchive's filename compatibility when a legacy name was decoded
+    // differently. A selected entry's CRC/length failure must still propagate.
+    return d.epubZip==null||!d.epubZip.entries.containsKey(entry)?NativeArchives.entry(d.source,entry,limit):d.epubZip.read(d.source,entry,limit);
+  }
   private String chapter(Doc d,int index)throws Exception{
-    if(index<0||index>=d.chapters.size())throw new IOException("章节不存在。");String entry=d.chapters.get(index);String html=new String(NativeArchives.entry(d.source,entry,8*1024*1024),StandardCharsets.UTF_8);
+    if(index<0||index>=d.chapters.size())throw new IOException("章节不存在。");String entry=d.chapters.get(index);String html=new String(epubEntry(d,entry,8*1024*1024),StandardCharsets.UTF_8);
     // Sanitization runs in the renderer's detached DOM, before the sandboxed chapter iframe.
     return new JSONObject().put("html",html).put("path",d.path).put("entry",entry).toString();
   }
@@ -1024,7 +1037,7 @@ final class LocalLibrary {
     Map<String,String> headers=new HashMap<>();headers.put("Cache-Control","no-store");headers.put("X-Content-Type-Options","nosniff");headers.put("Content-Length",String.valueOf(bytes.length));
     return new WebResourceResponse("application/octet-stream",null,200,"OK",headers,new ByteArrayInputStream(bytes));
   }
-  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)synchronized(doc){doc.closed=true;if(doc.pdf!=null)doc.pdf.close();doc.source.close();if(doc.imageDirectory!=null){File[] files=doc.imageDirectory.listFiles();if(files!=null)for(File image:files)image.delete();doc.imageDirectory.delete();}}}
+  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)synchronized(doc){doc.closed=true;doc.epubZip=null;if(doc.pdf!=null)doc.pdf.close();doc.source.close();if(doc.imageDirectory!=null){File[] files=doc.imageDirectory.listFiles();if(files!=null)for(File image:files)image.delete();doc.imageDirectory.delete();}}}
   synchronized void close(){
     fileAccess.writeLock().lock();try{
       closed=true;

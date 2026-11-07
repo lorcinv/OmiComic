@@ -425,7 +425,7 @@ export interface OmiComicApi {
   registerDocumentImage?(id:string,data:string):Promise<操作结果<{url:string;preview:string;width:number;height:number}>>;
   renderDocumentImage?(url:string,tile:number,preview:boolean):Promise<操作结果<{url:string;width:number;height:number}>>;
   setDocumentPurpose?(id:string,purpose:"reader"|"thumbnail"):Promise<操作结果<null>>;
-  renderDocumentPage?(id:string,index:number,preview:boolean):Promise<操作结果<{url:string;width:number;height:number}>>;
+  renderDocumentPage?(id:string,index:number,preview:boolean,fitAxis?:'width'|'height'):Promise<操作结果<{url:string;width:number;height:number}>>;
   readDocumentRange(id: string, begin: number, end: number): Promise<操作结果<Uint8Array>>;
   readDocumentChapter(id: string, index: number): Promise<操作结果<string>>;
   closeDocument(id: string): Promise<操作结果<null>>;
@@ -506,7 +506,7 @@ export interface OmiComicApi {
   isWindowMaximized(): Promise<操作结果<boolean>>;
   closeWindow(): void;
   setFullscreen(enabled: boolean): Promise<操作结果<boolean>>;
-  setReaderChrome?(hidden: boolean, active?: boolean): Promise<操作结果<boolean>>;
+  setReaderChrome?(hidden: boolean, active?: boolean, panorama?: boolean): Promise<操作结果<boolean>>;
   prepareEpubReaderViewport?(path: string): Promise<操作结果<boolean>>;
   setReaderVolumeKeys?(enabled: boolean): Promise<操作结果<boolean>>;
   isFullscreen(): Promise<操作结果<boolean>>;

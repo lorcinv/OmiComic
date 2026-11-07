@@ -25,3 +25,14 @@ it('a cancelled native PDF job does not start a second PDF engine',async()=>{
   native.prepare.mockRejectedValueOnce(new DOMException('Navigation changed','AbortError'));
   try{await source.open();await expect(source.readPage(0)).rejects.toMatchObject({name:'AbortError'});expect(window.omicomic.readDocumentRange).not.toHaveBeenCalled();}finally{source.dispose();}
 });
+
+it('PDF panorama preloads use its fill axis and ordinary reading keeps fit-window',async()=>{
+  const source=await setup('pdf');window.omicomic.openDocument=vi.fn(async()=>({ok:true,data:{nativePdf:true,size:4000,chapters:[{index:0,name:'One'}]}}));
+  const render=window.omicomic.renderDocumentPage=vi.fn(async()=>({ok:true as const,data:{url:'https://omi.local/media/pdf',width:400,height:600}}));
+  try{
+    await source.open();expect(source.nativePdfEnabled).toBe(true);
+    source.setReaderSession(88,'height');await source.readPage(0,undefined,true);expect(render).toHaveBeenLastCalledWith(expect.any(String),0,false,'height');
+    source.setReaderSession(88,'width');await source.readPage(0);expect(render).toHaveBeenLastCalledWith(expect.any(String),0,false,'width');
+    source.setReaderSession(88);await source.readPage(0);expect(render).toHaveBeenLastCalledWith(expect.any(String),0,false,undefined);
+  }finally{source.dispose();}
+});

@@ -39,7 +39,7 @@ import ReaderImageEffects, { GammaFilter } from "../components/ReaderImageEffect
 import { useAutoRead } from "../reader/useAutoRead";
 import { DEFAULT_ADJUSTMENTS, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
 import { useReaderDocument } from "../reader/useReaderDocument";
-import { advanceInertia, estimateReleaseVelocity, mouseDragGain, acceleratedMouseVelocity, MAX_MOTION_SPEED, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
+import { advanceInertia, estimateReleaseVelocity, estimateTouchVelocity, touchReleaseSample, mouseDragGain, acceleratedMouseVelocity, touchDragGain, acceleratedTouchVelocity, touchInertiaTime, MAX_MOTION_SPEED, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
 import { afterDisplaySamplingMotion, holdDisplaySampling, noteDisplaySamplingMotion } from "../reader/displaySampling";
 import type {
   AppSettings,
@@ -354,6 +354,7 @@ function ReaderPage({
   // initial DOM too, before the reader is revealed or any pixels are decoded.
   const 初始阅读状态 = useMemo(() => 创建初始阅读状态(resource, initialPageIndex), [resource, initialPageIndex]);
   const 原生图片核心 = isAndroid() && hasAndroidRenderer() && resource?.sourceType !== 'pdf' && (resource?.sourceType !== 'epub' && resource?.sourceType!=='mobi');
+  const 原生全景核心 = 原生图片核心 || Boolean(isAndroid() && hasAndroidRenderer() && 文档源?.nativePdfEnabled);
   const [当前索引, 设置当前索引] = useState(初始阅读状态.索引);
   const [页面图片状态表, 提交页面图片状态表] = useState<Record<number, 页面图片状态>>({});
   const [可显示页组, 设置可显示页组] = useState<可显示页组 | null>(null);
@@ -442,7 +443,7 @@ function ReaderPage({
   const 底部栏隐藏定时器 = useRef<number | null>(null);
   const 阅读器会话Id = useRef(下一个阅读器会话Id++);
   useNativeReaderSurface(阅读区域,阅读器会话Id.current,原生图片核心||Object.values(页面图片状态表).some(page=>page.native),isActive&&interactive,阅读器设置,画面调整);
-  useLayoutEffect(()=>{文档源?.setReaderSession(阅读器会话Id.current);},[文档源]);
+  useLayoutEffect(()=>{文档源?.setReaderSession(阅读器会话Id.current,全景模式?(阅读流向==='vertical'?'width':'height'):undefined);},[文档源,全景模式,阅读流向]);
   const 进度拖动指针Id = useRef<number | null>(null);
   const 进度手势 = useRef<{x:number; moved:boolean} | null>(null);
   const 进度跳转序号 = useRef(0);
@@ -481,6 +482,7 @@ function ReaderPage({
   const 全景切换中 = useRef(false);
   const 全景模式引用 = useRef(false);
   const 全景模式启用中 = useRef(false);
+  const 全景布局切换中 = useRef(false);
   const 全景导航序号 = useRef(0);
   const 全景导航目标索引 = useRef<number | null>(null);
   const 全景导航解码图片 = useRef<HTMLImageElement | null>(null);
@@ -1110,10 +1112,10 @@ function ReaderPage({
           return 轴向距离 >= 0 ? 轴向距离 : 1000 + Math.abs(轴向距离);
         };
         return 计算分数(左侧) - 计算分数(右侧) || 左侧 - 右侧;
-      }).slice(0, isAndroid() ? (原生图片核心 ? 48 : 索引集合.size) : Math.max(模式2窗口半径 * 2 + 1, 桌面全景容量));
+      }).slice(0, isAndroid() ? (原生全景核心 ? 48 : 索引集合.size) : Math.max(模式2窗口半径 * 2 + 1, 桌面全景容量));
     // Native URLs are not decoded-cache residency. Bound the useful body work
     // by actual allocations, including a small reverse-gesture margin.
-    return 原生图片核心 ? nativePanoramaWindow(排序索引,中心页,方向||原生阅读方向.current.direction,nativeReaderBodyCapacity(内存缓存上限字节,Object.values(页面图片状态引用.current)),Math.max(2,Math.ceil(1/自由缩放.scale))).keep : 排序索引;
+    return 原生全景核心 ? nativePanoramaWindow(排序索引,中心页,方向||原生阅读方向.current.direction,nativeReaderBodyCapacity(内存缓存上限字节,Object.values(页面图片状态引用.current)),Math.max(2,Math.ceil(1/自由缩放.scale))).keep : 排序索引;
   }
 
   function 计算模式2页面框架样式(页面索引: number): CSSProperties | undefined {
@@ -1290,8 +1292,8 @@ function ReaderPage({
     // Preparation still belongs to the outgoing library. Do not resize/hide its
     // status bar while the saved page is being decoded behind the snapshot.
     const active=isActive&&interactive;
-    if(isAndroid())void window.omicomic.setReaderChrome?.(Boolean(active&&!手机工具栏可见&&!手机阅读设置打开&&!手机页面预览打开),active);
-  },[isActive,interactive,手机工具栏可见,手机阅读设置打开,手机页面预览打开]);
+    if(isAndroid())void window.omicomic.setReaderChrome?.(Boolean(active&&!手机工具栏可见&&!手机阅读设置打开&&!手机页面预览打开),active,全景模式);
+  },[isActive,interactive,手机工具栏可见,手机阅读设置打开,手机页面预览打开,全景模式]);
   useLayoutEffect(()=>()=>{if(isAndroid())void window.omicomic.setReaderChrome?.(false,false);},[]);
   useEffect(() => {
     if(!手机布局 || !手机页面预览打开)return;
@@ -1542,7 +1544,9 @@ function ReaderPage({
   }
 
   function 计算全景采样速度(采样列表: 全景速度采样[]): { x: number; y: number } {
-    return estimateReleaseVelocity(采样列表, 垂直阅读);
+    return 手机布局 && 全景拖动.current.pointerType === 'touch'
+      ? estimateTouchVelocity(采样列表, 垂直阅读)
+      : estimateReleaseVelocity(采样列表, 垂直阅读);
   }
 
   function 计算全景甩动强度(采样列表: 全景速度采样[]): number {
@@ -1553,9 +1557,11 @@ function ReaderPage({
 
   function 应用全景拖动位置(拖动: 全景拖动状态): void {
     const 速度 = 计算全景采样速度(拖动.samples);
-    const 增益 = 拖动.pointerType === "mouse" ? mouseDragGain(垂直阅读 ? 速度.y : 速度.x) : 1;
-    拖动.velocityX = (拖动.pointerType === "mouse" ? acceleratedMouseVelocity(速度.x) : 速度.x) * 全景横向符号;
-    拖动.velocityY = 拖动.pointerType === "mouse" ? acceleratedMouseVelocity(速度.y) : 速度.y;
+    const 触摸 = 手机布局 && 拖动.pointerType === 'touch';
+    const 增益 = 拖动.pointerType === "mouse" ? mouseDragGain(垂直阅读 ? 速度.y : 速度.x) : 触摸 ? touchDragGain(垂直阅读 ? 速度.y : 速度.x) : 1;
+    const 加速 = 拖动.pointerType === 'mouse' ? acceleratedMouseVelocity : 触摸 ? acceleratedTouchVelocity : (value: number) => value;
+    拖动.velocityX = 加速(速度.x) * 全景横向符号;
+    拖动.velocityY = 加速(速度.y);
     const 拖动距离 = (垂直阅读 ? 拖动.currentY - 拖动.lastY : (拖动.currentX - 拖动.lastX) * 全景横向符号) * 增益;
     拖动.lastX = 拖动.currentX;
     拖动.lastY = 拖动.currentY;
@@ -1581,6 +1587,7 @@ function ReaderPage({
     }
 
     let 当前速度 = Math.max(-NeeView最大惯性速度, Math.min(NeeView最大惯性速度, 初始速度));
+    const 衰减时间 = 手机布局 && 全景拖动.current.pointerType === 'touch' ? touchInertiaTime(当前速度) : undefined;
     const 开始时间 = performance.now();
     全景惯性上帧时间.current = 开始时间;
 
@@ -1604,7 +1611,7 @@ function ReaderPage({
         return;
       }
 
-      const 下一步 = advanceInertia(当前速度, 间隔);
+      const 下一步 = advanceInertia(当前速度, 间隔, 衰减时间);
       const 移动距离 = 下一步.distance;
       const 原偏移 = 全景偏移引用.current;
       设置全景偏移值(原偏移 + 移动距离);
@@ -1765,7 +1772,7 @@ function ReaderPage({
           : { url: "", error: 结果.error.message, loading: false },
       };
     } catch (reason) {
-      if (signal?.aborted || (原生图片核心 && readerRequestCancelled(reason))) return 创建已取消页面图片结果(页面.index);
+      if (signal?.aborted || (原生全景核心 && readerRequestCancelled(reason))) return 创建已取消页面图片结果(页面.index);
       return {
         pageIndex: 页面.index,
         state: {
@@ -2191,7 +2198,7 @@ function ReaderPage({
     if (!resource || resource.total <= 0) return;
     const 操作资源Key = resource.resourceKey;
     const 索引列表 = 获取模式2预热索引(请求.centerIndex, 请求.direction, 请求.intensity);
-    if (原生图片核心) {
+    if (原生全景核心) {
       const 原生方向 = 请求.direction || 原生阅读方向.current.direction;
       const {keep,focus,key} = nativePanoramaWindow(索引列表,请求.centerIndex,原生方向);
       const 优先窗口 = `${阅读器会话Id.current}:${resource.resourceKey}:${key}`;
@@ -2208,7 +2215,7 @@ function ReaderPage({
     const 本次预热窗口 = new Set(索引列表);
     // A fast panorama jump must retire reads for the abandoned window just as
     // ordinary paging does. Keep the currently drawn pages and latest target.
-    if (!isAndroid() || 原生图片核心) 保留页面图片加载调度(new Set([...本次预热窗口, ...当前页组索引, ...(全景导航目标索引.current === null ? [] : [全景导航目标索引.current])]));
+    if (!isAndroid() || 原生全景核心) 保留页面图片加载调度(new Set([...本次预热窗口, ...当前页组索引, ...(全景导航目标索引.current === null ? [] : [全景导航目标索引.current])]));
     for (const 索引 of 模式2预热结果缓冲.current.keys()) {
       if (!本次预热窗口.has(索引)) 模式2预热结果缓冲.current.delete(索引);
     }
@@ -2334,7 +2341,7 @@ function ReaderPage({
       intensity: Math.min(Math.max(选项.强度 ?? 0, 0), 1),
     };
     模式2预读窗口.current = new Set(获取模式2预热索引(请求.centerIndex, 请求.direction, 请求.intensity));
-    if (!isAndroid() || 原生图片核心) 保留页面图片加载调度(new Set([...模式2预读窗口.current, ...当前页组索引, ...(全景导航目标索引.current === null ? [] : [全景导航目标索引.current])]));
+    if (!isAndroid() || 原生全景核心) 保留页面图片加载调度(new Set([...模式2预读窗口.current, ...当前页组索引, ...(全景导航目标索引.current === null ? [] : [全景导航目标索引.current])]));
     模式2动态预热状态.current = 请求;
     模式2待预热请求.current = 请求;
 
@@ -2924,7 +2931,32 @@ function ReaderPage({
     提交启用模式2(进入索引);
   }
 
-  function 切换全景模式(): void {
+  async function 切换全景模式(): Promise<void> {
+    if (阅读视图初始化中 || 全景布局切换中.current) return;
+    if (!isAndroid() || !hasAndroidRenderer()) { await 应用全景模式切换(); return; }
+    全景布局切换中.current = true;
+    const request = Date.now(), session = 阅读器会话Id.current, key = 资源Key引用.current;
+    const valid = () => 阅读器会话Id.current === session && 资源Key引用.current === key && 阅读区域.current?.isConnected;
+    try {
+      await androidCall('beginScene', {request,coverRoot:true});
+      if (!valid()) return;
+      // Resize under the captured frame before constructing the new strip.
+      // Insets, React geometry and native pixels must settle as one change.
+      await androidCall('setReaderChrome', {active:true,hidden:!手机工具栏可见&&!手机阅读设置打开&&!手机页面预览打开,panorama:!全景模式引用.current,settle:true});
+      if (!valid()) return;
+      刷新阅读区可用尺寸();
+      await 应用全景模式切换();
+      await 等待下一绘制();
+      await 等待下一绘制();
+      if (valid()) await androidCall('commitScene', {request,direction:'reader-layout',viewportWidth:innerWidth});
+    } finally {
+      // A later back/navigation snapshot must not be cancelled by this task.
+      void androidCall('cancelScene', {request});
+      全景布局切换中.current = false;
+    }
+  }
+
+  async function 应用全景模式切换(): Promise<void> {
     if (阅读视图初始化中) return;
     if (全景模式启用中.current && !全景模式引用.current) {
       全景导航序号.current += 1;
@@ -2950,7 +2982,7 @@ function ReaderPage({
         提交启用模式2(安全索引引用.current);
         return;
       }
-      void 启用模式2();
+      await 启用模式2();
       return;
     } else {
       const 退出索引 = 计算模式2偏移最近索引();
@@ -3054,15 +3086,18 @@ function ReaderPage({
       const 拖动 = 全景拖动.current;
       if (拖动.active) {
         const 当前时间 = 事件.nativeEvent.timeStamp;
-        拖动.currentX = 事件.clientX;
-        拖动.currentY = 事件.clientY;
+        const 松手 = 手机布局 && 拖动.pointerType === 'touch'
+          ? touchReleaseSample(拖动.samples, {x:事件.clientX,y:事件.clientY,time:当前时间}, 垂直阅读)
+          : {x:事件.clientX,y:事件.clientY,time:当前时间};
+        拖动.currentX = 松手.x;
+        拖动.currentY = 松手.y;
         const 末采样 = 拖动.samples[拖动.samples.length - 1];
         if (
           !末采样
-          || Math.hypot(事件.clientX - 末采样.x, 事件.clientY - 末采样.y) > 0.1
+          || Math.hypot(松手.x - 末采样.x, 松手.y - 末采样.y) > 0.1
           || 当前时间 - 末采样.time >= 16
         ) {
-          记录全景速度采样(拖动, 事件.clientX, 事件.clientY, 当前时间);
+          记录全景速度采样(拖动, 松手.x, 松手.y, 当前时间);
         }
       }
       结束全景拖动();

@@ -16,6 +16,54 @@ export function acceleratedMouseVelocity(speed: number): number {
   return Math.max(-MAX_MOTION_SPEED, Math.min(MAX_MOTION_SPEED, speed * mouseDragGain(speed)));
 }
 
+/** Preserve precise finger placement; a deliberate sweep gains distance smoothly.
+ * CSS pixels keep the same response on phones and tablets at different densities. */
+export function touchDragGain(speed: number): number {
+  const progress = Math.max(0, Math.min(1, (Math.abs(speed) - 0.45) / 2.55));
+  return 1 + 0.65 * progress * progress * (3 - 2 * progress);
+}
+
+export function acceleratedTouchVelocity(speed: number): number {
+  return Math.max(-MAX_MOTION_SPEED, Math.min(MAX_MOTION_SPEED, speed * touchDragGain(speed)));
+}
+
+/** UP may correct an extrapolated MOVE by tens of pixels. Only movement while
+ * held can establish a reversal; lifting must not pull the strip backwards. */
+export function touchReleaseSample(samples: readonly MotionSample[], release: MotionSample, vertical: boolean): MotionSample {
+  const last = samples[samples.length - 1];
+  if (!last) return release;
+  const velocity = estimateTouchVelocity(samples, vertical);
+  const speed = vertical ? velocity.y : velocity.x;
+  const delta = vertical ? release.y - last.y : release.x - last.x;
+  if (delta * speed < 0) return vertical ? { ...release, y: last.y } : { ...release, x: last.x };
+  return release;
+}
+
+/** A finger reversal must replace, rather than average with, the previous sweep. */
+export function estimateTouchVelocity(samples: readonly MotionSample[], vertical: boolean): { x: number; y: number } {
+  if (samples.length < 2) return { x: 0, y: 0 };
+  const end = samples[samples.length - 1];
+  let first = samples.findIndex(sample => sample.time >= end.time - 80);
+  let direction = 0, runDistance = 0;
+  for (let i = samples.length - 1; i > first; i--) {
+    const delta = vertical ? samples[i].y - samples[i - 1].y : samples[i].x - samples[i - 1].x;
+    if (Math.abs(delta) < 0.5) continue;
+    if (direction && Math.sign(delta) !== direction) {
+      // WebView can extrapolate the last MOVE beyond the physical UP position.
+      // A small correction is not a deliberate reversal of the whole fling.
+      if (runDistance >= 12) { first = i; break; }
+      runDistance = 0;
+    }
+    direction = Math.sign(delta);runDistance += Math.abs(delta);
+  }
+  return estimateReleaseVelocity(samples.slice(first), vertical);
+}
+
+/** Fast touch flings travel farther without changing speed at finger release. */
+export function touchInertiaTime(speed: number): number {
+  return DECAY_TIME_MS + 160 * Math.min(1, Math.abs(speed) / 4);
+}
+
 export function estimateReleaseVelocity(samples: readonly MotionSample[], vertical: boolean): { x: number; y: number } {
   if (samples.length < 2) return { x: 0, y: 0 };
   const end = samples[samples.length - 1];
@@ -53,10 +101,10 @@ export function estimateReleaseVelocity(samples: readonly MotionSample[], vertic
   return vertical ? { x: 0, y: speed } : { x: speed, y: 0 };
 }
 
-export function advanceInertia(velocity: number, elapsedMs: number): { distance: number; velocity: number } {
+export function advanceInertia(velocity: number, elapsedMs: number, decayTimeMs = DECAY_TIME_MS): { distance: number; velocity: number } {
   if (!Number.isFinite(velocity) || !Number.isFinite(elapsedMs) || elapsedMs <= 0) return { distance: 0, velocity };
-  const decay = Math.exp(-elapsedMs / DECAY_TIME_MS);
-  return { distance: velocity * DECAY_TIME_MS * (1 - decay), velocity: velocity * decay };
+  const decay = Math.exp(-elapsedMs / decayTimeMs);
+  return { distance: velocity * decayTimeMs * (1 - decay), velocity: velocity * decay };
 }
 
 /** Keep speculation bounded separately from the indispensable visible working set. */

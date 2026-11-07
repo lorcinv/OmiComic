@@ -1,5 +1,9 @@
 # Windows 1.1.2 验证记录
 
+2026-11-07 的 Android 1.1.87 全景回滚、模式切换颤动和 PDF 滚动修复见 [本轮工作报告](status/2026-11-07-1.1.87-work-report.md)，包含旧包复现、最终包回归与验证边界。
+
+2026-11-07 的 Android 1.1.86 启动、全景手势与手机／平板安全区域验证见 [本轮工作报告](status/2026-11-07-1.1.86-work-report.md)。其中区分 EPUB 读取耗时与完整入场耗时，并附最终 APK、原始结果和横竖屏截图；下文保留历史记录。
+
 最新 Windows 与 Android 1.1.36 关于页、三语说明、Omi 占位配图及发布核验见 [1.1.36 记录](verification-1.1.36.md)。
 
 最新 Windows 1.1.35 的简介编辑与缩略预览交互验证见 [1.1.35 工作报告](verification-1.1.35-windows.md)。画面调整说明删除见 [1.1.34 工作报告](verification-1.1.34-windows.md)，面板简化见 [1.1.33 工作报告](verification-1.1.33-windows.md)，沉浸进度条透明未读区域见 [1.1.32 工作报告](verification-1.1.32-windows.md)，拖拽外围高亮描边见 [1.1.31 工作报告](verification-1.1.31-windows.md)，首页按钮同步、分类浅白横杠和详情页窗口拖动见 [1.1.30 工作报告](verification-1.1.30-windows.md)。首页裁剪与大图加载对比见 [1.1.28 工作报告](verification-1.1.28-windows.md)。下文保留历史验证记录。

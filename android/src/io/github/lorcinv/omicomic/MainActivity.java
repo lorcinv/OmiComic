@@ -43,11 +43,13 @@ public final class MainActivity extends Activity {
   private boolean fullscreen;
   private boolean readerChromeHidden;
   private boolean readerActive;
+  private boolean readerPanorama;
   private boolean epubViewportPrepared;
   private String epubViewportKey;
   private long epubViewportRequest;
   private boolean keyboardVisible;
   private int readerStatusInset=-1;
+  private int readerSafeLeft,readerSafeTop,readerSafeRight,readerSafeBottom;
   private Boolean requestedStatusHidden,requestedNavigationHidden;
   private boolean systemThemeApplied;
 
@@ -89,19 +91,35 @@ public final class MainActivity extends Activity {
         if(keyboardVisible&&!visible)event("keyboard-hidden");
         keyboardVisible=visible;
         int left=0,top=0,right=0,bottom,status;
+        int cutoutLeft=0,cutoutTop=0,cutoutRight=0,cutoutBottom=0;
+        boolean panoramaCanvas=readerActive&&readerPanorama;
         if(Build.VERSION.SDK_INT>=30){
-          android.graphics.Insets safe=insets.getInsets(WindowInsets.Type.displayCutout()|WindowInsets.Type.ime()|(fullscreen?0:WindowInsets.Type.navigationBars()));
+          android.graphics.Insets cutout=insets.getInsets(WindowInsets.Type.displayCutout());
+          cutoutLeft=cutout.left;cutoutTop=cutout.top;cutoutRight=cutout.right;cutoutBottom=cutout.bottom;
+          android.graphics.Insets safe=insets.getInsets((panoramaCanvas?0:WindowInsets.Type.displayCutout())|WindowInsets.Type.ime()|(fullscreen?0:WindowInsets.Type.navigationBars()));
           left=safe.left;top=safe.top;right=safe.right;bottom=safe.bottom;
           status=insets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top;
         }else{
           bottom=fullscreen&&!visible?0:insets.getSystemWindowInsetBottom();status=insets.getStableInsetTop();
           if(!fullscreen){left=insets.getSystemWindowInsetLeft();right=insets.getSystemWindowInsetRight();}
-          if(Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){android.view.DisplayCutout cutout=insets.getDisplayCutout();left=Math.max(left,cutout.getSafeInsetLeft());top=cutout.getSafeInsetTop();right=Math.max(right,cutout.getSafeInsetRight());bottom=Math.max(bottom,cutout.getSafeInsetBottom());}
+          if(Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){
+            android.view.DisplayCutout cutout=insets.getDisplayCutout();
+            cutoutLeft=cutout.getSafeInsetLeft();cutoutTop=cutout.getSafeInsetTop();cutoutRight=cutout.getSafeInsetRight();cutoutBottom=cutout.getSafeInsetBottom();
+            if(!panoramaCanvas){left=Math.max(left,cutoutLeft);top=cutoutTop;right=Math.max(right,cutoutRight);bottom=Math.max(bottom,cutoutBottom);}
+          }
         }
         // A reader always keeps the same canvas, whether its controls/time bar
         // are shown or hidden. Only the toolbar needs the stable status inset.
-        int toolbarInset=fullscreen||tabletLandscape()?0:Math.max(0,status-top);
-        if(readerStatusInset!=toolbarInset){readerStatusInset=toolbarInset;publishReaderStatusInset();}
+        // Panorama pixels may extend behind a cutout. Controls retain safe
+        // edges, including a side camera after phone/tablet rotation.
+        int toolbarInset=Math.max(0,Math.max(panoramaCanvas?cutoutTop:0,fullscreen||tabletLandscape()?0:status)-top);
+        int safeLeft=panoramaCanvas?Math.max(0,cutoutLeft-left):0;
+        int safeTop=panoramaCanvas?Math.max(0,cutoutTop-top):0;
+        int safeRight=panoramaCanvas?Math.max(0,cutoutRight-right):0;
+        int safeBottom=panoramaCanvas?Math.max(0,cutoutBottom-bottom):0;
+        if(readerStatusInset!=toolbarInset||readerSafeLeft!=safeLeft||readerSafeTop!=safeTop||readerSafeRight!=safeRight||readerSafeBottom!=safeBottom){
+          readerStatusInset=toolbarInset;readerSafeLeft=safeLeft;readerSafeTop=safeTop;readerSafeRight=safeRight;readerSafeBottom=safeBottom;publishReaderStatusInset();
+        }
         if(!readerActive&&!epubViewportPrepared&&!hideStatusBar())top=Math.max(top,status);
         if(v.getPaddingLeft()!=left||v.getPaddingTop()!=top||v.getPaddingRight()!=right||v.getPaddingBottom()!=bottom){
           v.setPadding(left,top,right,bottom);sceneTransition.insetsChanged();
@@ -165,12 +183,12 @@ public final class MainActivity extends Activity {
               if(method.equals("readerSeek")){readerSurface.seek(args);return;}
               if(method.equals("readerPrepare")){readerSurface.prepare(args,(value,error)->reply(id,value,error==null?null:explain(error),ReaderCancelledException.causedBy(error)?"READER_CANCELLED":null));return;}
               if(method.equals("readerStats")){reply(id,readerSurface.stats(),null);return;}
-              if(method.equals("beginScene")){sceneTransition.begin(args.optLong("request"),()->reply(id,true,null));return;}
+              if(method.equals("beginScene")){sceneTransition.begin(args.optLong("request"),args.optBoolean("coverRoot"),()->reply(id,true,null));return;}
               if(method.equals("readerIntent")){sceneTransition.readerIntent(args.optString("key"));if(id!=0)reply(id,true,null);return;}
               if(method.equals("cancelReaderIntent")){if(args.optString("key").equals(epubViewportKey))resetEpubReaderViewport();sceneTransition.cancelReaderIntent(args.optString("key"));if(id!=0)reply(id,true,null);return;}
               if(method.equals("prepareEpubReaderViewport")){prepareEpubReaderViewport(args.optString("key"),id);return;}
               if(method.equals("commitScene")){long request=args.optLong("request");String direction=args.optString("direction","forward");JSONObject origin=args.optJSONObject("origin");float scale=web.getWidth()/(float)args.optDouble("viewportWidth",web.getWidth());float x=origin==null?36:(float)origin.optDouble("x")*scale,y=origin==null?40:(float)origin.optDouble("y")*scale;web.postVisualStateCallback(request,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){readerSurface.afterFrameReady(()->FrameCommit.after(web,()->{sceneTransition.commit(request,direction,x,y);reply(id,true,null);}));}});return;}
-              if(method.equals("cancelScene")){resetEpubReaderViewport();sceneTransition.cancel();if(id!=0)reply(id,true,null);return;}
+              if(method.equals("cancelScene")){if(args.has("request"))sceneTransition.cancel(args.optLong("request"));else{resetEpubReaderViewport();sceneTransition.cancel();}if(id!=0)reply(id,true,null);return;}
               if(method.equals("waitScene")){sceneTransition.afterFinished(args.optLong("request"),()->reply(id,true,null));return;}
               if(method.equals("chooseFolder")||method.equals("chooseFile")){choose(id,method.equals("chooseFolder"));return;}
               if(method.equals("exportBackupFile")||method.equals("readBackupFile")){chooseBackup(id,method.equals("exportBackupFile"),args);return;}
@@ -188,9 +206,11 @@ public final class MainActivity extends Activity {
               }
               if(method.equals("setReaderChrome")){
                 readerActive=args.optBoolean("active",true);readerChromeHidden=readerActive&&args.optBoolean("hidden");
+                readerPanorama=readerActive&&args.optBoolean("panorama");
                 resetEpubReaderViewport();
                 if(!readerActive||!sceneTransition.deferReaderBars(MainActivity.this::applySystemBars))applySystemBars();
-                reply(id,readerChromeHidden,null);return;
+                if(args.optBoolean("settle"))FrameCommit.after(rootFrame,()->web.postVisualStateCallback(id,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){reply(id,readerChromeHidden,null);}}));
+                else reply(id,readerChromeHidden,null);return;
               }
               if(method.equals("isFullscreen")){reply(id,fullscreen,null);return;}
               if(method.equals("setReaderVolumeKeys")){readerVolumeKeys=args.optBoolean("enabled");reply(id,readerVolumeKeys,null);return;}
@@ -235,10 +255,17 @@ public final class MainActivity extends Activity {
     });
   }
   private void publishReaderStatusInset(){
-    if(web!=null)web.evaluateJavascript("document.documentElement.style.setProperty('--android-reader-status-inset','"+(Math.max(0,readerStatusInset)/getResources().getDisplayMetrics().density)+"px')",null);
+    if(web==null)return;
+    float density=getResources().getDisplayMetrics().density;
+    web.evaluateJavascript("(()=>{const s=document.documentElement.style;s.setProperty('--android-reader-status-inset','"+(Math.max(0,readerStatusInset)/density)+"px');s.setProperty('--android-reader-safe-left','"+(readerSafeLeft/density)+"px');s.setProperty('--android-reader-safe-top','"+(readerSafeTop/density)+"px');s.setProperty('--android-reader-safe-right','"+(readerSafeRight/density)+"px');s.setProperty('--android-reader-safe-bottom','"+(readerSafeBottom/density)+"px');})()",null);
   }
   private void applySystemBars(){
     if(web==null)return;
+    if(Build.VERSION.SDK_INT>=28){
+      WindowManager.LayoutParams attributes=getWindow().getAttributes();
+      int cutoutMode=readerActive&&readerPanorama&&Build.VERSION.SDK_INT>=30?WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS:WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+      if(attributes.layoutInDisplayCutoutMode!=cutoutMode){attributes.layoutInDisplayCutoutMode=cutoutMode;getWindow().setAttributes(attributes);}
+    }
     boolean hideStatus=hideStatusBar();
     if(Build.VERSION.SDK_INT>=30){
       android.view.WindowInsetsController controller=getWindow().getInsetsController();

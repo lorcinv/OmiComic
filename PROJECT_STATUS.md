@@ -1,5 +1,7 @@
 # 当前项目状态
 
+**GitHub 发布：Android 1.1.87 / 10187 · 2026-11-07**。累计包含 EPUB 启动、全景加速与安全区域优化，修复快滑回滚、模式切换颤动并减少 PDF 重复绘制。Windows 使用 1.1.85。[发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.87) · [版本说明](docs/releases/v1.1.87.md) · [修复报告](docs/status/2026-11-07-1.1.87-work-report.md)。
+
 **Android 1.1.85 同版 EPUB 热修复 · 2026-11-05**。安卓 EPUB 提前准备最终阅读窗口，并将其他章节后台分页延后至入场完成；版本仍为 1.1.85 / 10185。新包与源码位于 `release/OmiComic-1.1.85-EPUB启动热修复版/`。Windows 保持此前的 1.1.85 交付。[热修复报告与验证边界](docs/status/2026-11-05-1.1.85-epub-hotfix.md)。
 
 **Android / Windows 1.1.85 本地交付 · 2026-11-05**。完善平板阅读入场顶部衔接、略微加深安卓漫画卡片蒙版；双端增加默认关闭的系统主题跟随，记住日间配色并自动切换夜色。[本轮工作报告](docs/status/2026-11-05-1.1.85-work-report.md) · [1.1.84 状态栏与 PDF 入场修复](docs/status/2026-11-05-1.1.84-work-report.md) · [1.1.83 阅读细节修复](docs/status/2026-11-05-1.1.83-work-report.md)。本次发布双端安装包、便携版与源码，安卓沿用原签名。

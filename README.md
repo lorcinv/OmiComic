@@ -23,11 +23,11 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 | 平台 | 安装包 |
 | --- | --- |
 | PC · Windows x64 | [OmiComic 1.1.85 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Portable-1.1.85-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Setup-1.1.85-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.85 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-1.1.85-android.apk) |
+| Android 8.0+ | [OmiComic 1.1.87 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.87/OmiComic-1.1.87-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.85：累计完善 1.1.79–1.1.85 的 PDF、EPUB、MOBI 加载与翻页、平板适配、目录读取和点击反馈；新增默认关闭的系统主题跟随。本次安卓包包含同版 EPUB 启动修复。[本版更新](docs/releases/v1.1.85.md) · [更新记录](docs/releases/README.md)。
+1.1.87（Android）：修复全景快滑回滚和切换颤动，减少 PDF 快速滚动时的重复绘制；包含 EPUB 目录复用、全景渐进加速和手机／平板横竖屏安全区域优化。Windows 继续使用 1.1.85。[本版更新](docs/releases/v1.1.87.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 

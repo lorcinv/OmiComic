@@ -254,7 +254,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     openDocument: input=>call("openDocument",input),
     registerDocumentImage:(id,data)=>call("registerDocumentImage",{id,data}),
     renderDocumentImage:(url,tile,preview)=>call("renderDocumentImage",{url,tile,preview}),
-    renderDocumentPage:(id,index,preview)=>call("renderDocumentPage",{id,index,preview}),
+    renderDocumentPage:(id,index,preview,fitAxis)=>call("renderDocumentPage",{id,index,preview,fitAxis}),
     readDocumentRange: async(id,begin,end)=>{
       try {
         // Keep document bytes binary. JSON/base64 decoding on the UI thread
@@ -299,7 +299,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     toggleMaximizeWindow:async()=>ok(false),isWindowMaximized:async()=>ok(false),
     setReaderVolumeKeys:enabled=>call("setReaderVolumeKeys",{enabled}),
     setFullscreen:enabled=>call("setFullscreen",{enabled}),isFullscreen:()=>call("isFullscreen"),
-    setReaderChrome:(hidden,active=true)=>call("setReaderChrome",{hidden,active}),
+    setReaderChrome:(hidden,active=true,panorama=false)=>call("setReaderChrome",{hidden,active,panorama}),
     prepareEpubReaderViewport:path=>call("prepareEpubReaderViewport",{key:path}),
   };
   return api;
