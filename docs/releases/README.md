@@ -2,14 +2,15 @@
 
 # 版本记录
 
-Android 1.1.87 已发布，说明见 [全景与文档阅读优化](v1.1.87.md)；Windows 继续使用 1.1.85。
+Windows / Android 最新版统一为 **1.1.90**，见 [放大拖动与惯性更新](v1.1.90.md)。安卓实机复测范围见版本说明。
 
 旧版下载与更新记录。
 
-[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.87)
+[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.90)
 
 | 版本 | 平台 | 发行页 |
 | --- | --- | --- |
+| v1.1.90 | Windows x64 / Android 1.1.90 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.90) |
 | v1.1.87 | Android 1.1.87 · Windows 1.1.85 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.87) |
 | v1.1.85 | PC · Windows x64 / Android 1.1.85 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.85) |
 | v1.1.78 | PC · Windows x64 / Android 1.1.78 | [发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.78) |

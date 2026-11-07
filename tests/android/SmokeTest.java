@@ -12,6 +12,7 @@ import java.util.concurrent.*;
 
 /** Separate, same-signer instrumentation APK. The shipped app needs no debug bridge. */
 public final class SmokeTest extends Instrumentation {
+  private CountDownLatch zoomDetailGate;
   private Bundle args;
   private WebView web;
   private final java.util.List<Long> frameTotals=new java.util.ArrayList<>(),frameDraws=new java.util.ArrayList<>();
@@ -51,7 +52,7 @@ public final class SmokeTest extends Instrumentation {
         float sceneTranslation=opening==null?content.getTranslationX():opening.getTranslationX();boolean hasSnapshot=snapshot!=null||opening!=null;
         float sourceScale=snapshot==null?1:snapshot.getScaleX();
         float contentScale=content.getScaleX();
-        if(drawn==lastDrawn&&empty==lastEmpty&&covered==lastCovered&&sceneTranslation==lastSceneTranslation&&hasSnapshot==lastSnapshot&&sourceScale==lastSourceScale&&contentScale==lastContentScale&&lastTop==sceneRoot.getPaddingTop()&&lastStatusVisible==statusVisible&&lastStatusTop==statusTop){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
+        if(!(args.getString("fixture","").contains("zoomperf1189")||args.getString("fixture","").contains("zoomfollow1190"))&&drawn==lastDrawn&&empty==lastEmpty&&covered==lastCovered&&sceneTranslation==lastSceneTranslation&&hasSnapshot==lastSnapshot&&sourceScale==lastSourceScale&&contentScale==lastContentScale&&lastTop==sceneRoot.getPaddingTop()&&lastStatusVisible==statusVisible&&lastStatusTop==statusTop){if(++callbacks<2400)Choreographer.getInstance().postFrameCallback(this);return;}
         lastStatusVisible=statusVisible;lastStatusTop=statusTop;
         lastTop=sceneRoot.getPaddingTop();
         lastSourceScale=sourceScale;
@@ -71,6 +72,13 @@ public final class SmokeTest extends Instrumentation {
           }
         }
         JSONObject recorded=new JSONObject().put("time",time/1000000).put("zoom",current==null?0:field(current,"zoom")).put("pixels",pixels).put("slots",slots).put("drawnFrames",field(surface,"drawnFrames")).put("emptyFrames",field(surface,"emptyFrames")).put("sceneCovered",covered).put("sceneTranslationX",sceneTranslation).put("sceneWidth",content.getWidth()).put("sceneSnapshot",hasSnapshot).put("active",field(surface,"active")).put("readerOpening",opening!=null);
+        if((args.getString("fixture","").contains("zoomperf1189")||args.getString("fixture","").contains("zoomfollow1190"))){
+          Object pending=field(surface,"pendingFrame");JSONArray requested=new JSONArray();
+          if(pending!=null)for(Object slot:(java.util.List<?>)field(pending,"slots")){android.graphics.RectF r=(android.graphics.RectF)field(slot,"rect");requested.put(new JSONObject().put("url",field(slot,"url")).put("left",r.left).put("top",r.top).put("width",r.width()).put("height",r.height()));}
+          recorded.put("waitingDetail",pending!=null).put("requested",requested);
+          try{recorded.put("drawSharp",field(surface,"lastDrawSharp"));}catch(NoSuchFieldException legacy){}
+
+        }
         recorded.put("sourceScale",sourceScale);
         recorded.put("contentScale",contentScale);
         recorded.put("statusBarVisible",statusVisible).put("statusBarTop",statusTop);
@@ -722,6 +730,9 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("tablet1179")&&fixture.contains("epubStartup1186"))scriptAsset="epub-startup1186";
       if(fixture.startsWith("tablet1179")&&fixture.contains("panorama1186"))scriptAsset="panorama1186";
       if(fixture.startsWith("tablet1179")&&fixture.contains("bugs1187"))scriptAsset="panorama-bugs1187";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("zoom1188"))scriptAsset="zoom-inertia1188";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("zoomperf1189"))scriptAsset="zoom-performance1189";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("zoomfollow1190"))scriptAsset="zoom-follow1190";
       if(fixture.startsWith("tablet1179")&&fixture.contains("startupFormats1186"))scriptAsset="startup-formats1186";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
@@ -845,6 +856,15 @@ public final class SmokeTest extends Instrumentation {
         String pendingFrameUrl=eval("window.__omiNativePendingUrl||null");
         if(!"null".equals(pendingFrameUrl)){nativePendingFrameTest(field(activity,"readerSurface"),field(activity,"library"),(String)new JSONTokener(pendingFrameUrl).nextValue());eval("window.__omiNativePendingPassed=true;window.__omiNativePendingUrl=null");}
         if("true".equals(eval("window.__omiNativeMovingPendingCheck===true"))){JSONObject report=nativeMovingPendingFrameTest(field(activity,"readerSurface"));eval("window.__omiNativeMovingPendingResult="+report+";window.__omiNativeMovingPendingCheck=false");}
+        String zoomGate=(String)new JSONTokener(eval("window.__omiDetailGate||null")).nextValue();
+        if("hold".equals(zoomGate)){
+          if(zoomDetailGate!=null)zoomDetailGate.countDown();
+          CountDownLatch release=new CountDownLatch(1),started=new CountDownLatch(1);zoomDetailGate=release;
+          Object queue=field(field(activity,"readerSurface"),"details");java.lang.reflect.Method execute=queue.getClass().getDeclaredMethod("execute",int.class,Runnable.class);execute.setAccessible(true);
+          execute.invoke(queue,-100,(Runnable)()->{started.countDown();try{release.await(20,TimeUnit.SECONDS);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();}});
+          if(!started.await(5,TimeUnit.SECONDS))throw new IOException("Detail test gate did not start");
+          eval("window.__omiDetailGateStarted="+SystemClock.uptimeMillis()+";window.__omiDetailGate=null");
+        }else if("release".equals(zoomGate)){if(zoomDetailGate!=null)zoomDetailGate.countDown();zoomDetailGate=null;eval("window.__omiDetailGate=null");}
         if("true".equals(eval("window.__omiTilePolicyCheck===true"))){JSONObject[] policy={null};runOnMainSync(()->{try{policy[0]=LargeImageChecks.tilePolicy(field(activity,"readerSurface"),field(activity,"library"));}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiTilePolicyResult="+policy[0]+";window.__omiTilePolicyCheck=false");}
         if("true".equals(eval("window.__omiNativeQueueCheck===true"))){JSONObject[] check={null};runOnMainSync(()->{try{check[0]=LargeImageChecks.scheduling(field(activity,"readerSurface"));}catch(Exception error){throw new RuntimeException(error);}});eval("window.__omiNativeQueueResult="+check[0]+";window.__omiNativeQueueCheck=false");}
         if("true".equals(eval("window.__omiReaderRevealCheck===true"))){JSONObject check=readerRevealGateTest(activity);eval("window.__omiReaderRevealResult="+check+";window.__omiReaderRevealCheck=false");}
@@ -931,6 +951,7 @@ public final class SmokeTest extends Instrumentation {
             state.put("rootLeftPadding",rootView.getPaddingLeft()).put("rootRightPadding",rootView.getPaddingRight()).put("rootBottomPadding",rootView.getPaddingBottom());
             if(Build.VERSION.SDK_INT>=28&&insets!=null&&insets.getDisplayCutout()!=null){android.view.DisplayCutout cutout=insets.getDisplayCutout();state.put("cutoutTop",cutout.getSafeInsetTop()).put("cutoutLeft",cutout.getSafeInsetLeft()).put("cutoutRight",cutout.getSafeInsetRight());}
             int[] webOrigin=new int[2];web.getLocationInWindow(webOrigin);state.put("webY",webOrigin[1]).put("webHeight",web.getHeight());
+            if((args.getString("fixture","").contains("zoomperf1189")||args.getString("fixture","").contains("zoomfollow1190"))){Object currentFrame=field(surface,"current");state.put("currentZoom",currentFrame==null?0:field(currentFrame,"zoom")).put("waitingDetail",field(surface,"pendingFrame")!=null).put("drawSharp",field(surface,"lastDrawSharp")).put("nativeWidth",((View)surface).getWidth());int openPages=0;for(Object doc:((java.util.Map<?,?>)field(field(activity,"library"),"documents")).values())try{if(field(doc,"detailPage")!=null)openPages++;}catch(NoSuchFieldException legacy){}state.put("openPdfDetails",openPages);}
             try{state.put("detailPlanReuses",field(surface,"detailPlanReuses")).put("detailPlansCreated",field(surface,"detailPlansCreated"));}catch(NoSuchFieldException legacy){/* Earlier APK baseline. */}
             try{state.put("windowReheats",field(surface,"windowReheats"));}catch(NoSuchFieldException legacy){}
             try{state.put("queuedBodyCancellations",field(surface,"queuedBodyCancellations")).put("joinedBodyLoads",field(surface,"joinedBodyLoads"));}catch(NoSuchFieldException legacy){}
@@ -1028,14 +1049,15 @@ public final class SmokeTest extends Instrumentation {
           }else{
           MotionEvent.PointerProperties finger=new MotionEvent.PointerProperties();finger.id=0;finger.toolType=MotionEvent.TOOL_TYPE_FINGER;
           long lastUp=down;
-          for(int step=0;step<=12;step++){
-            float fraction=Math.min(1,step/11f);
+          int dragSteps=Math.max(2,Math.min(120,request.optInt("steps",11)));
+          for(int step=0;step<=dragSteps+1;step++){
+            float fraction=Math.min(1,step/(float)dragSteps);
             MotionEvent.PointerCoords position=new MotionEvent.PointerCoords();position.pressure=1;position.size=1;
             position.x=origin[0]+(float)(from.getDouble("x")+(to.getDouble("x")-from.getDouble("x"))*fraction)*scale;
             position.y=origin[1]+(float)(from.getDouble("y")+(to.getDouble("y")-from.getDouble("y"))*fraction)*scale;
-            if(step==12){position.x+=request.optDouble("releaseCorrectionX",0)*scale;position.y+=request.optDouble("releaseCorrectionY",0)*scale;}
-            MotionEvent motion=MotionEvent.obtain(down,SystemClock.uptimeMillis(),step==0?MotionEvent.ACTION_DOWN:step==12?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE,1,new MotionEvent.PointerProperties[]{finger},new MotionEvent.PointerCoords[]{position},0,0,1,1,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
-            if(step==12)lastUp=motion.getEventTime();getUiAutomation().injectInputEvent(motion,!request.optBoolean("async",false));motion.recycle();SystemClock.sleep(step==0?request.optInt("holdMs",80):Math.max(1,request.optInt("stepMs",24)));
+            if(step==dragSteps+1){position.x+=request.optDouble("releaseCorrectionX",0)*scale;position.y+=request.optDouble("releaseCorrectionY",0)*scale;}
+            MotionEvent motion=MotionEvent.obtain(down,SystemClock.uptimeMillis(),step==0?MotionEvent.ACTION_DOWN:step==dragSteps+1?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE,1,new MotionEvent.PointerProperties[]{finger},new MotionEvent.PointerCoords[]{position},0,0,1,1,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
+            if(step==dragSteps+1)lastUp=motion.getEventTime();getUiAutomation().injectInputEvent(motion,!request.optBoolean("async",false));motion.recycle();SystemClock.sleep(step==0?request.optInt("holdMs",80):Math.max(1,request.optInt("stepMs",24)));
           }
           eval("window.__omiDragResult={lastUpUptime:"+lastUp+"};window.__omiDrag=null");
           }
@@ -1130,7 +1152,7 @@ public final class SmokeTest extends Instrumentation {
       }catch(NoSuchFieldException legacy){} // The same workload can measure the published 1.0.0 baseline.
       output.putString("result",resultObject.toString());
       File shots=getTargetContext().getExternalFilesDir(null);
-      if(args.getString("fixture","").contains("bugs1187")){
+      if(args.getString("fixture","").contains("bugs1187")||args.getString("fixture","").contains("zoom1188")||(args.getString("fixture","").contains("zoomperf1189")||args.getString("fixture","").contains("zoomfollow1190"))){
         File trace=new File(shots,"android-bugs1187-result.json");
         try(FileOutputStream file=new FileOutputStream(trace)){file.write(resultObject.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
         // Full frame traces exceed Binder's instrumentation result limit.

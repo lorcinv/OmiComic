@@ -1282,6 +1282,9 @@ function ReaderPage({
     }
   }
   useLayoutEffect(()=>{
+    自由缩放.stop();
+  },[模式2?null:显示页组索引.join('|'),isActive,interactive]);
+  useLayoutEffect(()=>{
     const pending=手机放大翻页位置.current;
     if(pending&&显示页组索引.includes(pending.index)){手机放大翻页位置.current=null;自由缩放.panTo(pending.x,pending.y);}
   },[显示页组索引.join('|')]);
@@ -4385,9 +4388,9 @@ function ReaderPage({
         }`}
         onPointerDown={(event) => { 开始手机触控(event); if(自由缩放.down(event)){if(手机布局&&!模式2&&event.isPrimary)手机滑页.down(event);else 手机滑页.cancel();return;} if(手机滑页.down(event))手机触点.current=null; 开始全景拖动(event); }}
         onPointerMove={event => { const start=手机触点.current;if(start&&start.id===event.pointerId&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>=8)start.moved=true;if(自由缩放.move(event)){const overflow=自由缩放.pageOverflow();if(overflow!==null)手机滑页.move(event,overflow);else 手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} if(手机滑页.move(event))return; 拖动全景(event); }}
-        onPointerUp={(event) => { const swiped=手机滑页.up(event),zoomed=自由缩放.up(event);if(swiped||zoomed){if(!swiped)手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} 结束全景指针(event); 结束手机触控(event); }}
+        onPointerUp={(event) => { const swiped=手机滑页.up(event),zoomed=自由缩放.up(event,!swiped);if(swiped||zoomed){if(!swiped)手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} 结束全景指针(event); 结束手机触控(event); }}
         onPointerCancel={(event) => { 自由缩放.cancel(event); 手机滑页.cancel(event); 手机触点.current=null; 取消全景指针(event); }}
-        onDoubleClick={event => { if(自由缩放.active&&isReaderCenter(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect())){event.preventDefault();自由缩放.reset();} }}
+        onDoubleClick={event => { if(自由缩放.active&&自由缩放.canDoubleClick()&&isReaderCenter(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect())){event.preventDefault();自由缩放.reset();} }}
         onLostPointerCapture={event => { if(event.target!==event.currentTarget||event.currentTarget.hasPointerCapture(event.pointerId))return;自由缩放.cancel(event); 手机滑页.cancel(event); 取消全景指针(event); }}
         onPointerLeave={(事件) => {
           if (事件.buttons === 0) 结束全景指针(事件);

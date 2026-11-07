@@ -1,0 +1,50 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>io.github.lorcinv</groupId>
+  <artifactId>reader-motion-check</artifactId>
+  <version>1</version>
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <reader.jar>${project.basedir}/../../android/build/classes.jar</reader.jar>
+    <android.jar>${project.basedir}/../../.cache/android-tools/android-35/android.jar</android.jar>
+    <motion.cache>${project.basedir}/../../.cache/android-motion-host</motion.cache>
+  </properties>
+  <repositories>
+    <repository><id>central</id><url>https://repo.maven.apache.org/maven2/</url></repository>
+    <repository><id>google</id><url>https://dl.google.com/dl/android/maven2/</url></repository>
+  </repositories>
+  <dependencies>
+    <dependency><groupId>org.robolectric</groupId><artifactId>robolectric</artifactId><version>4.16.1</version><scope>test</scope></dependency>
+    <dependency><groupId>junit</groupId><artifactId>junit</artifactId><version>4.13.2</version><scope>test</scope></dependency>
+    <dependency><groupId>local</groupId><artifactId>android</artifactId><version>35</version><scope>system</scope><systemPath>${android.jar}</systemPath></dependency>
+    <dependency><groupId>local</groupId><artifactId>reader</artifactId><version>1</version><scope>system</scope><systemPath>${reader.jar}</systemPath></dependency>
+  </dependencies>
+  <build>
+    <directory>${motion.cache}/target</directory>
+    <testSourceDirectory>${project.basedir}</testSourceDirectory>
+    <plugins>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version></plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-antrun-plugin</artifactId><version>3.1.0</version>
+        <executions><execution><phase>process-test-resources</phase><goals><goal>run</goal></goals><configuration><target>
+          <mkdir dir="${motion.cache}/home"/>
+          <unzip src="${settings.localRepository}/androidx/test/monitor/1.8.0/monitor-1.8.0.aar" dest="${motion.cache}/aar/monitor"><patternset><include name="classes.jar"/></patternset></unzip>
+          <unzip src="${settings.localRepository}/androidx/test/espresso/espresso-idling-resource/3.7.0/espresso-idling-resource-3.7.0.aar" dest="${motion.cache}/aar/espresso"><patternset><include name="classes.jar"/></patternset></unzip>
+        </target></configuration></execution></executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.2</version>
+        <configuration>
+          <useSystemClassLoader>false</useSystemClassLoader>
+          <argLine>-Xmx1024m -Duser.home="${motion.cache}/home"</argLine>
+          <systemPropertyVariables><robolectric.dependency.repo.url>https://repo.maven.apache.org/maven2</robolectric.dependency.repo.url></systemPropertyVariables>
+          <additionalClasspathElements>
+            <additionalClasspathElement>${motion.cache}/aar/monitor/classes.jar</additionalClasspathElement>
+            <additionalClasspathElement>${motion.cache}/aar/espresso/classes.jar</additionalClasspathElement>
+          </additionalClasspathElements>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

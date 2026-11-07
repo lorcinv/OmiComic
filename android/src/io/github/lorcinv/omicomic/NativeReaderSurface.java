@@ -48,7 +48,9 @@ final class NativeReaderSurface extends View {
   private long bytes,tileBytes,drawnFrames,retainedFrames,bitmapDecodes,bitmapHits,tileDecodes,emptyFrames,decodeMs,readMs,nativeBitmapDecodes,nativeTileDecodes;
   private int concurrency=2;
   private volatile boolean stopped;
-  private Frame current,pendingFrame;
+  private Frame current;
+  // Body workers inspect the latest requested URLs; publication is UI-owned.
+  private volatile Frame pendingFrame;
   private boolean active,readerOpen;
   private int background=0xffefefed;
   private String effectsKey="";
@@ -77,6 +79,7 @@ final class NativeReaderSurface extends View {
   private final Map<String,TilePresentation> tilePresentations=new HashMap<>();
   private float lastQualityZoom=1;
   private long lastZoomTime,qualityBlendFrames;
+  private boolean lastDrawSharp=true;
 
   private static final class Raster {
     final String url;final Bitmap bitmap;final int width,height,sample,orientation;final Matrix toOriginal;final long created=SystemClock.uptimeMillis();boolean preview;
@@ -86,7 +89,7 @@ final class NativeReaderSurface extends View {
   private static final class Slot {String url;RectF rect,clip;float alpha;Raster raster;}
   private static final class Frame {RectF clip;boolean panorama,restoring,scrubbing;float zoom=1;List<Slot> slots=new ArrayList<>();List<RectF> expected=new ArrayList<>();}
   private static final class Tile {Bitmap bitmap;Rect source;}
-  private static final class TilePlan {Slot slot;int sample;List<Rect> regions=new ArrayList<>();List<String> keys=new ArrayList<>();long bytes;}
+  private static final class TilePlan {Slot slot;int sample;float density;List<Rect> regions=new ArrayList<>();List<String> keys=new ArrayList<>();long bytes;}
   private static final class TilePresentation {TilePlan current,previous;long started;}
   private static final class PendingRaster {
     volatile long generation,seek;volatile String key="";volatile boolean cancelled;int threadId=-1,threadPriority;final CompletableFuture<Raster> future=new CompletableFuture<>();
@@ -337,7 +340,7 @@ final class NativeReaderSurface extends View {
     // Cover both ordinary fit and panorama (which fills one physical axis).
     // A 2124x3000 page stays original on a 1080px screen. Do not reduce photo
     // neighbours using a smaller ordinary fit when panorama needs more pixels.
-    // Zoom still reads original regions before changing geometry.
+    // Zoom refines source detail separately from the displayed geometry.
     double fit=Math.min(1,Math.max(Math.max(1,targetW)/(double)width,Math.max(1,targetH)/(double)height));
     double neededW=Math.ceil(width*fit)*1.1,neededH=Math.ceil(height*fit)*1.1;
     int sample=1;long allocation=Math.min(48L*1024*1024,Math.max(4L*1024*1024,budget/2));
@@ -603,7 +606,7 @@ final class NativeReaderSurface extends View {
       // paging still require the complete frame; no low-resolution substitute.
       Frame following=new Frame();following.clip=pendingFrame.clip;following.panorama=true;following.scrubbing=true;following.zoom=pendingFrame.zoom;
       for(Slot slot:pendingFrame.slots)if(slot.raster!=null)following.slots.add(slot);
-      if(!following.slots.isEmpty()&&clearFrameReady(following)){current=following;movingRetainedFrames++;}
+      if(!following.slots.isEmpty()){prepareFrameDetail(following);current=following;movingRetainedFrames++;}
       return;
     }
     if(Math.abs(current.zoom-pendingFrame.zoom)>.0001f)return;
@@ -624,37 +627,38 @@ final class NativeReaderSurface extends View {
     if(!following.slots.isEmpty()&&coversExpected(following,pendingFrame.expected)){current=following;movingRetainedFrames++;}
   }
   private void commitFrame(){
-    if(pendingFrame==null)return;
+    // A completion must not publish an older request ahead of queued input.
+    if(pendingFrame==null||queuedGeometry!=null)return;
     boolean complete=true;
     for(Slot slot:pendingFrame.slots){
       if(slot.raster==null){synchronized(cacheLock){slot.raster=cache.get(slot.url);}}
       if(slot.raster==null){complete=false;final long expected=generation,seek=seekGeneration;final String url=slot.url;
         synchronized(cacheLock){if(pending.containsKey(url)||!frameLoads.add(url))continue;}
         foreground.execute(-1,()->{
-          boolean needed=false;synchronized(cacheLock){if(pendingFrame!=null)for(Slot candidate:pendingFrame.slots)if(url.equals(candidate.url))needed=true;}
+          boolean needed=false;Frame requested=pendingFrame;
+          if(requested!=null)for(Slot candidate:requested.slots)if(url.equals(candidate.url))needed=true;
           if(!needed||expected!=generation){synchronized(cacheLock){frameLoads.remove(url);}return;}
           String key;synchronized(cacheLock){key=pageKeys.getOrDefault(url,"");}
           loadAsync(url,getWidth(),getHeight(),expected,seek,key,false,(raster,error)->{synchronized(cacheLock){frameLoads.remove(url);}post(()->{if(expected==generation){commitFrame();invalidate();}});});
         });
       }
     }
-    // For a sampled giant page, prepare the requested source region before
-    // committing its enlarged geometry. Keep the preceding sharp frame while
-    // it decodes, rather than enlarging the fit bitmap and fading in detail.
+    // A decoded body owns presentation readiness. Source detail is refinement,
+    // never a motion gate: waiting for it freezes the visible pose while input
+    // and inertia keep advancing, then jumps to the accumulated destination.
+    // Keep decoded detail in source coordinates and move it with the body.
     complete=complete&&coversExpected(pendingFrame,pendingFrame.expected);
     boolean bodyComplete=complete;
-    if(complete&&current!=null&&!pendingFrame.restoring)complete=clearFrameReady(pendingFrame);
+    if(complete&&current!=null&&!pendingFrame.restoring)prepareFrameDetail(pendingFrame);
     if(complete){current=pendingFrame;pendingFrame=null;synchronized(cacheLock){pendingDetailKeys.clear();pinned.clear();for(Slot slot:current.slots){pinned.add(slot.url);rememberVisibleRaster(slot.raster);}trim();}refineVisiblePages();reheatAdjacentPage();}
     else {retainedFrames++;if(!bodyComplete)followPendingPanorama();}
     invalidate();
   }
-  private boolean clearFrameReady(Frame frame){
+  private void prepareFrameDetail(Frame frame){
     List<TilePlan> plans=new ArrayList<>();Set<String> wanted=new HashSet<>();
-    for(Slot slot:frame.slots){TilePlan plan=tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size()));if(plan!=null){plans.add(plan);wanted.addAll(plan.keys);}}
+    for(Slot slot:frame.slots){TilePlan plan=tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size()),true);if(plan!=null){plans.add(plan);wanted.addAll(plan.keys);TilePlan ahead=plannedDetails.get(slot.url);if(ahead!=null)wanted.addAll(ahead.keys);}}
     synchronized(cacheLock){pendingDetailKeys.clear();pendingDetailKeys.addAll(wanted);visibleTiles.addAll(wanted);}
-    boolean ready=true;
-    for(TilePlan plan:plans){boolean failed;synchronized(cacheLock){failed=!Collections.disjoint(failedTiles,plan.keys);}if(!failed&&!tilesReady(plan,true))ready=false;}
-    return ready;
+    for(TilePlan plan:plans)tilesReady(plan,true);
   }
   @Override protected void onDraw(Canvas canvas){
     super.onDraw(canvas);if(!active)return;canvas.drawColor(background);
@@ -677,22 +681,31 @@ final class NativeReaderSurface extends View {
       plans.add(plan);if(plan!=null)wanted.addAll(plan.keys);if(slot.raster!=null)visibleAdjustments.add(rasterAdjustmentKey(slot.raster)+effectsKey);
       if(shown.current!=null)wanted.addAll(shown.current.keys);
       if(shown.previous!=null)wanted.addAll(shown.previous.keys);
+      TilePlan ahead=plannedDetails.get(slot.url);if(!holdQuality&&plan!=null&&ahead!=null)wanted.addAll(ahead.keys);
     }
     tilePresentations.keySet().retainAll(pageUrls);completeTilePlans.keySet().retainAll(pageUrls);
     for(String key:wanted)visibleAdjustments.add(key+effectsKey);
     synchronized(cacheLock){visibleTiles.clear();visibleTiles.addAll(wanted);visibleTiles.addAll(pendingDetailKeys);trim();}
-    canvas.save();canvas.clipRect(frame.clip);
+    // Decode the next complete sharp region while the current one still covers
+    // the viewport. Its keys share the existing two-region memory reservation.
+    if(!holdQuality)for(int i=0;i<frame.slots.size();i++){Slot slot=frame.slots.get(i);TilePlan ahead=plannedDetails.get(slot.url);if(plans.get(i)!=null&&ahead!=null)tilesReady(atSlot(ahead,slot),true);}
+    canvas.save();canvas.clipRect(frame.clip);lastDrawSharp=true;
     for(int i=0;i<frame.slots.size();i++){Slot slot=frame.slots.get(i);
       Raster raster=slot.raster;if(raster==null)continue;
       paint.setAlpha(Math.round(slot.alpha*255));
       // Ordinary pages draw their original bitmap at every zoom level.
       Bitmap base=adjust(rasterAdjustmentKey(raster),raster.bitmap);canvas.drawBitmap(base,null,slot.rect,paint);
       TilePresentation shown=tilePresentations.get(slot.url);TilePlan target=plans.get(i);
-      if(!sameTiles(shown.current,target)&&tilesReady(target,true)){
+      if(!sameTiles(shown.current,target)&&tilesReady(target,true)&&(target==null||coversDetail(target,slot,frame.clip))){
         shown.previous=null;shown.current=target;shown.started=0;
       }
       if(shown.current!=null){paint.setAlpha(Math.round(slot.alpha*255));drawTiles(canvas,atSlot(shown.current,slot),false);completeTilePlans.put(slot.url,shown.current);}
       else completeTilePlans.remove(slot.url);
+      if(!holdQuality&&raster.sample>1&&slot.rect.width()>raster.bitmap.getWidth()*1.001f){
+        TilePlan detail=shown.current;RectF visible=new RectF(slot.rect);visible.intersect(frame.clip);
+        if(detail==null)lastDrawSharp=false;
+        else{Rect area=detail.regions.get(0);RectF coverage=new RectF(slot.rect.left+area.left*slot.rect.width()/raster.width,slot.rect.top+area.top*slot.rect.height()/raster.height,slot.rect.left+area.right*slot.rect.width()/raster.width,slot.rect.top+area.bottom*slot.rect.height()/raster.height);coverage.inset(-1,-1);float scale=Math.max(slot.rect.width()/raster.width,slot.rect.height()/raster.height);if(!coverage.contains(visible)||detail.density+.0001f<Math.min(1,scale)||!tilesReady(detail,false))lastDrawSharp=false;}
+      }
     }
     canvas.restore();
     if(!holdQuality)restoreTilePlans.clear();
@@ -701,20 +714,37 @@ final class NativeReaderSurface extends View {
   private static boolean sameTiles(TilePlan left,TilePlan right){return left==right||left!=null&&right!=null&&left.keys.equals(right.keys);}
   private static String rasterAdjustmentKey(Raster raster){return raster.url+":"+(raster.preview?"preview":"body")+":"+raster.sample+":"+raster.bitmap.getWidth()+"x"+raster.bitmap.getHeight();}
   private TilePlan atSlot(TilePlan old,Slot slot){
-    TilePlan plan=new TilePlan();plan.slot=slot;plan.sample=old.sample;plan.regions=old.regions;plan.keys=old.keys;plan.bytes=old.bytes;return plan;
+    TilePlan plan=new TilePlan();plan.slot=slot;plan.sample=old.sample;plan.density=old.density;plan.regions=old.regions;plan.keys=old.keys;plan.bytes=old.bytes;return plan;
   }
   private TilePlan atSlotOrNull(TilePlan old,Slot slot){return old==null?null:atSlot(old,slot);}
+  private boolean coversDetail(TilePlan plan,Slot slot,RectF clip){
+    if(plan==null||plan.regions.size()!=1)return false;
+    RectF visible=new RectF(slot.rect);if(!visible.intersect(clip))return true;
+    Rect area=plan.regions.get(0);Raster raster=slot.raster;
+    RectF covered=new RectF(slot.rect.left+(float)area.left/raster.width*slot.rect.width(),slot.rect.top+(float)area.top/raster.height*slot.rect.height(),slot.rect.left+(float)area.right/raster.width*slot.rect.width(),slot.rect.top+(float)area.bottom/raster.height*slot.rect.height());
+    covered.inset(-.25f,-.25f);return covered.contains(visible);
+  }
   private boolean tilesReady(TilePlan plan,boolean requestMissing){return plan==null||drawTiles(null,plan,requestMissing);}
   private TilePlan coveringPlan(TilePlan old,Slot slot,Rect required,int sample,long allocation){
-    if(old==null||old.sample>sample||old.bytes>allocation/2||old.regions.size()!=1||!old.regions.get(0).contains(required))return null;
+    if(old==null||old.sample>sample||old.density+.00001f<detailDensity(slot,sample)||old.bytes>allocation/2||old.regions.size()!=1||!old.regions.get(0).contains(required))return null;
     detailPlanReuses++;return atSlot(old,slot);
   }
   private TilePlan regionPlan(Slot slot,int sample,Rect area){
-    TilePlan plan=new TilePlan();plan.slot=slot;plan.sample=sample;plan.regions.add(area);
-    plan.keys.add(slot.raster.url+":"+sample+":"+area.left+":"+area.top+":"+area.right+":"+area.bottom);
-    plan.bytes=(long)((area.width()+sample-1)/sample)*((area.height()+sample-1)/sample)*4;return plan;
+    TilePlan plan=new TilePlan();plan.slot=slot;plan.sample=sample;plan.density=detailDensity(slot,sample);plan.regions.add(area);
+    plan.keys.add(slot.raster.url+":"+sample+":"+plan.density+":"+area.left+":"+area.top+":"+area.right+":"+area.bottom);
+    plan.bytes=(long)Math.ceil(area.width()*plan.density)*(long)Math.ceil(area.height()*plan.density)*4;return plan;
+  }
+  private float detailDensity(Slot slot,int sample){
+    if(!library.isPdfPage(slot.raster.url))return 1f/sample;
+    float scale=Math.max(slot.rect.width()/slot.raster.width,slot.rect.height()/slot.raster.height);
+    // Round upwards to stable 1/16 levels. Every accepted frame keeps at
+    // least one rendered PDF pixel per physical screen pixel (up to source).
+    return Math.min(1f/sample,Math.max(1f/16,(float)Math.ceil(scale*16)/16));
   }
   private TilePlan tilePlan(Slot slot,RectF clip,long allocation){
+    return tilePlan(slot,clip,allocation,false);
+  }
+  private TilePlan tilePlan(Slot slot,RectF clip,long allocation,boolean prepareAhead){
     Raster raster=slot.raster;
     // A preview is a valid bottom layer, never a prerequisite for source detail.
     // The region decoder reads the original regardless of body promotion state.
@@ -728,8 +758,27 @@ final class NativeReaderSurface extends View {
     Rect required=new Rect(Math.max(0,(int)Math.floor((visible.left-slot.rect.left)/slot.rect.width()*raster.width)),Math.max(0,(int)Math.floor((visible.top-slot.rect.top)/slot.rect.height()*raster.height)),Math.min(raster.width,(int)Math.ceil((visible.right-slot.rect.left)/slot.rect.width()*raster.width)),Math.min(raster.height,(int)Math.ceil((visible.bottom-slot.rect.top)/slot.rect.height()*raster.height)));
     TilePresentation shown=tilePresentations.get(slot.url);
     TilePlan reuse=coveringPlan(shown==null?null:shown.current,slot,required,sample,allocation);
-    if(reuse==null)reuse=coveringPlan(plannedDetails.get(raster.url),slot,required,sample,allocation);
-    if(reuse!=null)return reuse;
+    TilePlan planned=coveringPlan(plannedDetails.get(raster.url),slot,required,sample,allocation);
+    // Let useful in-flight work finish. A moving viewport must not continually
+    // discard its almost-ready pixels and restart decoding at a new rectangle.
+    // The next draw plans the latest viewport after this job completes.
+    TilePlan inFlight=plannedDetails.get(raster.url);
+    if(planned==null&&inFlight!=null&&inFlight.sample<=sample&&inFlight.density+.00001f>=detailDensity(slot,sample)&&inFlight.bytes<=allocation/2&&inFlight.regions.size()==1&&Rect.intersects(inFlight.regions.get(0),required)){
+      synchronized(cacheLock){if(!Collections.disjoint(tilesPending.keySet(),inFlight.keys))return reuse!=null?reuse:atSlot(inFlight,slot);}
+    }
+    // Keep the displayed region until its coverage is exhausted. Switching
+    // as soon as look-ahead finishes wastes its remaining apron, creates more
+    // decoding work and makes an immediate reversal lose its sharp coverage.
+    if(planned!=null&&reuse==null)return planned;
+    int aheadX=0,aheadY=0;
+    if(reuse!=null){
+      if(!prepareAhead||planned!=null&&!sameTiles(reuse,planned))return reuse;
+      Rect area=reuse.regions.get(0);
+      float dx=required.exactCenterX()-area.exactCenterX(),dy=required.exactCenterY()-area.exactCenterY();
+      if(Math.abs(dx)>Math.max(32*sample,(area.width()-required.width())*.2f))aheadX=dx>0?1:-1;
+      if(Math.abs(dy)>Math.max(32*sample,(area.height()-required.height())*.2f))aheadY=dy>0?1:-1;
+      if(aheadX==0&&aheadY==0)return reuse;
+    }
     while(sample<raster.sample){
     // A modest source-space apron absorbs many pinch/pan frames. Prefer the
     // required sharp level with a smaller apron over reducing its resolution.
@@ -737,11 +786,18 @@ final class NativeReaderSurface extends View {
       int unit=(margin==0?64:128)*sample,padX=Math.round(required.width()*margin),padY=Math.round(required.height()*margin);
       int left=Math.max(0,(required.left-padX)/unit*unit),top=Math.max(0,(required.top-padY)/unit*unit);
       int right=Math.min(raster.width,(int)Math.ceil((required.right+padX)/(double)unit)*unit),bottom=Math.min(raster.height,(int)Math.ceil((required.bottom+padY)/(double)unit)*unit);
+      // Put the same apron budget in the direction of travel without changing
+      // the requested sharpness level. Geometry follows independently.
+      if(aheadX!=0){left=Math.max(0,(required.left-(aheadX<0?2*padX:0))/unit*unit);right=Math.min(raster.width,(int)Math.ceil((required.right+(aheadX>0?2*padX:0))/(double)unit)*unit);}
+      if(aheadY!=0){top=Math.max(0,(required.top-(aheadY<0?2*padY:0))/unit*unit);bottom=Math.min(raster.height,(int)Math.ceil((required.bottom+(aheadY>0?2*padY:0))/(double)unit)*unit);}
       TilePlan plan=regionPlan(slot,sample,new Rect(left,top,right,bottom));
       long retained=shown==null||shown.current==null||sameTiles(plan,shown.current)?0:shown.current.bytes;
       // Keep both complete regions within the existing allocation. The apron
       // never takes memory reserved for the old sharp frame or a second page.
-      if(plan.bytes<=allocation/2&&plan.bytes+retained<=allocation){plannedDetails.put(raster.url,plan);detailPlansCreated++;return plan;}
+      if(plan.bytes<=allocation/2&&plan.bytes+retained<=allocation&&(!library.isDocumentPage(raster.url)||plan.bytes<=24_000_000L)){
+        if(reuse!=null){Rect old=reuse.regions.get(0);boolean extendsAhead=aheadX<0&&left<old.left||aheadX>0&&right>old.right||aheadY<0&&top<old.top||aheadY>0&&bottom>old.bottom;if(!extendsAhead||sample!=reuse.sample)return reuse;}
+        plannedDetails.put(raster.url,plan);detailPlansCreated++;return reuse==null?plan:reuse;
+      }
     }
     sample*=2;
     }
@@ -759,7 +815,7 @@ final class NativeReaderSurface extends View {
       Rect region=plan.regions.get(i);RectF dst=new RectF(slot.rect.left+(float)region.left/raster.width*slot.rect.width(),slot.rect.top+(float)region.top/raster.height*slot.rect.height(),slot.rect.left+(float)region.right/raster.width*slot.rect.width(),slot.rect.top+(float)region.bottom/raster.height*slot.rect.height());canvas.drawBitmap(processed.get(i),null,dst,paint);
     }
     if(missing.isEmpty()||!requestMissing)return complete;
-    final int resolution=plan.sample;final long expected=generation;
+    final int resolution=plan.sample;final float density=plan.density;final long expected=generation;
     details.execute(0,()->{
       BitmapRegionDecoder decoder=null;
       List<Tile> decoded=new ArrayList<>();List<String> decodedKeys=new ArrayList<>();
@@ -772,7 +828,7 @@ final class NativeReaderSurface extends View {
           synchronized(cacheLock){if(stopped||expected!=generation||!visibleTiles.contains(keys.get(i)))break;}
           Rect content=missing.get(i),coverage=new Rect(content);
           RectF raw=new RectF(coverage);raster.toOriginal.mapRect(raw);Rect region=new Rect();raw.roundOut(region);region.intersect(0,0,pdf?raster.width:decoder.getWidth(),pdf?raster.height:decoder.getHeight());
-          Bitmap bitmap=pdf?library.readerDocument(raster.url,1,1,region,resolution).bitmap:ReaderBitmapDecoder.region(decoder,region,resolution,false,()->{checkGeneration(expected);synchronized(cacheLock){if(Collections.disjoint(visibleTiles,keys))throw new IOException("阅读请求已取消。");}});if(bitmap==null)continue;bitmap=orient(bitmap,raster.orientation);
+          Bitmap bitmap=pdf?library.readerDocument(raster.url,1,1,region,resolution,false,density).bitmap:ReaderBitmapDecoder.region(decoder,region,resolution,false,()->{checkGeneration(expected);synchronized(cacheLock){if(Collections.disjoint(visibleTiles,keys))throw new IOException("阅读请求已取消。");}});if(bitmap==null)continue;bitmap=orient(bitmap,raster.orientation);
           bitmap.setHasMipMap(true);bitmap.prepareToDraw();Tile tile=new Tile();tile.bitmap=bitmap;tile.source=content;
           decoded.add(tile);decodedKeys.add(keys.get(i));
         }
@@ -785,7 +841,7 @@ final class NativeReaderSurface extends View {
         }
         post(()->{if(expected==generation){if(pendingFrame!=null)commitFrame();postInvalidateOnAnimation();}});
       }catch(Exception|OutOfMemoryError ignored){synchronized(cacheLock){if(expected==generation&&(ignored.getMessage()==null||!ignored.getMessage().contains("已取消"))){if(failedTiles.size()>1024)failedTiles.clear();failedTiles.addAll(keys);}}/* Keep the base without retrying unsupported tiles every frame. */}
-      finally{for(Tile tile:decoded)if(tile!=null)tile.bitmap.recycle();if(decoder!=null)decoder.recycle();synchronized(cacheLock){for(String key:keys)if(Objects.equals(tilesPending.get(key),expected))tilesPending.remove(key);}post(()->{if(expected==generation&&pendingFrame!=null)commitFrame();});}
+      finally{for(Tile tile:decoded)if(tile!=null)tile.bitmap.recycle();if(decoder!=null)decoder.recycle();synchronized(cacheLock){for(String key:keys)if(Objects.equals(tilesPending.get(key),expected))tilesPending.remove(key);}post(()->{if(expected==generation&&active){if(pendingFrame!=null)commitFrame();postInvalidateOnAnimation();}});}
     });
     return complete;
   }
@@ -864,7 +920,7 @@ final class NativeReaderSurface extends View {
     }
     return source;
   }
-  void trimMemory(){synchronized(cacheLock){Iterator<Map.Entry<String,Raster>> it=cache.entrySet().iterator();while(it.hasNext()){Map.Entry<String,Raster> e=it.next();if(!pinned.contains(e.getKey())){bytes-=e.getValue().bitmap.getAllocationByteCount();it.remove();}}tiles.clear();tileBytes=0;}tilePresentations.clear();completeTilePlans.clear();restoreTilePlans.clear();plannedDetails.clear();adjusted.clear();adjustedBytes=0;}
+  void trimMemory(){library.releaseReaderDetails();synchronized(cacheLock){Iterator<Map.Entry<String,Raster>> it=cache.entrySet().iterator();while(it.hasNext()){Map.Entry<String,Raster> e=it.next();if(!pinned.contains(e.getKey())){bytes-=e.getValue().bitmap.getAllocationByteCount();it.remove();}}tiles.clear();tileBytes=0;}tilePresentations.clear();completeTilePlans.clear();restoreTilePlans.clear();plannedDetails.clear();adjusted.clear();adjustedBytes=0;}
   JSONObject stats()throws JSONException{synchronized(cacheLock){return new JSONObject().put("active",active).put("drawnFrames",drawnFrames).put("emptyFrames",emptyFrames).put("retainedFrames",retainedFrames).put("bitmapDecodes",bitmapDecodes).put("bitmapHits",bitmapHits).put("nativeBitmapDecodes",nativeBitmapDecodes).put("nativeTileDecodes",nativeTileDecodes).put("tileDecodes",tileDecodes).put("decodeMs",decodeMs).put("readMs",readMs).put("bitmapBytes",bytes).put("tileBytes",tileBytes).put("displayRasterBytes",displayBytes).put("displayRasterBuilds",displayBuilds).put("displayRasterHits",displayHits).put("displayRasterBuildMs",displayBuildMs).put("tileFilterBuilds",tileFilterBuilds).put("budget",budget).put("visiblePages",current==null?0:current.slots.size()).put("previewHits",previewHits).put("sharedPreviewDraws",sharedPreviewDraws).put("rasterDiskHits",rasterDiskHits).put("rasterSourceSkips",rasterSourceSkips).put("refinements",refinements).put("refinementFailures",refinementFailures).put("refinementCancellations",refinementCancellations).put("previewRestores",previewRestores).put("previewSlots",previews.size()).put("previewRasterUrls",new JSONArray(previewRasterUrls)).put("tileBudget",tileBudget()).put("cancelledLoads",cancelledLoads).put("retiredBytes",retiredBytes).put("coalescedFrames",coalescedFrames).put("retainedLoads",retainedLoads).put("clearPrefetches",clearPrefetches).put("rasterWriteCount",rasterWriteCount).put("deferredRasterWrites",deferredRasterWrites).put("pendingRasterWrites",pendingWrites.size());}}
   void close(){synchronized(cacheLock){stopped=true;generation++;warmGeneration++;pendingWrites.clear();workingKeys.clear();pageKeys.clear();}library.setReaderPreviewSource(null);foreground.getQueue().clear();prefetch.getQueue().clear();foreground.shutdownNow();prefetch.shutdownNow();details.shutdownNow();previewWork.shutdownNow();rasterWrites.shutdownNow();current=null;pendingFrame=null;queuedGeometry=null;plannedDetails.clear();synchronized(cacheLock){cache.clear();previewCache.clear();previewRestoring.clear();previewRestoreFailed.clear();tiles.clear();bytes=0;previewBytes=0;tileBytes=0;}adjusted.clear();}
 }

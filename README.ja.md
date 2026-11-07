@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.85 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.87/OmiComic-Portable-1.1.85-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.87/OmiComic-Setup-1.1.85-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.87 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.87/OmiComic-1.1.87-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.90 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-Portable-1.1.90-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-Setup-1.1.90-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.90 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-1.1.90-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.87（Android）：全景モードの高速スワイプ後の逆戻りと切り替え時の揺れを修正し、PDF 高速スクロール中の重複描画を削減。EPUB インデックスの再利用、タッチ操作の段階的な加速、スマートフォン・タブレットのセーフエリア改善を含みます。Windows は 1.1.85 を引き続き使用します。[更新内容](docs/releases/v1.1.87.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.1.90（Windows / Android）：拡大画像の慣性ドラッグを両環境に追加。Android は高解像度領域のデコード待ちによる位置更新の停止を修正。コンポーネント回帰テストは通過し、Android 実機での再確認は未完了です。[更新内容](docs/releases/v1.1.90.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 

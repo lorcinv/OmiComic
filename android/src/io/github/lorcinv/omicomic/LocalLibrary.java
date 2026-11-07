@@ -40,7 +40,7 @@ final class LocalLibrary {
   private final DiskCache thumbnails;
   private final DiskCache readerPages;
   private final DiskCache readerRasters;
-  private final java.util.concurrent.ExecutorService readerCleanup=java.util.concurrent.Executors.newSingleThreadExecutor();
+  private final java.util.concurrent.ScheduledExecutorService readerCleanup=java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
   private final java.util.concurrent.Future<?> readerStartupCleanup;
   private final java.util.concurrent.atomic.AtomicLong readerSessionEpoch=new java.util.concurrent.atomic.AtomicLong();
   private final java.util.concurrent.atomic.AtomicBoolean readerSessionActive=new java.util.concurrent.atomic.AtomicBoolean();
@@ -67,7 +67,7 @@ final class LocalLibrary {
   private static final String[] COLUMNS={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE,DocumentsContract.Document.COLUMN_LAST_MODIFIED};
   private static final class Entry {String name,path,mime;Uri uri;long size,modified,cachedAt;boolean directory;}
   private static final class Media {Doc pdfDoc;int pdfPage;String fitAxis;File encodedFile;String encodedKey,bodyUrl;android.graphics.Rect region;int targetWidth;String path,inner,identity;boolean preview;Media(String p,String i,boolean t,String id){path=p;inner=i;preview=t;identity=id;}}
-  private static final class Doc {String path;SeekableSource source;ZipArchive epubZip;PdfRenderer pdf;int pdfPageCount;final Map<Integer,int[]> pdfSizes=new java.util.concurrent.ConcurrentHashMap<>();boolean closed;File imageDirectory;List<String> chapters=new ArrayList<>();}
+  private static final class Doc {String path;SeekableSource source;ZipArchive epubZip;PdfRenderer pdf;PdfRenderer.Page detailPage;int detailPageIndex=-1;long detailPageUse;int pdfPageCount;final Map<Integer,int[]> pdfSizes=new java.util.concurrent.ConcurrentHashMap<>();boolean closed;File imageDirectory;List<String> chapters=new ArrayList<>();}
   private static final class CoverScan {
     final Deque<Entry> remaining=new ArrayDeque<>();
     final Set<String> visited=new HashSet<>();
@@ -112,6 +112,7 @@ final class LocalLibrary {
     readerCleanup.execute(()->{
       fileAccess.writeLock().lock();try{
         if(readerSessionActive.get()||epoch!=readerSessionEpoch.get())return;
+        for(Doc doc:documents.values())synchronized(doc){closeDetailPage(doc);}
         nativeArchives.release();previewArchives.release();readerPages.clear();clearSourceCopies();
       }finally{fileAccess.writeLock().unlock();}
     });
@@ -498,11 +499,15 @@ final class LocalLibrary {
     synchronized(media){Media item=media.get(uri.getLastPathSegment());return item!=null&&(item.pdfDoc!=null||item.region!=null)&&!item.preview?item:null;}
   }
   boolean isDocumentPage(String url){return documentMedia(url)!=null;}
+  boolean isPdfPage(String url){Media item=documentMedia(url);return item!=null&&item.pdfDoc!=null;}
   /** Keep PDF pixels native from render to Canvas. URLs identify pages, not PNGs. */
   DocumentRaster readerDocument(String url,int targetW,int targetH,android.graphics.Rect region,int regionSample)throws Exception{
     return readerDocument(url,targetW,targetH,region,regionSample,false);
   }
   DocumentRaster readerDocument(String url,int targetW,int targetH,android.graphics.Rect region,int regionSample,boolean fitWindow)throws Exception{
+    return readerDocument(url,targetW,targetH,region,regionSample,fitWindow,0);
+  }
+  DocumentRaster readerDocument(String url,int targetW,int targetH,android.graphics.Rect region,int regionSample,boolean fitWindow,float regionDensity)throws Exception{
     Media item=documentMedia(url);if(item==null)return null;
     fileAccess.readLock().lock();
     try{
@@ -523,7 +528,10 @@ final class LocalLibrary {
       Doc doc=item.pdfDoc;
       synchronized(doc){
         if(doc.closed||doc.pdf==null)throw new IOException("文档已关闭。");
-        try(PdfRenderer.Page page=doc.pdf.openPage(item.pdfPage)){
+        if(doc.detailPage!=null&&doc.detailPageIndex!=item.pdfPage)closeDetailPage(doc);
+        if(doc.detailPage==null){doc.detailPage=doc.pdf.openPage(item.pdfPage);doc.detailPageIndex=item.pdfPage;}
+        PdfRenderer.Page page=doc.detailPage;
+        try{
           // A stable eight-pixels-per-point space supports sharp zoom tiles;
           // only the viewport-sized level is allocated for the first paint.
           int width=Math.multiplyExact(page.getWidth(),8),height=Math.multiplyExact(page.getHeight(),8),sample=Math.max(1,regionSample);
@@ -531,6 +539,11 @@ final class LocalLibrary {
           android.graphics.Rect area=region==null?new android.graphics.Rect(0,0,width,height):new android.graphics.Rect(region);
           if(!area.intersect(0,0,width,height))throw new IOException("PDF 区域无效。");
           int bitmapW=Math.max(1,(area.width()+sample-1)/sample),bitmapH=Math.max(1,(area.height()+sample-1)/sample);
+          // PDF has continuous resolution. Render sharp regions at a level
+          // covering physical display pixels instead of rounding up to the
+          // next power-of-two bitmap, which can allocate almost four times
+          // the necessary pixels. Archive image sampling remains unchanged.
+          if(region!=null&&regionDensity>0){bitmapW=Math.max(1,(int)Math.ceil(area.width()*regionDensity));bitmapH=Math.max(1,(int)Math.ceil(area.height()*regionDensity));}
           if(region==null){
             // PDF can render directly at the display size. Power-of-two image
             // sampling otherwise overshoots the budget, then drops below fit
@@ -557,10 +570,19 @@ final class LocalLibrary {
           try{
             bitmap.eraseColor(Color.WHITE);android.graphics.Matrix matrix=new android.graphics.Matrix();
             if(region==null)matrix.setScale(8f*bitmapW/width,8f*bitmapH/height);
-            else{matrix.setScale(8f/sample,8f/sample);matrix.postTranslate(-area.left/(float)sample,-area.top/(float)sample);}
+            else{float density=regionDensity>0?regionDensity:1f/sample;matrix.setScale(8f*density,8f*density);matrix.postTranslate(-area.left*density,-area.top*density);}
             page.render(bitmap,null,matrix,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
             return new DocumentRaster(bitmap,width,height,sample,region==null);
           }catch(Throwable error){bitmap.recycle();throw error;}
+        }finally{
+          if(region==null)closeDetailPage(doc);
+          else{
+            // A pan repeatedly renders the same PDF page. Keep its parsed
+            // page briefly, without another renderer or another bitmap cache.
+            // Navigation, document close and one second of inactivity release it.
+            final long use=++doc.detailPageUse;
+            readerCleanup.schedule(()->{synchronized(doc){if(doc.detailPageUse==use)closeDetailPage(doc);}},1,java.util.concurrent.TimeUnit.SECONDS);
+          }
         }
       }
     }finally{fileAccess.readLock().unlock();}
@@ -930,11 +952,14 @@ final class LocalLibrary {
     synchronized(media){media.put(key,item);while(media.size()>4000)media.remove(media.keySet().iterator().next());}
     return new JSONObject().put("url","https://omi.local/media/"+key+"?v="+mediaEpoch).put("width",width).put("height",height);
   }
+  private static void closeDetailPage(Doc doc){if(doc.detailPage!=null){doc.detailPage.close();doc.detailPage=null;doc.detailPageIndex=-1;}doc.detailPageUse++;}
+  void releaseReaderDetails(){if(!closed)readerCleanup.execute(()->{for(Doc doc:documents.values())synchronized(doc){closeDetailPage(doc);}});}
   private byte[] pdfPageBytes(Media item)throws Exception{
     Doc d=item.pdfDoc;int edge=item.preview?360:Math.min(3200,Math.max(1600,Math.max(context.getResources().getDisplayMetrics().widthPixels,context.getResources().getDisplayMetrics().heightPixels)));
     String key="pdf-native-v1:"+hash(item.identity)+":"+item.pdfPage+":"+edge;byte[] saved=readerPages.get(key);if(saved!=null)return saved;
     synchronized(d){
       if(d.closed||d.pdf==null)throw new IOException("文档已关闭。");
+      closeDetailPage(d);
       try(PdfRenderer.Page page=d.pdf.openPage(item.pdfPage)){
         double scale=Math.min((double)edge/Math.max(page.getWidth(),page.getHeight()),Math.sqrt(6000000d/((double)page.getWidth()*page.getHeight())));
         Bitmap bitmap=Bitmap.createBitmap(Math.max(1,(int)Math.ceil(page.getWidth()*scale)),Math.max(1,(int)Math.ceil(page.getHeight()*scale)),Bitmap.Config.ARGB_8888);
@@ -1037,12 +1062,12 @@ final class LocalLibrary {
     Map<String,String> headers=new HashMap<>();headers.put("Cache-Control","no-store");headers.put("X-Content-Type-Options","nosniff");headers.put("Content-Length",String.valueOf(bytes.length));
     return new WebResourceResponse("application/octet-stream",null,200,"OK",headers,new ByteArrayInputStream(bytes));
   }
-  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)synchronized(doc){doc.closed=true;doc.epubZip=null;if(doc.pdf!=null)doc.pdf.close();doc.source.close();if(doc.imageDirectory!=null){File[] files=doc.imageDirectory.listFiles();if(files!=null)for(File image:files)image.delete();doc.imageDirectory.delete();}}}
+  private void closeDocument(String id)throws IOException {Doc doc=documents.remove(id);if(doc!=null)synchronized(doc){doc.closed=true;doc.epubZip=null;closeDetailPage(doc);if(doc.pdf!=null)doc.pdf.close();doc.source.close();if(doc.imageDirectory!=null){File[] files=doc.imageDirectory.listFiles();if(files!=null)for(File image:files)image.delete();doc.imageDirectory.delete();}}}
   synchronized void close(){
     fileAccess.writeLock().lock();try{
       closed=true;
       nativeArchives.close();previewArchives.close();
-      for(Doc doc:documents.values())try{doc.source.close();}catch(IOException ignored){}
+      for(String id:new ArrayList<>(documents.keySet()))try{closeDocument(id);}catch(IOException ignored){}
       documents.clear();
       indexWrites.execute(directoryIndex::close);indexWrites.shutdown();readerCleanup.shutdown();
     }finally{fileAccess.writeLock().unlock();}
