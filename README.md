@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.85 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Portable-1.1.85-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.85/OmiComic-Setup-1.1.85-x64.exe) |
+| PC · Windows x64 | [OmiComic 1.1.85 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.87/OmiComic-Portable-1.1.85-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.87/OmiComic-Setup-1.1.85-x64.exe) |
 | Android 8.0+ | [OmiComic 1.1.87 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.87/OmiComic-1.1.87-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
