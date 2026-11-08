@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.90 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-Portable-1.1.90-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-Setup-1.1.90-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.91 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-1.1.91-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.92 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Portable-1.1.92-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Setup-1.1.92-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.92 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-1.1.92-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.91（Android）：タップした位置を中心にダブルタップで拡大。設定をオフにすると、タップ後すぐにページを送れます。拡大・縮小時の揺れ、画面上端の表示、詳細画面のページ操作が残る問題を修正しました。Windows は 1.1.90 のままです。[更新内容](docs/releases/v1.1.91.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.1.92（Windows / Android）：バージョンを統一し、3言語の操作ガイドを更新しました。ダブルタップ拡大、即時ページ送り、慣性ドラッグ、各環境の操作の違いを説明します。[更新内容](docs/releases/v1.1.92.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 

@@ -48,7 +48,7 @@ The large image on a card is its cover. The heart adds or removes a favorite; th
 
 **Windows**: Double-click a card to open it. In details, double-click a page thumbnail to read from that page. Double-click the description to edit it; click outside the editor to save.
 
-**Android**: In grid view, tap a card to read. In list view, tap the cover for details or the title to read. The favorite heart is at the top right; long-press a card for organization actions.
+**Android**: Tap a grid card to read. In list view, tap the cover for details or the title to read. Tap a page thumbnail in details to start there; returning keeps the preview group. The heart at the top right toggles favorites; long-press for organization actions.
 
 </details>
 
@@ -160,18 +160,25 @@ Yes. Open location browses the containing folder temporarily without adding a sa
 <details>
 <summary>How do I zoom and pan?</summary>
 
-Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow and remains scrollable when reduced. Free zoom ranges from 50% to 600%; 100% is the default size of the current fit mode, rather than the original pixel ratio.
+Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow and remains scrollable when reduced. Free zoom ranges from 50% to 600%; 100% is the default size of the current fit mode, rather than the original pixel ratio. After panning an enlarged image, release to coast. Press to stop, drag in the opposite direction to reverse, or let the image stop at its boundary.
 
 **Windows**: Open Zoom to the right of Image adjustments for a slider centered on 100% and Reset size below it. Ctrl+wheel zooms; left-drag pans; double-click the center to reset. Reset animates smoothly and can be interrupted by a new zoom or drag. F toggles immersive reading; move to the top or bottom for tools.
 
-**Android**: Pinch in or out and double-tap the center to reset smoothly; there is no separate zoom control on phones. In normal single/double-page view, the next page/spread follows your drag; release to turn or return. When zoomed in, pan the image first, then keep dragging past its edge to reach the next page/spread. Dragging between pages also works when zoomed out. Panorama keeps continuous scrolling.
+**Android**: Pinch to zoom. Double-tap to zoom the image is enabled by default: double-tap the detail you want to see to enlarge it to 2×; double-tap again to reset. Drag horizontally to turn normal pages or spreads. When enlarged, pan to the image edge and keep dragging to turn. Panorama scrolls continuously. Zoomed single and double pages can fill the status-bar and camera area while controls stay clear of the camera.
+
+</details>
+
+<details>
+<summary>How do I use double-tap zoom or immediate tap paging? · Android</summary>
+
+Double-tap to zoom the image is on by default. Double-tap the detail you want to enlarge to 2×, and double-tap again to reset. Turn it off in reading settings or Settings → Default reading; your choice survives restarts. When enabled, single taps wait about 0.18–0.20 seconds after release to distinguish a double tap. When disabled, releasing a tap immediately turns the page or toggles the toolbar; pinch zoom remains available. In normal reading, tap the sides to turn pages and the center to show or hide tools. Panorama tap paging has its own separate switch.
 
 </details>
 
 <details>
 <summary>Where can I click to turn pages on PC? · Windows</summary>
 
-In horizontal reading, click the left 40% or right 40% of the reading area, including the image sides, to turn pages. The middle 20% keeps existing actions such as revealing tools. Left is previous and right is next by default; right-to-left reading reverses them. This applies to normal single/double pages and horizontal panorama. Vertical reading keeps the top and bottom 25% click zones. A drag that moves beyond the click threshold does not also turn a page.
+In horizontal reading, click the left 40% or right 40% of the reading area, including the image sides, to turn pages. The middle 20% keeps existing actions such as revealing tools. Left is previous and right is next by default; right-to-left reading reverses them. This applies to normal single/double pages and horizontal panorama. Vertical reading keeps the top and bottom 25% click zones. A drag that moves beyond the click threshold does not also turn a page. While enlarged, horizontal mouse click zones shrink to 20% on each side, leaving more room to pan. On PC, double-clicking the center resets size; use Ctrl+wheel or the Zoom menu to enlarge.
 
 </details>
 
@@ -236,7 +243,7 @@ No. Brightness, contrast, gamma and color effects change display only; Reset res
 <summary>Touch and volume keys · Android</summary>
 
 - **Tap center**: Show / hide the toolbar.
-- **Swipe / pinch**: Drag horizontally to the next page/spread in normal view. When zoomed in, pan to the image edge and keep dragging to turn; dragging also works when zoomed out. Panorama scrolls continuously. Pinch in/out and double-tap the center to reset smoothly.
+- **Swipe / pinch**: Drag sideways to turn normal pages or spreads. When enlarged, pan to an edge and continue dragging to turn. Panorama scrolls continuously. Pinch to zoom; panning coasts after release and stops when pressed.
 - **Long-press card**: Open actions, selection or ordering.
 - **Drag progress**: Jump live; tap preview thumbnails to refine.
 - **Volume + / −**: Enable volume-key paging in Default reading for previous / next page; direction can be reversed.
