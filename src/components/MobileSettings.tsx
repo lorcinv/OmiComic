@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { isAndroid } from '../platform';
 import { setUiLanguage, normalizeLanguage, uiOptions } from '../i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -84,6 +85,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {toggle('doublePageFirstSingle',t("封面单独显示"))}{toggle('smartDetectSpreadPage',t("智能识别跨页图"))}
         {toggle('readerVolumeKeys',t("音量键翻页"))}{toggle('readerVolumeKeysReversed',t("反转音量键翻页方向"))}
         {toggle('mobilePanoramaTapPaging',t('全景点击翻页'))}
+        {isAndroid() && <><label className="settings-toggle"><span>{t('双击放大画面')}</span><input type="checkbox" checked={value.mobileReaderDoubleTapZoom !== false} onChange={event=>save({mobileReaderDoubleTapZoom:event.target.checked})}/></label><p className="settings-help">{t('关闭后，点击翻页无需等待，仍可双指缩放。')}</p></>}
         {range('readerVolumePanoramaPages',t("全景音量键翻页间隔"),.25,2,.25,1,' 页')}
       </>}
       {category==='book' && <>

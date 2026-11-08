@@ -41,9 +41,10 @@ test('a paused release and pointer cancellation do not coast',()=>{
 test('catching inertia consumes the stop tap; subsequent pinch and book reset leave no stale fling',()=>{
   const view=setup();drag();act(()=>zoom.up(event(140,150)));tick(32);
   act(()=>zoom.down(event(200,200)));const caught=zoom.y;tick(64);expect(zoom.y).toBe(caught);
-  let consumed=false;act(()=>{consumed=zoom.up(event(200,200));});expect(consumed).toBe(true);tick(64);expect(zoom.y).toBe(caught);
+  let consumed=false;act(()=>{consumed=zoom.up(event(200,200));});expect(consumed).toBe(true);expect(zoom.stoppedInertiaTap()).toBe(true);tick(64);expect(zoom.y).toBe(caught);
   drag();act(()=>zoom.up(event(140,150)));tick();act(()=>{zoom.down(event(170,200));zoom.down(event(230,200,2));});
   clock+=16;act(()=>zoom.move(event(250,200,2)));act(()=>{zoom.up(event(250,200,2));zoom.up(event(170,200));});
+  expect(zoom.stoppedInertiaTap()).toBe(false);
   const pinched={x:zoom.x,y:zoom.y,scale:zoom.scale};tick(64);expect({x:zoom.x,y:zoom.y,scale:zoom.scale}).toEqual(pinched);
   drag();act(()=>zoom.up(event(140,150)));tick();view.rerender(<Harness book="two"/>);tick(64);expect(zoom.scale).toBe(1);expect(zoom.x).toBe(0);expect(zoom.y).toBe(0);
 });

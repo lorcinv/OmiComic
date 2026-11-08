@@ -4,10 +4,11 @@
 
 Downloads and changelogs for previous versions.
 
-[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.90)
+[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.91)
 
 | Version | Platform | Release |
 | --- | --- | --- |
+| v1.1.91 | Android 1.1.91 · Windows 1.1.90 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.91) |
 | v1.1.90 | Windows x64 / Android 1.1.90 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.90) |
 | v1.1.87 | Android 1.1.87 · Windows 1.1.85 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.87) |
 | v1.1.85 | PC · Windows x64 / Android 1.1.85 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.85) |

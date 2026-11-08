@@ -43,7 +43,6 @@ public final class MainActivity extends Activity {
   private boolean fullscreen;
   private boolean readerChromeHidden;
   private boolean readerActive;
-  private boolean readerPanorama;
   private boolean epubViewportPrepared;
   private String epubViewportKey;
   private long epubViewportRequest;
@@ -92,11 +91,11 @@ public final class MainActivity extends Activity {
         keyboardVisible=visible;
         int left=0,top=0,right=0,bottom,status;
         int cutoutLeft=0,cutoutTop=0,cutoutRight=0,cutoutBottom=0;
-        boolean panoramaCanvas=readerActive&&readerPanorama;
+        boolean expandedCanvas=readerActive;
         if(Build.VERSION.SDK_INT>=30){
           android.graphics.Insets cutout=insets.getInsets(WindowInsets.Type.displayCutout());
           cutoutLeft=cutout.left;cutoutTop=cutout.top;cutoutRight=cutout.right;cutoutBottom=cutout.bottom;
-          android.graphics.Insets safe=insets.getInsets((panoramaCanvas?0:WindowInsets.Type.displayCutout())|WindowInsets.Type.ime()|(fullscreen?0:WindowInsets.Type.navigationBars()));
+          android.graphics.Insets safe=insets.getInsets((expandedCanvas?0:WindowInsets.Type.displayCutout())|WindowInsets.Type.ime()|(fullscreen?0:WindowInsets.Type.navigationBars()));
           left=safe.left;top=safe.top;right=safe.right;bottom=safe.bottom;
           status=insets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top;
         }else{
@@ -105,18 +104,19 @@ public final class MainActivity extends Activity {
           if(Build.VERSION.SDK_INT>=28&&insets.getDisplayCutout()!=null){
             android.view.DisplayCutout cutout=insets.getDisplayCutout();
             cutoutLeft=cutout.getSafeInsetLeft();cutoutTop=cutout.getSafeInsetTop();cutoutRight=cutout.getSafeInsetRight();cutoutBottom=cutout.getSafeInsetBottom();
-            if(!panoramaCanvas){left=Math.max(left,cutoutLeft);top=cutoutTop;right=Math.max(right,cutoutRight);bottom=Math.max(bottom,cutoutBottom);}
+            if(!expandedCanvas){left=Math.max(left,cutoutLeft);top=cutoutTop;right=Math.max(right,cutoutRight);bottom=Math.max(bottom,cutoutBottom);}
           }
         }
         // A reader always keeps the same canvas, whether its controls/time bar
         // are shown or hidden. Only the toolbar needs the stable status inset.
-        // Panorama pixels may extend behind a cutout. Controls retain safe
-        // edges, including a side camera after phone/tablet rotation.
-        int toolbarInset=Math.max(0,Math.max(panoramaCanvas?cutoutTop:0,fullscreen||tabletLandscape()?0:status)-top);
-        int safeLeft=panoramaCanvas?Math.max(0,cutoutLeft-left):0;
-        int safeTop=panoramaCanvas?Math.max(0,cutoutTop-top):0;
-        int safeRight=panoramaCanvas?Math.max(0,cutoutRight-right):0;
-        int safeBottom=panoramaCanvas?Math.max(0,cutoutBottom-bottom):0;
+        // Keep this canvas fixed through zoom and restore. The ordinary reader
+        // fits pages inside CSS safe padding; enlarged pixels can cover it.
+        // Controls retain safe edges, including a side camera after rotation.
+        int toolbarInset=Math.max(0,Math.max(expandedCanvas?cutoutTop:0,fullscreen||tabletLandscape()?0:status)-top);
+        int safeLeft=expandedCanvas?Math.max(0,cutoutLeft-left):0;
+        int safeTop=expandedCanvas?Math.max(0,cutoutTop-top):0;
+        int safeRight=expandedCanvas?Math.max(0,cutoutRight-right):0;
+        int safeBottom=expandedCanvas?Math.max(0,cutoutBottom-bottom):0;
         if(readerStatusInset!=toolbarInset||readerSafeLeft!=safeLeft||readerSafeTop!=safeTop||readerSafeRight!=safeRight||readerSafeBottom!=safeBottom){
           readerStatusInset=toolbarInset;readerSafeLeft=safeLeft;readerSafeTop=safeTop;readerSafeRight=safeRight;readerSafeBottom=safeBottom;publishReaderStatusInset();
         }
@@ -206,7 +206,6 @@ public final class MainActivity extends Activity {
               }
               if(method.equals("setReaderChrome")){
                 readerActive=args.optBoolean("active",true);readerChromeHidden=readerActive&&args.optBoolean("hidden");
-                readerPanorama=readerActive&&args.optBoolean("panorama");
                 resetEpubReaderViewport();
                 if(!readerActive||!sceneTransition.deferReaderBars(MainActivity.this::applySystemBars))applySystemBars();
                 if(args.optBoolean("settle"))FrameCommit.after(rootFrame,()->web.postVisualStateCallback(id,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){reply(id,readerChromeHidden,null);}}));
@@ -263,7 +262,7 @@ public final class MainActivity extends Activity {
     if(web==null)return;
     if(Build.VERSION.SDK_INT>=28){
       WindowManager.LayoutParams attributes=getWindow().getAttributes();
-      int cutoutMode=readerActive&&readerPanorama&&Build.VERSION.SDK_INT>=30?WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS:WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+      int cutoutMode=readerActive&&Build.VERSION.SDK_INT>=30?WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS:WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
       if(attributes.layoutInDisplayCutoutMode!=cutoutMode){attributes.layoutInDisplayCutoutMode=cutoutMode;getWindow().setAttributes(attributes);}
     }
     boolean hideStatus=hideStatusBar();

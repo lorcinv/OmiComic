@@ -52,6 +52,7 @@ export interface AppSettings {
   readerVolumeKeys?: boolean;
   readerVolumeKeysReversed?: boolean;
   mobilePanoramaTapPaging?: boolean;
+  mobileReaderDoubleTapZoom?: boolean;
   readerVolumePanoramaPages?: number;
   mobileReaderPreviews?: boolean;
   mobileReaderAutoHide?: boolean;

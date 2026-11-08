@@ -1,5 +1,7 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "双击放大画面": ["Double-tap to zoom the image", "ダブルタップで画像を拡大"],
+  "关闭后，点击翻页无需等待，仍可双指缩放。": ["Turn off to turn pages without a tap delay. Pinch to zoom remains available.", "オフにするとタップ後すぐにページを送ります。ピンチ操作による拡大・縮小は引き続き使えます。"],
   "跟随系统主题": ["Follow system theme", "システムのテーマに合わせる"],
   "日间配色": ["Daytime palette", "ライトモードの配色"],
   "；深色模式自动使用夜色。": ["; dark mode automatically uses Night.", "。ダークモードでは夜色に切り替わります。"],

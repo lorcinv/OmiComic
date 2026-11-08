@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.90 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-Portable-1.1.90-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-Setup-1.1.90-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.90 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-1.1.90-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.90 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-Portable-1.1.90-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-Setup-1.1.90-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.91 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-1.1.91-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.90（Windows / Android）：双端加入放大拖动惯性；安卓解除高清解码阻塞图片位置的问题，改善 PDF 与大图压缩包放大拖动。安卓修复通过组件回归，实体设备复测尚未完成。[本版更新](docs/releases/v1.1.90.md) · [更新记录](docs/releases/README.md)。
+1.1.91（Android）：新增按点击位置双击放大与开关，关闭后松手直接翻页；修复缩放颤动、顶部区域利用和详情翻页胶囊残留。Windows 保持 1.1.90。[本版更新](docs/releases/v1.1.91.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 

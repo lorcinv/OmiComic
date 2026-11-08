@@ -733,10 +733,14 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("tablet1179")&&fixture.contains("zoom1188"))scriptAsset="zoom-inertia1188";
       if(fixture.startsWith("tablet1179")&&fixture.contains("zoomperf1189"))scriptAsset="zoom-performance1189";
       if(fixture.startsWith("tablet1179")&&fixture.contains("zoomfollow1190"))scriptAsset="zoom-follow1190";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("doubletap"))scriptAsset="android-double-tap";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("cutout1191"))scriptAsset="zoom-cutout1191";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("jitter1191"))scriptAsset="zoom-stability1191";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("tapoption1191"))scriptAsset="tap-option1191";
       if(fixture.startsWith("tablet1179")&&fixture.contains("startupFormats1186"))scriptAsset="startup-formats1186";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
-      deadline=System.currentTimeMillis()+(fixture.contains("bugs1187")?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
+      deadline=System.currentTimeMillis()+((fixture.contains("bugs1187")||fixture.contains("cutout1191"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
       String result;
       if(mode.equals("authorize1141")){
         // A background WebView pauses JavaScript callbacks while SAF owns the window.
@@ -856,7 +860,7 @@ public final class SmokeTest extends Instrumentation {
         String pendingFrameUrl=eval("window.__omiNativePendingUrl||null");
         if(!"null".equals(pendingFrameUrl)){nativePendingFrameTest(field(activity,"readerSurface"),field(activity,"library"),(String)new JSONTokener(pendingFrameUrl).nextValue());eval("window.__omiNativePendingPassed=true;window.__omiNativePendingUrl=null");}
         if("true".equals(eval("window.__omiNativeMovingPendingCheck===true"))){JSONObject report=nativeMovingPendingFrameTest(field(activity,"readerSurface"));eval("window.__omiNativeMovingPendingResult="+report+";window.__omiNativeMovingPendingCheck=false");}
-        String zoomGate=(String)new JSONTokener(eval("window.__omiDetailGate||null")).nextValue();
+        Object zoomGate=new JSONTokener(eval("window.__omiDetailGate||null")).nextValue();
         if("hold".equals(zoomGate)){
           if(zoomDetailGate!=null)zoomDetailGate.countDown();
           CountDownLatch release=new CountDownLatch(1),started=new CountDownLatch(1);zoomDetailGate=release;
@@ -951,7 +955,7 @@ public final class SmokeTest extends Instrumentation {
             state.put("rootLeftPadding",rootView.getPaddingLeft()).put("rootRightPadding",rootView.getPaddingRight()).put("rootBottomPadding",rootView.getPaddingBottom());
             if(Build.VERSION.SDK_INT>=28&&insets!=null&&insets.getDisplayCutout()!=null){android.view.DisplayCutout cutout=insets.getDisplayCutout();state.put("cutoutTop",cutout.getSafeInsetTop()).put("cutoutLeft",cutout.getSafeInsetLeft()).put("cutoutRight",cutout.getSafeInsetRight());}
             int[] webOrigin=new int[2];web.getLocationInWindow(webOrigin);state.put("webY",webOrigin[1]).put("webHeight",web.getHeight());
-            if((args.getString("fixture","").contains("zoomperf1189")||args.getString("fixture","").contains("zoomfollow1190"))){Object currentFrame=field(surface,"current");state.put("currentZoom",currentFrame==null?0:field(currentFrame,"zoom")).put("waitingDetail",field(surface,"pendingFrame")!=null).put("drawSharp",field(surface,"lastDrawSharp")).put("nativeWidth",((View)surface).getWidth());int openPages=0;for(Object doc:((java.util.Map<?,?>)field(field(activity,"library"),"documents")).values())try{if(field(doc,"detailPage")!=null)openPages++;}catch(NoSuchFieldException legacy){}state.put("openPdfDetails",openPages);}
+            if((args.getString("fixture","").contains("zoomperf1189")||args.getString("fixture","").contains("zoomfollow1190")||args.getString("fixture","").contains("doubletap"))){Object currentFrame=field(surface,"current");state.put("currentZoom",currentFrame==null?0:field(currentFrame,"zoom")).put("waitingDetail",field(surface,"pendingFrame")!=null).put("drawSharp",field(surface,"lastDrawSharp")).put("nativeWidth",((View)surface).getWidth());int openPages=0;for(Object doc:((java.util.Map<?,?>)field(field(activity,"library"),"documents")).values())try{if(field(doc,"detailPage")!=null)openPages++;}catch(NoSuchFieldException legacy){}state.put("openPdfDetails",openPages);}
             try{state.put("detailPlanReuses",field(surface,"detailPlanReuses")).put("detailPlansCreated",field(surface,"detailPlansCreated"));}catch(NoSuchFieldException legacy){/* Earlier APK baseline. */}
             try{state.put("windowReheats",field(surface,"windowReheats"));}catch(NoSuchFieldException legacy){}
             try{state.put("queuedBodyCancellations",field(surface,"queuedBodyCancellations")).put("joinedBodyLoads",field(surface,"joinedBodyLoads"));}catch(NoSuchFieldException legacy){}

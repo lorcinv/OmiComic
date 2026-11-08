@@ -12,6 +12,7 @@ const defaults: AppSettings = {
   showHomePage: true,
   language: 'zh-CN',
   mobileReaderAutoHide: true,
+  mobileReaderDoubleTapZoom: true,
   mobileLibraryLayout: "grid", mobileGridColumns: 2, mobileListCoverSize: 82, readerVolumeKeys: false, readerVolumeKeysReversed: false, mobilePanoramaTapPaging:false,
   colorTheme: "mist", followSystemTheme: false, dayColorTheme: "mist", cardSize: "medium", cardScale: 100, detailThumbnailScale: 100,
   pageSize: 50, sortMode: "name-asc", sortDirection: "asc", folderFirst: true,

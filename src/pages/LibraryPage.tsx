@@ -2893,8 +2893,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       if (已取消 || !结果.ok) return;
       设置根目录列表(结果.data.library.roots);
       if (isAndroid() && 保存序号 === 设置保存请求序号.current) {
-        const { readerVolumeKeys, readerVolumeKeysReversed } = 结果.data.settings;
-        界面设置快照.current = { ...界面设置快照.current, readerVolumeKeys, readerVolumeKeysReversed };
+        const { readerVolumeKeys, readerVolumeKeysReversed, mobileReaderDoubleTapZoom } = 结果.data.settings;
+        界面设置快照.current = { ...界面设置快照.current, readerVolumeKeys, readerVolumeKeysReversed, mobileReaderDoubleTapZoom };
         设置音量键翻页(Boolean(readerVolumeKeys));设置反转音量键(Boolean(readerVolumeKeysReversed));
       }
       设置阅读进度表(结果.data.readingProgress);
@@ -7588,7 +7588,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   : 总页数 > 0 ? tr`共 ${总页数} 页 · ${t(singleTapNavigation() ? "点击从该页阅读" : "单击选择，双击从该页阅读")}` : t("正在读取页面清单")}</p>}
               </div>
               <div className="resource-detail-preview-controls">
-                {资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && (手机布局 ? <MobileDetailPager current={资源详情预览页+1} total={Math.ceil(资源详情阅读资源.pages.length/48)} onPage={page=>资源详情预览导航.current?.scrollToIndex((page-1)*48)}/> : (
+                {资源详情阅读资源 && 资源详情阅读资源.pages.length > 48 && (手机布局 ? isActive && <MobileDetailPager current={资源详情预览页+1} total={Math.ceil(资源详情阅读资源.pages.length/48)} onPage={page=>资源详情预览导航.current?.scrollToIndex((page-1)*48)}/> : (
                   <nav className="detail-pagination" aria-label={t("预览分页")}>
                     <button type="button" aria-label={t("上一组预览")} disabled={资源详情预览页===0} onClick={()=>资源详情预览导航.current?.scrollToIndex((资源详情预览页-1)*48)}><MobileIcon name="chevron" style={{transform:"rotate(180deg)"}}/></button>
                     <span>{资源详情预览页+1} / {Math.ceil(资源详情阅读资源.pages.length/48)}</span>

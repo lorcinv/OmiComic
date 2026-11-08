@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.90 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-Portable-1.1.90-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-Setup-1.1.90-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.90 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.90/OmiComic-1.1.90-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.90 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-Portable-1.1.90-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-Setup-1.1.90-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.91 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.91/OmiComic-1.1.91-android.apk) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.90 (Windows / Android): inertial panning for zoomed images on both platforms; Android image movement no longer waits for sharp-region decoding. Component regression checks passed; physical Android device checks remain pending. [Release notes](docs/releases/v1.1.90.md) · [Version history](docs/releases/README.en.md).
+1.1.91 (Android): double-tap to zoom around the touched point, with a switch to restore immediate tap paging. Fixes zoom jitter, top-edge coverage and the lingering detail pager. Windows remains at 1.1.90. [Release notes](docs/releases/v1.1.91.md) · [Version history](docs/releases/README.en.md).
 
 ## Features
 
