@@ -10,12 +10,12 @@ const unresist = (offset: number, extent: number) => offset / Math.max(.01, .35 
 
 /** A bounded two-group transition. The incoming group stays until the actual
  * reader confirms that its decoded replacement is visible. */
-export default function useMobilePageSwipe(stage: RefObject<HTMLDivElement>, enabled: boolean, rtl: boolean, shownKey: string, getTarget: (direction: 1 | -1) => Target | null, prepare: (index: number) => void, navigate: (index: number) => void) {
+export default function useMobilePageSwipe(stage: RefObject<HTMLDivElement>, enabled: boolean, rtl: boolean, shownKey: string, getTarget: (direction: 1 | -1) => Target | null, prepare: (index: number) => void, navigate: (index: number) => void, onBoundary?: (direction: 1 | -1) => void) {
   const [view, setView] = useState(resting), current = useRef(resting), ready = useRef(''), pending = useRef('');
   const animation = useRef(() => {});
   const waiting = useRef<{ key: string; run: () => void; timer: number } | null>(null);
   const point = useRef<{ id: number; x: number; y: number; origin: number; slop: number; dragging: boolean; overflow?: number; samples: MotionSample[] } | null>(null);
-  const config = useRef({ enabled, rtl, getTarget, prepare, navigate }); config.current = { enabled, rtl, getTarget, prepare, navigate };
+  const config = useRef({ enabled, rtl, getTarget, prepare, navigate, onBoundary }); config.current = { enabled, rtl, getTarget, prepare, navigate, onBoundary };
   const extent = () => Math.max(1, stage.current?.clientWidth ?? 1);
   const update = (next: typeof resting) => { current.current = next; setView(next); };
   const stopWaiting = () => { if (waiting.current) clearTimeout(waiting.current.timer); waiting.current = null; };
@@ -86,8 +86,9 @@ export default function useMobilePageSwipe(stage: RefObject<HTMLDivElement>, ena
     if (start.dragging && start.overflow === undefined && last && (last.x !== event.clientX || last.y !== event.clientY)) move(event);
     sample(event); point.current = null; if (!start.dragging) return false;
     const snapshot = current.current, velocity = estimateReleaseVelocity(start.samples, false).x;
-    const fling = Math.abs(velocity) > .3 && Math.abs(snapshot.offset) > 18;
-    const commit = snapshot.target && (fling ? velocity * snapshot.offset > 0 : Math.abs(snapshot.offset) > extent() * .22);
+    const travel = snapshot.target ? snapshot.offset : unresist(snapshot.offset, extent());
+    const fling = Math.abs(velocity) > .3 && Math.abs(travel) > 18;
+    const commit = fling ? velocity * travel > 0 : Math.abs(travel) > extent() * .22;
     const target = snapshot.target;
     if (commit && target) {
       const finish = () => settle(snapshot.direction * (config.current.rtl ? 1 : -1) * extent(), velocity, () => {
@@ -100,7 +101,10 @@ export default function useMobilePageSwipe(stage: RefObject<HTMLDivElement>, ena
         // A new gesture cancels this wait and immediately resumes tracking.
         waiting.current = { key: target.key, run: finish, timer: window.setTimeout(() => { waiting.current = null; settle(0, 0, clear); }, 1500) };
       }
-    } else settle(0, velocity, clear);
+    } else settle(0, velocity, () => {
+      clear();
+      if (commit && snapshot.direction) config.current.onBoundary?.(snapshot.direction);
+    });
     event.preventDefault(); return true;
   };
   const cancel = (event?: PointerEvent<HTMLDivElement>) => {

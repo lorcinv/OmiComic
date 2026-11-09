@@ -1,3 +1,4 @@
+import { directoryOrder } from "../library/directoryOrder";
 import { cardDropAtPoint } from "../utils/cardDrag";
 import { FontSizeControl } from "../components/FontSizeControl";
 import HomeArtworkSettings from '../components/HomeArtworkSettings';
@@ -508,16 +509,6 @@ const 默认设置: AppSettings = {
     recent: true,
   },
 };
-const 类型顺序: Record<资源类型, number> = {
-  folder: 0,
-  image: 1,
-  archive: 2,
-  pdf: 3,
-  epub: 4,
-  mobi: 5,
-  unknown: 6,
-};
-
 const 类型信息: Record<资源类型, { label: string; icon: ReturnType<typeof ResourcePlaceholder> }> = {
   folder: { label: "文件夹", icon: <ResourcePlaceholder type="folder" /> },
   image: { label: "图片", icon: <ResourcePlaceholder type="image" /> },
@@ -1649,20 +1640,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     return 资源标签匹配筛选模式(tags, 已选标签列表, 搜索模式)
       && 匹配整理搜索(搜索内容, [文件.name, info?.note], tags, 搜索模式);
   }, [目录查询签名, 资源元数据表, 已加入书架资源集合]);
-  const 目录比较 = useMemo(() => (左侧: 文件条目, 右侧: 文件条目) => {
-    if (随机模式) return 0;
-    if ((文件夹优先 || 目录穿透搜索) && (左侧.type === 'folder') !== (右侧.type === 'folder')) return 左侧.type === 'folder' ? -1 : 1;
-    if (排序 === 'name-desc') return 文件名排序器.compare(右侧.name, 左侧.name);
-    if (排序 === 'time-asc' || 排序 === 'time-desc') {
-      // Unknown timestamps wait behind known metadata rather than pretending to
-      // be the oldest files. Background batches supply the actual timestamps.
-      if (左侧.modifiedAt === undefined || 右侧.modifiedAt === undefined) {
-        if (左侧.modifiedAt !== 右侧.modifiedAt) return 左侧.modifiedAt === undefined ? 1 : -1;
-      } else if (左侧.modifiedAt !== 右侧.modifiedAt) return (排序 === 'time-asc' ? 1 : -1) * (左侧.modifiedAt - 右侧.modifiedAt);
-    }
-    if (排序 === 'type' && 左侧.type !== 右侧.type) return 类型顺序[左侧.type] - 类型顺序[右侧.type];
-    return 文件名排序器.compare(左侧.name, 右侧.name);
-  }, [排序, 随机模式, 文件夹优先, 目录穿透搜索]);
+  const 目录比较 = useMemo(() => 随机模式 ? () => 0 : directoryOrder({ sortMode: 排序, folderFirst: 文件夹优先 || 目录穿透搜索 }), [排序, 随机模式, 文件夹优先, 目录穿透搜索]);
   const 稳定搜索选项 = useMemo(() => 目录穿透搜索 && !随机模式 ? {
     key: (item: 文件条目) => item.path,
     first: (item: 文件条目) => item.type === 'folder',

@@ -1,3 +1,4 @@
+import { resourcePosition } from "../reader/originalDirectoryContext";
 import { useOriginalDirectoryContext } from "../hooks/useOriginalDirectoryContext";
 import { uiOptions } from '../i18n';
 import { queueDesktopDecode, prioritizeDesktopDecodes } from '../reader/desktopDecodeQueue';
@@ -671,7 +672,7 @@ function ReaderPage({
     ? `${resource.title}${显示阅读页面?.name ? ` / ${显示阅读页面.name}` : ""}`
     : 输入资源?.title ?? "阅读器";
   const 上下文当前位置 = resource && openContext
-    ? openContext.items.findIndex((项目) => 项目.key === openContext.currentKey)
+    ? resourcePosition(resource, openContext)
     : -1;
   const 上一本资源 = openContext && 上下文当前位置 > 0
     ? openContext.items[上下文当前位置 - 1]
@@ -1273,7 +1274,10 @@ function ReaderPage({
       const index=direction>0?计算下一页组主索引(安全索引,总页数,有效阅读器设置,是跨页横图):计算上一页组主索引(安全索引,总页数,有效阅读器设置,是跨页横图);
       if(index===安全索引)return null;
       return {index,key:`${resource.resourceKey}:${index}`};
-    },index=>{for(const page of 计算页组索引(index,总页数,有效阅读器设置,页面是跨页横图))void 确保页面图片就绪(page);},index=>{if(自由缩放.scale>1)手机放大翻页位置.current={index,...手机邻页平移};void 跳转到页面索引(index);});
+    },index=>{for(const page of 计算页组索引(index,总页数,有效阅读器设置,页面是跨页横图))void 确保页面图片就绪(page);},index=>{if(自由缩放.scale>1)手机放大翻页位置.current={index,...手机邻页平移};void 跳转到页面索引(index);}, direction => {
+      if (direction > 0 && 当前页组包含尾页 && 下一本资源) 设置跨本提示("next");
+      else if (direction < 0 && 当前页组包含首页 && 上一本资源) 设置跨本提示("previous");
+    });
   const 手机滑页索引=手机滑页.target?计算页组索引(手机滑页.target.index,总页数,有效阅读器设置,页面是跨页横图):[];
   const 手机滑页视觉索引=从右到左阅读?[...手机滑页索引].reverse():手机滑页索引;
   const 手机滑页页面=手机滑页视觉索引.map(index=>({...resource!.pages[index],...页面图片状态引用.current[index],url:页面图片状态引用.current[index]?.url??'',width:页面图片状态引用.current[index]?.width??600,height:页面图片状态引用.current[index]?.height??900}));

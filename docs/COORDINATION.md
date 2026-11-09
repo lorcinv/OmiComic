@@ -1,3 +1,5 @@
+最新 1.1.93 安装包改为 `release/OmiComic-1.1.93-reading-fix/`；本轮修正原目录排序位置、安卓末页滑动入口及菜单留白，见 [补修记录](status/2026-11-09-1.1.93-reading-order.md)。源码仍在 `codex/android-ui-1.1.93`。
+
 最新本地补修为 **Windows / Android 1.1.93**，见 [2026-11-09 补修记录](status/2026-11-09-1.1.93-reader-followup.md)。完整源码在 `codex/android-ui-1.1.93` 分支（工作树 `.cache/android-ui1193/worktree`），包含安卓打开方式和构建防遗漏检查；下一次发行应从该基线继续，不要直接用 GitHub 1.1.92 覆盖这些修复。安装包在 `release/OmiComic-1.1.93-followup/`，尚未发布 GitHub。
 
 最新 Android / Windows 本地交付为 **1.1.82 完整阅读性能修复版**：`release/OmiComic-1.1.82-完整阅读性能修复版/`，见 [工作报告](status/2026-11-04-1.1.82-work-report.md) 与 [ComicScreen 对照](status/2026-11-04-comicscreen-pdf-motion-analysis.md)。去掉 PDF 正文的 PNG／网页重复处理，图片 EPUB/MOBI 与长图进入原生直绘，文字分页分段让出线程；补齐阅读中预览、连续模式队列与 PC 详情预览。完整流程及三版本同机对照已验证，文字 MOBI 帧间隔未提升、混合书库首次打开仍有初始化开销，报告保留这些结果。华为、OPPO 与用户手机尚待实机复测；旧交付保留，未提交、推送或公开发布。

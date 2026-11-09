@@ -288,9 +288,10 @@ html[data-platform="android"] .mobile-sheet-overlay:not(.is-side-drawer) .mobile
 .mobile-option-row > span { display:flex; justify-content:space-between; }
 .mobile-option-row input { width:100%; accent-color:var(--强调色); }
 .mobile-settings-link { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border:0; border-top:1px solid var(--边框色); background:none; font:inherit; color:var(--主文字); }
-.mobile-sheet:has(.mobile-display-actions) { padding-bottom:0; }
+.mobile-sheet:has(.mobile-display-actions) { padding-bottom:20px; }
 .mobile-display-actions { display:grid; gap:0; }
 .mobile-display-actions .mobile-settings-link { min-height:53px; gap:12px; line-height:24px; }
+.mobile-display-actions .mobile-settings-link:not(:first-child):not(:last-child) { padding-top:19px; padding-bottom:19px; min-height:63px; }
 .mobile-sheet.is-headingless .mobile-sheet-content > .mobile-settings-link:first-child { border-top:0; }
 .mobile-sheet-overlay.is-side-drawer { padding:0; justify-content:flex-start; align-items:stretch; }
 .is-side-drawer .mobile-sheet { width:min(84vw,360px); height:100%; max-height:100%; padding:18px 0; display:flex; flex-direction:column; border-radius:0 22px 22px 0; }

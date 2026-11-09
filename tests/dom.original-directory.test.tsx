@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { originalDirectoryContext, parentDirectory } from '../src/reader/originalDirectoryContext';
+import { originalDirectoryContext, parentDirectory, resourcePosition } from '../src/reader/originalDirectoryContext';
 import { useOriginalDirectoryContext } from '../src/hooks/useOriginalDirectoryContext';
 import type { 阅读资源结果, 阅读打开上下文 } from '../src/types';
 
@@ -30,6 +30,23 @@ describe('original-directory neighbours', () => {
     expect(result?.currentKey).toBe('folder:/series/Vol 2');
     expect(result?.items[1].path).toBe('/series/Vol 10');
     expect(api.listDirectory).toHaveBeenCalledWith('/series', { background: true });
+  });
+  it('uses source-directory descending order and anchors the current path even with an obsolete context key', async () => {
+    const api = { listDirectory: vi.fn().mockResolvedValue(directory([entry('10.cbz'), entry('01.cbz'), entry('02.cbz'), entry('03.cbz')])) };
+    const context = (await originalDirectoryContext(resource, api, { sortMode: 'name-desc', folderFirst: false }))!;
+    context.currentKey = context.items[0].key;
+    const index = resourcePosition(resource, context);
+    expect(context.items.map(i => i.title)).toEqual(['10.cbz', '03.cbz', '02.cbz', '01.cbz']);
+    expect(index).toBe(2); expect(context.items[index + 1].title).toBe('01.cbz');
+  });
+  it('preserves the resource library timestamp ordering instead of restarting from its first entry', async () => {
+    const api = { listDirectory: vi.fn().mockResolvedValue(directory([{ ...entry('01.cbz'), modifiedAt: 300 }, { ...entry('02.cbz'), modifiedAt: 100 }, { ...entry('03.cbz'), modifiedAt: 200 }, entry('04.cbz')])) };
+    const context = (await originalDirectoryContext(resource, api, { sortMode: 'time-asc', folderFirst: false }))!;
+    expect(context.items.map(i => i.title)).toEqual(['02.cbz', '03.cbz', '01.cbz', '04.cbz']);
+    expect(context.items[resourcePosition(resource, context) + 1].title).toBe('03.cbz');
+  });
+  it('does not use an obsolete queue position when the current path is missing', () => {
+    expect(resourcePosition(resource, { ...recent, source: 'directory', currentKey: 'wrong-history' })).toBe(-1);
   });
   it('does not invent neighbours when the grant is denied or current file has disappeared', async () => {
     expect(await originalDirectoryContext(resource, { listDirectory: vi.fn().mockResolvedValue({ ok: false }) })).toBeNull();
