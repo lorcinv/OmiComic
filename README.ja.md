@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.93 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Portable-1.1.93-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Setup-1.1.93-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.93 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-1.1.93-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.94 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.94/OmiComic-Portable-1.1.94-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.94/OmiComic-Setup-1.1.94-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.94 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.94/OmiComic-1.1.94-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.93（Windows / Android）：履歴からの再開時に元フォルダーの並び順を適用し、整理用フォルダーを飛ばして前後の本へ移動できるよう修正しました。Android のスワイプ後の初回タップ、全景モードの前後移動、メニューとタブレットのパネル、システムの「アプリで開く」を改善しました。[更新内容](docs/releases/v1.1.93.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.1.94（Windows / Android）：本棚一覧に戻ったときのスクロール位置と、本棚内の閲覧位置を保持するよう修正しました。PC で選択中も元の右クリックメニューを表示し、本棚・お気に入りへの一括追加や移動・コピーを利用できます。[更新内容](docs/releases/v1.1.94.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 

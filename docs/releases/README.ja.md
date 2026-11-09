@@ -4,10 +4,11 @@
 
 過去のバージョンのダウンロードと更新履歴。
 
-[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.93)
+[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94)
 
 | バージョン | 対応環境 | リリース |
 | --- | --- | --- |
+| v1.1.94 | Windows x64 / Android 1.1.94 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94) |
 | v1.1.93 | Windows x64 / Android 1.1.93 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.93) |
 | v1.1.92 | Windows x64 / Android 1.1.92 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.92) |
 | v1.1.91 | Android 1.1.91 · Windows 1.1.90 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.91) |

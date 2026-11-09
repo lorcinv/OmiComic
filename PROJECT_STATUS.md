@@ -1,6 +1,6 @@
 # 当前项目状态
 
-**1.1.94 本地修复版 · 2026-11-10**：两端书架返回列表后保留原滚动位置，再次进入恢复内部位置；PC 选中后恢复原右键菜单和批量整理操作。Windows 实包及 Android 模拟器最终 APK 验证通过，实体手机未测试。安装包位于 `release/OmiComic-1.1.94/`，完整源码在 `codex/bookshelf-fixes-1.1.94`，尚未发布 GitHub。[本轮验证](docs/status/2026-11-10-1.1.94-bookshelf-fixes.md)。
+**1.1.94 发行 · 2026-11-10**：两端书架返回列表后保留原滚动位置，再次进入恢复内部位置；PC 选中后恢复原右键菜单和批量整理操作。Windows 实包及 Android 模拟器最终 APK 验证通过，实体手机未测试。安装包位于 `release/OmiComic-1.1.94/`，完整源码在 `codex/bookshelf-fixes-1.1.94`，[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94)。[本轮验证](docs/status/2026-11-10-1.1.94-bookshelf-fixes.md)。
 
 **1.1.92 发行 · 2026-11-08**：在已发布 1.1.91 源码上更新三语内置操作说明，统一 Windows / Android 1.1.92，重新打包安装版、便携版及原签名 APK。使用独立工作树，未替换用户本机安装的软件。[发行说明](docs/releases/v1.1.92.md)。
 

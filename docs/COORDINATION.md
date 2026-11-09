@@ -1,4 +1,4 @@
-当前本地修复版为 **Windows / Android 1.1.94**，分支 `codex/bookshelf-fixes-1.1.94`，工作树 `.cache/android-ui1193/worktree`。从完整 1.1.93 发行基线继续修复书架返回位置和 PC 选择后的右键菜单。安装包位于 `release/OmiComic-1.1.94/`，见 [更新说明](releases/v1.1.94.md) 和 [验证记录](status/2026-11-10-1.1.94-bookshelf-fixes.md)。当前公开发行仍为 1.1.93，未安装到用户日常程序。以下为各轮本地交付的历史记录。
+当前发行版本为 **Windows / Android 1.1.94**：[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94)。源码分支 `codex/bookshelf-fixes-1.1.94`，工作树 `.cache/android-ui1193/worktree`；安装包位于 `release/OmiComic-1.1.94/`。见 [更新说明](releases/v1.1.94.md) 和 [验证记录](status/2026-11-10-1.1.94-bookshelf-fixes.md)。以下为各轮本地交付的历史记录。
 
 最新本地安装包为 `release/OmiComic-1.1.93-neighbour-fix/`；修复不可阅读文件夹阻隔上下本，并将普通模式恢复左右箭头，见 [验证记录](status/2026-11-09-1.1.93-neighbour-fix.md)。版本仍为 1.1.93，完整基线在 `codex/android-ui-1.1.93`。
 
