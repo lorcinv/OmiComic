@@ -1,3 +1,5 @@
+当前发行基线为 **1.1.93**；[发行说明](releases/v1.1.93.md)。本版从 `codex/android-ui-1.1.93` 发布，汇总源目录续读、跨本手势、文件夹过滤与安卓界面修复。以下为各轮本地交付的历史记录。
+
 最新本地安装包为 `release/OmiComic-1.1.93-neighbour-fix/`；修复不可阅读文件夹阻隔上下本，并将普通模式恢复左右箭头，见 [验证记录](status/2026-11-09-1.1.93-neighbour-fix.md)。版本仍为 1.1.93，完整基线在 `codex/android-ui-1.1.93`。
 
 最新本地安装包为 `release/OmiComic-1.1.93-swipe-fix/`；修复滑动后跨本按钮首次点按失效，并补齐连续阅读首尾入口与方向，见 [验证记录](status/2026-11-09-1.1.93-swipe-fix.md)。版本不变，完整源码仍在 `codex/android-ui-1.1.93`。

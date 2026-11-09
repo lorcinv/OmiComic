@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.92 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Portable-1.1.92-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Setup-1.1.92-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.92 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-1.1.92-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.93 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Portable-1.1.93-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Setup-1.1.93-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.93 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-1.1.93-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.92（Windows / Android）：バージョンを統一し、3言語の操作ガイドを更新しました。ダブルタップ拡大、即時ページ送り、慣性ドラッグ、各環境の操作の違いを説明します。[更新内容](docs/releases/v1.1.92.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.1.93（Windows / Android）：履歴からの再開時に元フォルダーの並び順を適用し、整理用フォルダーを飛ばして前後の本へ移動できるよう修正しました。Android のスワイプ後の初回タップ、全景モードの前後移動、メニューとタブレットのパネル、システムの「アプリで開く」を改善しました。[更新内容](docs/releases/v1.1.93.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 

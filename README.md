@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.92 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Portable-1.1.92-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Setup-1.1.92-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.92 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-1.1.92-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.93 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Portable-1.1.93-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Setup-1.1.93-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.93 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-1.1.93-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.92（Windows / Android）：统一版本，更新三语操作说明，补齐双击放大开关、立即翻页、拖动惯性与平台操作区别。[本版更新](docs/releases/v1.1.92.md) · [更新记录](docs/releases/README.md)。
+1.1.93（Windows / Android）：修复历史续读的源目录排序、跨文件夹切换上下本和安卓滑动后的首次点按，补齐全景首尾入口，调整安卓菜单与平板弹窗，并恢复系统打开方式。[本版更新](docs/releases/v1.1.93.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 

@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.92 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Portable-1.1.92-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-Setup-1.1.92-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.92 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.92/OmiComic-1.1.92-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.93 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Portable-1.1.93-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-Setup-1.1.93-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.93 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.93/OmiComic-1.1.93-android.apk) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.92 (Windows / Android): unified versions and updated guides in all three languages, covering double-tap zoom, immediate tap paging, inertial panning and platform differences. [Release notes](docs/releases/v1.1.92.md) · [Version history](docs/releases/README.en.md).
+1.1.93 (Windows / Android): fixes source-folder ordering when resuming history, previous/next-book navigation across organizing folders, and the first tap after Android swipes. Adds continuous-reading boundary controls and improves Android menus, tablet panels and Open with support. [Release notes](docs/releases/v1.1.93.md) · [Version history](docs/releases/README.en.md).
 
 ## Features
 
