@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
   private int readerSafeLeft,readerSafeTop,readerSafeRight,readerSafeBottom;
   private Boolean requestedStatusHidden,requestedNavigationHidden;
   private boolean systemThemeApplied;
+  private final ArrayDeque<Intent> externalFiles = new ArrayDeque<>();
 
   @Override public void onCreate(Bundle state) {
     super.onCreate(state);
@@ -191,6 +192,13 @@ public final class MainActivity extends Activity {
               if(method.equals("cancelScene")){if(args.has("request"))sceneTransition.cancel(args.optLong("request"));else{resetEpubReaderViewport();sceneTransition.cancel();}if(id!=0)reply(id,true,null);return;}
               if(method.equals("waitScene")){sceneTransition.afterFinished(args.optLong("request"),()->reply(id,true,null));return;}
               if(method.equals("chooseFolder")||method.equals("chooseFile")){choose(id,method.equals("chooseFolder"));return;}
+              if(method.equals("takeExternalFile")){
+                final Intent incoming=externalFiles.pollFirst();
+                if(incoming==null){reply(id,null,null);return;}
+                // The frontend drains only after its reader and error handlers exist.
+                work.execute(()->{try{reply(id,library.openExternalFile(ExternalFiles.uri(incoming),incoming.getType(),incoming.getFlags()),null);}catch(Exception e){reply(id,null,explain(e));}});
+                return;
+              }
               if(method.equals("exportBackupFile")||method.equals("readBackupFile")){chooseBackup(id,method.equals("exportBackupFile"),args);return;}
               if(method.equals("close")){reply(id,null,null);finish();return;}
               if(method.equals("background")){reply(id,null,null);moveTaskToBack(true);return;}
@@ -225,6 +233,16 @@ public final class MainActivity extends Activity {
     });
     web.post(this::applySystemBars);
     web.loadUrl("https://omi.local/index.html");
+    receiveExternalFile(getIntent());
+  }
+
+  @Override protected void onNewIntent(Intent intent){
+    super.onNewIntent(intent);setIntent(intent);receiveExternalFile(intent);
+  }
+  private void receiveExternalFile(Intent intent){
+    if(ExternalFiles.uri(intent)==null)return;
+    if(externalFiles.size()>=16){Toast.makeText(this,"待打开的文件过多，请稍后重试。",Toast.LENGTH_SHORT).show();return;}
+    externalFiles.addLast(new Intent(intent));event("external-open");
   }
 
   private boolean tabletLandscape(){

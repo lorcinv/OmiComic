@@ -65,14 +65,13 @@ export default function ReaderTools(props: Props) {
     {!props.mobile && <button data-reader-auto-play className={props.running ? 'is-active' : ''} disabled={props.disabled} onClick={() => { setPanel(null); props.onPlay(); }} aria-pressed={props.running} aria-label={props.running ? t("暂停自动阅读") : t("开始自动阅读")} title={props.running ? t("暂停自动阅读") : t("开始自动阅读")}>
       <svg viewBox="0 0 24 24" aria-hidden="true" className="reader-play-icon">{props.running ? <path d="M7 5h3v14H7zM14 5h3v14h-3z"/> : <path d="m8 5 11 7-11 7Z"/>}</svg>
     </button>}
-    {panel && createPortal(<div className={`reader-tool-panel ${panel==='zoom'?'reader-zoom-panel':''}`} ref={popup} role="dialog" aria-modal="false" aria-label={t(panel==='zoom'?'缩放':'画面调整')} style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 12}px)` }} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
+    {panel && createPortal(<div className={`reader-tool-panel ${props.mobile?'is-mobile-tool-panel':''} ${panel==='zoom'?'reader-zoom-panel':''}`} ref={popup} role="dialog" aria-modal="false" aria-label={t(panel==='zoom'?'缩放':'画面调整')} style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 12}px)` }} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
       {panel==='zoom'?<>
         <label className="reader-tool-slider"><span>{t('缩放比例')}<output>{Math.round((props.zoom??1)*100)}%</output></span><input aria-label={t('缩放比例')} aria-valuetext={`${Math.round((props.zoom??1)*100)}%`} type="range" min="-100" max="100" step="1" value={Math.round(Math.log(props.zoom??1)/Math.log((props.zoom??1)<1?2:6)*100)} onChange={event=>{const value=Number(event.target.value);props.onZoom?.(Math.pow(value<0?2:6,value/100));}}/></label>
         <div className="reader-zoom-ticks"><span>50%</span><span>100%</span><span>600%</span></div>
         <button className="reader-tool-reset" onClick={()=>props.onResetZoom?.()}>{t('重置大小')}</button>
       </>:<>
       {props.mobile && <div className="reader-tool-heading"><strong>{t("画面调整")}</strong><button aria-label={t("关闭面板")} onClick={() => setPanel(null)}><MobileIcon name="close"/></button></div>}
-        {props.mobile && <p className="reader-tool-comparison">{t("全局画面调整 · 应用于所有漫画")}</p>}
         <div className="reader-tool-section"><strong>{t("基础调整")}</strong>
           <Slider label={t("亮度")} value={props.adjustments.brightness} min={50} max={150} unit="%" onChange={v => adjust('brightness', v)} />
           <Slider label={t("对比度")} value={props.adjustments.contrast} min={50} max={150} unit="%" onChange={v => adjust('contrast', v)} />

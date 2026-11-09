@@ -172,9 +172,9 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
       const safeSaved = Math.max(0, Number.isFinite(saved) ? Math.floor(saved) : 0);
       const page = isDocument ? safeSaved : resolvePageIndex(resource.data.pages, progress.data?.currentPageId, progress.data?.currentPageName, safeSaved);
       if (!isDocument) resource.data.requestedPageId = pageIdentity(resource.data.pages[page]);
-      if (mobile) await onOpenReader(resource.data, page, undefined, origin, motion);
-      else if (origin) await onOpenReader(resource.data, page, undefined, origin);
-      else await onOpenReader(resource.data, page);
+      const context: 阅读打开上下文 = { source: "recent", currentKey: resource.data.resourceKey, items: [] };
+      if (mobile) await onOpenReader(resource.data, page, context, origin, motion);
+      else await onOpenReader(resource.data, page, context, origin);
     } catch (cause) {
       if (request === openRequest.current) setError(cause instanceof Error ? cause.message : "打开失败，请检查文件是否已移动或删除。");
     } finally {

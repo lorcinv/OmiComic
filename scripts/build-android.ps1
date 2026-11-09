@@ -14,6 +14,7 @@ function Invoke-Checked([string]$Tool, [string[]]$Arguments) {
   & $Tool @Arguments
   if ($LASTEXITCODE -ne 0) { throw "Build tool failed: $Tool ($LASTEXITCODE)" }
 }
+Invoke-Checked 'node' @('scripts/verify-android-external-open.cjs')
 Invoke-Checked 'node' @('scripts/prepare-android.cjs')
 $build = Join-Path $projectRoot 'android\build'
 $release = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $projectRoot 'release' }
@@ -87,6 +88,8 @@ try {
   Invoke-Checked (Join-Path $buildTools 'apksigner.bat') @('sign','--ks',$keyfile,'--ks-key-alias','omicomic','--ks-pass','env:OMI_SIGNING_PASSWORD','--key-pass','env:OMI_SIGNING_PASSWORD','--out',$apk,$aligned)
   Invoke-Checked (Join-Path $buildTools 'apksigner.bat') @('verify','--verbose','--print-certs',$apk)
 } finally { Remove-Item Env:OMI_SIGNING_PASSWORD -ErrorAction SilentlyContinue }
+Copy-Item -LiteralPath $apk -Destination (Join-Path $build 'verified.apk') -Force
+Invoke-Checked 'node' @('scripts/verify-android-external-open.cjs',(Join-Path $build 'verified.apk'),(Join-Path $buildTools 'aapt.exe'))
 $hashStream = [IO.File]::OpenRead($apk)
 $sha256 = [Security.Cryptography.SHA256]::Create()
 try { Write-Output ('SHA256: ' + [BitConverter]::ToString($sha256.ComputeHash($hashStream)).Replace('-','').ToLowerInvariant()) }

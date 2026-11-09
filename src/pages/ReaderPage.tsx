@@ -1,3 +1,4 @@
+import { useOriginalDirectoryContext } from "../hooks/useOriginalDirectoryContext";
 import { uiOptions } from '../i18n';
 import { queueDesktopDecode, prioritizeDesktopDecodes } from '../reader/desktopDecodeQueue';
 import { abortable } from '../reader/abortable';
@@ -338,7 +339,7 @@ function 创建初始阅读状态(
 function ReaderPage({
   resource: 输入资源,
   initialPageIndex,
-  openContext,
+  openContext: requestedOpenContext,
   isActive,
   interactive = true,
   entryPending = false,
@@ -349,6 +350,7 @@ function ReaderPage({
   onProgressSaved,
   onBookmarksChanged,
 }: ReaderPageProps) {
+  const openContext = useOriginalDirectoryContext(输入资源, requestedOpenContext, isActive);
   const 手机布局 = useMobileLayout();
   const [手机工具栏可见, 设置手机工具栏可见] = useState(false);
   const [手机阅读设置打开, 设置手机阅读设置打开] = useState(false);

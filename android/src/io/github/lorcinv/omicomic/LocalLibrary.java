@@ -118,6 +118,35 @@ final class LocalLibrary {
     });
   }
   private void clearSourceCopies(){File[] files=cache.listFiles();if(files!=null)for(File file:files)if(file.isFile())file.delete();}
+  String openExternalFile(Uri uri,String mime,int flags)throws Exception{
+    if(uri==null)throw new IOException("没有收到可打开的文件。");
+    // A foreign file:// URI must never expose the app's own private files.
+    if("file".equals(uri.getScheme())){
+      String source=new File(uri.getPath()).getCanonicalPath();
+      String storage=android.os.Environment.getExternalStorageDirectory().getCanonicalPath()+File.separator;
+      if(!source.startsWith(storage))throw new SecurityException("请通过文件管理器分享此文件。");
+    }
+    Entry entry=stat(uri,"/");
+    String name=ExternalFiles.name(entry.name,ExternalFiles.extension(entry.mime).isEmpty()?mime:entry.mime);
+    if(entry.directory||!ExternalFiles.supported(name))throw new IOException("不支持此文件格式。请选择图片、漫画压缩包、PDF、EPUB 或 MOBI。");
+    if("content".equals(uri.getScheme())){
+      boolean persistent=false;
+      for(android.content.UriPermission permission:resolver.getPersistedUriPermissions())if(permission.getUri().equals(uri)&&permission.isReadPermission()){persistent=true;break;}
+      if(!persistent&&(flags&Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)!=0){
+        try{resolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);persistent=true;}catch(SecurityException ignored){}
+      }
+      if(persistent&&ExternalFiles.supported(entry.name))return addGrant(uri,false);
+    }
+    // FileProvider grants expire. Keep a durable private copy for recent reading.
+    if(entry.size>MAX_FILE)throw new IOException("临时共享文件超过 1 GB，请在 Omi 中通过系统文件选择器打开。");
+    File directory=new File(context.getFilesDir(),"external-open/"+hash(uri.toString()).substring(0,32));
+    if(!directory.isDirectory()&&!directory.mkdirs())throw new IOException("无法保存共享文件。");
+    File target=new File(directory,name);AtomicFile atomic=new AtomicFile(target);FileOutputStream output=null;
+    try(InputStream input=resolver.openInputStream(uri)){
+      output=atomic.startWrite();copy(input,output,MAX_FILE);atomic.finishWrite(output);output=null;
+    }catch(Exception error){if(output!=null)atomic.failWrite(output);throw error;}
+    String path=addGrant(Uri.fromFile(target),false);refreshMetadata(path);return path;
+  }
   synchronized String addGrant(Uri uri,boolean tree)throws Exception{
     String key=hash(uri.toString()).substring(0,16);
     Uri document=tree?DocumentsContract.buildDocumentUriUsingTree(uri,DocumentsContract.getTreeDocumentId(uri)):uri;
@@ -178,7 +207,24 @@ final class LocalLibrary {
   }
   private Entry stat(Uri uri,String path)throws Exception{
     resolveQueries++;
-    try(Cursor c=resolver.query(uri,COLUMNS,null,null,null)){if(c==null||!c.moveToFirst())throw new FileNotFoundException();return entry(c,uri,path);}
+    if("file".equals(uri.getScheme())){
+      File file=new File(uri.getPath());if(!file.isFile())throw new FileNotFoundException();
+      Entry e=new Entry();e.uri=uri;e.path=path;e.name=file.getName();e.mime="application/octet-stream";e.size=file.length();e.modified=file.lastModified();e.cachedAt=System.currentTimeMillis();return e;
+    }
+    if(DocumentsContract.isDocumentUri(context,uri)){
+      try(Cursor c=resolver.query(uri,COLUMNS,null,null,null)){if(c==null||!c.moveToFirst())throw new FileNotFoundException();return entry(c,uri,path);}
+    }
+    Entry e=new Entry();e.uri=uri;e.path=path;e.name=uri.getLastPathSegment();e.mime=resolver.getType(uri);e.cachedAt=System.currentTimeMillis();
+    // Ordinary FileProviders expose OpenableColumns, not DocumentsContract IDs.
+    Cursor metadata;
+    try{metadata=resolver.query(uri,COLUMNS,null,null,null);}catch(IllegalArgumentException unsupportedColumns){metadata=resolver.query(uri,null,null,null,null);}
+    try(Cursor c=metadata){
+      if(c!=null&&c.moveToFirst()){
+        int name=c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME),size=c.getColumnIndex(android.provider.OpenableColumns.SIZE),modified=c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
+        if(name>=0&&!c.isNull(name))e.name=c.getString(name);if(size>=0&&!c.isNull(size))e.size=c.getLong(size);if(modified>=0&&!c.isNull(modified))e.modified=c.getLong(modified);
+      }
+    }
+    e.name=ExternalFiles.name(e.name,e.mime);e.directory=DocumentsContract.Document.MIME_TYPE_DIR.equals(e.mime);return e;
   }
   private Entry entry(Cursor c,Uri uri,String path){
     Entry e=new Entry();e.uri=uri;e.path=path;e.name=c.getString(1);e.mime=c.getString(2);e.size=c.getLong(3);e.modified=c.getLong(4);e.directory=DocumentsContract.Document.MIME_TYPE_DIR.equals(e.mime);e.cachedAt=System.currentTimeMillis();return e;

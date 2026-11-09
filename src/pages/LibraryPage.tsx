@@ -2494,14 +2494,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       })
       .filter((项目): 项目 is 阅读相邻资源项 => 项目 !== null)
   ), [筛选排序后项目]);
-  const 最近打开阅读队列 = useMemo<阅读相邻资源项[]>(() => (
-    筛选后最近打开列表.map((项目) => ({
-      key: 项目.resourceKey,
-      path: 项目.sourcePath,
-      type: 项目.sourceType,
-      title: 项目.title,
-    }))
-  ), [筛选后最近打开列表]);
   const 书签阅读队列 = useMemo<阅读相邻资源项[]>(() => 筛选后书签列表.map(item => ({
     key: item.id, path: item.sourcePath, type: item.sourceType, title: item.bookmarkTitle ?? item.title,
     pageIndex: item.pageIndex, pageId: item.pageId, pageName: item.pageName,
@@ -4288,7 +4280,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       打开阅读器(
         结果.data,
         起始页,
-        创建阅读上下文("recent", 结果.data.resourceKey, 最近打开阅读队列),
+        { source: "recent", currentKey: 结果.data.resourceKey, items: [] },
         转场原点,
         motion,
       );
@@ -5946,7 +5938,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (!资源详情阅读资源) return;
     const 起始页 = Math.min(Math.max(页码, 0), (资源详情阅读资源.sourceType === "pdf" || (资源详情阅读资源.sourceType === "epub" || 资源详情阅读资源.sourceType==="mobi") ? Number.MAX_SAFE_INTEGER : Math.max(0, 资源详情阅读资源.total - 1)));
     void 保存资源当前进度(资源详情阅读资源, 起始页);
-    打开阅读器({...资源详情阅读资源,requestedPageId:资源详情阅读资源.pages[起始页]?.pageId}, 起始页);
+    打开阅读器({...资源详情阅读资源,requestedPageId:资源详情阅读资源.pages[起始页]?.pageId}, 起始页, 当前视图 === "recent" ? { source: "recent", currentKey: 资源详情阅读资源.resourceKey, items: [] } : undefined);
   }
 
   async function 打开详情文件操作(mode: "rename" | "delete"): Promise<void> {
@@ -7705,10 +7697,12 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         {手机自适应.wide && <small className="mobile-adaptive-hint">{t("宽屏自动适配")} · {手机列数} {t("列")}</small>}
         <label className="mobile-option-row"><span>{t("列表封面尺寸 ")}<b>{手机封面尺寸}</b></span><input aria-label={t("列表封面尺寸")} type="range" min="64" max="132" step="4" value={手机封面尺寸} onChange={event => 保存界面设置(patchMobileDisplay(界面设置快照.current, 手机显示范围, {coverSize:Number(event.target.value)}))} /></label>
         <div className="mobile-option-row mobile-sort-row"><span>{t("排序")}</span><GlassSelect value={随机模式 ? 'random' : 排序} options={uiOptions(浏览排序选项)} ariaLabel={t("资源库默认排序")} onChange={应用浏览排序} />{当前随机范围 && <RandomBrowseToggle active={随机模式} onChange={随机浏览.toggle}/>}</div>
+        <div className="mobile-display-actions">
         <button className="mobile-settings-link" disabled={正在读取 || 正在检查全局无效资源} onClick={() => { 设置手机显示选项(false); void 处理刷新按钮(); }}>{t("刷新资源库 ")}<MobileIcon name="refresh"/></button>
         {移除索引数量 > 0 && <button className="mobile-settings-link" onClick={async () => { const result = await window.omicomic.restoreResourceIndex(); if (result.ok) { await 同步文件操作(result.data); 设置手机显示选项(false); } else 设置错误信息(result.error.message); }}>{t("恢复文件索引 (")}{移除索引数量})</button>}
         <button className="mobile-settings-link" onClick={() => { 设置手机显示选项(false); 设置当前右侧抽屉("tag-filter"); }}>{t("标签管理 ")}<MobileIcon name="chevron"/></button>
         <button className="mobile-settings-link" onClick={() => 打开设置窗口()}>{t("应用设置 ")}<MobileIcon name="chevron"/></button>
+        </div>
       </MobileSheet>}
       {手机布局 && !资源信息目标 && 渲染手机操作栏()}
       <aside className="library-sidebar">

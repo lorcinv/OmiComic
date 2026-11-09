@@ -1,3 +1,5 @@
+最新本地补修为 **Windows / Android 1.1.93**，见 [2026-11-09 补修记录](status/2026-11-09-1.1.93-reader-followup.md)。完整源码在 `codex/android-ui-1.1.93` 分支（工作树 `.cache/android-ui1193/worktree`），包含安卓打开方式和构建防遗漏检查；下一次发行应从该基线继续，不要直接用 GitHub 1.1.92 覆盖这些修复。安装包在 `release/OmiComic-1.1.93-followup/`，尚未发布 GitHub。
+
 最新 Android / Windows 本地交付为 **1.1.82 完整阅读性能修复版**：`release/OmiComic-1.1.82-完整阅读性能修复版/`，见 [工作报告](status/2026-11-04-1.1.82-work-report.md) 与 [ComicScreen 对照](status/2026-11-04-comicscreen-pdf-motion-analysis.md)。去掉 PDF 正文的 PNG／网页重复处理，图片 EPUB/MOBI 与长图进入原生直绘，文字分页分段让出线程；补齐阅读中预览、连续模式队列与 PC 详情预览。完整流程及三版本同机对照已验证，文字 MOBI 帧间隔未提升、混合书库首次打开仍有初始化开销，报告保留这些结果。华为、OPPO 与用户手机尚待实机复测；旧交付保留，未提交、推送或公开发布。
 
 最新 Android 本地交付为 **1.1.79 平板兼容修复版**：`release/OmiComic-1.1.79-平板兼容修复版/`，见 [平板修复与验证记录](status/2026-11-04-tablet-1.1.79.md)。修复首页横竖屏、导航和旧内核颜色、滚动条及阅读设置，补齐 PDF/EPUB 与大 MOBI 的打开和预览。用户约 422 MiB MOBI 识别 546 页；旧内核、当前内核及 Android 模拟器横屏、竖屏、手机尺寸验证通过，华为与 OPPO 实机待验。Windows 保持 1.1.78，原包未重建。累计工作区和旧交付保留，没有提交、推送或公开发布。

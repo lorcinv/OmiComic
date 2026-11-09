@@ -271,6 +271,10 @@ html[data-platform="android"] .mobile-sheet-overlay:not(.is-side-drawer) .mobile
   .resource-detail-primary-actions .resource-detail-read-button { min-height:44px; }
   .reader-tool-panel { z-index:1100; left:12px !important; top:auto !important; bottom:12px; width:calc(100vw - 24px); max-width:560px; max-height:calc(100dvh - 24px) !important; }
 }
+.reader-tool-panel.is-mobile-tool-panel { z-index:1100; left:50% !important; top:auto !important; bottom:12px; transform:translateX(-50%); width:calc(100vw - 24px); max-width:560px; max-height:calc(100dvh - 24px) !important; }
+.is-mobile-tool-panel .reader-tool-heading button { display:grid; place-items:center; flex:none; width:40px; height:40px; min-height:40px; padding:0; margin:-6px; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.is-mobile-tool-panel .reader-tool-heading button:hover { background:transparent; }
+.is-mobile-tool-panel .reader-tool-heading button svg { width:18px; height:18px; }
 /* Phone-specific composition keeps the shared Omi palette and controls. */
 .is-mobile-library .mobile-hidden,.is-mobile-library.is-mobile-filters-open .library-controls { display:none; }
 .is-mobile-library .mobile-library-bar { gap:2px; padding:4px 8px; }
@@ -284,6 +288,9 @@ html[data-platform="android"] .mobile-sheet-overlay:not(.is-side-drawer) .mobile
 .mobile-option-row > span { display:flex; justify-content:space-between; }
 .mobile-option-row input { width:100%; accent-color:var(--强调色); }
 .mobile-settings-link { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border:0; border-top:1px solid var(--边框色); background:none; font:inherit; color:var(--主文字); }
+.mobile-sheet:has(.mobile-display-actions) { padding-bottom:0; }
+.mobile-display-actions { display:grid; gap:0; }
+.mobile-display-actions .mobile-settings-link { min-height:53px; gap:12px; line-height:24px; }
 .mobile-sheet.is-headingless .mobile-sheet-content > .mobile-settings-link:first-child { border-top:0; }
 .mobile-sheet-overlay.is-side-drawer { padding:0; justify-content:flex-start; align-items:stretch; }
 .is-side-drawer .mobile-sheet { width:min(84vw,360px); height:100%; max-height:100%; padding:18px 0; display:flex; flex-direction:column; border-radius:0 22px 22px 0; }
@@ -305,7 +312,7 @@ html[data-platform="android"] .mobile-sheet-overlay:not(.is-side-drawer) .mobile
 .mobile-tree-children > small { display:block; padding:8px 24px; font-size:calc(12px * var(--desktop-font-scale, 1)); color:var(--次文字); }
 .mobile-drawer-footer { position:sticky; z-index:2; bottom:0; display:flex; flex-shrink:0; gap:8px; margin-top:auto; padding:12px 12px 8px; border-top:1px solid var(--边框色); background:var(--面板色); }
 .is-side-drawer .mobile-sheet:has(.mobile-drawer-footer) { padding-bottom:0; }
-.mobile-drawer-footer button { flex:1; min-height:44px; border:1px solid var(--边框色); border-radius:12px; color:var(--主文字); background:var(--控件背景); }
+.mobile-drawer-footer button { flex:1; justify-content:center; text-align:center; min-height:44px; border:1px solid var(--边框色); border-radius:12px; color:var(--主文字); background:var(--控件背景); }
 .mobile-reorder-list > div { position:relative; touch-action:pan-y; user-select:none; }
 .mobile-reorder-list > .is-dragging { z-index:3; background:var(--面板色); box-shadow:var(--阴影); opacity:.9; }
 .is-mobile-library .resource-list-scroll { padding:7px 8px; }
@@ -781,3 +788,5 @@ html[data-platform="android"] :is(.mobile-resource-card,.omi-home__book)::before
 html[data-platform="android"] :is(.mobile-resource-card,.omi-home__book)[data-omi-pressed="true"]::before { opacity:1; transition-duration:65ms; }
 
 html[data-platform="android"] .mobile-resource-card { -webkit-tap-highlight-color:transparent; }
+
+html[data-platform="android"] .reader-tool-panel.is-mobile-tool-panel { bottom:calc(12px + var(--android-reader-safe-bottom,0px)); max-height:calc(100dvh - 24px - var(--android-reader-safe-top,0px) - var(--android-reader-safe-bottom,0px)) !important; }

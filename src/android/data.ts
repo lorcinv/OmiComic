@@ -97,6 +97,13 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
   };
   const external: Array<{ resource: 阅读资源结果; initialPageIndex: number }> = [];
   const listeners = new Set<() => void>();
+  const openExternalPath = async (path: string) => {
+    const type = /\.(zip|cbz|rar|cbr|7z|cb7)$/i.test(path)?'archive':/\.pdf$/i.test(path)?'pdf':/\.epub$/i.test(path)?'epub':/\.mobi$/i.test(path)?'mobi':'image';
+    const opened=await api.getResourcePages({path,type});if(!opened.ok)return opened;
+    const resource=opened.data,initialPageIndex=data.readingProgress[resource.resourceKey]?.currentPageIndex??0;
+    const saved=await write(d=>{const item={resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:initialPageIndex,totalPages:resource.total,updatedAt:Date.now()};d.recentOpened=[item,...d.recentOpened.filter(i=>i.resourceKey!==item.resourceKey)].slice(0,d.settings.recentOpenedLimit);d.removedRecentResourceKeys=d.removedRecentResourceKeys.filter(key=>key!==item.resourceKey);return null;});
+    return saved.ok?ok({resource,initialPageIndex}):saved;
+  };
   let pendingBackup: DataImportPreview | null = null;
   const api: OmiComicApi = {
     openResourceDirectory: async input => {
@@ -269,14 +276,19 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     },
     readDocumentChapter: async(id,index)=>{try{return ok(await sanitizeAndroidChapter(await native<string>("readDocumentChapter",{id,index}),native));}catch(e){return failure(e);}},
     closeDocument: id=>call("closeDocument",{id}),
-    takeExternalOpen: async()=>ok(external.shift()??null),
-    onExternalOpen: callback=>{listeners.add(callback);return()=>{listeners.delete(callback);};},
+    takeExternalOpen: async()=>{
+      const selected=external.shift();if(selected)return ok(selected);
+      const incoming=await call<string|null>('takeExternalFile');if(!incoming.ok)return incoming;
+      return incoming.data?openExternalPath(incoming.data):ok(null);
+    },
+    onExternalOpen: callback=>{
+      listeners.add(callback);window.addEventListener('omi-external-open',callback);
+      return()=>{listeners.delete(callback);window.removeEventListener('omi-external-open',callback);};
+    },
     chooseExternalFiles: async()=>{
       const result=await call<string|null>("chooseFile");if(!result.ok)return result;if(!result.data)return ok(null);
-      const opened=await api.getResourcePages({path:result.data,type:/\.(zip|cbz|rar|cbr|7z|cb7)$/i.test(result.data)?'archive':/\.pdf$/i.test(result.data)?'pdf':/\.epub$/i.test(result.data)?'epub':'image'});if(!opened.ok)return opened;
-      const resource=opened.data, initialPageIndex=data.readingProgress[resource.resourceKey]?.currentPageIndex??0;
-      const saved=await write(d=>{const item={resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:initialPageIndex,totalPages:resource.total,updatedAt:Date.now()};d.recentOpened=[item,...d.recentOpened.filter(i=>i.resourceKey!==item.resourceKey)].slice(0,d.settings.recentOpenedLimit);d.removedRecentResourceKeys=d.removedRecentResourceKeys.filter(key=>key!==item.resourceKey);return null;});
-      if(!saved.ok)return saved;external.push({resource,initialPageIndex});listeners.forEach(fn=>fn());return ok(null);
+      const opened=await openExternalPath(result.data);if(!opened.ok)return opened;
+      external.push(opened.data);listeners.forEach(fn=>fn());return ok(null);
     },
     removeTemporaryOpened:key=>write(d=>{d.temporaryOpened=d.temporaryOpened.filter(i=>i.resourceKey!==key);return null;}),
     promoteTemporaryOpened:async()=>failure(new Error("请点击添加目录，授权文件所在的文件夹。Android 的单文件授权不能访问同目录中的其他文件。")),
