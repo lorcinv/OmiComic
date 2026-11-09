@@ -1321,13 +1321,17 @@ function ReaderPage({
   },[isActive,interactive,手机工具栏可见,手机阅读设置打开,手机页面预览打开,全景模式]);
   useLayoutEffect(()=>()=>{if(isAndroid())void window.omicomic.setReaderChrome?.(false,false);},[]);
   useEffect(() => {
-    if(!手机布局 || !手机页面预览打开)return;
+    if(!手机布局 || !手机页面预览打开 || !手机工具栏可见)return;
     const outside=(event:PointerEvent)=>{
-      if((event.target as Element)?.closest('.mobile-reader-previews,.reader-progress-rail,.mobile-sheet-overlay'))return;
-      consumeDismissGesture(event);手机触点.current=null;设置手机页面预览打开(false);
+      const target=event.target as Element;
+      if(target?.closest('.mobile-reader-previews,.reader-progress-rail,.mobile-sheet-overlay'))return;
+      // An explicit book button must retain its click while the previews close.
+      // Background taps still dismiss only, without accidentally turning a page.
+      if(!target?.closest('.reader-book-switch'))consumeDismissGesture(event);
+      手机触点.current=null;设置手机页面预览打开(false);
     };
     window.addEventListener('pointerdown',outside,true);return()=>window.removeEventListener('pointerdown',outside,true);
-  },[手机布局,手机页面预览打开]);
+  },[手机布局,手机页面预览打开,手机工具栏可见]);
   useEffect(()=>{设置页面解码完成({});},[resource?.resourceKey]);
   function 开始手机触控(event: ReactPointerEvent<HTMLDivElement>) {
     if (!['touch','mouse'].includes(event.pointerType) || event.button !== 0 || (event.target as HTMLElement).closest("button,input,a,select,textarea,[contenteditable=true]")) return;

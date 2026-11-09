@@ -66,7 +66,26 @@ for (const mobile of [false, true]) test.describe(mobile ? 'mobile original dire
 
 test.describe('touch book boundary', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  for (const previous of [false, true]) test(`visible ${previous ? 'previous' : 'next'}-book button works on the first tap while progress previews are open`, async ({ page }) => {
+    await fixture(page);
+    await page.evaluate(() => document.documentElement.dataset.platform = 'android');
+    await page.locator('.omi-home__book').filter({ has: page.locator('.omi-home__book-title', { hasText: /^Vol 2$/ }) }).tap();
+    await expect(page.locator('.reader-layout')).toHaveAttribute('aria-busy', 'false');
+    await page.locator('.reader-stage').tap();
+    const rail = page.locator('.reader-progress-rail');
+    await expect(rail).toBeVisible();
+    const box = (await rail.boundingBox())!;
+    await page.touchscreen.tap(box.x + (previous ? 2 : box.width - 2), box.y + box.height / 2);
+    await expect(page.locator('.mobile-reader-previews')).toBeVisible();
+    await page.keyboard.press(previous ? 'ArrowLeft' : 'ArrowRight');
+    const next = page.getByRole('button', { name: previous ? '上一本：Vol 1' : '下一本：Vol 3', exact: true });
+    await expect(next).toBeVisible();
+    await next.tap();
+    await expect(page.locator('.mobile-reader-title')).toHaveText(previous ? 'Vol 1' : 'Vol 3');
+    await expect(page.locator('.mobile-reader-previews')).toHaveCount(0);
+  });
   for (const rtl of [false, true]) test(`swiping at the end reveals next book and ordinary page swipes still work (${rtl ? 'RTL' : 'LTR'})`, async ({ page, context }) => {
+    await page.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => document.documentElement.dataset.platform = 'android'); });
     await fixture(page, 'name-asc', rtl);
     await page.locator('.omi-home__book').filter({ has: page.locator('.omi-home__book-title', { hasText: /^Vol 2$/ }) }).click();
     await expect(page.locator('.reader-stage')).toBeVisible();
@@ -79,7 +98,7 @@ test.describe('touch book boundary', () => {
     await touch('touchStart'); await touch('touchMove', 150); await touch('touchCancel');
     await page.waitForTimeout(400); await expect(next).toHaveCount(0);
     await touch('touchStart'); await touch('touchMove', 40); await touch('touchMove', 200); await touch('touchEnd');
-    await expect(next).toBeVisible(); await next.click();
+    await expect(next).toBeVisible(); await next.tap();
     await expect(page.locator('.mobile-reader-title')).toHaveText('Vol 3');
     await expect(page.locator('.reader-stage [data-reader-page-index="0"]').first()).toBeVisible();
     await touch('touchStart'); await touch('touchMove', 40); await touch('touchMove', 200); await touch('touchEnd');

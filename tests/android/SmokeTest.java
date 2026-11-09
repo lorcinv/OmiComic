@@ -654,6 +654,7 @@ public final class SmokeTest extends Instrumentation {
       while(true){boolean[] covered={false};runOnMainSync(()->{try{covered[0]=launchProgress(activity)>=0;}catch(NoSuchFieldException legacy){}catch(Exception error){throw new RuntimeException(error);}});if(!covered[0])break;if(SystemClock.uptimeMillis()>launchDeadline)throw new IOException("Launch cover did not close");Thread.sleep(20);}
       long launchReadyMs=SystemClock.uptimeMillis()-launchStarted;
       if(args.getString("fixture","").startsWith("tablet1179")){
+        if(args.getString("fixture","").contains("bookSwitch1193"))getContext().getContentResolver().call(android.net.Uri.parse("content://io.github.lorcinv.omicomic.test.tablet"),"prepareBookSwitch",null,null);
         Object local=field(activity,"library");java.lang.reflect.Method grant=local.getClass().getDeclaredMethod("addGrant",android.net.Uri.class,boolean.class),call=local.getClass().getDeclaredMethod("call",String.class,JSONObject.class);grant.setAccessible(true);call.setAccessible(true);
         String root=(String)grant.invoke(local,android.provider.DocumentsContract.buildTreeDocumentUri("io.github.lorcinv.omicomic.test.tablet","root"),true);
         call.invoke(local,"refreshThumbnails",new JSONObject());Thread.sleep(300);
@@ -738,6 +739,7 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("tablet1179")&&fixture.contains("jitter1191"))scriptAsset="zoom-stability1191";
       if(fixture.startsWith("tablet1179")&&fixture.contains("tapoption1191"))scriptAsset="tap-option1191";
       if(fixture.startsWith("tablet1179")&&fixture.contains("startupFormats1186"))scriptAsset="startup-formats1186";
+      if(fixture.contains("bookSwitch1193"))scriptAsset="book-switch1193";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
       deadline=System.currentTimeMillis()+((fixture.contains("bugs1187")||fixture.contains("cutout1191"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);

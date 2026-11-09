@@ -1,3 +1,5 @@
+最新 1.1.93 安装包为 `release/OmiComic-1.1.93-tap-fix/`；修复预览吞掉跨本按钮首次点击，统一三行菜单间距并补底线，见 [验证记录](status/2026-11-09-1.1.93-tap-fix.md)。完整基线仍在 `codex/android-ui-1.1.93`。
+
 最新 1.1.93 安装包改为 `release/OmiComic-1.1.93-reading-fix/`；本轮修正原目录排序位置、安卓末页滑动入口及菜单留白，见 [补修记录](status/2026-11-09-1.1.93-reading-order.md)。源码仍在 `codex/android-ui-1.1.93`。
 
 最新本地补修为 **Windows / Android 1.1.93**，见 [2026-11-09 补修记录](status/2026-11-09-1.1.93-reader-followup.md)。完整源码在 `codex/android-ui-1.1.93` 分支（工作树 `.cache/android-ui1193/worktree`），包含安卓打开方式和构建防遗漏检查；下一次发行应从该基线继续，不要直接用 GitHub 1.1.92 覆盖这些修复。安装包在 `release/OmiComic-1.1.93-followup/`，尚未发布 GitHub。

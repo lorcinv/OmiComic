@@ -10,6 +10,17 @@ import java.io.*;
 /** Read-only, emulator-only SAF fixtures. Never part of the production APK. */
 public final class TabletProvider extends ContentProvider {
   @Override public boolean onCreate(){return true;}
+  @Override public android.os.Bundle call(String method,String arg,android.os.Bundle extras){
+    if(!"prepareBookSwitch".equals(method))return super.call(method,arg,extras);
+    try{for(int volume=1;volume<=3;volume++){
+      File folder=new File(getContext().getFilesDir(),"tablet1179/Switch1193/Vol "+volume);folder.mkdirs();
+      android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(600,900,android.graphics.Bitmap.Config.ARGB_8888);
+      bitmap.eraseColor(volume==1?0xffffaaaa:volume==2?0xffaaffaa:0xffaaaaff);
+      try{for(int page=1;page<=2;page++)try(FileOutputStream out=new FileOutputStream(new File(folder,page+".png"))){bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}finally{bitmap.recycle();}
+    }}catch(IOException error){throw new IllegalStateException(error);}
+    return android.os.Bundle.EMPTY;
+  }
+
   private File file(String id)throws IOException{
     File root=new File(getContext().getFilesDir(),"tablet1179").getCanonicalFile();
     File file=id.equals("root")?root:new File(root,id.substring("root/".length())).getCanonicalFile();
