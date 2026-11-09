@@ -1085,7 +1085,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 手机自适应 = useResponsiveLibrary(手机基础列数, 手机布局);
   const 手机列数 = 手机自适应.columns;
   const [目录空白菜单, 设置目录空白菜单] = useState<{ x: number; y: number } | null>(null);
-  const [选择右键菜单, 设置选择右键菜单] = useState<{ x: number; y: number } | null>(null);
   const [电脑书架选择中, 设置电脑书架选择中] = useState(false);
   const [电脑已选书架, 设置电脑已选书架] = useState<Set<string>>(new Set());
   const [资源菜单, 设置资源菜单] = useState<{
@@ -3172,10 +3171,9 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }, [书签拖拽Key, 书签拖拽落点, 书签列表]);
 
   useEffect(() => {
-    if (!选择右键菜单 && !目录空白菜单 && !资源菜单 && !最近菜单 && !收藏菜单 && !书签菜单 && !书架菜单 && !书架栏空白菜单 && !虚拟文件夹菜单 && !书架空白菜单 && !书架内部空白菜单 && !整理空白菜单 && !虚拟文件夹资源菜单 && !根目录菜单 && !标签菜单) return;
+    if (!目录空白菜单 && !资源菜单 && !最近菜单 && !收藏菜单 && !书签菜单 && !书架菜单 && !书架栏空白菜单 && !虚拟文件夹菜单 && !书架空白菜单 && !书架内部空白菜单 && !整理空白菜单 && !虚拟文件夹资源菜单 && !根目录菜单 && !标签菜单) return;
 
     function 关闭菜单(): void {
-      设置选择右键菜单(null);
       设置目录空白菜单(null);
       设置资源菜单(null);
       设置最近菜单(null);
@@ -3194,7 +3192,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
     function 处理按键(事件: KeyboardEvent): void {
       if (事件.key === "Escape") {
-        设置选择右键菜单(null);
         设置目录空白菜单(null);
         设置资源菜单(null);
         设置最近菜单(null);
@@ -3218,7 +3215,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       window.removeEventListener("click", 关闭菜单);
       window.removeEventListener("keydown", 处理按键);
     };
-  }, [选择右键菜单, 目录空白菜单, 资源菜单, 最近菜单, 收藏菜单, 书签菜单, 书架菜单, 书架栏空白菜单, 虚拟文件夹菜单, 书架空白菜单, 书架内部空白菜单, 整理空白菜单, 虚拟文件夹资源菜单, 根目录菜单, 标签菜单]);
+  }, [目录空白菜单, 资源菜单, 最近菜单, 收藏菜单, 书签菜单, 书架菜单, 书架栏空白菜单, 虚拟文件夹菜单, 书架空白菜单, 书架内部空白菜单, 整理空白菜单, 虚拟文件夹资源菜单, 根目录菜单, 标签菜单]);
 
   useEffect(() => {
     if (!当前右侧抽屉) return;
@@ -4956,6 +4953,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 打开书架(已转场: unknown = false): void {
     if (已转场 !== true) { 切换手机栏目('bookshelf', () => 打开书架(true)); return; }
+    if (当前视图 === "virtual-folder") { 返回书架根层(true); return; }
     设置导航会话(value => value + 1);
     重置栏目搜索();
     if (资源信息目标) 关闭资源详情页面(true);
@@ -4969,7 +4967,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 进入书架文件夹(文件夹: VirtualFolder, 已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 进入书架文件夹(文件夹, true), "folder"); return; }
-    if (手机布局) 设置导航会话(value => value + 1);
+    // Reuse this navigation session so the continuous list can restore both levels.
     设置当前虚拟文件夹ID(文件夹.id);
     目录连续列表.sync();
     设置当前视图("virtual-folder");
@@ -4980,7 +4978,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 返回书架根层(已转场: unknown = false): void {
     if (手机布局 && 已转场 !== true) { 取消手机后台打开请求(); void mobileNavigate(() => 返回书架根层(true), "folder"); return; }
-    if (手机布局) 设置导航会话(value => value + 1);
     if (排序 === "type") 设置排序("name-asc");
     if (!当前书架ID && 书架列表[0]) 设置当前书架ID(书架列表[0].id);
     目录连续列表.sync();
@@ -5803,7 +5800,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 关闭所有右键菜单(): void {
-    设置选择右键菜单(null);
     设置目录空白菜单(null); 设置资源菜单(null); 设置最近菜单(null); 设置收藏菜单(null);
     设置书签菜单(null); 设置书架菜单(null); 设置书架栏空白菜单(null); 设置虚拟文件夹菜单(null);
     设置书架空白菜单(null); 设置书架内部空白菜单(null); 设置整理空白菜单(null);
@@ -6291,7 +6287,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 退出电脑书架选择(): void {
-    设置电脑书架选择中(false); 设置电脑已选书架(new Set()); 设置选择右键菜单(null);
+    设置电脑书架选择中(false); 设置电脑已选书架(new Set());
   }
 
   function 渲染菜单选择文件(关闭: () => void, 书架根层 = false) {
@@ -7638,10 +7634,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   return (
     <section className={`library-layout ${手机布局 ? `is-mobile-library mobile-cards-${手机卡片布局}` : ""} ${资源信息目标 ? 'is-detail-open' : ''} ${手机筛选展开 ? "is-mobile-filters-open" : ""}`} ref={手机导航区域}
-      onContextMenuCapture={事件 => {
-        if (手机布局 || !(电脑书架选择中 || (选择模式 && 选择模式 === 当前选择视图)) || (事件.target instanceof Element && 事件.target.closest('.recent-context-menu'))) return;
-        事件.preventDefault(); 事件.stopPropagation(); 关闭所有右键菜单(); 设置选择右键菜单({x:事件.clientX,y:事件.clientY});
-      }}
       aria-labelledby="library-title" style={手机布局 ? { "--mobile-columns": 手机列数, "--mobile-list-columns": 手机自适应.listColumns, "--mobile-cover-size": `${手机封面尺寸}px`, "--mobile-preview-width": `${手机预览宽度}px` } as CSSProperties : undefined}>
       {手机布局 && !资源信息目标 && <MobileLibraryBar title={资源信息目标 ? t("漫画详情") : 当前视图 === "directory" ? 当前目录 ? (根目录列表.find(root => root.path === 当前目录.path)?.name ?? 获取目录名称(当前目录.path)) : t("资源库") : 当前视图 === "bookshelf" ? t("我的书架") : 当前视图 === "virtual-folder" ? 视图标题 : t(视图标题)}
         detail={Boolean(资源信息目标)}
@@ -9748,11 +9740,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
           </div>,
           document.body,
         )}
-        {选择右键菜单 && <ContextMenu className="recent-context-menu" style={{left:选择右键菜单.x,top:选择右键菜单.y}} role="menu" onClick={事件 => 事件.stopPropagation()}>
-          <button type="button" role="menuitem" onClick={() => { if (电脑书架选择中) 设置电脑已选书架(new Set(筛选后书架文件夹列表.map(item=>item.id))); else 全选当前选择视图(); 设置选择右键菜单(null); }}>{t("全选")}</button>
-          <button type="button" role="menuitem" onClick={() => { if (电脑书架选择中) 设置电脑已选书架(new Set()); else 取消全选(); 设置选择右键菜单(null); }}>{t("取消全选")}</button>
-          <button type="button" role="menuitem" onClick={() => { if (电脑书架选择中) 退出电脑书架选择(); else 退出选择模式(); 设置选择右键菜单(null); }}>{t("退出选择")}</button>
-        </ContextMenu>}
         {根目录菜单 && (
           <ContextMenu
             className="recent-context-menu"

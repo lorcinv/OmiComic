@@ -11,6 +11,14 @@ import java.io.*;
 public final class TabletProvider extends ContentProvider {
   @Override public boolean onCreate(){return true;}
   @Override public android.os.Bundle call(String method,String arg,android.os.Bundle extras){
+    if("prepareBookshelf1194".equals(method)){
+      File folder=new File(getContext().getFilesDir(),"tablet1179/Shelf1194");folder.mkdirs();
+      android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(16,24,android.graphics.Bitmap.Config.ARGB_8888);
+      bitmap.eraseColor(0xffaaffaa);
+      try{for(int page=0;page<120;page++)try(FileOutputStream out=new FileOutputStream(new File(folder,page+".png"))){bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}
+      catch(IOException error){throw new IllegalStateException(error);}finally{bitmap.recycle();}
+      return android.os.Bundle.EMPTY;
+    }
     if(!"prepareBookSwitch".equals(method))return super.call(method,arg,extras);
     try{for(int volume=1;volume<=3;volume++){
       File folder=new File(getContext().getFilesDir(),"tablet1179/Switch1193/Vol "+volume);folder.mkdirs();

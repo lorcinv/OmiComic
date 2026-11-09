@@ -11,7 +11,11 @@ async function library(page: Page, collection = false) {
     const data = result.data;
     data.settings.showHomePage = false;
     (data as any).temporaryOpened=data.recentOpened.slice(0,1);
-    if(collection){const thumbnail=api.getThumbnail;api.getThumbnail=async input=>input.path.endsWith('/Parent')?{ok:true,data:{url:null,itemCount:2}}:thumbnail(input);}
+    if(collection){
+      const thumbnail=api.getThumbnail,list=api.listDirectory;
+      api.getThumbnail=async input=>input.path.endsWith('/Parent')?{ok:true,data:{url:null,itemCount:2}}:thumbnail(input);
+      api.listDirectory=async path=>{const r=await list(path);if(!r.ok||path!=='/comics')return r;return{...r,data:{...r.data,items:r.data.items.map(item=>item.type==='image'?{...item,id:item.id.replace('.png','.cbz'),name:item.name.replace('.png','.cbz'),path:item.path.replace('.png','.cbz'),type:'archive' as const,extension:'cbz'}:item)}};};
+    }
     data.bookshelves = [{ id: 'category', name: '分类', sortIndex: 0, createdAt: 1, updatedAt: 1 }];
     data.virtualFolders = ['甲', '乙'].map((name, i) => ({ id: `s${i}`, name, note: '保留原备注', bookshelfId: 'category', items: [], createdAt: 1, updatedAt: 1, sortIndex: i }));
     data.favorites = [{ resourceKey: 'archive:/comics/book.cbz', sourcePath: '/comics/book.cbz', sourceType: 'archive', title: '收藏漫画', addedAt: 1, updatedAt: 1, tags: [], note: '' }];
@@ -61,34 +65,41 @@ test('desktop drop notice sits at the top and right-click actions are grouped an
   await page.screenshot({ path: 'test-results/ui-pdf-fixes/desktop-menu-1024.png' });
 });
 
-test('container folders have only file actions and selection mode has only selection actions', async ({ page }) => {
+test('selection keeps the original resource menus and can add selected books to a shelf', async ({ page }) => {
   await library(page,true);
   const parent=page.locator('.resource-card').filter({has:page.locator('strong',{hasText:/^Parent$/})});
   await expect(parent).toContainText('2 项');await parent.click({button:'right'});
   const menu=page.getByRole('menu');
   expect(await menu.getByRole('menuitem').allTextContents()).toEqual(['选择文件','重命名本地文件','删除资源…']);
   await menu.getByRole('menuitem',{name:'选择文件',exact:true}).click();await parent.click({button:'right'});
-  expect(await menu.getByRole('menuitem').allTextContents()).toEqual(['全选','取消全选','退出选择']);
-  await menu.getByRole('menuitem',{name:'全选',exact:true}).click();await expect(page.locator('.resource-card.is-selected')).toHaveCount(10);
-  await parent.click({button:'right'});await menu.getByRole('menuitem',{name:'取消全选',exact:true}).click();await expect(page.locator('.resource-card.is-selected')).toHaveCount(0);
-  await parent.click({button:'right'});await menu.getByRole('menuitem',{name:'退出选择',exact:true}).click();await expect(page.locator('.selection-check')).toHaveCount(0);
+  expect(await menu.getByRole('menuitem').allTextContents()).toEqual(['选择文件','重命名本地文件','删除资源…']);
+  await page.locator('.selection-toolbar').getByRole('button',{name:'全选',exact:true}).click();await expect(page.locator('.resource-card.is-selected')).toHaveCount(10);
+  await page.locator('.selection-toolbar').getByRole('button',{name:'取消全选',exact:true}).click();await expect(page.locator('.resource-card.is-selected')).toHaveCount(0);
+  const image=(name:string)=>page.locator('.resource-card').filter({has:page.locator('strong',{hasText:name})});
+  await image('page0.cbz').click();await image('page1.cbz').click();await image('page0.cbz').click({button:'right'});
+  await expect(menu.getByRole('menuitem',{name:'加入书架',exact:true})).toBeVisible();
+  await expect(menu.getByRole('menuitem',{name:'加入收藏',exact:true})).toBeVisible();
+  await menu.getByRole('menuitem',{name:'加入书架',exact:true}).click();
+  await page.locator('.shelf-picker').getByRole('button',{name:/^甲/}).click();
+  expect(await page.evaluate(async()=>{const r=await window.omicomic.getAppData();return r.ok&&r.data.virtualFolders[0].items.map(item=>item.sourcePath);})).toEqual(['/comics/page0.cbz','/comics/page1.cbz']);
+  await expect(page.locator('.selection-check')).toHaveCount(0);
 });
 
-test('shelf root and shelf books support selecting, and temporary storage has no open-path action', async ({ page }) => {
+test('shelf root, shelf books and temporary storage retain their resource menus', async ({ page }) => {
   await library(page);
   await page.evaluate(async()=>{await window.omicomic.addVirtualFolderItems({folderId:'s0',items:[{resourceKey:'folder:/comics/Book',sourcePath:'/comics/Book',sourceType:'folder',title:'Book'}]});});
   await page.locator('.sidebar-item').filter({has:page.locator('span',{hasText:/^书架$/})}).click();
   const card=page.locator('.bookshelf-folder-card').filter({hasText:'甲'}),menu=page.getByRole('menu');
   await card.click({button:'right'});await expect(menu.getByRole('menuitem',{name:'编辑备注',exact:true})).toHaveCount(0);
   await menu.getByRole('menuitem',{name:'选择文件',exact:true}).click();await card.click();await expect(card).toHaveAttribute('aria-pressed','true');
-  await card.click({button:'right'});expect(await menu.getByRole('menuitem').allTextContents()).toEqual(['全选','取消全选','退出选择']);
-  await menu.getByRole('menuitem',{name:'全选',exact:true}).click();await expect(page.locator('.bookshelf-folder-card.is-selected')).toHaveCount(2);
-  await card.click({button:'right'});await menu.getByRole('menuitem',{name:'退出选择',exact:true}).click();await card.dblclick();
+  await card.click({button:'right'});await expect(menu.getByRole('menuitem',{name:'重命名',exact:true})).toBeVisible();await expect(menu.getByRole('menuitem',{name:'删除',exact:true})).toBeVisible();
+  await page.locator('.selection-toolbar').getByRole('button',{name:'全选',exact:true}).click();await expect(page.locator('.bookshelf-folder-card.is-selected')).toHaveCount(2);
+  await page.locator('.selection-toolbar').getByRole('button',{name:'退出选择',exact:true}).click();await card.dblclick();
   const book=page.locator('.resource-card').first();await book.click({button:'right'});await menu.getByRole('menuitem',{name:'选择文件',exact:true}).click();
-  await book.click({button:'right'});expect(await menu.getByRole('menuitem').allTextContents()).toEqual(['全选','取消全选','退出选择']);
-  await menu.getByRole('menuitem',{name:'退出选择',exact:true}).click();
+  await book.click();await book.click({button:'right'});await expect(menu.getByRole('menuitem',{name:'加入收藏',exact:true})).toBeVisible();await expect(menu.getByRole('menuitem',{name:'移动到书架',exact:true})).toBeVisible();
+  await page.locator('.selection-toolbar').getByRole('button',{name:'退出选择',exact:true}).click();
   await page.locator('.sidebar-item').filter({has:page.locator('span',{hasText:/^临时存放$/})}).click();
-  await page.locator('.resource-card').first().click({button:'right'});await expect(menu).toBeVisible();await expect(menu.getByRole('menuitem',{name:'打开路径',exact:true})).toHaveCount(0);
+  await page.locator('.resource-card').first().click({button:'right'});await expect(menu.getByRole('menuitem',{name:'查看资源信息',exact:true})).toBeVisible();await expect(menu.getByRole('menuitem',{name:'加入书架',exact:true})).toBeVisible();
 });
 
 test('adding a mixed folder expands its books and opens its own images without nesting', async ({ page }) => {
