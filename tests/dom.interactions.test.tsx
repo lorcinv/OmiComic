@@ -125,7 +125,12 @@ describe('OmiComic actual React DOM regressions', () => {
     const onOpenReader = vi.fn();
     render(<HomePage refreshToken={0} onBrowse={() => {}} onOpenReader={onOpenReader} />);
     fireEvent.click(await screen.findByRole('button', { name: /继续阅读 First/ }));
-    await waitFor(() => expect(onOpenReader).toHaveBeenCalledWith(expect.objectContaining({ sourceType: 'pdf' }), 120));
+    await waitFor(() => expect(onOpenReader).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceType: 'pdf' }),
+      120,
+      expect.objectContaining({ source: 'recent', currentKey: 'pdf:test', items: [] }),
+      undefined,
+    ));
   });
 
 });
