@@ -18,6 +18,9 @@ public final class TabletProvider extends ContentProvider {
       bitmap.eraseColor(volume==1?0xffffaaaa:volume==2?0xffaaffaa:0xffaaaaff);
       try{for(int page=1;page<=2;page++)try(FileOutputStream out=new FileOutputStream(new File(folder,page+".png"))){bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}}finally{bitmap.recycle();}
     }}catch(IOException error){throw new IllegalStateException(error);}
+    new File(getContext().getFilesDir(),"tablet1179/Switch1193/Vol 1.5").mkdirs();
+    new File(getContext().getFilesDir(),"tablet1179/Switch1193/Vol 2.5/Nested").mkdirs();
+    new File(getContext().getFilesDir(),"tablet1179/Switch1193/Vol 2.6").mkdirs();
     return android.os.Bundle.EMPTY;
   }
 

@@ -1,3 +1,4 @@
+import { useReadableNeighbours } from '../hooks/useReadableNeighbours';
 import ReaderBookSwitch from '../components/ReaderBookSwitch';
 import { resourcePosition } from "../reader/originalDirectoryContext";
 import { useOriginalDirectoryContext } from "../hooks/useOriginalDirectoryContext";
@@ -677,12 +678,7 @@ function ReaderPage({
   const 上下文当前位置 = resource && openContext
     ? resourcePosition(resource, openContext)
     : -1;
-  const 上一本资源 = openContext && 上下文当前位置 > 0
-    ? openContext.items[上下文当前位置 - 1]
-    : null;
-  const 下一本资源 = openContext && 上下文当前位置 >= 0 && 上下文当前位置 < openContext.items.length - 1
-    ? openContext.items[上下文当前位置 + 1]
-    : null;
+  const { previous: 上一本资源, next: 下一本资源 } = useReadableNeighbours(openContext, 上下文当前位置, isActive);
   const 图书切换按钮基础透明度 = 阅读器设置.bookSwitchButtonOpacity / 100;
 
   const 页组间距 = 0;
@@ -1278,8 +1274,8 @@ function ReaderPage({
       if(index===安全索引)return null;
       return {index,key:`${resource.resourceKey}:${index}`};
     },index=>{for(const page of 计算页组索引(index,总页数,有效阅读器设置,页面是跨页横图))void 确保页面图片就绪(page);},index=>{if(自由缩放.scale>1)手机放大翻页位置.current={index,...手机邻页平移};void 跳转到页面索引(index);}, direction => {
-      if (direction > 0 && 当前页组包含尾页 && 下一本资源) 设置跨本提示("next");
-      else if (direction < 0 && 当前页组包含首页 && 上一本资源) 设置跨本提示("previous");
+      if (direction > 0 && 当前页组包含尾页) 设置跨本提示("next");
+      else if (direction < 0 && 当前页组包含首页) 设置跨本提示("previous");
     });
   const 手机滑页索引=手机滑页.target?计算页组索引(手机滑页.target.index,总页数,有效阅读器设置,页面是跨页横图):[];
   const 手机滑页视觉索引=从右到左阅读?[...手机滑页索引].reverse():手机滑页索引;
@@ -3060,8 +3056,8 @@ function ReaderPage({
     设置全景拖动中(false);
     if (Math.abs(拖动.boundaryPull) >= 40) {
       const edge = 计算模式2偏移最近索引();
-      if (拖动.boundaryPull < 0 && edge === 总页数 - 1 && 下一本资源) 设置跨本提示('next');
-      else if (拖动.boundaryPull > 0 && edge === 0 && 上一本资源) 设置跨本提示('previous');
+      if (拖动.boundaryPull < 0 && edge === 总页数 - 1) 设置跨本提示('next');
+      else if (拖动.boundaryPull > 0 && edge === 0) 设置跨本提示('previous');
     }
     const 甩动强度 = 计算全景甩动强度(拖动.samples);
     启动全景惯性滚动(拖动.velocityX, 拖动.velocityY, 甩动强度);
@@ -3977,7 +3973,7 @@ function ReaderPage({
 
   function 上一页(): void {
     if (阅读视图初始化中) return;
-    if (当前页组包含首页) { if (上一本资源) 设置跨本提示("previous"); return; }
+    if (当前页组包含首页) { 设置跨本提示("previous"); return; }
     设置跨本提示(null);
     if(自由缩放.active)自由缩放.setScale(1);
     if (全景滚屏到相邻页(-1)) return;
@@ -3986,7 +3982,7 @@ function ReaderPage({
 
   function 下一页(): void {
     if (阅读视图初始化中) return;
-    if (当前页组包含尾页) { if (下一本资源) 设置跨本提示("next"); return; }
+    if (当前页组包含尾页) { 设置跨本提示("next"); return; }
     设置跨本提示(null);
     if(自由缩放.active)自由缩放.setScale(1);
     if (全景滚屏到相邻页(1)) return;
@@ -4473,12 +4469,12 @@ function ReaderPage({
         }}
       >
         {resource && 跨本提示 === "previous" && 当前页组包含首页 && 上一本资源 && (
-          <ReaderBookSwitch direction={垂直阅读 ? 'up' : 从右到左阅读 ? 'right' : 'left'} opacity={图书切换按钮基础透明度} avoidControls={手机布局 && 手机工具栏可见}
+          <ReaderBookSwitch direction={全景模式 && 垂直阅读 ? 'up' : 从右到左阅读 ? 'right' : 'left'} opacity={图书切换按钮基础透明度} avoidControls={手机布局 && 手机工具栏可见}
             title={tr`上一本：${上一本资源.title}（↑）`} label={tr`上一本：${上一本资源.title}`}
             onActivate={() => void 切换相邻资源('previous')} />
         )}
         {resource && 跨本提示 === "next" && 当前页组包含尾页 && 下一本资源 && (
-          <ReaderBookSwitch direction={垂直阅读 ? 'down' : 从右到左阅读 ? 'left' : 'right'} opacity={图书切换按钮基础透明度} avoidControls={手机布局 && 手机工具栏可见}
+          <ReaderBookSwitch direction={全景模式 && 垂直阅读 ? 'down' : 从右到左阅读 ? 'left' : 'right'} opacity={图书切换按钮基础透明度} avoidControls={手机布局 && 手机工具栏可见}
             title={tr`下一本：${下一本资源.title}（↓）`} label={tr`下一本：${下一本资源.title}`}
             onActivate={() => void 切换相邻资源('next')} />
         )}
