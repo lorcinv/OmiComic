@@ -1,3 +1,4 @@
+import ReaderBookSwitch from '../components/ReaderBookSwitch';
 import { resourcePosition } from "../reader/originalDirectoryContext";
 import { useOriginalDirectoryContext } from "../hooks/useOriginalDirectoryContext";
 import { uiOptions } from '../i18n';
@@ -127,6 +128,7 @@ interface 全景拖动状态 {
   velocityY: number;
   startOffset: number;
   distance: number;
+  boundaryPull: number;
   pointerType: string;
   samples: 全景速度采样[];
 }
@@ -470,6 +472,7 @@ function ReaderPage({
     velocityY: 0,
     startOffset: 0,
     distance: 0,
+    boundaryPull: 0,
     pointerType: "mouse",
     samples: [],
   });
@@ -1602,7 +1605,15 @@ function ReaderPage({
     拖动.lastX = 拖动.currentX;
     拖动.lastY = 拖动.currentY;
     拖动.distance += 拖动距离;
-    设置全景偏移值(拖动.startOffset + 拖动.distance);
+    const requestedOffset = 拖动.startOffset + 拖动.distance;
+    设置全景偏移值(requestedOffset);
+    // Count only deliberate movement beyond the actual book edge, not movement
+    // within a long first/last page. A reverse drag withdraws the boundary hint.
+    if (Math.abs(拖动距离) > .01) {
+      const overflow = requestedOffset - 全景偏移引用.current;
+      拖动.boundaryPull = Math.abs(overflow) > .5
+        ? (Math.sign(overflow) === Math.sign(拖动.boundaryPull) ? 拖动.boundaryPull : 0) + overflow : 0;
+    }
     // Do not accumulate invisible overscroll at either end of the book.
     拖动.distance = 全景偏移引用.current - 拖动.startOffset;
     尝试重心化模式2窗口();
@@ -3047,6 +3058,11 @@ function ReaderPage({
     全景拖动.current.pointerId = -1;
     取消全景拖动动画帧();
     设置全景拖动中(false);
+    if (Math.abs(拖动.boundaryPull) >= 40) {
+      const edge = 计算模式2偏移最近索引();
+      if (拖动.boundaryPull < 0 && edge === 总页数 - 1 && 下一本资源) 设置跨本提示('next');
+      else if (拖动.boundaryPull > 0 && edge === 0 && 上一本资源) 设置跨本提示('previous');
+    }
     const 甩动强度 = 计算全景甩动强度(拖动.samples);
     启动全景惯性滚动(拖动.velocityX, 拖动.velocityY, 甩动强度);
   }
@@ -3090,6 +3106,7 @@ function ReaderPage({
       velocityY: 0,
       startOffset: 全景偏移引用.current,
       distance: 0,
+    boundaryPull: 0,
       pointerType: 事件.pointerType,
       samples: [{ x: 事件.clientX, y: 事件.clientY, time: 当前时间 }],
     };
@@ -4456,28 +4473,14 @@ function ReaderPage({
         }}
       >
         {resource && 跨本提示 === "previous" && 当前页组包含首页 && 上一本资源 && (
-          <button
-            type="button"
-            className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "right" : "left"}`}
-            style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
-            title={tr`上一本：${上一本资源.title}（↑）`}
-            aria-label={tr`上一本：${上一本资源.title}`}
-            onClick={() => void 切换相邻资源("previous")}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={从右到左阅读 ? "M8 5L18 12L8 19Z" : "M16 5L6 12L16 19Z"} /></svg>
-          </button>
+          <ReaderBookSwitch direction={垂直阅读 ? 'up' : 从右到左阅读 ? 'right' : 'left'} opacity={图书切换按钮基础透明度} avoidControls={手机布局 && 手机工具栏可见}
+            title={tr`上一本：${上一本资源.title}（↑）`} label={tr`上一本：${上一本资源.title}`}
+            onActivate={() => void 切换相邻资源('previous')} />
         )}
         {resource && 跨本提示 === "next" && 当前页组包含尾页 && 下一本资源 && (
-          <button
-            type="button"
-            className={`reader-book-switch reader-book-switch-${从右到左阅读 ? "left" : "right"}`}
-            style={{ "--book-switch-opacity": 图书切换按钮基础透明度 } as CSSProperties}
-            title={tr`下一本：${下一本资源.title}（↓）`}
-            aria-label={tr`下一本：${下一本资源.title}`}
-            onClick={() => void 切换相邻资源("next")}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d={从右到左阅读 ? "M16 5L6 12L16 19Z" : "M8 5L18 12L8 19Z"} /></svg>
-          </button>
+          <ReaderBookSwitch direction={垂直阅读 ? 'down' : 从右到左阅读 ? 'left' : 'right'} opacity={图书切换按钮基础透明度} avoidControls={手机布局 && 手机工具栏可见}
+            title={tr`下一本：${下一本资源.title}（↓）`} label={tr`下一本：${下一本资源.title}`}
+            onActivate={() => void 切换相邻资源('next')} />
         )}
         {文档错误 ? (
           <div className="reader-error" role="alert"><span aria-hidden="true">!</span><h3>{t("文档打开失败")}</h3><p>{t(文档错误 ?? '')}</p></div>

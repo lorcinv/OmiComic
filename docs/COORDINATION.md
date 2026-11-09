@@ -1,3 +1,5 @@
+最新本地安装包为 `release/OmiComic-1.1.93-swipe-fix/`；修复滑动后跨本按钮首次点按失效，并补齐连续阅读首尾入口与方向，见 [验证记录](status/2026-11-09-1.1.93-swipe-fix.md)。版本不变，完整源码仍在 `codex/android-ui-1.1.93`。
+
 最新 1.1.93 安装包为 `release/OmiComic-1.1.93-tap-fix/`；修复预览吞掉跨本按钮首次点击，统一三行菜单间距并补底线，见 [验证记录](status/2026-11-09-1.1.93-tap-fix.md)。完整基线仍在 `codex/android-ui-1.1.93`。
 
 最新 1.1.93 安装包改为 `release/OmiComic-1.1.93-reading-fix/`；本轮修正原目录排序位置、安卓末页滑动入口及菜单留白，见 [补修记录](status/2026-11-09-1.1.93-reading-order.md)。源码仍在 `codex/android-ui-1.1.93`。

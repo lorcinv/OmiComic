@@ -1,12 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
 
-async function fixture(page: Page, sortMode: 'name-asc' | 'name-desc' | 'time-desc' = 'name-asc', rtl = false) {
+async function fixture(page: Page, sortMode: 'name-asc' | 'name-desc' | 'time-desc' = 'name-asc', rtl = false, panorama = false, flow = 'horizontal', double = false) {
   await page.addInitScript(installMock, { count: 2 });
-  await page.addInitScript(({ sortMode, rtl }) => {
+  await page.addInitScript(({ sortMode, rtl, panorama, flow, double }) => {
     const api = window.omicomic, get = api.getAppData, pages = api.getResourcePages;
     const recent = [4, 1, 3, 2].map(n => ({ resourceKey: `folder:/series/Vol ${n}`, sourcePath: `/series/Vol ${n}`, sourceType: 'folder', title: `Vol ${n}`, currentPageIndex: 1, totalPages: 2, updatedAt: Date.now() - n }));
-    api.getAppData = async () => { const result = await get(); if (result.ok) { result.data.recentOpened = recent as any; result.data.settings.readerDefaultFitMode = 'fit-window'; result.data.settings.sortMode = sortMode; result.data.settings.doublePageDirection = rtl ? 'right-to-left' : 'left-to-right'; } return result; };
+    api.getAppData = async () => { const result = await get(); if (result.ok) { result.data.recentOpened = recent as any; result.data.settings.readerDefaultFitMode = 'fit-window'; result.data.settings.sortMode = sortMode; Object.assign(result.data.settings, { readerDefaultPanorama: panorama, readerDefaultFlow: flow, readerPageMode: double ? 'double' : 'single', doublePageFirstSingle: false }); result.data.settings.doublePageDirection = rtl ? 'right-to-left' : 'left-to-right'; } return result; };
     api.getRecentOpened = async () => ({ ok: true, data: recent as any });
     api.getReadingProgress = async () => ({ ok: true, data: null });
     api.getResourcePages = async input => {
@@ -16,7 +16,7 @@ async function fixture(page: Page, sortMode: 'name-asc' | 'name-desc' | 'time-de
     };
     const list = api.listDirectory;
     api.listDirectory = async (path, options) => path === '/series' ? { ok: true, data: { path, parentPath: '/', total: 5, items: [5, 4, 2, 3, 1].map(n => ({ id: `/series/Vol ${n}`, path: `/series/Vol ${n}`, name: `Vol ${n}`, type: 'folder', extension: '', containsImages: true, modifiedAt: [0, 10, 40, 30, 50, 20][n] })) } } : list(path, options);
-  }, { sortMode, rtl });
+  }, { sortMode, rtl, panorama, flow, double });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 }
@@ -104,4 +104,37 @@ test.describe('touch book boundary', () => {
     await touch('touchStart'); await touch('touchMove', 40); await touch('touchMove', 200); await touch('touchEnd');
     await expect(page.locator('.reader-stage [data-reader-page-index="1"]').first()).toBeVisible();
   });
+});
+
+
+test.describe('both book boundaries and reading directions', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  for (const mode of ['single', 'double', 'horizontal', 'rtl', 'vertical', 'vertical-controls']) for (const previous of [false, true])
+    test(`${mode}: swipe then one tap ${previous ? 'previous' : 'next'}`, async ({ page, context }) => {
+      const panorama = !['single', 'double'].includes(mode), vertical = mode.startsWith('vertical'), rtl = mode === 'rtl';
+      await fixture(page, 'name-asc', rtl, panorama, vertical ? 'vertical' : 'horizontal', mode === 'double');
+      await page.evaluate(() => document.documentElement.dataset.platform = 'android');
+      await page.locator('.omi-home__book').filter({ has: page.locator('.omi-home__book-title', { hasText: /^Vol 2$/ }) }).tap();
+      await expect(page.locator('.reader-layout')).toHaveAttribute('aria-busy', 'false');
+      await expect(page.locator('.page-panel.is-visible .reader-stage')).toBeVisible();
+      await page.keyboard.press(previous ? 'Home' : 'End');
+      await expect(page.locator('.reader-progress-rail')).toHaveAttribute('aria-valuenow', previous && mode !== 'double' ? '1' : '2');
+      await page.waitForTimeout(100);
+      const stage = page.locator('.reader-stage');
+      if (panorama) await expect(stage).toHaveClass(/is-panorama/);
+      if (mode === 'vertical-controls') { await stage.tap(); await expect(page.locator('.reader-layout')).toHaveClass(/is-mobile-chrome-visible/); }
+      const cdp = await context.newCDPSession(page), box = (await stage.boundingBox())!;
+      const sign = (previous ? 1 : -1) * (rtl ? -1 : 1);
+      const x = box.x + box.width * (vertical ? .5 : sign > 0 ? .2 : .8), y = box.y + box.height * (!vertical ? .5 : sign > 0 ? .2 : .8);
+      const touch = (type: string, distance = 0) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x: x + (vertical ? 0 : sign * distance), y: y + (vertical ? sign * distance : 0), id: 1 }] });
+      await touch('touchStart'); await touch('touchMove', 30); await touch('touchMove', (vertical ? box.height : box.width) * .6); await touch('touchEnd');
+      const button = page.getByRole('button', { name: previous ? '上一本：Vol 1' : '下一本：Vol 3', exact: true });
+      await expect(button).toBeVisible();
+      const direction = vertical ? previous ? 'up' : 'down' : previous !== rtl ? 'left' : 'right';
+      await expect(button).toHaveClass(new RegExp(`reader-book-switch-${direction}`));
+      const rect = (await button.boundingBox())!;
+      if (vertical) { expect(Math.abs(rect.x + rect.width / 2 - (box.x + box.width / 2))).toBeLessThan(2); if (mode === 'vertical-controls') { const control = (await page.locator(previous ? '.reader-toolbar' : '.reader-footer').boundingBox())!; expect(previous ? rect.y - control.y - control.height : control.y - rect.y - rect.height).toBeGreaterThanOrEqual(7); } else expect(previous ? rect.y - box.y : box.y + box.height - rect.y - rect.height).toBeLessThan(12); }
+      await button.tap();
+      await expect(page.locator('.mobile-reader-title')).toHaveText(previous ? 'Vol 1' : 'Vol 3');
+    });
 });

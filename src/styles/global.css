@@ -5553,6 +5553,9 @@ a,
 @media (hover:hover) { .reader-book-switch:hover { opacity: 1; background: color-mix(in srgb, var(--玻璃基色) 90%, transparent); } }
 .reader-book-switch-left { left: 8px; }
 .reader-book-switch-right { right: 8px; }
+.reader-book-switch-up,.reader-book-switch-down { left:50%; top:auto; width:52px; height:40px; transform:translateX(-50%); }
+.reader-book-switch-up { top:calc(8px + var(--android-reader-safe-top,0px)); }
+.reader-book-switch-down { bottom:calc(8px + var(--android-reader-safe-bottom,0px)); }
 .resource-placeholder-icon { display: block; width: 64px; height: 64px; opacity: .68; }
 .omi-home__cover-placeholder > .resource-placeholder-icon { width: 40%; height: auto; margin: auto; }
 .library-refresh-button {
