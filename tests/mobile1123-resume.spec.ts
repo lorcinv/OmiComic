@@ -121,7 +121,12 @@ test('switching to the next comic while data is pending does not replay after re
   await page.getByRole('button',{name:'最近阅读',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.mobileNavigation??'')).toBe('');
   await page.evaluate(()=>{
-    const api=window.omicomic,original=api.getResourcePages;
+    const api=window.omicomic,original=api.getResourcePages,list=api.listDirectory;
+    api.listDirectory=async path=>{
+      if(path==='/comics')return {ok:true,data:{path,parentPath:null,items:['First','Second'].map(name=>({id:`${path}/${name}`,path:`${path}/${name}`,name,type:'folder' as const,extension:'',size:0,modifiedAt:0})),total:2}};
+      if(path==='/comics/First'||path==='/comics/Second')return {ok:true,data:{path,parentPath:'/comics',items:[{id:`${path}/01.png`,path:`${path}/01.png`,name:'01.png',type:'image',extension:'png',size:68,modifiedAt:0}],total:1}};
+      return list(path);
+    };
     api.getResourcePages=async input=>{
       if(input.path.endsWith('/Second'))await new Promise<void>(r=>(window as any).__releaseData=r);
       const result=await original(input);if(result.ok)result.data.title=input.path.split('/').at(-1)!;return result;

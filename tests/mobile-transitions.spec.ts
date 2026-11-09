@@ -119,7 +119,10 @@ test('late folder and comic responses cannot replace a newer tab',async({page})=
 test('next comic warms its first image while the current comic remains visible',async({page})=>{
   await setup(page);
   await page.evaluate(()=>{
-    const api=window.omicomic,get=api.getResourcePages,image=api.getPageImage;
+    const api=window.omicomic,get=api.getResourcePages,image=api.getPageImage,list=api.listDirectory;
+    api.listDirectory=async path=>path==='/comics/Parent'
+      ? {ok:true,data:{path,parentPath:'/comics',items:[{id:`${path}/01.png`,path:`${path}/01.png`,name:'01.png',type:'image',extension:'png',size:68,modifiedAt:0}],total:1}}
+      : list(path);
     let warmed=false;
     api.getResourcePages=async input=>{
       if(input.path!=='/comics/Parent')return get(input);
