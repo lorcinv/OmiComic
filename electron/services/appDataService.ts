@@ -1,5 +1,6 @@
 import { desktopTypography, mobileTypography } from "../shared/desktopTypography";
 import { normalizeThemePreferences } from '../shared/colorTheme';
+import { normalizeStartupPage, type StartupPage } from '../shared/startupPage';
 import os from 'node:os';
 import { desktopPerformance, type DesktopPerformanceProfile } from '../shared/desktopPerformance';
 import type { ReaderPreferences, PageSort } from "../shared/readerPreferences";
@@ -43,6 +44,7 @@ export interface LibraryRoot {
 
 export interface AppSettings {
   showHomePage?: boolean;
+  startupPage?: StartupPage;
   language?: 'zh-CN' | 'en' | 'ja';
   desktopInfoFontSize?: number;
   desktopGlobalFontSize?: number;
@@ -479,6 +481,7 @@ function 修正设置(输入: unknown): AppSettings {
   return {
     language: 设置.language === 'en' || 设置.language === 'ja' ? 设置.language : 'zh-CN',
     showHomePage: 设置.showHomePage !== false,
+    ...(normalizeStartupPage(设置.startupPage) ? {startupPage: normalizeStartupPage(设置.startupPage)} : {}),
     ...desktopTypography(设置),
     ...mobileTypography(设置),
     desktopReaderAutoHide: 设置.desktopReaderAutoHide === true,

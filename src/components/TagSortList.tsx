@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
+import { useRememberedScroll } from '../hooks/useRememberedScroll';
+import useMobileLayout from '../hooks/useMobileLayout';
 
 export default function TagSortList({ tags, selecting, selected, onToggle, onReorder }: {
   tags: string[]; selecting: boolean; selected: ReadonlySet<string>; onToggle: (tag: string) => void; onReorder: (tags: string[]) => void;
 }) {
   const list = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLElement | null>(null);
+  const mobile = useMobileLayout();
+  useLayoutEffect(() => { scroller.current = list.current?.closest<HTMLElement>('.mobile-tag-catalogue') ?? list.current; });
+  useRememberedScroll(scroller, `${mobile ? 'mobile' : 'desktop'}:tags:catalogue`);
   const gesture = useRef<{ tag: string; x: number; y: number; element: HTMLElement; active: boolean; target: string; after: boolean } | null>(null);
   const suppress = useRef(false);
   const [drag, setDrag] = useState<{ tag: string; target: string; after: boolean } | null>(null);
@@ -19,7 +25,7 @@ export default function TagSortList({ tags, selecting, selected, onToggle, onReo
     if (g?.active) window.setTimeout(() => { suppress.current = false; }, 0);
     cancel();
   }
-  return <div ref={list} className={`tag-sort-list ${selecting ? 'is-selecting' : ''} ${drag ? 'is-sorting' : ''}`} role="group" aria-label={t('全部标签')}
+  return <div ref={list} className={`tag-filter-list tag-sort-list ${selecting ? 'is-selecting' : ''} ${drag ? 'is-sorting' : ''}`} role="group" aria-label={t('全部标签')}
     onClickCapture={event => { if (suppress.current) { event.preventDefault(); event.stopPropagation(); } }}>
     {tags.map((tag, index) => <div key={tag} data-tag-sort={tag}
       className={`tag-sort-item ${drag?.tag === tag ? 'is-dragging' : ''} ${drag?.target === tag && drag.tag !== tag ? drag.after ? 'drop-after' : 'drop-before' : ''}`}

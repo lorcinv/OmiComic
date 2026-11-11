@@ -1,4 +1,5 @@
 import type { ReaderPreferences, PageSort, ImageAdjustments } from "../../electron/shared/readerPreferences";
+import type { StartupPage } from '../../electron/shared/startupPage';
 export type 页面名称 = "首页" | "资源库" | "阅读器";
 
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
@@ -36,6 +37,7 @@ export interface MobileDisplaySettings { layout: "grid" | "list"; columns: numbe
 
 export interface AppSettings {
   showHomePage?: boolean;
+  startupPage?: StartupPage;
   desktopInfoFontSize?: number;
   desktopGlobalFontSize?: number;
   mobileInfoFontSize?: number;

@@ -1,4 +1,7 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { readViewMemory, saveViewMemory } from '../library/viewMemory';
+
+type ListPosition = { index: number; fraction: number; id?: string };
 
 // Page numbers are row-aligned landmarks in one continuous, virtualized list.
 export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabled: boolean,
@@ -8,10 +11,20 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
   const columns = layoutColumns ?? requestedColumns;
   const [view, setView] = useState({ stride: 400, height: 800, row: 0, bottom: false, gap:14, count });
   const viewRef = useRef(view);
-  const anchor = useRef<{ index: number; fraction: number; id?: string }>({ index: 0, fraction: 0 });
-  const positions = useRef(new Map<string, { index: number; fraction: number; id?: string }>());
+  const anchor = useRef<ListPosition>({ index: 0, fraction: 0 });
+  const positions = useRef(new Map<string, ListPosition>());
+  function positionFor(key: string): ListPosition {
+    const cached = positions.current.get(key);
+    if (cached) return cached;
+    const saved = readViewMemory<ListPosition>(`list:${key}`);
+    const position = saved && Number.isFinite(saved.index) && saved.index >= 0 && Number.isFinite(saved.fraction)
+      ? { index: Math.floor(saved.index), fraction: Math.max(0, Math.min(1, saved.fraction)), id: saved.id }
+      : { index: 0, fraction: 0 };
+    positions.current.set(key, position);
+    return position;
+  }
   const lastIdentities = useRef(identities);
-  const previous = useRef({ key: resetKey, columns, stride: 400, gap:14 });
+  const previous = useRef({ key: '', columns, stride: 400, gap:14 });
   const lastElement = useRef<HTMLDivElement | null>(null);
   const rows = Math.ceil(count / columns);
   const rowsPerPage = Math.max(1, Math.ceil(requestedPageSize / columns));
@@ -20,7 +33,7 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
   // Mount the destination's cards before measuring it. Reusing the outgoing row
   // can leave a short folder empty or briefly show its old scrolled window.
   const resetting = previous.current.key !== resetKey;
-  const visibleRow = resetting ? Math.floor(Math.min(positions.current.get(resetKey)?.index ?? 0, Math.max(0, count - 1)) / columns) : view.row;
+  const visibleRow = resetting ? Math.floor(Math.min(positionFor(resetKey).index, Math.max(0, count - 1)) / columns) : view.row;
   const page = !resetting && view.bottom && view.count === count ? pages : Math.min(pages, Math.floor(visibleRow * columns / pageSize) + 1);
   const windowRows = Math.ceil(view.height / view.stride) + (exactPageSize ? 8 : 6);
   const startRow = Math.max(0, Math.min(visibleRow - 3, rows - windowRows));
@@ -37,7 +50,7 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
   }
   function sync() {
     const element = container.current;
-    if (!enabled || !element) return;
+    if (!enabled || !element || previous.current.key !== resetKey || !count) return;
     const stride = previous.current.stride;
     const padding = contentTop(element);
     const position = Math.max(0, element.scrollTop - padding) / stride;
@@ -46,6 +59,7 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
     anchor.current = { index: row * columns, fraction: Math.max(0, position - row), id: identities?.[row * columns] };
     positions.current.delete(previous.current.key);
     positions.current.set(previous.current.key, { ...anchor.current });
+    saveViewMemory(`list:${previous.current.key}`, { ...anchor.current });
     if (positions.current.size > 160) positions.current.delete(positions.current.keys().next().value!);
     // Fractional rows and browser scroll rounding can leave up to one grid gap
     // after restoring a rotated layout. That empty tail still belongs to the last page.
@@ -88,7 +102,7 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
     const canvas = element.querySelector<HTMLElement>('.library-virtual-canvas');
     if (canvas) canvas.style.height = `${Math.max(0, rows * stride - gap)}px`;
     if (reset) {
-      anchor.current = positions.current.get(resetKey) ?? { index: 0, fraction: 0 };
+      anchor.current = { ...positionFor(resetKey) };
       if (anchor.current.id && identities) { const index = identities.indexOf(anchor.current.id); if (index >= 0) anchor.current.index = index; }
       const row = Math.floor(Math.min(anchor.current.index, Math.max(0, count - 1)) / columns);
       element.scrollTop = row * stride + anchor.current.fraction * stride + (row ? contentTop(element) : 0);

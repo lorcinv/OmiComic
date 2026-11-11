@@ -647,6 +647,7 @@ public final class SmokeTest extends Instrumentation {
       if((args.getString("fixture","").startsWith("tagdata1176")||args.getString("fixture","").startsWith("tagpolish1177")))startupSelector=".omi-home,.library-layout";
       if(args.getString("fixture","").startsWith("bottom1178"))startupSelector=".omi-home,.library-layout";
       if(args.getString("fixture","").startsWith("tablet1179"))startupSelector=".omi-home,.library-layout";
+      if(args.getString("fixture","").contains("navmemory"))startupSelector=".omi-home,.library-layout";
       while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('"+startupSelector+"')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
       // DOM existence precedes the first composed frame. Do not inject taps
       // through the launch cover while observing its initial reveal.
@@ -665,6 +666,10 @@ public final class SmokeTest extends Instrumentation {
           roots.put(new JSONObject().put("path",root).put("name","Tablet1179").put("addedAt",0).put("lastOpenedAt",0));
           lib.put("roots",roots).put("lastActiveRootPath",savedRoot).put("lastCurrentPath",savedRoot);
         data.getJSONObject("settings").put("showHomePage",true).put("mobileReaderAutoHide",false).put("mobileReaderPreviews",true).put("readerPageMode","single").put("readerDefaultPanorama",false).put("mobileCardLayout","grid").put("doublePageFirstSingle",false);
+        if(args.getString("fixture","").contains("navmemory")){
+          data.getJSONObject("settings").put("startupPage","home").remove("mobileViewDisplays");
+          eval("localStorage.removeItem('omi-view-memory-v1')");
+        }
         if(args.getString("fixture","").contains("bookshelf1194")){
           data.put("bookshelves",new JSONArray().put(new JSONObject().put("id","position1194").put("name","位置回归").put("sortIndex",0).put("createdAt",1).put("updatedAt",1)));
           JSONArray folders=new JSONArray();
@@ -755,6 +760,7 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("tablet1179")&&fixture.contains("startupFormats1186"))scriptAsset="startup-formats1186";
       if(fixture.contains("bookSwitch1193"))scriptAsset=fixture.contains("swipe")?"book-swipe1193":"book-switch1193";
       if(fixture.contains("bookshelf1194"))scriptAsset="bookshelf1194";
+      if(fixture.contains("navmemory"))scriptAsset="navigation-memory";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
       deadline=System.currentTimeMillis()+((fixture.contains("bugs1187")||fixture.contains("cutout1191"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);

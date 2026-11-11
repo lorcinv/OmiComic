@@ -10,6 +10,7 @@ import "./styles/desktopTheme.css";
 import "./styles/tagData.css";
 import { connectAndroid } from "./android/bridge";
 import { initializeSystemTheme } from './theme';
+import { initializeNativeViewMemory } from './library/viewMemory';
 
 async function start() {
   if (import.meta.env.MODE === "android") {
@@ -23,6 +24,7 @@ async function start() {
       import('./android/data'),
     ]);
     window.omicomic = await createAndroidApi(native);
+    await initializeNativeViewMemory(native);
   }
   await initializeSystemTheme();
   ReactDOM.createRoot(document.getElementById("root")!).render(

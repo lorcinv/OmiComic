@@ -27,6 +27,7 @@ final class LocalLibrary {
   private final ContentResolver resolver;
   private final SharedPreferences grants;
   private final AtomicFile dataFile;
+  private final AtomicFile viewMemoryFile;
   private final Object dataLock=new Object();
   private final DirectoryIndex directoryIndex;
   private final java.util.concurrent.ExecutorService indexWrites=java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -78,6 +79,7 @@ final class LocalLibrary {
   LocalLibrary(Context context){
     this.context=context;resolver=context.getContentResolver();grants=context.getSharedPreferences("omi-grants",0);
     dataFile=new AtomicFile(new File(context.getFilesDir(),"omicomic-data.json"));
+    viewMemoryFile=new AtomicFile(new File(context.getFilesDir(),"omicomic-view-memory.json"));
     directoryIndex=new DirectoryIndex(context);
     cache=new File(context.getCacheDir(),"reader");cache.mkdirs();
     mediaEpoch=context.getSharedPreferences("omi-cache",0).getLong("mediaEpoch",0);
@@ -1034,7 +1036,7 @@ final class LocalLibrary {
   }
   private Object foregroundCall(String method,JSONObject input)throws Exception{
     awaitReaderCleanup();
-    if(method.equals("loadData")||method.equals("saveData")||method.equals("backupData")||method.equals("importDataBackup")||method.equals("restoreDataBackup")||method.equals("hasDataImportBackup")){
+    if(method.equals("loadData")||method.equals("saveData")||method.equals("loadViewMemory")||method.equals("saveViewMemory")||method.equals("backupData")||method.equals("importDataBackup")||method.equals("restoreDataBackup")||method.equals("hasDataImportBackup")){
       synchronized(dataLock){return dispatch(method,input);}
     }
     if(method.equals("getResourcePages")||method.equals("listDirectory")||method.equals("scanLibrary")){
@@ -1054,6 +1056,8 @@ final class LocalLibrary {
   }
   private Object dispatch(String method,JSONObject input)throws Exception{
     switch(method){
+      case "loadViewMemory":return viewMemoryFile.getBaseFile().exists()?new JSONObject(new String(viewMemoryFile.readFully(),StandardCharsets.UTF_8)):null;
+      case "saveViewMemory":save(viewMemoryFile,input);return null;
       case "loadData":{if(!dataFile.getBaseFile().exists())return null;JSONObject saved=new JSONObject(new String(dataFile.readFully(),StandardCharsets.UTF_8));configureCaches(saved.optJSONObject("settings"));return saved;}
       case "saveData":save(dataFile,input.getJSONObject("data"));configureCaches(input.getJSONObject("data").optJSONObject("settings"));return null;
       case "importDataBackup":{

@@ -14,6 +14,7 @@
 .detail-tag-add-inline { align-items:flex-start; min-width:0; max-width:100%; }
 .mobile-tag-add-form > button,.detail-tag-add-inline > button { flex:none; }
 .tag-sort-list { display:flex; flex-wrap:wrap; align-content:flex-start; gap:10px 8px; padding:4px; }
+.tag-filter-drawer .tag-all-section .tag-sort-list { gap:10px 8px; }
 .tag-sort-item { position:relative; max-width:100%; touch-action:none; user-select:none; -webkit-user-select:none; }
 .tag-catalogue-chip { display:flex; align-items:center; gap:7px; max-width:100%; min-height:34px; padding:7px 12px; border:1px solid color-mix(in srgb,var(--主文字) 26%,var(--面板色)); background:var(--控件背景); color:var(--主文字); cursor:pointer; overflow-wrap:anywhere; }
 .tag-sort-item > .tag-filter-chip { cursor:grab; }

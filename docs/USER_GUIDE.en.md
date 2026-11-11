@@ -42,6 +42,13 @@ Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z
 ## Library
 
 <details>
+<summary>Are browsing positions remembered?</summary>
+
+PC and Android remember positions for each section, bookshelf category, shelf and library folder. Grid and list positions are saved separately and restored after navigation or an app restart. Settings and resource detail previews also retain their scroll positions.
+
+</details>
+
+<details>
 <summary>How do I open a comic and preview its pages?</summary>
 
 The large image on a card is its cover. The heart adds or removes a favorite; the three dots open details with the file location, tags, description and page thumbnails.
@@ -266,9 +273,16 @@ No. Brightness, contrast, gamma and color effects change display only; Reset res
 </details>
 
 <details>
-<summary>How do I start directly in the library?</summary>
+<summary>How do I choose the startup page?</summary>
 
-Settings → Appearance → Show home screen is on by default. Turn it off to start directly in the library; turn it back on to restore Home.
+Settings → Default reading → Startup page: choose Home, Library, Bookshelf, Favorites, Bookmarks or Recent reading; PC also offers Temporary files. The next launch opens that section and restores its browsing position. Choosing Home also enables the home screen.
+
+</details>
+
+<details>
+<summary>How do I enable or disable Home?</summary>
+
+Settings → Appearance → Show home screen controls whether Home is available. The startup page follows your choice in Default reading. Selecting Home as the startup page enables it again.
 
 </details>
 
@@ -282,7 +296,7 @@ Settings → Appearance → Home mascot: choose an image, crop and save. PNG/JPG
 <details>
 <summary>Defaults or per-comic settings?</summary>
 
-Default reading sets initial preferences. Page order and auto-reading speed can be saved per comic; open that comic's details before changing reading settings. PDF/EPUB retain document order.
+Default reading → Default fit mode offers Fit window, Fit height, Fit width and Original size on both platforms. New comics use the default; resumed comics retain their saved fit mode. Page order and auto-reading speed are also saved per comic; open that comic's details before changing reading settings. PDF/EPUB retain document order.
 
 </details>
 

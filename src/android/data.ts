@@ -7,6 +7,7 @@ import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sor
 import { backupFilename, createDataBackup, parseDataBackup, mergeBackup, autoMatchBackupLocations, type DataImportPreview } from '../../electron/shared/dataBackup';
 import { mobileTypography } from '../../electron/shared/desktopTypography';
 import { normalizeThemePreferences } from '../../electron/shared/colorTheme';
+import { normalizeStartupPage } from '../../electron/shared/startupPage';
 
 const defaults: AppSettings = {
   showHomePage: true,
@@ -52,6 +53,9 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
   data.settings = { ...defaults, ...stored?.settings };
   Object.assign(data.settings, normalizeThemePreferences(data.settings));
   data.settings.showHomePage = data.settings.showHomePage !== false;
+  const startupPage = normalizeStartupPage(data.settings.startupPage);
+  if (startupPage) data.settings.startupPage = startupPage;
+  else delete data.settings.startupPage;
   if (![50,100,150,200,500].includes(Number(data.settings.pageSize))) data.settings.pageSize = 50;
   data.settings.searchSplitSpaces = data.settings.searchSplitSpaces === true;
   // Preserve existing direct-file references when upgrading to history-only storage.
@@ -153,7 +157,13 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     getAndroidCacheInfo: () => call("getAndroidCacheInfo"),
     clearAndroidReadCache: () => call("clearAndroidReadCache"),
     getAppData: () => read(() => data),
-    updateSettings: input => write(d => (d.settings = {...d.settings,...input,...normalizeThemePreferences({...d.settings,...input}),...mobileTypography({...d.settings,...input})})),
+    updateSettings: input => write(d => {
+      const settings = {...d.settings,...input,...normalizeThemePreferences({...d.settings,...input}),...mobileTypography({...d.settings,...input})};
+      const startupPage = normalizeStartupPage(settings.startupPage);
+      if (startupPage) settings.startupPage = startupPage;
+      else delete settings.startupPage;
+      return d.settings = settings;
+    }),
     addLibraryRoot: input => write(d => {
       const root = d.library.roots.find(r => r.path === input.path);
       if (root) return root;

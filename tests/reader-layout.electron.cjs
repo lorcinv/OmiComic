@@ -43,26 +43,26 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
     const left = r.left + parseFloat(css.paddingLeft), top = r.top + parseFloat(css.paddingTop);
     const width = stage.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight), height = stage.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
     const spread = stage.querySelector('.reader-page-spread').getBoundingClientRect();
-    return [...stage.querySelectorAll('img')].every(img => {
+    return [...stage.querySelectorAll('.reader-page-frame:not([aria-hidden="true"]) img')].every(img => {
       const box = img.getBoundingClientRect();
       return img.complete && img.naturalWidth > 0 && box.left >= left - 1 && box.right <= left + width + 1 && box.top >= top - 1 && box.bottom <= top + height + 1;
     }) && Math.abs(spread.x + spread.width / 2 - left - width / 2) < 1 && Math.abs(spread.y + spread.height / 2 - top - height / 2) < 1;
   })).toBe(true);
   await page.getByRole('button', { name: '当前单页，点击切换双页', exact: true }).click();
-  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained();
+  await expect(page.locator('.reader-page-spread > figure:not([aria-hidden="true"])')).toHaveCount(2); await contained();
   await page.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(pixels(2)).toBeVisible();
-  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(2); await contained();
+  await expect(page.locator('.reader-page-spread > figure:not([aria-hidden="true"])')).toHaveCount(2); await contained();
   await fit('适应高度');
-  await expect(page.locator('.reader-page-spread > figure')).toHaveCount(1); await contained();
+  await expect(page.locator('.reader-page-spread > figure:not([aria-hidden="true"])')).toHaveCount(1); await contained();
   await page.getByRole('button', { name: '当前双页，点击切换单页', exact: true }).click();
   for (const number of [5, 6]) { await jump(number); await fit('适应窗口'); await contained(); }
   await jump(5);
-  await expect.poll(() => page.locator('.reader-stage').evaluate(stage => Math.abs(stage.querySelector('img').getBoundingClientRect().width - stage.clientWidth))).toBeLessThan(1);
+  await expect.poll(() => page.locator('.reader-stage').evaluate(stage => Math.abs(stage.querySelector('.reader-page-frame:not([aria-hidden="true"]) img').getBoundingClientRect().width - stage.clientWidth))).toBeLessThan(1);
   await fit('适应高度');
   await expect.poll(() => page.locator('.reader-stage').evaluate(stage => {
     const css = getComputedStyle(stage);
-    return Math.abs(stage.querySelector('img').getBoundingClientRect().height - stage.clientHeight + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom));
+    return Math.abs(stage.querySelector('.reader-page-frame:not([aria-hidden="true"]) img').getBoundingClientRect().height - stage.clientHeight + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom));
   })).toBeLessThan(1);
   await expect.poll(() => page.locator('.reader-stage').evaluate(stage => stage.scrollWidth - stage.clientWidth)).toBeGreaterThan(1000);
   await jump(7); await fit('适应宽度'); await contained();

@@ -28,14 +28,14 @@ async function seed(page: Page) {
 test.describe('phone stable entry and folder navigation', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test('directory re-entry starts at the top and folder transitions keep their size', async ({ page }) => {
+  test('directory re-entry remembers its position and folder transitions keep their size', async ({ page }) => {
     await seed(page);
     const parent = page.locator('.mobile-resource-card').filter({ has: page.locator('strong', { hasText: /^Parent$/ }) });
     const body = page.locator('.page-panel.is-visible .resource-list-scroll');
     for (let pass = 0; pass < 2; pass++) {
       await parent.tap();
-      await expect(page.locator('.mobile-resource-card').first()).toContainText('nested000');
-      await expect.poll(() => body.evaluate(el => el.scrollTop)).toBeLessThan(1);
+      await expect(page.locator('.mobile-resource-card').first()).toContainText('nested');
+      await expect.poll(() => body.evaluate(el => el.scrollTop)).toBeCloseTo(pass ? 2400 : 0, 0);
       await expect(page.locator('html')).not.toHaveAttribute('data-mobile-navigation');
       await body.evaluate(el => { el.scrollTop = 2400; });
       await expect.poll(() => body.evaluate(el => el.scrollTop)).toBeGreaterThan(2350);
@@ -68,15 +68,15 @@ test.describe('phone stable entry and folder navigation', () => {
     expect(transforms.every(value => !/scale\(/.test(value))).toBe(true);
   });
 
-  test('reopening a bookshelf folder starts at its first row', async ({ page }) => {
+  test('reopening a bookshelf folder remembers its last row', async ({ page }) => {
     await seed(page);
     await page.locator('.sidebar-primary-nav .sidebar-item').filter({ has: page.locator('span', { hasText: /^书架$/ }) }).click();
     const shelf = page.locator('.mobile-bookshelf-card').filter({ has: page.locator('strong', { hasText: /^Shelf$/ }) });
     for (let pass = 0; pass < 2; pass++) {
       await shelf.tap();
       const body = page.locator('.page-panel.is-visible .resource-list-scroll');
-      await expect(page.locator('.mobile-resource-card').first()).toContainText('Shelf image 000');
-      await expect.poll(() => body.evaluate(el => el.scrollTop)).toBeLessThan(1);
+      await expect(page.locator('.mobile-resource-card').first()).toContainText('Shelf image');
+      await expect.poll(() => body.evaluate(el => el.scrollTop)).toBeCloseTo(pass ? 2000 : 0, 0);
       await expect(page.locator('html')).not.toHaveAttribute('data-mobile-navigation');
       await body.evaluate(el => { el.scrollTop = 2000; });
       await expect.poll(() => body.evaluate(el => el.scrollTop)).toBeGreaterThan(1950);

@@ -166,7 +166,7 @@ for (const mobile of [false, true]) test.describe(mobile ? 'phone tag and data t
   });
 });
 
-test('desktop explicit folder reentry resets its page while a detail return preserves the list position', async ({page})=>{
+test('desktop folder reentry and a detail return both preserve the list position', async ({page})=>{
   await page.addInitScript(installMock,{count:180});
   await page.addInitScript(async()=>{
     const api=window.omicomic,result=await api.getAppData();if(!result.ok)throw Error();result.data.settings.showHomePage=false;
@@ -180,7 +180,7 @@ test('desktop explicit folder reentry resets its page while a detail return pres
   const scrolled=await panel.evaluate(el=>el.scrollTop);await page.locator('.resource-card').first().getByRole('button',{name:'打开资源信息',exact:true}).evaluate(el=>(el as HTMLButtonElement).click());
   await page.getByRole('button',{name:'返回资源列表',exact:true}).click();await expect.poll(()=>panel.evaluate(el=>el.scrollTop)).toBeCloseTo(scrolled,0);
   await page.getByRole('button',{name:'返回',exact:true}).click();await expect(parent).toBeVisible();await parent.dblclick();
-  await expect(page.locator('.resource-card strong').first()).toContainText('Image');await expect.poll(()=>panel.evaluate(el=>el.scrollTop)).toBe(0);await expect(page.getByRole('button',{name:'上一页',exact:true})).toBeDisabled();
+  await expect(page.locator('.resource-card strong').first()).toContainText('Image');await expect.poll(()=>panel.evaluate(el=>el.scrollTop)).toBeCloseTo(scrolled,0);await expect(page.getByRole('button',{name:'上一页',exact:true})).toBeEnabled();
 });
 
 test.describe('phone interaction corrections',()=>{

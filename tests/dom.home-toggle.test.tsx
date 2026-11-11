@@ -28,6 +28,18 @@ async function seed(home?: boolean) {
 afterEach(() => { delete document.documentElement.dataset.platform; setUiLanguage('zh-CN'); });
 
 describe('optional home screen startup', () => {
+  it.each(['directory','bookshelf','favorites','bookmarks','recent','temporary'] as const)('starts directly in %s while keeping home available', async startupPage => {
+    const fixture = await seed(true);
+    fixture.initial.data.settings.startupPage = startupPage;
+    render(<StrictMode><App /></StrictMode>);
+    const label = { directory:'资源库',bookshelf:'书架',favorites:'收藏',bookmarks:'书签',recent:'最近阅读',temporary:'临时存放' }[startupPage];
+    await waitFor(() => expect(document.querySelector('.sidebar-primary-nav .is-active span')?.textContent).toBe(label));
+    expect(document.querySelector('.omi-home')).toBeNull();
+    expect(fixture.data).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button',{name:'OmiComic',exact:true}));
+    await waitFor(() => expect(document.querySelector('.omi-home')).not.toBeNull());
+  });
+
   it('keeps old settings on home and shares one startup settings read through StrictMode', async () => {
     const fixture = await seed(); render(<StrictMode><App /></StrictMode>);
     await waitFor(() => expect(document.querySelectorAll('.omi-home__book')).toHaveLength(3));

@@ -12,6 +12,7 @@ import {useNoticeState} from './notifications';
 import { loadReader, warmReader } from './reader/loadReader';
 import {beginReaderOpening,cancelReaderOpening,readerOpeningCurrent} from './android/readerOpening';
 import { 应用主题设置, applyDesktopTypography } from './theme';
+import { effectiveStartupPage, type LibraryStartupPage, type StartupPage } from '../electron/shared/startupPage';
 import { isAndroid } from "./platform";
 import { androidCall, hasAndroidRenderer } from './android/bridge';
 import useMobileLayout from "./hooks/useMobileLayout";
@@ -97,19 +98,21 @@ function App() {
   const 主界面开关 = useRef(true);
   const 启动资料请求 = useRef<Promise<操作结果<OmiComicAppData>> | null>(null);
   const 初始资源库资料 = useRef<OmiComicAppData>();
+  const 初始资源库栏目 = useRef<LibraryStartupPage>('directory');
+  const [启动页, 设置启动页] = useState<StartupPage>('home');
   const 启动导航序号 = useRef(0);
   const [初始资源库已就绪, 设置初始资源库已就绪] = useState(false);
   const 启动遮罩已结束 = useRef(false);
 
   useEffect(() => {
     if (!isAndroid() || 启动遮罩已结束.current || !启动设置就绪 || 阅读器准备中
-      || (!显示主界面 && !初始资源库已就绪 && 当前页面 !== '阅读器')) return;
+      || (启动页 !== 'home' && !初始资源库已就绪 && 当前页面 !== '阅读器')) return;
     let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
       启动遮罩已结束.current = true;
       void androidCall('finishLaunch', { animated: !matchMedia('(prefers-reduced-motion: reduce)').matches }).catch(() => undefined);
     }); });
     return () => cancelAnimationFrame(frame);
-  }, [启动设置就绪, 显示主界面, 初始资源库已就绪, 当前页面, 阅读器准备中]);
+  }, [启动设置就绪, 启动页, 初始资源库已就绪, 当前页面, 阅读器准备中]);
 
   useEffect(() => {
     const changed = (event: Event) => {
@@ -226,9 +229,11 @@ function App() {
       应用主题设置(result.data.settings); applyDesktopTypography(result.data.settings);
       setUiLanguage(result.data.settings.language);
       const enabled = result.data.settings.showHomePage !== false;
+      const startup = effectiveStartupPage(result.data.settings);
       主界面开关.current = enabled; 设置显示主界面(enabled);
+      设置启动页(startup);
       设置启动资料(result.data); 设置启动设置就绪(true);
-      if (!enabled && 启动导航序号.current === 0) await 直接进入资源库(result.data, 0, () => !cancelled);
+      if (startup !== 'home' && 启动导航序号.current === 0) await 直接进入资源库(result.data, 0, () => !cancelled, startup);
     }).catch(error => {
       if (cancelled) return;
       主界面开关.current = true; 设置显示主界面(true); 设置启动设置就绪(true);
@@ -237,18 +242,19 @@ function App() {
     return () => { cancelled = true; };
   }, []);
 
-  async function 直接进入资源库(initialData?: OmiComicAppData, navigation = 启动导航序号.current, live = () => true): Promise<void> {
+  async function 直接进入资源库(initialData?: OmiComicAppData, navigation = 启动导航序号.current, live = () => true, initialView: LibraryStartupPage = 'directory'): Promise<void> {
     const readerRequest = 阅读打开请求.current;
     try {
       const page = LibraryPage ?? (await import('./pages/LibraryPage')).default;
       if (!应用已挂载.current || !live() || navigation !== 启动导航序号.current || readerRequest !== 阅读打开请求.current) return;
-      if (!LibraryPage) 初始资源库资料.current = initialData;
+      if (!LibraryPage) { 初始资源库资料.current = initialData; 初始资源库栏目.current = initialView; }
       // The native launch cover waits for the library's existing onReady signal.
       // A skipped home screen needs neither its cover work nor a home transition.
       flushSync(() => { 设置资源库组件(() => page); 设置当前页面('资源库'); });
     } catch {
       if (!应用已挂载.current || !live() || navigation !== 启动导航序号.current) return;
       主界面开关.current = true; 设置显示主界面(true);
+      设置启动页('home');
       设置外部打开错误('资源库加载失败，请重试。');
     }
   }
@@ -427,11 +433,12 @@ function App() {
   return (
     <div className="app-shell">
       <main className="app-content" aria-busy={!启动设置就绪 || undefined}>
-        {启动设置就绪 && 显示主界面 && 当前页面 === "首页" && <HomePage initialData={!LibraryPage && !ReaderPage ? 启动资料 ?? undefined : undefined} refreshToken={进度刷新令牌} onBrowse={() => 切换主界面("资源库")} onSettings={openHomeSettings} onOpenReader={打开阅读器页面} />}
+        {启动设置就绪 && 显示主界面 && (启动页 === 'home' || LibraryPage) && 当前页面 === "首页" && <HomePage initialData={!LibraryPage && !ReaderPage ? 启动资料 ?? undefined : undefined} refreshToken={进度刷新令牌} onBrowse={() => 切换主界面("资源库")} onSettings={openHomeSettings} onOpenReader={打开阅读器页面} />}
 
         <div className={`page-panel ${当前页面 === "资源库" ? "is-visible" : "is-hidden"}`}>
           {LibraryPage && <LibraryPage
             initialData={初始资源库资料.current}
+            initialView={初始资源库栏目.current}
             onReady={() => { 资源库就绪.current=true; 设置初始资源库已就绪(true); 等待资源库.current.splice(0).forEach(resolve => resolve()); }}
             onHome={() => 切换主界面("首页")}
             refreshToken={进度刷新令牌}

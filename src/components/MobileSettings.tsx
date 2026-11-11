@@ -14,6 +14,9 @@ import { useMobileScrim } from '../hooks/mobileScrim';
 import DataManagement from './DataManagement';
 import { FontSizeControl } from './FontSizeControl';
 import { mobileTypography } from '../../electron/shared/desktopTypography';
+import { FIT_MODE_OPTIONS } from '../../electron/shared/readerPreferences';
+import { effectiveStartupPage, startupPages } from '../../electron/shared/startupPage';
+import { useRememberedScroll } from '../hooks/useRememberedScroll';
 import { applyDesktopTypography, 应用主题设置, effectiveColorTheme, normalizeThemePreferences, useSystemDarkMode, 主题选项 } from '../theme';
 
 const categories: Array<{id:string;title:string;note:string;icon:MobileIconName}> = [
@@ -29,6 +32,8 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
   useMobileScrim();
   const [category,setCategory]=useState(''), [value,setValue]=useState(settings), [error,setError]=useState('');
   const [displayPage,setDisplayPage]=useState<MobileDisplayScope>(displayScope);
+  const body = useRef<HTMLDivElement>(null);
+  useRememberedScroll(body, `mobile:settings:${category}`);
   const display=getMobileDisplay(value,displayPage);
   const fonts=mobileTypography(value);
   const systemDark=useSystemDarkMode(), themePreferences=normalizeThemePreferences(value);
@@ -50,7 +55,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
   function range<K extends keyof AppSettings>(key:K,label:string,min:number,max:number,step:number,fallback:number,unit='') {const shown=Math.min(max,Math.max(min,Number(value[key] ?? fallback)));return <label className="mobile-option-row"><span>{label}<output>{shown}{t(unit)}</output></span><input type="range" aria-label={label} min={min} max={max} step={step} value={shown} onChange={event => save({[key]:Number(event.target.value)})}/></label>;}
   return createPortal(<div className="settings-window-overlay mobile-settings-surface"><section className="mobile-settings-page" role="dialog" aria-modal="true" aria-label={t("设置")}>
     <header><button className="mobile-icon-button" aria-label={category?t("返回设置"):t("关闭设置")} onClick={back}><MobileIcon name="back"/></button><h2>{categories.find(item=>item.id===category)?.title ? t(categories.find(item=>item.id===category)!.title) : t("设置")}</h2></header>
-    <div className="mobile-settings-body">{!category ? <nav aria-label={t("设置分类")}>{categories.map(item => <button key={item.id} className="mobile-setting-category" onClick={() => void mobileNavigate(() => setCategory(item.id))}><MobileIcon name={item.icon}/><span><strong>{t(item.title)}</strong><small>{t(item.note)}</small></span><MobileIcon name="chevron"/></button>)}</nav> : <>
+    <div className="mobile-settings-body" ref={body}>{!category ? <nav aria-label={t("设置分类")}>{categories.map(item => <button key={item.id} className="mobile-setting-category" onClick={() => void mobileNavigate(() => setCategory(item.id))}><MobileIcon name={item.icon}/><span><strong>{t(item.title)}</strong><small>{t(item.note)}</small></span><MobileIcon name="chevron"/></button>)}</nav> : <>
       {category==='appearance' && <>
         <div className="settings-row"><span>{t('语言 / Language')}</span><GlassSelect ariaLabel="语言 / Language" value={normalizeLanguage(value.language)} options={[{value:'zh-CN',label:'简体中文'},{value:'en',label:'English'},{value:'ja',label:'日本語'}]} onChange={language=>save({language:normalizeLanguage(language)})}/></div>
         <div className="settings-row"><span>{t('全局字号')}</span><FontSizeControl label={t('全局字号')} value={fonts.mobileGlobalFontSize} onChange={mobileGlobalFontSize=>save({mobileGlobalFontSize})}/></div>
@@ -59,7 +64,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {toggle('followSystemTheme',t('跟随系统主题'))}
         {themePreferences.followSystemTheme && <p className="settings-hint">{t('日间配色')}：{t(themePreferences.dayColorTheme==='mist'?'雾蓝':主题选项.find(theme=>theme.id===themePreferences.dayColorTheme)!.label)}{t('；深色模式自动使用夜色。')}</p>}
         <div className="settings-row"><span>{t('界面主题')}</span><GlassSelect ariaLabel={t('界面主题')} value={selectedTheme} options={uiOptions([{value:'mist',label:'雾蓝'},{value:'nord',label:'北境'},{value:'sand',label:'暖沙'},{value:'night',label:'夜色',disabled:themePreferences.followSystemTheme&&!systemDark}])} onChange={colorTheme=>save(normalizeThemePreferences({...value,colorTheme}))}/></div>
-        <div className="settings-row"><span>{t("显示设置页面")}</span><GlassSelect ariaLabel={t("显示设置页面")} value={displayPage} options={uiOptions(Object.entries(mobileDisplayLabels).map(([key,label])=>({value:key as MobileDisplayScope,label})))} onChange={setDisplayPage}/></div>
+        <div className="settings-row"><span>{t("调整栏目布局")}</span><GlassSelect ariaLabel={t("调整栏目布局")} value={displayPage} options={uiOptions(Object.entries(mobileDisplayLabels).map(([key,label])=>({value:key as MobileDisplayScope,label})))} onChange={setDisplayPage}/></div>
         <div className="settings-row"><span>{t("卡片布局")}</span><GlassSelect ariaLabel={t("卡片布局")} value={display.layout} options={uiOptions([{value:'grid' as const,label:'网格'},{value:'list' as const,label:'缩略图与说明'}])} onChange={layout=>save(patchMobileDisplay(value,displayPage,{layout}))}/></div>
         <label className="mobile-option-row"><span>{t("网格列数")}<output>{display.columns}</output></span><input type="range" aria-label={t("网格列数")} min="2" max="6" step="1" value={display.columns} onChange={event=>save(patchMobileDisplay(value,displayPage,{columns:Number(event.target.value)}))}/></label>
         <label className="mobile-option-row"><span>{t("列表封面尺寸")}<output>{display.coverSize} px</output></span><input type="range" aria-label={t("列表封面尺寸")} min="64" max="132" step="4" value={display.coverSize} onChange={event=>save(patchMobileDisplay(value,displayPage,{coverSize:Number(event.target.value)}))}/></label>
@@ -76,8 +81,8 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {select('recentOpenedLimit',t("最近阅读记录上限"),[50,100,150,200].map(n=>({value:n,label:String(n)})))}
       </>}
       {category==='reading' && <>
-
-        <div className="settings-row"><span>{t("打开漫画时的缩放")}</span><strong>{t("适应窗口")}</strong></div>
+        <div className="settings-row"><span>{t('启动页')}</span><GlassSelect ariaLabel={t('启动页')} value={effectiveStartupPage(value)} options={uiOptions(startupPages.filter(page=>page.value!=='temporary'))} onChange={startupPage=>save({startupPage,...(startupPage==='home'?{showHomePage:true}:{})})}/></div>
+        {select('readerDefaultFitMode',t('默认缩放模式'),[...FIT_MODE_OPTIONS],'fit-window')}
         {toggle('readerDefaultPanorama',t("默认开启全景连环画模式"))}
         {select('readerDefaultFlow',t("默认阅读流向"),[{value:'horizontal',label:'横向'},{value:'vertical',label:'纵向'}])}
         {select('readerPageMode',t("默认单双页"),[{value:'single',label:'单页'},{value:'double',label:'双页'}])}
@@ -85,7 +90,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {toggle('doublePageFirstSingle',t("封面单独显示"))}{toggle('smartDetectSpreadPage',t("智能识别跨页图"))}
         {toggle('readerVolumeKeys',t("音量键翻页"))}{toggle('readerVolumeKeysReversed',t("反转音量键翻页方向"))}
         {toggle('mobilePanoramaTapPaging',t('全景点击翻页'))}
-        {isAndroid() && <><label className="settings-toggle"><span>{t('双击放大画面')}</span><input type="checkbox" checked={value.mobileReaderDoubleTapZoom !== false} onChange={event=>save({mobileReaderDoubleTapZoom:event.target.checked})}/></label><p className="settings-help">{t('关闭后，点击翻页无需等待，仍可双指缩放。')}</p></>}
+        {isAndroid() && <label className="settings-toggle"><span>{t('双击放大画面')}</span><input type="checkbox" checked={value.mobileReaderDoubleTapZoom !== false} onChange={event=>save({mobileReaderDoubleTapZoom:event.target.checked})}/></label>}
         {range('readerVolumePanoramaPages',t("全景音量键翻页间隔"),.25,2,.25,1,' 页')}
       </>}
       {category==='book' && <>

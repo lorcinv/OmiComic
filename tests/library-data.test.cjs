@@ -33,6 +33,20 @@ function resource(dir, name, sourceType = 'archive') {
   return { resourceKey: `${sourceType}:${sourcePath}`, sourcePath, sourceType, title: name };
 }
 
+test('desktop startup tabs persist across service restarts and invalid values retain legacy behavior', async t => {
+  const { effectiveStartupPage } = require('../dist-electron/shared/startupPage.js');
+  const f = await fixture(t, { settings: { showHomePage: false } });
+  assert.equal(effectiveStartupPage((await f.service.读取应用数据()).settings), 'directory');
+  for (const startupPage of ['bookshelf','favorites','bookmarks','recent','temporary','directory','home']) {
+    await f.service.更新设置({ startupPage, showHomePage: true });
+    const saved = (await f.load().读取应用数据()).settings;
+    assert.equal(saved.startupPage, startupPage);
+    assert.equal(effectiveStartupPage(saved), startupPage);
+  }
+  await f.service.更新设置({ startupPage: 'invalid', showHomePage: false });
+  assert.equal(effectiveStartupPage((await f.load().读取应用数据()).settings), 'directory');
+});
+
 test('fresh desktop reading defaults use single LTR pages with panorama disabled and preserve explicit choices', async t => {
   const f = await fixture(t), initial = await f.service.读取应用数据();
   assert.equal(initial.settings.readerDefaultPanorama, false);

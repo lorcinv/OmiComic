@@ -12,6 +12,7 @@ import OmiPageBrand from "../components/OmiPageBrand";
 import OmiSignature from "../components/OmiSignature";
 import { HomeArtworkPalette, HomeMascot } from '../components/HomeArtworkDecor';
 import useMobileLayout from "../hooks/useMobileLayout";
+import { useRememberedScroll } from '../hooks/useRememberedScroll';
 import { defaultHomeArtwork, useHomeArtwork } from '../hooks/useHomeArtwork';
 import { clearMobileTreeCache } from '../library/mobileTreeIndex';
 import { invalidateLibraryCatalog } from '../library/libraryCatalog';
@@ -38,6 +39,8 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
   const initialSnapshot = useRef(initialData);
   const initialRefresh = useRef(refreshToken);
   const mobile = useMobileLayout();
+  const home = useRef<HTMLDivElement>(null);
+  useRememberedScroll(home, `${mobile ? 'mobile' : 'desktop'}:home`);
   const artwork = useHomeArtwork(!mobile);
   const [artworkFailed, setArtworkFailed] = useState(false);
   useEffect(() => setArtworkFailed(false), [artwork?.url]);
@@ -184,7 +187,7 @@ export default function HomePage({ onBrowse, onSettings, onOpenReader, refreshTo
   };
 
   return (
-    <div className={`omi-home${mobile ? ' is-mobile-home' : ''}`}>
+    <div className={`omi-home${mobile ? ' is-mobile-home' : ''}`} ref={home}>
       {!mobile && <HomeArtworkPalette id="omi-home-palette" />}
       <header className="omi-home__header">
         <OmiPageBrand onActivate={browse} onRead={origin => resume(books[0], origin)} readDisabled={loading || books.length === 0} readBusy={opening !== null} />

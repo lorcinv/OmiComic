@@ -558,10 +558,11 @@ export const messages: Record<string, readonly [string, string]> = {
     "Theme",
     "テーマ"
   ],
-  "显示设置页面": [
-    "Page to customize",
-    "表示を設定する画面"
+  "调整栏目布局": [
+    "Customize section layout",
+    "一覧のレイアウトを調整"
   ],
+  "启动页": ["Startup page", "起動時の画面"],
   "卡片布局": [
     "Card layout",
     "カードの表示形式"

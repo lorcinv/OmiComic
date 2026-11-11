@@ -1,5 +1,11 @@
 import { compareComicPagePaths } from './comicPageSort';
 export type PageSort = "name-asc" | "name-desc" | "time-asc" | "time-desc";
+export const FIT_MODE_OPTIONS = [
+  { value: 'fit-window', label: '适应窗口' },
+  { value: 'fit-height', label: '适应高度' },
+  { value: 'fit-width', label: '适应宽度' },
+  { value: 'original', label: '原始尺寸' },
+] as const;
 export interface ImageAdjustments {
   enabled: boolean; brightness: number; contrast: number; gamma: number;
   warmth: number; grayscale: boolean; invert: boolean; sharpen: number; denoise: number;

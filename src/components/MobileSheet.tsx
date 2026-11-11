@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, type ReactNode, type PointerEvent as ReactPoin
 import { createPortal } from 'react-dom';
 import { takeDrawerGesture } from '../hooks/mobileDrawerGesture';
 import { useMobileScrim } from '../hooks/mobileScrim';
+import { useRememberedScroll } from '../hooks/useRememberedScroll';
 const sheets: HTMLElement[] = [];
 export const MOBILE_SHEET_MOTION_MS = 180;
 export function dismissMobileSheet(afterClose?: () => void): void {
@@ -10,6 +11,8 @@ export function dismissMobileSheet(afterClose?: () => void): void {
 }
 export default function MobileSheet({ title, onClose, beforeClose, children, side = false, showClose = true, showHeading = true, showHandle = true }: { title: string; onClose: () => void; beforeClose?: () => boolean; children: ReactNode; side?: boolean | 'right'; showClose?: boolean; showHeading?: boolean; showHandle?: boolean }) {
   const panel = useRef<HTMLElement>(null), backdrop = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  useRememberedScroll(side ? content : panel, `mobile:sheet:${side || 'bottom'}:${title}`);
   const scrim = useMobileScrim(true, 0);
   const close = useRef(onClose); close.current = onClose;
   const guard = useRef(beforeClose); guard.current = beforeClose;
@@ -146,7 +149,7 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
     <section className={`mobile-sheet${showHeading ? '' : ' is-headingless'}`} ref={panel} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
       {showHandle&&!side&&<div className="mobile-sheet-grab-area" onPointerDown={startHandleDrag} onPointerMove={moveHandleDrag} onPointerUp={event=>endHandleDrag(event)} onPointerCancel={event=>endHandleDrag(event,true)} onLostPointerCapture={event=>{if(event.target===event.currentTarget)endHandleDrag(event,true);}}><div className="mobile-sheet-handle" aria-hidden="true"/></div>}
       {showHeading&&<header className="mobile-sheet-heading"><h2>{title}</h2>{!side&&showClose&&<button onClick={()=>settle(0)} aria-label={tr`关闭${title}`}>{t("完成")}</button>}</header>}
-      <div className="mobile-sheet-content">{children}</div>
+      <div className="mobile-sheet-content" ref={content}>{children}</div>
     </section>
   </div>,document.body);
 }

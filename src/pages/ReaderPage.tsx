@@ -384,7 +384,7 @@ function ReaderPage({
   const [进度保存错误, 设置进度保存错误] = useState<string | null>(null);
   const [当前页已书签, 设置当前页已书签] = useState(false);
   const [书签处理中, 设置书签处理中] = useState(false);
-  const [缩放模式, 设置缩放模式] = useState<阅读器缩放模式>(手机布局 ? "fit-window" : 初始阅读状态.视图.fitMode);
+  const [缩放模式, 设置缩放模式] = useState<阅读器缩放模式>(初始阅读状态.视图.fitMode);
   const [可用区域, 设置可用区域] = useState<可用区域尺寸>({ width: 0, height: 0 });
   const 显示缩放缓存用量 = useRef(new Map<string,number>());
   const 显示缩放统计等待 = useRef(() => {});
@@ -3285,7 +3285,7 @@ function ReaderPage({
     设置阅读器设置(初始阅读状态.设置);
     设置双页配对起点(初始阅读状态.配对起点);
     设置阅读流向(初始阅读状态.视图.flow);
-    设置缩放模式(手机布局 ? "fit-window" : 初始阅读状态.视图.fitMode);
+    设置缩放模式(初始阅读状态.视图.fitMode);
     设置顶部栏可见(!初始阅读状态.视图.immersive);
     设置底部栏可见(!初始阅读状态.视图.immersive);
     延后启用全景动画();
@@ -3333,7 +3333,7 @@ function ReaderPage({
         // Keep the saved page until dimensions decide whether it can pair.
         // Pre-normalizing here could discard the last page on a narrower window.
         设置阅读器设置(新阅读器设置);
-        设置缩放模式(手机布局 ? "fit-window" : 阅读视图.fitMode);
+        设置缩放模式(阅读视图.fitMode);
         设置手机页面预览打开(false);
         设置阅读流向(阅读视图.flow);
         设置当前索引(恢复索引);
