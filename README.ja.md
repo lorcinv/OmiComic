@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.95 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-Portable-1.1.95-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-Setup-1.1.95-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.95 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-1.1.95-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.96 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Portable-1.1.96-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Setup-1.1.96-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.96 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-1.1.96-android.apk) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.95（Windows / Android）：起動画面の選択と、各一覧・フォルダーの表示位置の保存に対応しました。Android の既定の表示方式を PC と統一し、4 種類から選べます。[更新内容](docs/releases/v1.1.95.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.1.96（Windows / Android）：表示位置は実行中のみ記憶し、再起動すると先頭に戻ります。現在のナビゲーションを再選択すると最上位の先頭に戻ります。[更新内容](docs/releases/v1.1.96.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 

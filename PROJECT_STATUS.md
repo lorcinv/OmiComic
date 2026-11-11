@@ -1,5 +1,7 @@
 # 当前项目状态
 
+**1.1.96 · 2026-11-11**：浏览位置仅在本次运行期间保留，重启清零；恢复重复点击当前导航栏返回顶层顶部。源码分支 `codex/navigation-session-1.1.96`，[版本说明](docs/releases/v1.1.96.md) · [工作记录](docs/status/2026-11-11-1.1.96-navigation-session.md)。
+
 **1.1.95 发行 · 2026-11-11**：双端加入启动页和完整浏览位置记忆；手机默认缩放与 PC 统一为四种可选模式，移除双击放大项的说明小字。源码分支 `codex/startup-layout-1.1.95`，[发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95) · [版本说明](docs/releases/v1.1.95.md) · [发行记录](docs/status/2026-11-11-1.1.95-release.md)。
 
 **1.1.94 发行 · 2026-11-10**：两端书架返回列表后保留原滚动位置，再次进入恢复内部位置；PC 选中后恢复原右键菜单和批量整理操作。Windows 实包及 Android 模拟器最终 APK 验证通过，实体手机未测试。安装包位于 `release/OmiComic-1.1.94/`，完整源码在 `codex/bookshelf-fixes-1.1.94`，[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94)。[本轮验证](docs/status/2026-11-10-1.1.94-bookshelf-fixes.md)。

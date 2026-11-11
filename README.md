@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.95 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-Portable-1.1.95-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-Setup-1.1.95-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.95 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-1.1.95-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.96 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Portable-1.1.96-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Setup-1.1.96-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.96 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-1.1.96-android.apk) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.95（Windows / Android）：新增可选启动页和各栏目、文件夹的位置记忆；手机默认缩放模式与 PC 统一，支持四种选项并在阅读中生效。[本版更新](docs/releases/v1.1.95.md) · [更新记录](docs/releases/README.md)。
+1.1.96（Windows / Android）：浏览位置仅在本次使用期间保留，重启回到顶部；恢复再次点击当前导航栏返回顶层顶部。[本版更新](docs/releases/v1.1.96.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 

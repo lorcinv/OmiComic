@@ -44,7 +44,7 @@ Supported: image folders; JPG/JPEG/PNG/WebP/BMP/GIF images; ZIP/CBZ, RAR/CBR, 7z
 <details>
 <summary>Are browsing positions remembered?</summary>
 
-PC and Android remember positions for each section, bookshelf category, shelf and library folder. Grid and list positions are saved separately and restored after navigation or an app restart. Settings and resource detail previews also retain their scroll positions.
+PC and Android remember positions for each section, bookshelf category, shelf and library folder. Grid and list positions are remembered separately within the running session. Switching sections or going Back restores them; selecting the active navigation entry again returns to the top of its root level. Restarting clears browsing positions, including settings and detail previews. Comic reading progress remains saved.
 
 </details>
 
@@ -275,7 +275,7 @@ No. Brightness, contrast, gamma and color effects change display only; Reset res
 <details>
 <summary>How do I choose the startup page?</summary>
 
-Settings → Default reading → Startup page: choose Home, Library, Bookshelf, Favorites, Bookmarks or Recent reading; PC also offers Temporary files. The next launch opens that section and restores its browsing position. Choosing Home also enables the home screen.
+Settings → Default reading → Startup page: choose Home, Library, Bookshelf, Favorites, Bookmarks or Recent reading; PC also offers Temporary files. The next launch opens the top of that section’s root level. Choosing Home also enables the home screen.
 
 </details>
 

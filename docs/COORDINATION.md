@@ -1,4 +1,6 @@
-当前版本为 **Windows / Android 1.1.95**：[发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95)，源码分支 `codex/startup-layout-1.1.95`。启动页、位置记忆与默认缩放更新见 [版本说明](releases/v1.1.95.md)。
+当前版本为 **Windows / Android 1.1.96**，源码分支 `codex/navigation-session-1.1.96`。浏览位置仅保留本次运行，重选导航回顶层顶部，见 [版本说明](releases/v1.1.96.md)。
+
+上一版本为 **Windows / Android 1.1.95**：[发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95)，源码分支 `codex/startup-layout-1.1.95`。启动页、位置记忆与默认缩放更新见 [版本说明](releases/v1.1.95.md)。
 
 上一发行版本为 **Windows / Android 1.1.94**：[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94)。源码分支 `codex/bookshelf-fixes-1.1.94`，工作树 `.cache/android-ui1193/worktree`；安装包位于 `release/OmiComic-1.1.94/`。见 [更新说明](releases/v1.1.94.md) 和 [验证记录](status/2026-11-10-1.1.94-bookshelf-fixes.md)。以下为各轮本地交付的历史记录。
 

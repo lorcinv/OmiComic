@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { _electron, expect } = require('@playwright/test');
 
-test('Windows startup tabs and positions survive closing the application process', { timeout: 120000 }, async () => {
+test('Windows remembers this session, resets navigation on reselect, and starts fresh after closing', { timeout: 120000 }, async () => {
   const directory = await fs.mkdtemp(path.resolve('test-results/navigation-memory-'));
   const profile = path.join(directory, 'profile'), source = path.join(directory, 'books');
   await fs.mkdir(profile); await fs.mkdir(source);
@@ -52,13 +52,20 @@ test('Windows startup tabs and positions survive closing the application process
     });
     const shelf = () => page.locator('.bookshelf-folder-card').filter({has:page.locator('strong',{hasText:new RegExp(`^${name}$`)})});
     await shelf().dblclick(); await scroll(books(),950);
+    await nav('收藏').click(); await at(body(),900);
+    await nav('书架').click(); await at(books(),950);
+    await page.getByRole('button',{name:'返回书架',exact:true}).click(); await at(root(),1100);
+    await shelf().dblclick(); await at(books(),950);
+    await nav('书架').click(); await at(root(),0);
+    await scroll(root(),1100); await shelf().dblclick(); await at(books(),950);
     await page.evaluate(async()=>{const result=await window.omicomic.updateSettings({startupPage:'bookshelf'});if(!result.ok)throw Error(result.error.message);});
     await app.close(); app=null;
     page=await launch();
-    await expect(nav('书架')).toHaveClass(/is-active/); await at(books(),950);
-    await page.getByRole('button',{name:'返回书架',exact:true}).click(); await at(root(),1100);
-    await nav('收藏').click(); await at(body(),900);
-    await nav('资源库').click(); await at(list(),1200);
+    await expect(nav('书架')).toHaveClass(/is-active/); await at(root(),0);
+    await root().locator('.bookshelf-folder-card').first().dblclick(); await at(books(),0);
+    await nav('收藏').click(); await at(body(),0);
+    await nav('资源库').click(); await at(list(),0);
+    await scroll(list(),1200); await nav('资源库').click(); await at(list(),0);
     const checks=[];
     for (const [startupPage,label] of [['favorites','收藏'],['bookmarks','书签'],['recent','最近阅读'],['temporary','临时存放'],['directory','资源库'],['home','主页']]) {
       await page.evaluate(async startupPage=>{const result=await window.omicomic.updateSettings({startupPage});if(!result.ok)throw Error(result.error.message);},startupPage);
@@ -69,6 +76,6 @@ test('Windows startup tabs and positions survive closing the application process
     }
     const runtime=await app.evaluate(({app,BrowserWindow})=>({version:app.getVersion(),packaged:app.isPackaged,visible:BrowserWindow.getAllWindows().some(window=>window.isVisible())}));
     assert.equal(runtime.visible,false);
-    await fs.writeFile('output/navigation-20261111/windows-runtime.json',JSON.stringify({runtime,startupPages:['bookshelf',...checks],positions:{directory:1200,favorites:900,bookshelf:1100,books:950},processRestart:true},null,2));
+    await fs.writeFile('test-results/navigation-session-runtime.json',JSON.stringify({runtime,startupPages:['bookshelf',...checks],sessionPositions:{directory:1200,favorites:900,bookshelf:1100,books:950},restartPositions:0,reselectRootTop:true,processRestart:true},null,2));
   } finally {if(app)await app.close();}
 });

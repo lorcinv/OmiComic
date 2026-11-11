@@ -38,7 +38,7 @@ async function scroll(page: Page, location: 'root' | 'books', top: number) {
 
 for (const mobile of [false, true]) test.describe(mobile ? 'mobile bookshelf positions' : 'desktop bookshelf positions', () => {
   test.use(mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {});
-  for (const exit of ['back', 'sidebar'] as const) test(`returning through ${exit} keeps the shelf list and each shelf position`, async ({ page }) => {
+  for (const exit of ['back', 'sidebar'] as const) test(`${exit}: Back restores the list; reselecting the sidebar resets the root`, async ({ page }) => {
     await seed(page);
     await scroll(page, 'root', 1100);
     const cards = page.locator(mobile ? '.mobile-bookshelf-card' : '.bookshelf-folder-card');
@@ -54,7 +54,8 @@ for (const mobile of [false, true]) test.describe(mobile ? 'mobile bookshelf pos
       else await page.getByRole('button', { name: '返回书架', exact: true }).click();
     } else await nav(page).click();
     await expect(root(page)).toBeVisible();
-    await expect.poll(() => root(page).evaluate(element => element.scrollTop)).toBeCloseTo(1100, 0);
+    await expect.poll(() => root(page).evaluate(element => element.scrollTop)).toBeCloseTo(exit === 'sidebar' ? 0 : 1100, 0);
+    if(exit === 'sidebar')await scroll(page,'root',1100);
     const sameShelf = cards.filter({ has: page.locator('strong', { hasText: new RegExp(`^${shelfName}$`) }) });
     if (mobile) await sameShelf.tap(); else await sameShelf.dblclick();
     await expect(books(page)).toBeVisible();

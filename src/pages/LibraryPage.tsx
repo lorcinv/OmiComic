@@ -2360,6 +2360,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     : 当前视图 === 'favorites' ? 收藏卡片项目.map(item => item.项目.resourceKey)
     : 书签卡片项目.map(item => item.项目.id),
     [当前视图,筛选排序后项目,筛选后书架文件夹列表,虚拟文件夹卡片项目,最近打开卡片项目,收藏卡片项目,书签卡片项目]);
+  const 待栏目置顶 = useRef<资源库视图 | null>(null);
   const 列表位置键 = JSON.stringify([手机布局 ? 'mobile' : 'desktop', 当前视图,
     当前视图 === 'directory' ? [当前根目录,当前目录?.path] : 当前视图 === 'bookshelf' ? 当前书架ID
       : 当前视图 === 'virtual-folder' ? [当前书架ID,当前虚拟文件夹ID] : 当前视图 === 'recent' ? 阅读记录分类 : null,
@@ -2369,6 +2370,16 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const 目录连续列表 = useContinuousLibrary(列表容器, isActive && 数据已加载 && 初始目录就绪 && 连续列表启用 && !资源信息目标 && !正在读取,
     当前分页项目总数, 手机布局 ? 手机卡片布局 === 'list' ? 手机自适应.listColumns : 手机列数 : 获取卡片列数(卡片缩放), 手机布局 ? 手机每页数量 : 每页数量,
     列表位置键,手机布局 || 随机模式,目录资源身份);
+  useLayoutEffect(() => {
+    // Re-selecting a tab is an explicit reset. Wait for the root directory and
+    // its virtualized list to mount before replacing that destination's anchor.
+    const target = 待栏目置顶.current;
+    if (!target || !isActive || 正在读取 || !初始目录就绪 || 当前视图 !== target) return;
+    if (target === 'directory' && 当前根目录 && 当前目录?.path !== 当前根目录) return;
+    待栏目置顶.current = null;
+    待恢复滚动位置.current = null; 待恢复精确滚动位置.current = null;
+    目录连续列表.reset();
+  });
   const 实际每页数量 = 随机模式 ? (手机布局 ? 手机每页数量 : 每页数量) : 连续列表启用 ? 目录连续列表.pageSize : 每页数量;
   const 手机连续样式 = {paddingTop:目录连续列表.offset,paddingBottom:目录连续列表.bottom};
   const 总页数 = Math.max(1, Math.ceil(当前分页项目总数 / 实际每页数量));
@@ -2855,8 +2866,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         let 已恢复 = false;
         for (const 根目录 of 候选根目录) {
           if (已取消) break;
-          const 保存目录 = 根目录 === 恢复根目录 ? 结果.data.library.lastCurrentPath
-            : readViewMemory<string>(`directory:${手机布局 ? 'mobile' : 'desktop'}:${根目录.path}`);
+          const 保存目录 = readViewMemory<string>(`directory:${手机布局 ? 'mobile' : 'desktop'}:${根目录.path}`);
           if (保存目录) 已恢复 = await 打开目录(保存目录, 根目录.path, "none", false);
           if (!已恢复 && 保存目录 !== 根目录.path) 已恢复 = await 打开目录(根目录.path, 根目录.path, "none", false);
           if (已恢复) break;
@@ -4974,6 +4984,13 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if(saved?.folderId&&!虚拟文件夹列表.some(folder=>folder.id===saved!.folderId))saved=undefined;
     const apply=()=>{
       if(资源信息目标)关闭资源详情页面(true);
+      待栏目置顶.current = different ? null : 目标;
+      if(!different){
+        目录连续列表.sync();
+        栏目浏览位置.current.delete(to);
+        待恢复滚动位置.current=null;待恢复精确滚动位置.current=null;
+        退出选择模式();
+      }
       if(!saved){commit();return;}
       待恢复滚动位置.current=null;待恢复精确滚动位置.current=null;
       设置当前根目录(saved.root);设置当前目录(saved.directory);设置当前书架ID(saved.bookshelfId);设置当前虚拟文件夹ID(saved.folderId);
@@ -4998,13 +5015,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     设置当前视图("bookshelf");
     设置当前虚拟文件夹ID(null);
     设置错误信息(null);
-    const saved = readViewMemory<{ view: string; bookshelfId: string | null; folderId: string | null }>(`navigation:${位置记忆平台}:bookshelf`);
-    const folder = 虚拟文件夹列表.find(item => item.id === saved?.folderId);
-    const shelf = 书架列表.find(item => item.id === (folder?.bookshelfId ?? saved?.bookshelfId));
-    if (shelf) {
-      设置当前书架ID(shelf.id);
-      if (saved?.view === 'virtual-folder' && folder) { 设置当前虚拟文件夹ID(folder.id); 设置当前视图('virtual-folder'); }
-    }
     设置当前页(1);
   }
 
@@ -5241,7 +5251,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     设置当前虚拟文件夹ID(null);
     const root = 当前根目录 ?? 根目录列表[0]?.path;
     if (root) {
-      if (当前目录) { 设置当前视图("directory"); 设置当前页(1); }
+      if (当前目录?.path === root) { 设置当前视图("directory"); 设置当前页(1); }
       else void 打开目录(root, root);
     } else 设置当前视图("directory");
   }

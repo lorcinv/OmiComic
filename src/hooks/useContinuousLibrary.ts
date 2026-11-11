@@ -134,5 +134,10 @@ export function useContinuousLibrary(container: RefObject<HTMLDivElement>, enabl
   return { start: startRow * columns, end: Math.min(count, endRow * columns), offset: startRow * view.stride,
     visibleStart:visibleRow*columns, visibleEnd:Math.min(count,(visibleRow+Math.ceil(view.height/view.stride)+1)*columns), columns,
     height, bottom:Math.max(0,(rows-endRow)*view.stride), page, pages, pageSize, sync, jump,
-    reset: () => { positions.current.delete(resetKey); jump(1); } };
+    reset: () => {
+      anchor.current = { index: 0, fraction: 0 };
+      positions.current.set(resetKey, { ...anchor.current });
+      saveViewMemory(`list:${resetKey}`, { ...anchor.current });
+      jump(1);
+    } };
 }

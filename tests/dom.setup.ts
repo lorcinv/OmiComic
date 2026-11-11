@@ -1,5 +1,6 @@
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { startViewMemorySession } from '../src/library/viewMemory';
 
 Object.defineProperty(window, 'matchMedia', { writable: true, value: vi.fn((query: string) => ({
   matches: query.includes('prefers-reduced-motion'), media: query, onchange: null,
@@ -30,4 +31,4 @@ vi.stubGlobal('ResizeObserver', TestResizeObserver);
 vi.stubGlobal('IntersectionObserver', TestIntersectionObserver);
 Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value() {} });
 Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value() {} });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); startViewMemorySession(); vi.restoreAllMocks(); });

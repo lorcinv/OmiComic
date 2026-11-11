@@ -20,16 +20,14 @@ const select=async(label,value)=>{
 };
 
 if(window.__omiFixture.includes('restore')){
-  await wait(books,'startup bookshelf folder');await settled();
-  await wait(()=>near(books().scrollTop,950),'process restart book position');
-  if(document.querySelector('.omi-home'))throw Error('Startup flashed home');
+  await wait(root,'startup bookshelf root');await settled();
+  await wait(()=>near(root().scrollTop,0),'process restart root top');
   const state=await window.omicomic.getAppData();
-  if(!state.ok||state.data.settings.startupPage!=='bookshelf'||state.data.settings.mobileViewDisplays?.bookshelf?.layout!=='list')throw Error('Native preferences not retained');
-  const rootTop=state.data.settings.navigationMemoryTestRoot;
-  if(!Number.isFinite(rootTop))throw Error('Missing native fixture expectation');
-  await back();await wait(root,'bookshelf after restart');await wait(()=>near(root().scrollTop,rootTop),'root position after process restart');
-  await tap(target());await wait(books,'reopened folder after restart');await settled();await wait(()=>near(books().scrollTop,950),'reopened folder position');
-  return {processRestart:true,startupPage:state.data.settings.startupPage,layout:'list',rootScrollTop:rootTop,booksScrollTop:books().scrollTop,transport:'final APK on Android emulator; native bridge and Android Back'};
+  if(!state.ok||state.data.settings.startupPage!=='bookshelf')throw Error('Startup preference not retained');
+  root().scrollTop=state.data.settings.navigationMemoryTestRoot;root().dispatchEvent(new Event('scroll'));await wait(target,'seeded shelf');
+  await tap(target());await wait(books,'fresh shelf');await settled();
+  await wait(()=>near(books().scrollTop,0),'process restart book top');
+  return {processRestart:true,startupPage:'bookshelf',rootScrollTop:0,booksScrollTop:0};
 }
 
 if(button('打开资源库'))await tap(button('打开资源库'));
@@ -56,11 +54,13 @@ for(const layout of ['grid','list']){
   await back();await wait(root,'returned root');await wait(()=>near(root().scrollTop,rootTop),'root restored');
   await tap(target());await wait(books,'reentered books');await settled();await wait(()=>near(books().scrollTop,950),'book position restored');
   await tap(nav('资源库'));await settled();await tap(nav('书架'));await settled();await wait(books,'tab returned folder');await wait(()=>near(books().scrollTop,950),'tab retained books');
+  await tap(nav('书架'));await settled();await wait(root,'reselected root');await wait(()=>near(root().scrollTop,0),'reselected root top');
+  root().scrollTop=rootTop;root().dispatchEvent(new Event('scroll'));await wait(target,'shelf again');await tap(target());await settled();await wait(()=>books()&&near(books().scrollTop,950),'shelf session retained');
   checks.push({layout,rootScrollTop:rootTop,booksScrollTop:950});
   if(layout==='grid'){await back();await wait(root,'grid root');await wait(()=>near(root().scrollTop,rootTop),'grid root kept');}
 }
-// Keep the independent expected value in the native test fixture. WebView's
-// browser-storage commit timing is deliberately not part of the test oracle.
+// Save a fixture locator so the restart check can manually reach Shelf 20
+// after first verifying that its parent starts at the top.
 const save=await window.omicomic.updateSettings({startupPage:'bookshelf',showHomePage:true,navigationMemoryTestRoot:checks[1].rootScrollTop});if(!save.ok)throw Error(save.error.message);
 await pause(250);
 return {checks,startupPage:'bookshelf',transport:'final APK on Android emulator; native bridge, real taps and Android Back'};

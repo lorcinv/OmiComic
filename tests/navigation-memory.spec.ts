@@ -20,6 +20,7 @@ async function seed(page: Page, layout: 'grid' | 'list') {
     api.updateLibraryState = async patch => { Object.assign(data.library, patch); persist(); return { ok: true, data: null }; };
     const resource = (prefix: string, index: number) => ({ resourceKey: `image:/${prefix}/${index}.png`, sourcePath: `/${prefix}/${index}.png`, sourceType: 'image', title: `${prefix} ${String(index).padStart(3,'0')}`, currentPageIndex: 0, totalPages: 2, updatedAt: 1000-index, sortIndex: index, addedAt: 1 });
     data.recentOpened = Array.from({ length: 200 }, (_, i) => resource('Recent', i));
+    data.temporaryOpened = Array.from({ length: 200 }, (_, i) => resource('Temporary', i));
     data.favorites = Array.from({ length: 200 }, (_, i) => resource('Favorite', i));
     data.bookmarks = Array.from({ length: 200 }, (_, i) => ({ ...resource('Bookmark', i), id: `mark${i}`, pageIndex: 0, createdAt: 1 }));
     data.bookshelves = [{ id: 'category', name: '分类', sortIndex: 0, createdAt: 1, updatedAt: 1 }];
@@ -77,7 +78,7 @@ for (const mode of ['desktop', 'mobile-grid', 'mobile-list'] as const) test.desc
   const mobile = mode !== 'desktop';
   test.use(mobile ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : {});
 
-  test('physical folders retain both levels through Back and a renderer restart', async ({ page }) => {
+  test('physical folders retain both levels through Back but restart at the root top', async ({ page }) => {
     await seed(page, mode === 'mobile-list' ? 'list' : 'grid');
     await scroll(directory(page), 1200);
     const name = await visibleTitle(directory(page), '.resource-card');
@@ -89,11 +90,12 @@ for (const mode of ['desktop', 'mobile-grid', 'mobile-list'] as const) test.desc
     await enter(page, mobile, name);
     await at(directory(page), 900);
     await page.reload();
-    await expect(directory(page).locator('.resource-card').first()).toContainText('Image');
-    await at(directory(page), 900);
+    await expect(directory(page).locator('.resource-card').first()).toContainText('Folder');
+    await at(directory(page), 0);
+    await enter(page, mobile, 'Folder 000'); await at(directory(page), 0);
   });
 
-  test('tabs and each bookshelf retain their own positions after leaving and restarting', async ({ page }) => {
+  test('tabs and bookshelves remember this session only; restart clears every position', async ({ page }) => {
     await seed(page, mode === 'mobile-list' ? 'list' : 'grid');
     await scroll(directory(page), 950);
     for (const [name, top] of [['收藏',900],['书签',1000],['最近阅读',1100]] as const) { await nav(page,name).click(); await scroll(body(page),top); }
@@ -106,9 +108,38 @@ for (const mode of ['desktop', 'mobile-grid', 'mobile-list'] as const) test.desc
     await windowBack(page,mobile); await at(shelfRoot(page),1200);
     await enter(page,mobile,name,true); await at(shelfBooks(page),950);
     await page.evaluate(async () => { await window.omicomic.updateSettings({ startupPage: 'bookshelf' }); });
-    await page.reload(); await at(shelfBooks(page),950);
+    await page.reload(); await at(shelfRoot(page),0);
+    await enter(page,mobile,'Shelf 000',true); await at(shelfBooks(page),0);
+    for (const label of ['收藏','书签','最近阅读','资源库']) { await nav(page,label).click(); await at(body(page),0); }
+  });
+
+  test('reselecting the active navigation resets the top level; switching tabs and Back still remember', async ({page}) => {
+    await seed(page,mode==='mobile-list'?'list':'grid');
+    await scroll(directory(page),1200);
+    const folder = await visibleTitle(directory(page),'.resource-card');
+    await enter(page,mobile,folder); await scroll(directory(page),900);
+    await nav(page,'收藏').click(); await nav(page,'资源库').click();
+    await expect(directory(page).locator('.resource-card').first()).toContainText('Image'); await at(directory(page),900);
+    await nav(page,'资源库').click();
+    await expect(directory(page).locator('.resource-card').first()).toContainText('Folder'); await at(directory(page),0);
+    await nav(page,'收藏').click(); await nav(page,'资源库').click(); await at(directory(page),0);
+    await scroll(directory(page),1200); await enter(page,mobile,folder); await at(directory(page),900);
+    await nav(page,'资源库').click(); await at(directory(page),0);
+    await nav(page,'书架').click(); await scroll(shelfRoot(page),1200);
+    const shelf = await visibleTitle(shelfRoot(page),mobile?'.mobile-bookshelf-card':'.bookshelf-folder-card');
+    await enter(page,mobile,shelf,true); await scroll(shelfBooks(page),950);
     await windowBack(page,mobile); await at(shelfRoot(page),1200);
-    for (const [label, top] of [['收藏',900],['书签',1000],['最近阅读',1100]] as const) { await nav(page,label).click(); await at(body(page),top); }
+    await enter(page,mobile,shelf,true); await at(shelfBooks(page),950);
+    await nav(page,'书架').click(); await at(shelfRoot(page),0);
+    await nav(page,'收藏').click(); await nav(page,'书架').click(); await at(shelfRoot(page),0);
+    await scroll(shelfRoot(page),1200); await enter(page,mobile,shelf,true); await at(shelfBooks(page),950);
+    await nav(page,'书架').click(); await at(shelfRoot(page),0);
+    for(const label of ['收藏','书签','最近阅读',...(!mobile?['临时存放']:[])]) {
+      await nav(page,label).click();
+      await scroll(body(page),900);
+      await nav(page,label).click(); await at(body(page),0);
+      await nav(page,'资源库').click(); await nav(page,label).click(); await at(body(page),0);
+    }
   });
 
   test('startup choice is saved under default reading and opens every navigation tab directly', async ({ page }) => {
@@ -165,7 +196,7 @@ for (const mode of ['desktop', 'mobile-grid', 'mobile-list'] as const) test.desc
     await info.click(); await at(details,700);
   });
 
-  test('the tag catalogue retains its position after closing and restarting', async ({page}) => {
+  test('the tag catalogue remembers reopening in this session and resets on restart', async ({page}) => {
     await seed(page,mode==='mobile-list'?'list':'grid');
     const openTags = async () => {
       if(mobile){await page.getByRole('button',{name:'显示选项',exact:true}).click();await page.getByRole('button',{name:'标签管理',exact:true}).click();}
@@ -174,7 +205,7 @@ for (const mode of ['desktop', 'mobile-grid', 'mobile-list'] as const) test.desc
     const tags=page.locator(mobile?'.mobile-tag-catalogue':'.tag-all-section .tag-sort-list');
     await openTags();await scroll(tags,500);await page.keyboard.press('Escape');
     await expect(tags).toHaveCount(0);await openTags();await at(tags,500);
-    await page.reload();await expect(directory(page)).toBeVisible();await openTags();await at(tags,500);
+    await page.reload();await expect(directory(page)).toBeVisible();await openTags();await at(tags,0);
   });
 });
 

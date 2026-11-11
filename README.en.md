@@ -22,12 +22,12 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.95 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-Portable-1.1.95-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-Setup-1.1.95-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.95 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.95/OmiComic-1.1.95-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.96 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Portable-1.1.96-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Setup-1.1.96-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.96 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-1.1.96-android.apk) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.95 (Windows / Android): adds startup page selection and persistent browsing positions for sections and folders. Android now shares all four default fit modes with PC and applies the selected mode when reading. [Release notes](docs/releases/v1.1.95.md) · [Version history](docs/releases/README.en.md).
+1.1.96 (Windows / Android): browsing positions are remembered within the current session and reset on restart. Selecting the active navigation entry again returns to the top of its root level. [Release notes](docs/releases/v1.1.96.md) · [Version history](docs/releases/README.en.md).
 
 ## Features
 

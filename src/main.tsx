@@ -10,9 +10,10 @@ import "./styles/desktopTheme.css";
 import "./styles/tagData.css";
 import { connectAndroid } from "./android/bridge";
 import { initializeSystemTheme } from './theme';
-import { initializeNativeViewMemory } from './library/viewMemory';
+import { startViewMemorySession } from './library/viewMemory';
 
 async function start() {
+  startViewMemorySession();
   if (import.meta.env.MODE === "android") {
     document.documentElement.dataset.platform = "android";
     // Reader pinch zoom is handled by its own gesture layer. Keep the app
@@ -24,7 +25,6 @@ async function start() {
       import('./android/data'),
     ]);
     window.omicomic = await createAndroidApi(native);
-    await initializeNativeViewMemory(native);
   }
   await initializeSystemTheme();
   ReactDOM.createRoot(document.getElementById("root")!).render(
