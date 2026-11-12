@@ -49,10 +49,28 @@ test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, r
     await page.keyboard.press('Meta+k');
     assert.equal(await page.evaluate(()=>document.activeElement?.tagName),'INPUT');
     await page.screenshot({path:path.join(output,'mac-library.png')});
-    await page.close(); await app.evaluate(({app})=>app.emit('activate'));
+    await page.keyboard.press('Escape');
+    await window.evaluate(window=>window.setSize(1440,960));
+    await app.evaluate(({app},file)=>app.emit('open-file',{preventDefault(){}},file),path.join(source,'RAR4.rar'));
+    const stage=page.locator('.reader-stage');await expect(stage).toBeVisible();
+    await expect.poll(()=>stage.locator('img.reader-image').evaluateAll(images=>images.some(i=>i.naturalWidth>0))).toBe(true);
+    const progress=page.locator('[aria-label="阅读进度"]'), before=await progress.getAttribute('aria-valuenow');
+    const box=await stage.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+    await page.keyboard.down('Meta');await page.mouse.wheel(0,-180);await page.keyboard.up('Meta');
+    await expect.poll(async()=>Number(await stage.getAttribute('data-reader-zoom'))).toBeGreaterThan(1);
+    assert.equal(await progress.getAttribute('aria-valuenow'),before);
+    await page.screenshot({path:path.join(output,'mac-reader.png')});
+    // Exercise the native window close path used by the traffic-light button.
+    // Playwright's page.close() closes WebContents directly and can tear down
+    // its browser connection while the last hidden decoder is also closing.
+    await app.evaluate(({BrowserWindow,app})=>new Promise(resolve=>{
+      const main=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/index.html'));
+      main.once('closed',()=>setTimeout(()=>{app.emit('activate');resolve();},100));
+      main.close();
+    }));
     await expect.poll(async()=>app.windows().filter(w=>!w.isClosed()&&w.url().endsWith('/index.html')).length).toBe(1);
     const reopened=app.windows().find(w=>!w.isClosed()&&w.url().endsWith('/index.html'));
     await expect(reopened.locator('.app-shell')).toBeVisible();
-    await fs.writeFile(path.join(output,'result.json'),JSON.stringify({info,archives:4,pdf:true,measurements,reopened:true},null,2));
+    await fs.writeFile(path.join(output,'result.json'),JSON.stringify({info,archives:4,pdf:true,measurements,commandWheel:true,reopened:true},null,2));
   } finally { await app.close(); }
 });

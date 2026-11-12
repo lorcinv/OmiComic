@@ -19,7 +19,7 @@ beforeEach(()=>{
     return {x:0,y:0,left:0,top:0,width:size,height:size,right:size,bottom:size,toJSON(){}};
   });
 });
-afterEach(()=>vi.unstubAllGlobals());
+afterEach(()=>{vi.unstubAllGlobals();delete document.documentElement.dataset.platform;});
 function tick(ms=16){act(()=>{clock+=ms;const pending=[...frames.values()];frames.clear();for(const cb of pending)cb(clock);});}
 function event(x:number,y:number,id=1,type='touch'){
   const node=document.querySelector('[data-reader-zoom]')!;
@@ -27,6 +27,18 @@ function event(x:number,y:number,id=1,type='touch'){
 }
 function setup(panorama=false,vertical=false){const view=render(<Harness panorama={panorama} vertical={vertical}/>);act(()=>zoom.setScale(3));return view;}
 function drag(){act(()=>zoom.down(event(200,200)));for(let n=1;n<=5;n++){clock+=16;act(()=>zoom.move(event(200-n*12,200-n*10)));}}
+
+test('Command-wheel zooms on Mac and preserves ordinary wheel navigation elsewhere',()=>{
+  render(<Harness/>);
+  const stage=document.querySelector('[data-reader-zoom]')!;
+  const wheel=()=>new WheelEvent('wheel',{metaKey:true,deltaY:-120,clientX:200,clientY:200,bubbles:true,cancelable:true});
+  document.documentElement.dataset.platform='win32';
+  const windowsEvent=wheel();act(()=>stage.dispatchEvent(windowsEvent));
+  expect(zoom.scale).toBe(1);expect(windowsEvent.defaultPrevented).toBe(false);
+  document.documentElement.dataset.platform='darwin';
+  const macEvent=wheel();act(()=>stage.dispatchEvent(macEvent));
+  expect(zoom.scale).toBeGreaterThan(1);expect(macEvent.defaultPrevented).toBe(true);
+});
 
 test('two axes coast monotonically, a corrected UP cannot reverse them, and lost capture after UP preserves momentum',()=>{
   setup();drag();const held={x:zoom.x,y:zoom.y};clock+=5;

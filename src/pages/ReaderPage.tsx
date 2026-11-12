@@ -4443,7 +4443,7 @@ function ReaderPage({
           if (事件.buttons === 0) 结束全景指针(事件);
         }}
         onWheel={(事件) => {
-          if (事件.ctrlKey || (!模式2 && 自由缩放.scale > 1)) return;
+          if (primaryModifier(事件) || (!模式2 && 自由缩放.scale > 1)) return;
           if (!resource) return;
           if (模式2) {
             滚动全景(事件);

@@ -14,7 +14,7 @@
 
 ## iOS 模拟器
 
-下载并解压 `OmiComic-1.1.96-ios-simulator.zip`，在运行中的 Xcode 模拟器中安装 `OmiComic.app`。可直接拖入模拟器，或运行 `xcrun simctl install booted /path/to/OmiComic.app`。
+下载并解压 `OmiComic-1.1.96-ios-simulator.zip`，在 Apple Silicon Mac 的 Xcode 模拟器中安装 `OmiComic.app`。可直接拖入模拟器，或运行 `xcrun simctl install booted /path/to/OmiComic.app`。此包由 GitHub 的 arm64 构建环境生成；Windows 上可查看随包保存的 iPhone/iPad 阅读截图。
 
 - 使用系统“文件”选择器添加目录，授权会随应用数据保存。
 - 共用移动端书架、标签、书签、进度及备份界面。

@@ -3,6 +3,7 @@ import { animateReaderMotion, zoomRestoreProgress } from '../reader/transitionAn
 import { readerMotionStyle } from '../reader/cssMotion';
 import { noteDisplaySamplingMotion } from '../reader/displaySampling';
 import { advanceInertia, estimateTouchVelocity, touchInertiaTime, type MotionSample } from '../reader/motion';
+import { primaryModifier } from '../platform';
 
 type View = { scale: number; x: number; y: number };
 const initial: View = { scale: 1, x: 0, y: 0 };
@@ -136,7 +137,7 @@ export default function useReaderZoom(stage: RefObject<HTMLDivElement>, resetKey
     const element=stage.current;if(!element)return;
     const wheel=(e:WheelEvent)=>{
       stopMomentum();
-      if(!e.ctrlKey)return;
+      if(!primaryModifier(e))return;
       e.preventDefault();e.stopPropagation();interrupt();config.current.onBegin?.();
       const box=element.getBoundingClientRect(),old=current.current;
       const scale=Math.max(MIN_READER_ZOOM,Math.min(MAX_READER_ZOOM,old.scale*Math.exp(-e.deltaY*.002)));
