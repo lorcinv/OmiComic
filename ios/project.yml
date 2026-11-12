@@ -1,7 +1,7 @@
 name: OmiComic
 options:
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "16.4"
 packages:
   SwiftArchive:
     url: https://github.com/matteo-pacini/libarchive-for-swift
@@ -21,12 +21,13 @@ targets:
     platform: iOS
     sources:
       - path: Sources
-    resources:
       - path: ../dist-ios
         type: folder
+        buildPhase: resources
       - path: Assets.xcassets
       - path: Licenses
         type: folder
+        buildPhase: resources
     info:
       path: Info.plist
       properties:
@@ -49,10 +50,11 @@ targets:
   OmiComicTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [Tests]
-    resources:
+    sources:
+      - path: Tests
       - path: TestFixtures
         type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.lorcinv.omicomic.ios.tests

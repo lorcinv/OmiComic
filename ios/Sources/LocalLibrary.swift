@@ -150,7 +150,9 @@ final class LocalLibrary {
     }
     private func raster(_ data: Data, key: String, preview: Bool) throws -> [String: Any] {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil), let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any], let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int, width > 0, height > 0, width <= 100000, height <= 100000 else { throw OmiError("图片无法解码。") }
-        let edge = preview ? 512 : 4096
+        // Bound decoded memory by pixels, retaining readable width on tall comic pages.
+        let ratio = min(1.0, sqrt(16_000_000.0 / (Double(width) * Double(height))), 4096.0 / Double(min(width, height)), 24000.0 / Double(max(width, height)))
+        let edge = preview ? 512 : max(1, Int(Double(max(width, height)) * ratio))
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: edge, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true] as CFDictionary), let encoded = UIImage(cgImage: image).jpegData(compressionQuality: preview ? 0.82 : 0.94) else { throw OmiError("图片解码失败。") }
         return ["url": try publish(encoded, key: key + ":\(edge)"), "width": image.width, "height": image.height, "encodedBytes": encoded.count]
     }

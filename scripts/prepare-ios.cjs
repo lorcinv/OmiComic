@@ -22,6 +22,7 @@ fs.writeFileSync(path.join(epub, 'OPS/chapter.xhtml'), '<html><body><h1>Omi iOS<
 fs.copyFileSync(path.join(fixtures, 'panorama-800x1200.jpg'), path.join(epub, 'OPS/page.jpg'));
 execFileSync(require('7zip-bin-full').path7z, ['a', '-tzip', path.join(fixtures, 'Sample.epub'), '.'], { cwd: epub, stdio: 'ignore' });
 execFileSync(require('7zip-bin-full').path7z, ['a', '-tzip', path.join(fixtures, 'Sample.cbz'), 'panorama-800x1200.jpg', 'pixel.png'], { cwd: fixtures, stdio: 'ignore' });
+fs.writeFileSync(path.join(fixtures, 'Sample.mobi'), require('../tests/helpers/mobiFixture.cjs').mobiFixture(['<p>Omi iOS MOBI</p><img recindex="1"/>'], [fs.readFileSync(path.join(fixtures, 'panorama-800x1200.jpg'))]));
 console.log('Prepared iOS icons and native test fixtures.');
 const licenses = path.join(root, 'ios/Licenses'); fs.mkdirSync(licenses, {recursive:true});
 fs.cpSync(path.join(root, 'resources/ios-licenses'), path.join(licenses, 'archive'), {recursive:true});

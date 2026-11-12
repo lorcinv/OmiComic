@@ -45,10 +45,15 @@ final class ReaderTests: XCTestCase {
         let controller = try XCTUnwrap(app.window?.rootViewController as? ReaderViewController)
         controller.loadViewIfNeeded()
         let web = try XCTUnwrap(controller.webView)
+        XCTAssertNotNil(Bundle.main.url(forResource: "dist-ios", withExtension: nil))
         for _ in 0..<100 {
             if (try? await web.evaluateJavaScript("Boolean(window.omicomic && document.querySelector('.omi-home'))")) as? Bool == true { break }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
+        let ready = (try? await web.evaluateJavaScript("Boolean(window.omicomic)")) as? Bool == true
+        let startupText = (try? await web.evaluateJavaScript("document.body.innerText")) as? String ?? "Empty page"
+        XCTAssertTrue(ready, startupText)
+        guard ready else { return }
         let info = try await web.callAsyncJavaScript("return await window.omicomic.getAppInfo()", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertEqual(info?["platform"] as? String, "ios")
         let layout = try await web.evaluateJavaScript("document.documentElement.dataset.omiLayout") as? String
@@ -58,18 +63,38 @@ final class ReaderTests: XCTestCase {
         }
         let added = try await web.callAsyncJavaScript("return await window.omicomic.addLibraryRoot({path, name:'Apple test'})", arguments: ["path": root], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertEqual(added?["ok"] as? Bool, true)
-        let book = root + "/Sample.cbz"
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in controller.library.queue.async { controller.library.external.append(book); continuation.resume() } }
-        _ = try await web.evaluateJavaScript("window.dispatchEvent(new Event('omi-external-open'))")
-        var reading = false
-        for _ in 0..<100 {
-            reading = (try? await web.evaluateJavaScript("Boolean(document.querySelector('.page-panel.is-visible .reader-layout') && ([...document.querySelectorAll('.reader-layout img')].some(i=>i.naturalWidth>0 && i.getBoundingClientRect().width>0) || [...document.querySelectorAll('.reader-layout canvas')].some(c=>c.width>0 && c.height>0)))")) as? Bool == true
-            if reading { break }; try await Task.sleep(nanoseconds: 200_000_000)
+        for name in ["Sample.cbz", "three-pages.pdf", "Sample.epub", "Sample.mobi"] {
+            let book = root + "/" + name
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in controller.library.queue.async { controller.library.external.append(book); continuation.resume() } }
+            _ = try await web.evaluateJavaScript("window.dispatchEvent(new Event('omi-external-open'))")
+            var reading = false
+            for _ in 0..<150 {
+                reading = (try? await web.evaluateJavaScript("""
+                    Boolean(document.querySelector('.page-panel.is-visible .reader-layout') &&
+                      ([...document.querySelectorAll('.reader-layout img.reader-image')].some(i=>i.naturalWidth>0 && i.getBoundingClientRect().width>0) ||
+                       [...document.querySelectorAll('.reader-layout canvas')].some(c=>c.width>0 && c.height>0) ||
+                       [...document.querySelectorAll('.reader-layout iframe')].some(f=>f.contentDocument?.body?.textContent?.trim() && [...f.contentDocument.images].every(i=>i.complete && i.naturalWidth>0))))
+                    """)) as? Bool == true
+                if reading { break }; try await Task.sleep(nanoseconds: 200_000_000)
+            }
+            let state = (try? await web.evaluateJavaScript("document.body.innerText.slice(0,2500)")) as? String ?? "No page"
+            XCTAssertTrue(reading, "\(name) should render in WKWebView: \(state)")
+            let bounds = web.bounds
+            XCTAssertGreaterThan(bounds.width, 300); XCTAssertGreaterThan(bounds.height, 300)
+            let image = UIGraphicsImageRenderer(bounds: web.bounds).image { _ in web.drawHierarchy(in: web.bounds, afterScreenUpdates: true) }
+            let attachment = XCTAttachment(image: image); attachment.name = "iOS-\(name)"; attachment.lifetime = .keepAlways; add(attachment)
+            if name == "Sample.cbz" {
+                _ = try await web.evaluateJavaScript("window.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}))")
+                try await Task.sleep(nanoseconds: 600_000_000)
+            }
+            _ = try await web.evaluateJavaScript("window.dispatchEvent(new Event('omi-reader-back'))")
+            for _ in 0..<50 {
+                if (try? await web.evaluateJavaScript("!document.querySelector('.reader-layout')")) as? Bool == true { break }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
         }
-        XCTAssertTrue(reading, "Real WKWebView should open and paint the selected comic")
-        let bounds = web.bounds
-        XCTAssertGreaterThan(bounds.width, 300); XCTAssertGreaterThan(bounds.height, 300)
-        let image = UIGraphicsImageRenderer(bounds: web.bounds).image { _ in web.drawHierarchy(in: web.bounds, afterScreenUpdates: true) }
-        let attachment = XCTAttachment(image: image); attachment.name = "iOS-reader"; attachment.lifetime = .keepAlways; add(attachment)
+        let saved = try await web.callAsyncJavaScript("return (await window.omicomic.getAppData()).data.readingProgress", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
+        XCTAssertGreaterThanOrEqual(saved?.count ?? 0, 4)
+        XCTAssertEqual((saved?["archive:" + root + "/Sample.cbz"] as? [String: Any])?["currentPageIndex"] as? Int, 1)
     }
 }
