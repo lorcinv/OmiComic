@@ -648,6 +648,7 @@ public final class SmokeTest extends Instrumentation {
       if(args.getString("fixture","").startsWith("bottom1178"))startupSelector=".omi-home,.library-layout";
       if(args.getString("fixture","").startsWith("tablet1179"))startupSelector=".omi-home,.library-layout";
       if(args.getString("fixture","").contains("navmemory"))startupSelector=".omi-home,.library-layout";
+      if(args.getString("fixture","").equals("updates1196"))startupSelector=".omi-home,.library-layout";
       while(!"true".equals(eval("!!window.omicomic && !!document.querySelector('"+startupSelector+"')"))){if(System.currentTimeMillis()>deadline)throw new IOException("App startup failed: "+eval("document.body.innerText"));Thread.sleep(100);}
       // DOM existence precedes the first composed frame. Do not inject taps
       // through the launch cover while observing its initial reveal.
@@ -761,6 +762,7 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.contains("bookSwitch1193"))scriptAsset=fixture.contains("swipe")?"book-swipe1193":"book-switch1193";
       if(fixture.contains("bookshelf1194"))scriptAsset="bookshelf1194";
       if(fixture.contains("navmemory"))scriptAsset="navigation-memory";
+      if(fixture.equals("updates1196"))scriptAsset="update-check";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
       deadline=System.currentTimeMillis()+((fixture.contains("bugs1187")||fixture.contains("cutout1191"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
@@ -1115,7 +1117,8 @@ public final class SmokeTest extends Instrumentation {
       }
       if(mode.equals("about")){
         removeMonitor(externalMonitor);
-        if(!"https://github.com/lorcinv/OmiComic".equals(externalLink.optString("url")))throw new IOException("GitHub browser intent was not dispatched: "+externalLink);
+        String expectedURL=fixture.equals("updates1196")?"https://github.com/lorcinv/OmiComic/releases/tag/v9.9.9":"https://github.com/lorcinv/OmiComic";
+        if(resultObject.optBoolean("ok")&&!expectedURL.equals(externalLink.optString("url")))throw new IOException("GitHub browser intent was not dispatched: "+externalLink);
         resultObject.put("externalBrowserIntent",externalLink);
       }
       if(mode.equals("native-codecs")){

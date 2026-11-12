@@ -17,7 +17,7 @@ enum ArchiveReader {
     private static func walk(_ url: URL, visit: (OpaquePointer, Entry) throws -> Bool) throws {
         // libarchive's RAR/7z name conversion requires a UTF-8 locale. Scope it
         // to this synchronous read thread, without changing the app's locale.
-        guard let utf8 = newlocale(1 << LC_CTYPE, "en_US.UTF-8", nil) else { throw OmiError("无法初始化压缩包文件名编码。") }
+        guard let utf8 = newlocale(LC_CTYPE_MASK, "en_US.UTF-8", nil) else { throw OmiError("无法初始化压缩包文件名编码。") }
         guard let previous = uselocale(utf8) else { freelocale(utf8); throw OmiError("无法读取压缩包文件名编码。") }
         defer { uselocale(previous); freelocale(utf8) }
         guard let archive = archive_read_new() else { throw OmiError("压缩包初始化失败。") }
