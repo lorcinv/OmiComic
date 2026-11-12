@@ -31,4 +31,11 @@ vi.stubGlobal('ResizeObserver', TestResizeObserver);
 vi.stubGlobal('IntersectionObserver', TestIntersectionObserver);
 Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value() {} });
 Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value() {} });
-afterEach(() => { cleanup(); startViewMemorySession(); vi.restoreAllMocks(); });
+afterEach(async () => {
+  cleanup();
+  // Home/reader interactions can start a PDF runtime import without awaiting it.
+  // Finish those imports before Vitest tears down the browser environment.
+  await vi.dynamicImportSettled();
+  startViewMemorySession();
+  vi.restoreAllMocks();
+});

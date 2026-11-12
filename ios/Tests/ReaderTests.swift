@@ -48,13 +48,18 @@ final class ReaderTests: XCTestCase {
         controller.loadViewIfNeeded()
         let web = try XCTUnwrap(controller.webView)
         XCTAssertNotNil(Bundle.main.url(forResource: "dist-ios", withExtension: nil))
-        for _ in 0..<100 {
-            if (try? await web.evaluateJavaScript("Boolean(window.omicomic && document.querySelector('.omi-home'))")) as? Bool == true { break }
+        // A cold CI simulator may expose the native bridge before React mounts.
+        // Wait for the actual home screen and mobile layout, not just the bridge.
+        let startupCondition = "Boolean(window.omicomic && document.querySelector('.omi-home') && document.documentElement.dataset.omiLayout === 'mobile')"
+        var ready = false
+        let startupDeadline = Date().addingTimeInterval(60)
+        while Date() < startupDeadline {
+            ready = (try? await web.evaluateJavaScript(startupCondition)) as? Bool == true
+            if ready { break }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
-        let ready = (try? await web.evaluateJavaScript("Boolean(window.omicomic)")) as? Bool == true
         let startupText = (try? await web.evaluateJavaScript("document.body.innerText")) as? String ?? "Empty page"
-        XCTAssertTrue(ready, startupText)
+        XCTAssertTrue(ready, "Home screen and mobile layout did not mount: \(startupText)")
         guard ready else { return }
         let info = try await web.callAsyncJavaScript("return await window.omicomic.getAppInfo()", arguments: [:], in: nil, contentWorld: .page) as? [String: Any]
         XCTAssertEqual(info?["platform"] as? String, "ios")
