@@ -42,7 +42,8 @@ const reorder = <T>(list: T[], keys: string[], key: (item: T) => string): T[] =>
 }).map((v,i) => ({ ...v, sortIndex: i }));
 const parent = (p: string) => p.slice(0, p.lastIndexOf("/"));
 
-export async function createAndroidApi(native: NativeCall, platform: "android" | "ios" = "android"): Promise<OmiComicApi> {
+export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi> {
+  const platform = "android" as const;
   const stored = await native<Partial<OmiComicAppData> | null>("loadData");
   let data: OmiComicAppData = {
     version: 1, library: { roots: [] }, settings: defaults, readingProgress: {}, recentOpened: [],
@@ -230,7 +231,7 @@ export async function createAndroidApi(native: NativeCall, platform: "android" |
     removeBookmark: id=>write(d=>{d.bookmarks=d.bookmarks.filter(i=>i.id!==id);return null;}),
     isPageBookmarked: (key,page,id)=>read(()=>data.bookmarks.some(i=>i.resourceKey===key&&bookmarkMatches(i,page,id))),
     selectFolder: ()=>call("chooseFolder"),
-    cancelLibraryScan: () => { if (platform === "android") androidNotify("cancelLibraryScan", {}); else void native("cancelLibraryScan").catch(() => undefined); },
+    cancelLibraryScan: () => { androidNotify("cancelLibraryScan", {}); },
     scanLibrary: async (path, refresh=false, booksOnly=false, options)=>{const result=await call<import("../types").LibraryCatalog>("scanLibrary",{path,refresh,booksOnly,...options,excludedPaths:data.excludedResourcePaths??[]});return result;},
     listDirectory: async path=>{const result=await call<import("../types").目录结果>("listDirectory",{path});if(result.ok){const hidden=data.excludedResourcePaths??[];result.data.items=result.data.items.filter(i=>!hidden.some(p=>withinPath(i.path,p)));result.data.total=result.data.items.length;}return result;},
     getResourcePages: async input=>{
@@ -277,14 +278,14 @@ export async function createAndroidApi(native: NativeCall, platform: "android" |
       try {
         // Keep document bytes binary. JSON/base64 decoding on the UI thread
         // delayed PDF painting and every image chapter in large MOBI books.
-        const response=await fetch(`${platform === "ios" ? "omi://app" : "https://omi.local"}/documents/${encodeURIComponent(id)}?begin=${begin}&end=${end}`);
+        const response=await fetch(`https://omi.local/documents/${encodeURIComponent(id)}?begin=${begin}&end=${end}`);
         if(!response.ok)throw new Error('文档读取失败，请重新打开。');
         const bytes=new Uint8Array(await response.arrayBuffer());
         if(bytes.length!==end-begin)throw new Error('文档读取中断，请重新打开。');
         return ok(bytes);
       }catch(error){return failure(error);}
     },
-    readDocumentChapter: async(id,index)=>{try{return ok(await sanitizeAndroidChapter(await native<string>("readDocumentChapter",{id,index}),native,platform === "ios" ? "omi:" : "https://omi.local"));}catch(e){return failure(e);}},
+    readDocumentChapter: async(id,index)=>{try{return ok(await sanitizeAndroidChapter(await native<string>("readDocumentChapter",{id,index}),native));}catch(e){return failure(e);}},
     closeDocument: id=>call("closeDocument",{id}),
     takeExternalOpen: async()=>{
       const selected=external.shift();if(selected)return ok(selected);
@@ -325,9 +326,5 @@ export async function createAndroidApi(native: NativeCall, platform: "android" |
     setReaderChrome:(hidden,active=true,panorama=false)=>call("setReaderChrome",{hidden,active,panorama}),
     prepareEpubReaderViewport:path=>call("prepareEpubReaderViewport",{key:path}),
   };
-  if (platform === "ios") {
-    delete api.getAndroidCacheInfo; delete api.clearAndroidReadCache;
-    delete api.registerDocumentImage; delete api.renderDocumentImage;
-  }
   return api;
 }

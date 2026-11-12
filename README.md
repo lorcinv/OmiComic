@@ -26,11 +26,10 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 | Android 8.0+ | [OmiComic 1.1.97 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-android.apk) |
 | macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.zip) |
 | macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.zip) |
-| iOS · Simulator (arm64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-ios-simulator.zip) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.97：新增 macOS Apple Silicon / Intel 支持，保留桌面七档卡片尺寸，加入更新提醒；“检查更新”位于操作说明后，结果显示在按钮内。另提供 iOS 模拟器测试包。[本版更新](docs/releases/v1.1.97.md) · [更新记录](docs/releases/README.md)。
+1.1.97：新增 macOS Apple Silicon / Intel 支持，保留桌面七档卡片尺寸，加入更新提醒；“检查更新”位于操作说明后，结果显示在按钮内。[本版更新](docs/releases/v1.1.97.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 
@@ -99,7 +98,7 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 
 支持 Apple Silicon（M 系列，arm64）与 Intel（x64）。打开 DMG，将 OmiComic 拖入“应用程序”，或解压 ZIP 后移动应用。提供与 Windows 相同的本地格式、书架、标签和阅读工具，支持原生窗口按钮、Command 快捷键及关闭窗口后从 Dock 重新打开。
 
-当前发行包没有 Apple 开发者签名与公证。首次打开的处理方式见 [Mac 安装说明](docs/APPLE.md)；内置操作说明可切换到 macOS，查看安装、⌘＋K 搜索、⌘＋滚轮缩放和窗口操作。iOS 目前只提供模拟器测试包，不能直接安装到实体 iPhone 或 iPad。
+当前发行包没有 Apple 开发者签名与公证。首次打开的处理方式见 [Mac 安装说明](docs/APPLE.md)；内置操作说明可切换到 macOS，查看安装、⌘＋K 搜索、⌘＋滚轮缩放和窗口操作。
 
 ## Android 版
 

@@ -27,11 +27,7 @@ async function start() {
     ]);
     window.omicomic = await createAndroidApi(native);
   }
-  if (import.meta.env.MODE === "ios") {
-    document.documentElement.dataset.platform = "ios";
-    const [{ connectIOS }, { createAndroidApi }] = await Promise.all([import("./ios/bridge"), import("./android/data")]);
-    window.omicomic = await createAndroidApi(connectIOS(), "ios");
-  } else if (import.meta.env.MODE !== "android") {
+  if (import.meta.env.MODE !== "android") {
     document.documentElement.dataset.platform = (await window.omicomic.getAppInfo()).platform;
   }
   await initializeSystemTheme();

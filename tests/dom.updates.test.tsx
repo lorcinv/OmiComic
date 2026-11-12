@@ -12,7 +12,7 @@ describe('platform-specific update reminders',()=>{
     expect(compareVersions('1.1.100','1.1.99')).toBe(1);
     const rows = [release('v1.1.100','OmiComic-android.apk'),release('v1.1.99','OmiComic-Setup-1.1.99-x64.exe'),release('v2.0.0','OmiComic-Setup-2.0.0-x64.exe',{prerelease:true})];
     expect(selectUpdate(rows,info)).toMatchObject({kind:'available',update:{version:'1.1.99'}});
-    expect(selectUpdate(rows,{...info,platform:'ios'})).toEqual({kind:'unavailable'});
+    expect(selectUpdate(rows,{...info,platform:'unsupported'})).toEqual({kind:'unavailable'});
     expect(selectUpdate(rows,{...info,version:'1.1.99'})).toEqual({kind:'current'});
     expect(selectUpdate([release('v1.1.99','OmiComic-1.1.99-mac-arm64.dmg')],{...info,platform:'darwin',arch:'x64'})).toEqual({kind:'unavailable'});
     expect(selectUpdate([release('v1.1.99','OmiComic-1.1.99-mac-arm64.dmg')],{...info,platform:'darwin',arch:'arm64'})).toMatchObject({kind:'available'});

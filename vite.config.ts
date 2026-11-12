@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => ({
   base: "./",
   // Android System WebView updates independently of the OS. PDF.js's supported
   // legacy build supplies its own compatibility shims in both renderer and worker.
-  resolve: { alias: (mode === "android" || mode === "ios") ? [
+  resolve: { alias: mode === "android" ? [
     { find: /^pdfjs-dist$/, replacement: "pdfjs-dist/legacy/build/pdf.mjs" },
     { find: /^pdfjs-compat$/, replacement: "pdfjs-compat/legacy/build/pdf.mjs" },
     { find: /^pdfjs-dist\/build\/pdf.worker.min.mjs\?url$/, replacement: path.resolve('src/android/pdf.worker.ts') + '?worker&url' },
@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => ({
     watch: { ignored: ["**/.cache/**", "**/.packaged-app/**", "**/android/build/**", "**/dist-android/**", "**/dist-electron/**", "**/release/**", "**/test-results/**"] },
   },
   build: {
-    target: mode === 'android' ? 'chrome94' : mode === 'ios' ? 'safari16' : undefined,
+    target: mode === 'android' ? 'chrome94' : undefined,
     outDir: "dist",
     emptyOutDir: true,
   },

@@ -356,7 +356,7 @@ Open Settings → Safety and backup. Export filenames include OmiComic, the plat
 <details>
 <summary>How do I check for updates?</summary>
 
-Open Settings → About OmiComic and select Check for updates below the user guide. The result appears inside the button. When a version is available, click that action to open the official release page and choose a download. Failed checks can be retried. An automatic check also runs 15 seconds after startup, at most once per day for each platform and version; it does not download or install updates. Mac packages match your processor architecture. iOS simulator builds are not offered as updates for physical iPhones.
+Open Settings → About OmiComic and select Check for updates below the user guide. The result appears inside the button. When a version is available, click that action to open the official release page and choose a download. Failed checks can be retried. An automatic check also runs 15 seconds after startup, at most once per day for each platform and version; it does not download or install updates. Mac packages match your processor architecture.
 
 </details>
 

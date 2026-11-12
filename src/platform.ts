@@ -2,8 +2,7 @@ export function isAndroid(): boolean {
   return document.documentElement.dataset.platform === "android";
 }
 
-export function isIOS(): boolean { return document.documentElement.dataset.platform === 'ios'; }
-export function isNativeMobile(): boolean { return isAndroid() || isIOS(); }
+export function isNativeMobile(): boolean { return isAndroid(); }
 export function primaryModifier(event: { ctrlKey: boolean; metaKey: boolean }): boolean {
   return event.ctrlKey || (document.documentElement.dataset.platform === 'darwin' && event.metaKey);
 }

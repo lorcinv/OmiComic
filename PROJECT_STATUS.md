@@ -1,6 +1,6 @@
 # 当前项目状态
 
-**1.1.97 · 2026-11-12**：Windows、macOS（Apple Silicon / Intel）与 Android 统一为 1.1.97，另提供 iOS 模拟器测试包。关于页更新按钮移到操作说明后，状态内置；补齐三语 Mac 说明。[版本说明](docs/releases/v1.1.97.md) · [Mac 与 iOS](docs/APPLE.md) · [验证与全量回归未完成项](docs/status/2026-11-12-1.1.97-release.md)。
+**1.1.97 · 2026-11-12**：Windows、macOS（Apple Silicon / Intel）与 Android 统一为 1.1.97。关于页更新按钮移到操作说明后，状态内置；补齐三语 Mac 说明。[版本说明](docs/releases/v1.1.97.md) · [Mac 安装说明](docs/APPLE.md) · [验证与全量回归未完成项](docs/status/2026-11-12-1.1.97-release.md)。
 
 **1.1.96 · 2026-11-11**：浏览位置仅在本次运行期间保留，重启清零；恢复重复点击当前导航栏返回顶层顶部。源码分支 `codex/navigation-session-1.1.96`，[版本说明](docs/releases/v1.1.96.md) · [工作记录](docs/status/2026-11-11-1.1.96-navigation-session.md)。
 

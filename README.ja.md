@@ -26,11 +26,10 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 | Android 8.0+ | [OmiComic 1.1.97 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-android.apk) |
 | macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.zip) |
 | macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.zip) |
-| iOS · Simulator (arm64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-ios-simulator.zip) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.97：Apple Silicon / Intel の macOS に対応。デスクトップのカードは7段階を維持し、更新通知を追加しました。操作ガイドの下に更新確認ボタンを配置し、結果もその中に表示します。iOS シミュレーター用テスト版も配布します。[更新内容](docs/releases/v1.1.97.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.1.97：Apple Silicon / Intel の macOS に対応。デスクトップのカードは7段階を維持し、更新通知を追加しました。操作ガイドの下に更新確認ボタンを配置し、結果もその中に表示します。[更新内容](docs/releases/v1.1.97.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 
@@ -99,7 +98,7 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 
 Apple Silicon（M シリーズ、arm64）と Intel（x64）に対応します。DMG を開き、OmiComic を「アプリケーション」にドラッグするか、ZIP を展開してアプリを移動します。Windows と同じローカル形式・本棚・読書ツールに加え、標準のウィンドウボタン、Command キー、閉じたウィンドウの Dock からの再表示に対応します。
 
-現在の配布版は Apple Developer ID による署名・公証を行っていません。[Mac インストール案内](docs/APPLE.md) とアプリ内ガイドの macOS タブで、初回起動、⌘＋K の検索、⌘＋ホイールの拡大縮小などを確認できます。iOS はシミュレーター用テスト版のみで、実機の iPhone・iPad にはインストールできません。
+現在の配布版は Apple Developer ID による署名・公証を行っていません。[Mac インストール案内](docs/APPLE.md) とアプリ内ガイドの macOS タブで、初回起動、⌘＋K の検索、⌘＋ホイールの拡大縮小などを確認できます。
 
 ## Android 版
 

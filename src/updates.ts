@@ -20,8 +20,6 @@ export function selectUpdate(payload: unknown, info: 应用信息): UpdateResult
     if (info.platform === 'win32') return /(?:setup|win|portable)/i.test(name) && /\.(exe|zip)$/i.test(name) && !/arm64|ia32/i.test(name);
     if (info.platform === 'android') return /\.apk$/i.test(name);
     if (info.platform === 'darwin') return /(?:mac|darwin)/i.test(name) && /\.(dmg|zip)$/i.test(name) && (info.arch ? new RegExp(`(?:${info.arch}|universal)`, 'i').test(name) : /universal/i.test(name));
-    // Simulator builds cannot be installed on an iPhone. Only advertise a device package here.
-    if (info.platform === 'ios') return /\.ipa$/i.test(name);
     return false;
   };
   const releases = payload.filter((r: any) => r && !r.draft && !r.prerelease && typeof r.tag_name === 'string' && numbers(r.tag_name) && Array.isArray(r.assets)

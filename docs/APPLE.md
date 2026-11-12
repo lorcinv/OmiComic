@@ -1,4 +1,4 @@
-# macOS 与 iOS 模拟器
+# macOS
 
 [下载 OmiComic 1.1.97](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) · [中文操作说明](USER_GUIDE.zh-CN.md) · [English guide](USER_GUIDE.en.md) · [日本語ガイド](USER_GUIDE.ja.md)
 
@@ -20,21 +20,10 @@ English: choose `arm64` for Apple Silicon or `x64` for Intel. Drag the app from 
 - 使用原生窗口按钮；关闭窗口后从 Dock 重新打开，⌘＋Q 退出应用，Control＋⌘＋F 切换系统全屏。
 - 设置 → 关于 OmiComic → 操作说明，可切换 Windows、macOS、Android 分类；内容支持中文、English、日本語，离线可查。
 
-本机编译需要 macOS：运行 `npm ci`，再运行 `npm run dist:mac`。Windows 可通过 GitHub 的 **Apple test builds** 工作流构建，两种架构分别执行打包与真实应用测试。
-
-## iOS 模拟器测试版
-
-下载并解压 `OmiComic-1.1.97-ios-simulator.zip`，在 Apple Silicon Mac 的 Xcode 模拟器中安装 `OmiComic.app`。可拖入模拟器，或运行 `xcrun simctl install booted /path/to/OmiComic.app`。这不是 IPA，不能直接安装到实体 iPhone 或 iPad，也不是 TestFlight 版本。
-
-- 使用系统“文件”选择器添加目录并保存授权。
-- 共用移动端书架、标签、书签、进度及备份界面。
-- 本地读取图片、ZIP/CBZ、RAR/CBR、7z/CB7、PDF、EPUB；MOBI 使用现有解析器。
-- 适配 iPhone/iPad、安全区域、横竖屏和触摸缩放；音量键翻页仍是 Android 功能。
-
-本机编译：安装 Xcode 和 XcodeGen，运行 `npm ci`、`npm run build:ios:renderer`、`node scripts/prepare-ios.cjs`、`xcodegen generate --spec ios/project.yml`，打开 `ios/OmiComic.xcodeproj` 选择模拟器。GitHub 工作流运行 iPhone 与 iPad 测试，并保存阅读截图。
+本机编译需要 macOS：运行 `npm ci`，再运行 `npm run dist:mac`。Windows 可通过 GitHub 的 **macOS builds** 工作流构建，两种架构分别执行打包与真实应用测试。
 
 ## 更新提醒
 
 关于页底部、操作说明后提供“检查更新”。检查结果和失败重试说明都在按钮内；发现新版后，点击该区域打开官方 Release 页面，自行下载。启动 15 秒后也会检查，同一平台和版本每天最多一次，网络失败不打断阅读。
 
-只查询正式 GitHub Releases，按平台及 Mac 架构匹配安装包，不自动下载或安装。iOS 模拟器 ZIP 不作为实体 iPhone 的更新包。
+只查询正式 GitHub Releases，按平台及 Mac 架构匹配安装包，不自动下载或安装。
