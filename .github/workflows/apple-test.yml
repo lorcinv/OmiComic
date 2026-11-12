@@ -3,6 +3,12 @@ on:
   push:
     branches: ['codex/apple-test-*']
   workflow_dispatch:
+    inputs:
+      target:
+        description: Apple platform to build and test
+        type: choice
+        default: all
+        options: [all, macos, ios]
 permissions:
   contents: read
 concurrency:
@@ -10,6 +16,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   macos:
+    if: github.event_name != 'workflow_dispatch' || inputs.target != 'ios'
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +53,7 @@ jobs:
             test-results/apple-desktop/result.json
           retention-days: 30
   ios:
+    if: github.event_name != 'workflow_dispatch' || inputs.target != 'macos'
     runs-on: macos-15
     timeout-minutes: 40
     steps:
