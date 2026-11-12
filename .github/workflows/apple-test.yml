@@ -1,14 +1,8 @@
-name: Apple test builds
+name: macOS builds
 on:
   push:
     branches: ['codex/apple-test-*']
   workflow_dispatch:
-    inputs:
-      target:
-        description: Apple platform to build and test
-        type: choice
-        default: all
-        options: [all, macos, ios]
 permissions:
   contents: read
 concurrency:
@@ -16,7 +10,6 @@ concurrency:
   cancel-in-progress: true
 jobs:
   macos:
-    if: github.event_name != 'workflow_dispatch' || inputs.target != 'ios'
     strategy:
       fail-fast: false
       matrix:
@@ -51,55 +44,4 @@ jobs:
             release/*.zip
             test-results/apple-desktop/*.png
             test-results/apple-desktop/result.json
-          retention-days: 30
-  ios:
-    if: github.event_name != 'workflow_dispatch' || inputs.target != 'macos'
-    runs-on: macos-15
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck && npm run build:ios:renderer && node scripts/prepare-ios.cjs
-      - run: brew install xcodegen
-      - run: xcodegen generate --spec ios/project.yml
-      - name: Build and run native iPhone tests
-        run: |
-          set -o pipefail
-          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPhone")))')
-          echo "IOS_DEVICE=$DEVICE" >> "$GITHUB_ENV"
-          xcodebuild test -project ios/OmiComic.xcodeproj -scheme OmiComic -parallel-testing-enabled NO -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build/Derived -resultBundlePath ios/build/iPhone.xcresult CODE_SIGNING_ALLOWED=NO | tee ios/build/iphone.log
-      - name: Run native iPad tests
-        run: |
-          set -o pipefail
-          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPad")))')
-          xcodebuild test -project ios/OmiComic.xcodeproj -scheme OmiComic -parallel-testing-enabled NO -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build/Derived -resultBundlePath ios/build/iPad.xcresult CODE_SIGNING_ALLOWED=NO | tee ios/build/ipad.log
-      - name: Export reading screenshots
-        if: always()
-        run: |
-          for DEVICE in iPhone iPad; do
-            if [ -d "ios/build/$DEVICE.xcresult" ]; then
-              xcrun xcresulttool export attachments --path "ios/build/$DEVICE.xcresult" --output-path "ios/build/screenshots/$DEVICE"
-            fi
-          done
-      - name: Package simulator app
-        run: |
-          mkdir -p release
-          VERSION=$(node -p "require('./package.json').version")
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app/Info.plist)" = "$VERSION"
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleSupportedPlatforms:0' ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app/Info.plist)" = 'iPhoneSimulator'
-          ditto -c -k --sequesterRsrc --keepParent ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app "release/OmiComic-$VERSION-ios-simulator.zip"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: OmiComic-ios-simulator
-          path: |
-            release/*ios-simulator.zip
-            ios/build/*.xcresult
-            ios/build/*.log
-            ios/build/*.png
-            ios/build/screenshots
           retention-days: 30
