@@ -82,7 +82,7 @@ export default function CardScaleControl({ value, label, scope, className = "", 
         </div>
         <input type="range" min={0} max={卡片缩放档位.length - 1} step={1} value={index}
           aria-label={label} aria-valuetext={tr`尺寸 ${index + 1} / ${卡片缩放档位.length}`} disabled={disabled}
-          data-tooltip="缩放，支持ctrl+滚轮操作。"
+          data-tooltip={document.documentElement.dataset.platform === 'darwin' ? '缩放，支持⌘+滚轮操作。' : '缩放，支持ctrl+滚轮操作。'}
           onChange={event => onChange(卡片缩放档位[Number(event.currentTarget.value)])}
           onPointerUp={onCommit} onKeyUp={onCommit} onBlur={onCommit} />
       </div>

@@ -16,7 +16,10 @@ function WindowControls() {
       ]);
       if (已卸载) return;
       if (最大化结果.ok) 设置已最大化(最大化结果.data);
-      if (全屏结果.ok) 设置全屏状态(全屏结果.data);
+      if (全屏结果.ok) {
+        设置全屏状态(全屏结果.data);
+        document.documentElement.dataset.windowFullscreen = String(全屏结果.data);
+      }
     };
 
     const 安排同步窗口状态 = (): void => {

@@ -25,6 +25,8 @@ targets:
       - path: ../dist-ios
         type: folder
       - path: Assets.xcassets
+      - path: Licenses
+        type: folder
     info:
       path: Info.plist
       properties:
@@ -55,6 +57,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.lorcinv.omicomic.ios.tests
         GENERATE_INFOPLIST_FILE: YES
+        # Xcode 16.4 / iOS 18.5 has a missing Swift WebKit overlay for older test targets.
+        # Keep the app at iOS 16; only the hosted test bundle needs Apple's workaround.
+        # https://developer.apple.com/forums/thread/785964
+        IPHONEOS_DEPLOYMENT_TARGET: "18.4"
     dependencies:
       - target: OmiComic
 schemes:

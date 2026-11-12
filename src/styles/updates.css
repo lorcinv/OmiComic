@@ -1,5 +1,5 @@
 .omi-update-result { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .omi-update-result a, .omi-update-reminder a { color: var(--强调色); }
 .omi-update-notes { white-space: pre-line; max-height: 180px; overflow: auto; }
-.omi-update-reminder { position: fixed; z-index: 15000; bottom: max(24px, env(safe-area-inset-bottom)); right: max(24px, env(safe-area-inset-right)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; max-width: min(420px, calc(100vw - 48px)); background: var(--面板背景, #f5f2eb); color: var(--主文字); border: 1px solid var(--边框色, #ccc); border-radius: 12px; box-shadow: 0 4px 24px #0002; font-size: 13px; }
+.omi-update-reminder { position: fixed; z-index: 15000; bottom: max(24px, env(safe-area-inset-bottom)); right: max(24px, env(safe-area-inset-right)); display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px; max-width: min(420px, calc(100vw - 48px)); background: var(--面板色, #f5f2eb); color: var(--主文字); border: 1px solid var(--边框色, #ccc); border-radius: 12px; box-shadow: 0 4px 24px #0002; font-size: 13px; }
 .omi-update-reminder button { min-height: 36px; padding: 4px 10px; border: 0; border-radius: 6px; background: var(--控件背景); color: var(--主文字); cursor: pointer; }

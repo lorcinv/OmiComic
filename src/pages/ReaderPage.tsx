@@ -21,7 +21,7 @@ import { clampPage as 限制索引, normalizeGroup as 规范化页组主索引, 
 import ReaderChapter from "../components/ReaderChapter";
 import ReaderCanvas from "../components/ReaderCanvas";
 import ReaderTools from "../components/ReaderTools";
-import { isAndroid } from "../platform";
+import { isAndroid, isNativeMobile, primaryModifier } from "../platform";
 import { androidCall, androidNotify, hasAndroidRenderer } from '../android/bridge';
 import { prepareNativeReaderPage, readerRequestCancelled } from '../android/readerRequests';
 import { nativePanoramaWindow, nativeReaderBodyCapacity } from '../android/readerWindow';
@@ -444,7 +444,7 @@ function ReaderPage({
   const 上次滚轮时间 = useRef(0);
   const 相邻资源切换中 = useRef(false);
   const 阅读区域 = useRef<HTMLDivElement>(null);
-  const 自由缩放 = useReaderZoom(阅读区域, `${resource?.resourceKey}:${缩放模式}:${全景模式}:${阅读流向}`, {panorama:全景模式,vertical:阅读流向==='vertical',pageSwipe:手机布局&&!全景模式,doubleTapZoom:isAndroid(),onBegin:()=>取消全景异步导航(true)});
+  const 自由缩放 = useReaderZoom(阅读区域, `${resource?.resourceKey}:${缩放模式}:${全景模式}:${阅读流向}`, {panorama:全景模式,vertical:阅读流向==='vertical',pageSwipe:手机布局&&!全景模式,doubleTapZoom:isNativeMobile(),onBegin:()=>取消全景异步导航(true)});
   const 上次全景几何缩放 = useRef(自由缩放.scale);
   const 全景页面流 = useRef<HTMLDivElement>(null);
   const 保存进度定时器 = useRef<number | null>(null);
@@ -686,8 +686,8 @@ function ReaderPage({
   const 模式2 = 全景模式;
   useLayoutEffect(()=>{模式2原生优先窗口.current='';},[模式2,isActive,resource?.resourceKey]);
   const 原生跳页代号 = useRef(0);
-  const 预加载页数 = Math.min(Math.max(Math.round(阅读器设置.readerPreloadPages), 0), isAndroid() ? 20 : 120);
-  const 图片加载线程数 = Math.min(Math.max(Math.round(阅读器设置.readerImageLoadConcurrency), 1), resource?.sourceType==='mobi'?1:文档源 ? (isAndroid() ? 2 : 4) : (isAndroid() ? 8 : 24));
+  const 预加载页数 = Math.min(Math.max(Math.round(阅读器设置.readerPreloadPages), 0), isNativeMobile() ? 20 : 120);
+  const 图片加载线程数 = Math.min(Math.max(Math.round(阅读器设置.readerImageLoadConcurrency), 1), resource?.sourceType==='mobi'?1:文档源 ? (isNativeMobile() ? 2 : 4) : (isNativeMobile() ? 8 : 24));
   const 内存缓存上限字节 = Math.max(0, Math.round(阅读器设置.readerMemoryCacheSizeMb) * 1024 * 1024 - 显示缩放缓存字节);
   const 原生预读窗口 = useRef(new Set<number>());
   const 原生阅读方向 = useRef({resourceKey:'',index:0,direction:1});
@@ -715,7 +715,7 @@ function ReaderPage({
   const 桌面预读任务 = useRef(new Map<string, Promise<unknown>>());
   // Android documents share the bounded complete-spread read-ahead. Prepared
   // text and image neighbours must survive the swipe-to-foreground handoff.
-  const 手机文档成组预读 = isAndroid() && ['pdf','epub','mobi'].includes(resource?.sourceType??'');
+  const 手机文档成组预读 = isNativeMobile() && ['pdf','epub','mobi'].includes(resource?.sourceType??'');
   const 桌面估计索引 = 模式2 ? [全景窗口中心索引-1,全景窗口中心索引,全景窗口中心索引+1] : 当前页组索引;
   const 已知页面 = 桌面估计索引.map(index=>页面图片状态表[index]).filter((state):state is 页面图片状态=>Boolean(state?.url));
   const 桌面单页预算 = 已知页面.length ? Math.max(1, ...已知页面.map(估算页面图片缓存字节)) : 16 * 1024 * 1024;
@@ -1263,7 +1263,7 @@ function ReaderPage({
   });
 
   const 手机触点 = useRef<{ id: number; x: number; y: number; time: number; type: string; moved: boolean } | null>(null);
-  const 安卓双击 = useReaderDoubleTap(阅读区域, isAndroid() && 阅读器设置.mobileReaderDoubleTapZoom !== false && isActive && interactive && !阅读视图初始化中,
+  const 安卓双击 = useReaderDoubleTap(阅读区域, isNativeMobile() && 阅读器设置.mobileReaderDoubleTapZoom !== false && isActive && interactive && !阅读视图初始化中,
     `${resource?.resourceKey}:${显示页组索引[0]}:${缩放模式}:${全景模式}:${阅读流向}`,
     (x,y)=>执行阅读单击(x,y,'touch'), (x,y)=>自由缩放.toggleAt(x,y));
   const 手机放大翻页位置 = useRef<{index:number;x:number;y:number}|null>(null);
@@ -1857,7 +1857,7 @@ function ReaderPage({
 
   function 推进页面图片加载队列(): void {
     排序页面图片加载队列();
-    const 并发上限 = Math.min(Math.max(Math.round(页面图片并发上限.current), 1), isAndroid() ? 8 : 24);
+    const 并发上限 = Math.min(Math.max(Math.round(页面图片并发上限.current), 1), isNativeMobile() ? 8 : 24);
     while (页面图片加载队列.current.length > 0) {
       // Reserve a foreground lane; slow speculative reads must not block a jump.
       const 下一任务 = 页面图片加载队列.current[0];
@@ -4243,7 +4243,7 @@ function ReaderPage({
         !手机布局 && 可隐藏工具栏 && !顶部栏可见 ? "is-top-ui-hidden" : ""
       } ${!手机布局 && 可隐藏工具栏 && !底部栏可见 ? "is-bottom-ui-hidden" : ""} ${
         全景模式 ? "is-panorama" : ""
-      } ${isAndroid() || 全景模式 ? 'is-edge-to-edge' : ''} is-flow-${阅读流向}`}
+      } ${isNativeMobile() || 全景模式 ? 'is-edge-to-edge' : ''} is-flow-${阅读流向}`}
       aria-labelledby="reader-title"
       aria-busy={!文档错误 && 阅读视图初始化中}
       style={!resource?.readerInit && 阅读视图初始化中 && !错误信息 && !文档错误 ? { visibility: "hidden" } : undefined}
@@ -4435,9 +4435,9 @@ function ReaderPage({
         }`}
         onPointerDown={(event) => { 安卓双击.down(event); 开始手机触控(event); if(自由缩放.down(event)){if(手机布局&&!模式2&&event.isPrimary)手机滑页.down(event);else 手机滑页.cancel();return;} if(手机滑页.down(event))手机触点.current=null; 开始全景拖动(event); }}
         onPointerMove={event => { 安卓双击.move(event); const start=手机触点.current;if(start&&start.id===event.pointerId&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>=8)start.moved=true;if(自由缩放.move(event)){const overflow=自由缩放.pageOverflow();if(overflow!==null)手机滑页.move(event,overflow);else 手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} if(手机滑页.move(event))return; 拖动全景(event); }}
-        onPointerUp={(event) => { const swiped=手机滑页.up(event),zoomed=自由缩放.up(event,!swiped);if(swiped||zoomed){if(!swiped&&isAndroid()&&自由缩放.stoppedInertiaTap())结束手机触控(event,true);else 安卓双击.cancel();if(!swiped)手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} 结束全景指针(event); 结束手机触控(event); }}
+        onPointerUp={(event) => { const swiped=手机滑页.up(event),zoomed=自由缩放.up(event,!swiped);if(swiped||zoomed){if(!swiped&&isNativeMobile()&&自由缩放.stoppedInertiaTap())结束手机触控(event,true);else 安卓双击.cancel();if(!swiped)手机滑页.cancel();手机触点.current=null;取消全景指针(event);return;} 结束全景指针(event); 结束手机触控(event); }}
         onPointerCancel={(event) => { 安卓双击.cancel(); 自由缩放.cancel(event); 手机滑页.cancel(event); 手机触点.current=null; 取消全景指针(event); }}
-        onDoubleClick={event => { if(isAndroid()){event.preventDefault();return;} if(自由缩放.active&&自由缩放.canDoubleClick()&&isReaderCenter(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect())){event.preventDefault();自由缩放.reset();} }}
+        onDoubleClick={event => { if(isNativeMobile()){event.preventDefault();return;} if(自由缩放.active&&自由缩放.canDoubleClick()&&isReaderCenter(event.clientX,event.clientY,event.currentTarget.getBoundingClientRect())){event.preventDefault();自由缩放.reset();} }}
         onLostPointerCapture={event => { if(event.target!==event.currentTarget||event.currentTarget.hasPointerCapture(event.pointerId))return;安卓双击.lostCapture(event);自由缩放.cancel(event); 手机滑页.cancel(event); 取消全景指针(event); }}
         onPointerLeave={(事件) => {
           if (事件.buttons === 0) 结束全景指针(事件);

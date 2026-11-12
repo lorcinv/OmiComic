@@ -2,6 +2,8 @@
 html[data-platform="darwin"] .app-shell { height: calc(100dvh - 48px); margin-top: 48px; }
 html[data-platform="darwin"] body::before { content: ""; position: fixed; inset: 0 0 auto; height: 48px; background: var(--背景色); -webkit-app-region: drag; }
 html[data-platform="darwin"] { --window-controls-height: 0px; }
+html[data-platform="darwin"][data-window-fullscreen="true"] .app-shell { height: 100dvh; margin-top: 0; }
+html[data-platform="darwin"][data-window-fullscreen="true"] body::before { display: none; }
 html[data-platform="darwin"] .reader-toolbar { padding-right: 16px; }
 html[data-platform="ios"] { --window-controls-height: 0px; }
 html[data-platform="ios"] body { min-width: 320px; height: 100dvh; -webkit-touch-callout: none; }

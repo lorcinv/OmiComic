@@ -63,7 +63,7 @@ final class ReaderTests: XCTestCase {
         _ = try await web.evaluateJavaScript("window.dispatchEvent(new Event('omi-external-open'))")
         var reading = false
         for _ in 0..<100 {
-            reading = (try? await web.evaluateJavaScript("Boolean(document.querySelector('.reader-layout') && [...document.querySelectorAll('canvas')].some(c=>c.width>0 && c.height>0))")) as? Bool == true
+            reading = (try? await web.evaluateJavaScript("Boolean(document.querySelector('.page-panel.is-visible .reader-layout') && ([...document.querySelectorAll('.reader-layout img')].some(i=>i.naturalWidth>0 && i.getBoundingClientRect().width>0) || [...document.querySelectorAll('.reader-layout canvas')].some(c=>c.width>0 && c.height>0)))")) as? Bool == true
             if reading { break }; try await Task.sleep(nanoseconds: 200_000_000)
         }
         XCTAssertTrue(reading, "Real WKWebView should open and paint the selected comic")

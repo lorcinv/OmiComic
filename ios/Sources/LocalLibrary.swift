@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import PDFKit
 import ImageIO
+import CryptoKit
 
 final class LocalLibrary {
     let queue = DispatchQueue(label: "io.omicomic.files", qos: .userInitiated)
@@ -128,7 +129,8 @@ final class LocalLibrary {
         }
     }
     private func publish(_ data: Data, key: String, suffix: String = "jpg") throws -> String {
-        if let existing = mediaKeys[key], media[existing] != nil { return "omi://app/media/\(existing)" }
+        let contentKey = key + ":" + SHA256.hash(data: data).description
+        if let existing = mediaKeys[contentKey], media[existing] != nil { return "omi://app/media/\(existing)" }
         // Derived previews are disposable; bound disk usage, retaining the most recent files.
         let files = try fm.contentsOfDirectory(at: mediaFolder, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])
         var total = files.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
@@ -142,7 +144,7 @@ final class LocalLibrary {
         }
         let id = UUID().uuidString, url = mediaFolder.appendingPathComponent(id + "." + suffix)
         try data.write(to: url, options: .atomic)
-        media[id] = url; mediaKeys[key] = id
+        media[id] = url; mediaKeys[contentKey] = id
         if mediaKeys.count > 2048 { mediaKeys.removeAll() }
         return "omi://app/media/\(id)"
     }
@@ -204,11 +206,13 @@ final class LocalLibrary {
         case "scanLibrary":
             cancellation.lock(); scanCancelled = false; cancellation.unlock()
             var pending = [try string("path")], output: [[String: Any]] = [], directories = 0, skipped = 0
+            var visited = Set<String>()
             let excluded = args["excludedPaths"] as? [String] ?? [], deadline = Date().addingTimeInterval(60)
             while let path = pending.popLast() {
                 try checkScan()
                 guard Date() < deadline, output.count < 30000 else { throw OmiError("目录扫描超过上限，请选择较小的子目录。") }
                 if excluded.contains(where: { path == $0 || path.hasPrefix($0 + "/") }) { continue }
+                if let physical = try? resolve(path).resolvingSymlinksInPath().path, !visited.insert(physical).inserted { continue }
                 let list: [[String: Any]]
                 do { list = try children(path) } catch { skipped += 1; continue }
                 directories += 1

@@ -21,9 +21,38 @@ test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, r
       const image = await page.evaluate(input=>window.omicomic.getPageImage(input),opened.data.pages[0]); assert.equal(image.ok,true,JSON.stringify(image));
       assert.ok(await page.evaluate(url=>new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(image.naturalWidth>0);image.onerror=()=>resolve(false);image.src=url;}),image.data.url));
     }
-    await page.screenshot({path:path.join(output,'mac-startup.png')});
-    const old = page; await old.close(); await app.evaluate(({app})=>app.emit('activate'));
-    await expect.poll(async()=> (await app.windows()).filter(w=>!w.isClosed()).length).toBeGreaterThan(0);
-    await fs.writeFile(path.join(output,'result.json'),JSON.stringify({info,archives:4,reopened:true},null,2));
+    const documents = path.resolve('tests/fixtures/documents');
+    await page.evaluate(path=>window.omicomic.addLibraryRoot({path,name:'PDF test'}),documents);
+    const pdf = await page.evaluate(path=>window.omicomic.openDocument({path,type:'pdf',id:'apple-pdf-test'}),path.join(documents,'three-pages.pdf'));
+    assert.equal(pdf.ok,true,JSON.stringify(pdf)); assert.ok(pdf.data.size>0);
+    const bytes = await page.evaluate(async()=>{const r=await window.omicomic.readDocumentRange('apple-pdf-test',0,5); return r.ok?Array.from(r.data):null;});
+    assert.deepEqual(bytes,[37,80,68,70,45]);
+    await page.evaluate(()=>window.omicomic.closeDocument('apple-pdf-test'));
+    await page.evaluate(async path=>{await window.omicomic.updateSettings({startupPage:'directory',hideBookshelfItemsInLibrary:false});await window.omicomic.updateLibraryState({lastActiveRootPath:path,lastCurrentPath:path});},source);
+    await page.reload();
+    await expect(page.locator('.resource-list .resource-card').first()).toBeVisible();
+    const window = await app.browserWindow(page), measurements=[];
+    const slider = page.locator('.card-scale-control[data-card-scale-scope="library"] input');
+    for (const width of [1440,2560]) {
+      await window.evaluate((window,width)=>window.setSize(width,960),width);
+      for(let index=0;index<7;index++) {
+        await slider.evaluate((input,index)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,String(index));input.dispatchEvent(new Event('input',{bubbles:true}));},index);
+        await expect(slider).toHaveAttribute('aria-valuetext',`尺寸 ${index+1} / 7`);
+        const size=await page.locator('.resource-card').first().evaluate(element=>element.getBoundingClientRect().width);
+        measurements.push({window:width,index,size});
+      }
+    }
+    for(let i=0;i<7;i++) {
+      assert.ok(measurements[i+7].size/measurements[i].size>=0.84 && measurements[i+7].size/measurements[i].size<=1.18);
+      if(i)assert.ok(measurements[i].size>measurements[i-1].size);
+    }
+    await page.keyboard.press('Meta+k');
+    assert.equal(await page.evaluate(()=>document.activeElement?.tagName),'INPUT');
+    await page.screenshot({path:path.join(output,'mac-library.png')});
+    await page.close(); await app.evaluate(({app})=>app.emit('activate'));
+    await expect.poll(async()=>app.windows().filter(w=>!w.isClosed()&&w.url().endsWith('/index.html')).length).toBe(1);
+    const reopened=app.windows().find(w=>!w.isClosed()&&w.url().endsWith('/index.html'));
+    await expect(reopened.locator('.app-shell')).toBeVisible();
+    await fs.writeFile(path.join(output,'result.json'),JSON.stringify({info,archives:4,pdf:true,measurements,reopened:true},null,2));
   } finally { await app.close(); }
 });

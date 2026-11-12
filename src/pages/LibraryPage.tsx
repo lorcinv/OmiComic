@@ -7848,7 +7848,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   回到第一页();
                 }}
               />
-              {!当前搜索内容 && <kbd className="search-shortcut">Ctrl K</kbd>}
+              {!当前搜索内容 && <kbd className="search-shortcut">{document.documentElement.dataset.platform === 'darwin' ? '⌘ K' : 'Ctrl K'}</kbd>}
               {当前搜索内容 && (
                 <button
                   className="search-clear-button"

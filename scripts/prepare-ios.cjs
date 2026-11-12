@@ -23,3 +23,17 @@ fs.copyFileSync(path.join(fixtures, 'panorama-800x1200.jpg'), path.join(epub, 'O
 execFileSync(require('7zip-bin-full').path7z, ['a', '-tzip', path.join(fixtures, 'Sample.epub'), '.'], { cwd: epub, stdio: 'ignore' });
 execFileSync(require('7zip-bin-full').path7z, ['a', '-tzip', path.join(fixtures, 'Sample.cbz'), 'panorama-800x1200.jpg', 'pixel.png'], { cwd: fixtures, stdio: 'ignore' });
 console.log('Prepared iOS icons and native test fixtures.');
+const licenses = path.join(root, 'ios/Licenses'); fs.mkdirSync(licenses, {recursive:true});
+fs.cpSync(path.join(root, 'resources/ios-licenses'), path.join(licenses, 'archive'), {recursive:true});
+for(const file of ['LICENSE','ASSET_CREDITS.md']) fs.copyFileSync(path.join(root,file),path.join(licenses,file));
+const lock = JSON.parse(fs.readFileSync(path.join(root,'package-lock.json'),'utf8'));
+const notices = ['OmiComic iOS simulator test build', 'Source: https://github.com/lorcinv/OmiComic/tree/codex/apple-test-20261112', 'libarchive-for-swift v1.0.0 (e8b70b7f0e15108a828362fe696e63898d5be916); licenses in archive/.', ''];
+for(const [folder,pkg] of Object.entries(lock.packages)) {
+  if(!folder.startsWith('node_modules/') || pkg.dev || !fs.existsSync(path.join(root,folder))) continue;
+  const name=folder.replaceAll('node_modules/','').replaceAll('/','-');
+  notices.push(`${name} ${pkg.version} — ${pkg.license || 'see package license'}`);
+  for(const file of fs.readdirSync(path.join(root,folder)).filter(f=>/^(license|copying|notice)(\.|$)/i.test(f))) {
+    if(fs.statSync(path.join(root,folder,file)).isFile()) fs.copyFileSync(path.join(root,folder,file),path.join(licenses,`${name}-${file}`));
+  }
+}
+fs.writeFileSync(path.join(licenses,'THIRD_PARTY_NOTICES.txt'),notices.join('\n'));
