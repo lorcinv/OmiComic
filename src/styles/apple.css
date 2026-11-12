@@ -12,3 +12,5 @@ html[data-platform="ios"] .reader-toolbar { padding-right: 16px; }
 html[data-platform="ios"] .reader-stage { touch-action: none; }
 html[data-platform="ios"] :is(input, textarea, select) { font-size: max(16px, 1em); }
 html[data-platform="ios"] .mobile-settings-page { height: 100dvh; }
+html[data-platform="ios"] body, html[data-platform="ios"] body * { -webkit-user-select: none; user-select: none; }
+html[data-platform="ios"] :is(#resource-detail-title, input, textarea, [contenteditable="true"], [contenteditable="true"] *) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }

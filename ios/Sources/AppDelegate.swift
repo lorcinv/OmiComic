@@ -14,4 +14,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         (window?.rootViewController as? ReaderViewController)?.openExternal(url)
         return true
     }
+    func applicationWillResignActive(_ application: UIApplication) { (window?.rootViewController as? ReaderViewController)?.lifecycle("omi-pause") }
+    func applicationDidBecomeActive(_ application: UIApplication) { (window?.rootViewController as? ReaderViewController)?.lifecycle("omi-app-resume") }
 }

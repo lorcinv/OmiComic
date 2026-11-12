@@ -1,5 +1,6 @@
 import Foundation
 import libarchive
+import Darwin
 
 struct OmiError: LocalizedError {
     let message: String
@@ -14,6 +15,11 @@ enum ArchiveReader {
     }
     // Read selected entries in memory. Never extract archive paths into the filesystem.
     private static func walk(_ url: URL, visit: (OpaquePointer, Entry) throws -> Bool) throws {
+        // libarchive's RAR/7z name conversion requires a UTF-8 locale. Scope it
+        // to this synchronous read thread, without changing the app's locale.
+        guard let utf8 = newlocale(1 << LC_CTYPE, "en_US.UTF-8", nil) else { throw OmiError("无法初始化压缩包文件名编码。") }
+        guard let previous = uselocale(utf8) else { freelocale(utf8); throw OmiError("无法读取压缩包文件名编码。") }
+        defer { uselocale(previous); freelocale(utf8) }
         guard let archive = archive_read_new() else { throw OmiError("压缩包初始化失败。") }
         defer { archive_read_free(archive) }
         archive_read_support_filter_all(archive)
@@ -28,7 +34,7 @@ enum ArchiveReader {
             guard status >= ARCHIVE_WARN, let entry else { throw OmiError("压缩包目录读取失败。") }
             count += 1
             guard count <= 30000, Date() < deadline else { throw OmiError("压缩包内容过多，请拆分后打开。") }
-            guard let raw = archive_entry_pathname_utf8(entry) ?? archive_entry_pathname(entry) else { continue }
+            guard let raw = archive_entry_pathname_utf8(entry) ?? archive_entry_pathname(entry) else { throw OmiError("压缩包文件名无法解码。") }
             let name = String(cString: raw)
             // AE_IFREG is a C macro unavailable to Swift; its POSIX file-type value is 0100000.
             if archive_entry_filetype(entry) == 0o100000 && validName(name) && archive_entry_symlink(entry) == nil && archive_entry_hardlink(entry) == nil {

@@ -10,6 +10,7 @@ final class ReaderViewController: UIViewController, WKScriptMessageHandlerWithRe
     private var stoppedTasks = Set<ObjectIdentifier>()
     private let taskLock = NSLock()
     private var fullscreen = false
+    private var darkChrome = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -40,6 +41,9 @@ final class ReaderViewController: UIViewController, WKScriptMessageHandlerWithRe
         if gesture.state == .ended && gesture.translation(in: webView).x > 70 { webView.evaluateJavaScript("window.dispatchEvent(new Event('omi-back'))") }
     }
     override var prefersHomeIndicatorAutoHidden: Bool { fullscreen }
+    override var prefersStatusBarHidden: Bool { fullscreen }
+    override var preferredStatusBarStyle: UIStatusBarStyle { darkChrome ? .lightContent : .darkContent }
+    func lifecycle(_ name: String) { webView?.evaluateJavaScript("window.dispatchEvent(new Event('\(name)'))") }
     func openExternal(_ url: URL) {
         loadViewIfNeeded()
         library.queue.async { [weak self] in
@@ -76,7 +80,12 @@ final class ReaderViewController: UIViewController, WKScriptMessageHandlerWithRe
             }
         case "cancelLibraryScan": library.cancelScan(); replyHandler(NSNull(), nil)
         case "isFullscreen": replyHandler(fullscreen, nil)
-        case "setFullscreen": fullscreen = args["enabled"] as? Bool == true; setNeedsUpdateOfHomeIndicatorAutoHidden(); replyHandler(fullscreen, nil)
+        case "setFullscreen": fullscreen = args["enabled"] as? Bool == true; setNeedsUpdateOfHomeIndicatorAutoHidden(); setNeedsStatusBarAppearanceUpdate(); replyHandler(fullscreen, nil)
+        case "setColorTheme":
+            let theme = args["theme"] as? String ?? "mist"
+            let colors = ["mist": 0xf8f8f7, "nord": 0xe2e8f2, "sand": 0xf3efe9, "night": 0x2e3440], rgb = colors[theme] ?? 0xf8f8f7
+            view.backgroundColor = UIColor(red: CGFloat((rgb >> 16) & 255) / 255, green: CGFloat((rgb >> 8) & 255) / 255, blue: CGFloat(rgb & 255) / 255, alpha: 1)
+            darkChrome = theme == "night"; setNeedsStatusBarAppearanceUpdate(); replyHandler(NSNull(), nil)
         case "setReaderChrome", "prepareEpubReaderViewport", "setReaderVolumeKeys": replyHandler(false, nil)
         case "background", "close": replyHandler(NSNull(), nil)
         default:

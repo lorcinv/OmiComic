@@ -9,5 +9,9 @@ export function connectIOS(): NativeCall {
     const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
   } });
-  return async <T>(method: string, args: unknown = {}) => await handler.postMessage({ method, args }) as T;
+  const native: NativeCall = async <T>(method: string, args: unknown = {}) => await handler.postMessage({ method, args }) as T;
+  const syncChrome = () => { void native('setColorTheme', { theme: document.documentElement.dataset.colorTheme ?? 'mist' }).catch(() => undefined); };
+  new MutationObserver(syncChrome).observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-theme'] });
+  syncChrome();
+  return native;
 }

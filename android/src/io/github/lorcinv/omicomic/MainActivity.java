@@ -144,7 +144,7 @@ public final class MainActivity extends Activity {
       @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
         Uri uri=request.getUrl();
         if(isApp(uri))return false;
-        if(request.isForMainFrame()&&request.hasGesture()&&"https".equals(uri.getScheme())&&"github.com".equalsIgnoreCase(uri.getHost())&&"/lorcinv/OmiComic".equals(uri.getPath())) {
+        if(request.isForMainFrame()&&request.hasGesture()&&"https".equals(uri.getScheme())&&"github.com".equalsIgnoreCase(uri.getHost())&&("/lorcinv/OmiComic".equals(uri.getPath())||uri.getPath()!=null&&uri.getPath().startsWith("/lorcinv/OmiComic/releases/tag/"))) {
           try { startActivity(new Intent(Intent.ACTION_VIEW,uri)); }
           catch(android.content.ActivityNotFoundException error) { android.widget.Toast.makeText(MainActivity.this,"No browser available",android.widget.Toast.LENGTH_SHORT).show(); }
         }
@@ -152,6 +152,8 @@ public final class MainActivity extends Activity {
       }
       @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest request) {
         Uri uri=request.getUrl();
+        // Update metadata is the only remote resource the reader itself fetches.
+        if("GET".equals(request.getMethod())&&"https".equals(uri.getScheme())&&"api.github.com".equalsIgnoreCase(uri.getHost())&&"/repos/lorcinv/OmiComic/releases".equals(uri.getPath())) return null;
         if(!isApp(uri)) return response("text/plain",new ByteArrayInputStream(new byte[0]),403,"Blocked");
         try {
           if(uri.getPath().startsWith("/media/")) return library.media(uri.getLastPathSegment());

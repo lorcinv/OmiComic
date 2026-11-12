@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { checkForUpdates, type AvailableUpdate, type UpdateResult } from '../updates';
 import { t, tr } from '../i18n';
+import { isNativeMobile } from '../platform';
 import '../styles/updates.css';
 
 function UpdateDetails({ update }: { update: AvailableUpdate }) {
-  return <><strong>{tr`发现新版本 ${update.version}`}</strong>{update.notes && <p className="omi-update-notes">{update.notes}</p>}<a href={update.url} target="_blank" rel="noopener noreferrer">{t('查看更新与下载')} ↗</a></>;
+  return <><strong>{tr`发现新版本 ${update.version}`}</strong>{update.notes && <p className="omi-update-notes">{update.notes}</p>}<a href={update.url} target={isNativeMobile() ? undefined : '_blank'} rel="noopener noreferrer">{t('查看更新与下载')} ↗</a></>;
 }
 export default function UpdateCheck() {
   const [busy, setBusy] = useState(false);
@@ -30,5 +31,5 @@ export function UpdateReminder() {
     return () => { active = false; clearTimeout(timer); };
   }, []);
   if (!update) return null;
-  return <aside className="omi-update-reminder" aria-label={t('版本更新')} role="status"><strong>{tr`发现新版本 ${update.version}`}</strong><a href={update.url} target="_blank" rel="noopener noreferrer">{t('查看更新与下载')} ↗</a><button type="button" onClick={() => setUpdate(null)}>{t('稍后')}</button></aside>;
+  return <aside className="omi-update-reminder" aria-label={t('版本更新')} role="status"><strong>{tr`发现新版本 ${update.version}`}</strong><a href={update.url} target={isNativeMobile() ? undefined : '_blank'} rel="noopener noreferrer">{t('查看更新与下载')} ↗</a><button type="button" onClick={() => setUpdate(null)}>{t('稍后')}</button></aside>;
 }
