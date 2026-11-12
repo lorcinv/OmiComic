@@ -42,7 +42,7 @@ const reorder = <T>(list: T[], keys: string[], key: (item: T) => string): T[] =>
 }).map((v,i) => ({ ...v, sortIndex: i }));
 const parent = (p: string) => p.slice(0, p.lastIndexOf("/"));
 
-export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi> {
+export async function createAndroidApi(native: NativeCall, platform: "android" | "ios" = "android"): Promise<OmiComicApi> {
   const stored = await native<Partial<OmiComicAppData> | null>("loadData");
   let data: OmiComicAppData = {
     version: 1, library: { roots: [] }, settings: defaults, readingProgress: {}, recentOpened: [],
@@ -124,7 +124,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     },
     exportDataBackup: async () => {
       await queue;
-      return call('exportBackupFile', { filename: backupFilename('android'), text: JSON.stringify(createDataBackup(data, 'android', appVersion), null, 2) + '\n' });
+      return call('exportBackupFile', { filename: backupFilename(platform), text: JSON.stringify(createDataBackup(data, platform, appVersion), null, 2) + '\n' });
     },
     readDataBackup: async () => {
       pendingBackup = null;
@@ -132,7 +132,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
         const raw = await native<string | null>('readBackupFile');
         if (raw === null) return ok(null);
         pendingBackup = { token: crypto.randomUUID(), backup: parseDataBackup(raw) };
-        pendingBackup.matches = await autoMatchBackupLocations(pendingBackup.backup, data, 'android', async (path, directory) => {
+        pendingBackup.matches = await autoMatchBackupLocations(pendingBackup.backup, data, platform, async (path, directory) => {
           try { const state = await native<{ readable: boolean; isDirectory: boolean }>('checkResourcePath', { path }); return state.readable && state.isDirectory === directory; } catch { return false; }
         });
         return ok(structuredClone(pendingBackup));
@@ -140,7 +140,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     },
     applyDataBackup: (token, options) => write(async draft => {
       if (!pendingBackup || pendingBackup.token !== token) throw new Error('请重新选择备份文件。');
-      const next = mergeBackup(draft, pendingBackup.backup, options, 'android');
+      const next = mergeBackup(draft, pendingBackup.backup, options, platform);
       for (const mapping of options.mappings) {
         const checked = await native<{ readable: boolean; isDirectory: boolean }>('checkResourcePath', { path: mapping.to });
         if (!checked.readable || !checked.isDirectory) throw new Error('目标目录无法访问，请重新选择目录。');
@@ -153,7 +153,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
       const previous = await native<OmiComicAppData>('restoreDataBackup');
       Object.assign(draft, previous); return draft;
     }, false),
-    getAppInfo: async () => ({name:"OmiComic", version:appVersion, platform:"android"}),
+    getAppInfo: async () => ({name:"OmiComic", version:appVersion, platform}),
     getAndroidCacheInfo: () => call("getAndroidCacheInfo"),
     clearAndroidReadCache: () => call("clearAndroidReadCache"),
     getAppData: () => read(() => data),
@@ -230,7 +230,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     removeBookmark: id=>write(d=>{d.bookmarks=d.bookmarks.filter(i=>i.id!==id);return null;}),
     isPageBookmarked: (key,page,id)=>read(()=>data.bookmarks.some(i=>i.resourceKey===key&&bookmarkMatches(i,page,id))),
     selectFolder: ()=>call("chooseFolder"),
-    cancelLibraryScan: () => androidNotify("cancelLibraryScan", {}),
+    cancelLibraryScan: () => { if (platform === "android") androidNotify("cancelLibraryScan", {}); else void native("cancelLibraryScan").catch(() => undefined); },
     scanLibrary: async (path, refresh=false, booksOnly=false, options)=>{const result=await call<import("../types").LibraryCatalog>("scanLibrary",{path,refresh,booksOnly,...options,excludedPaths:data.excludedResourcePaths??[]});return result;},
     listDirectory: async path=>{const result=await call<import("../types").目录结果>("listDirectory",{path});if(result.ok){const hidden=data.excludedResourcePaths??[];result.data.items=result.data.items.filter(i=>!hidden.some(p=>withinPath(i.path,p)));result.data.total=result.data.items.length;}return result;},
     getResourcePages: async input=>{
@@ -277,14 +277,14 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
       try {
         // Keep document bytes binary. JSON/base64 decoding on the UI thread
         // delayed PDF painting and every image chapter in large MOBI books.
-        const response=await fetch(`https://omi.local/documents/${encodeURIComponent(id)}?begin=${begin}&end=${end}`);
+        const response=await fetch(`${platform === "ios" ? "omi://app" : "https://omi.local"}/documents/${encodeURIComponent(id)}?begin=${begin}&end=${end}`);
         if(!response.ok)throw new Error('文档读取失败，请重新打开。');
         const bytes=new Uint8Array(await response.arrayBuffer());
         if(bytes.length!==end-begin)throw new Error('文档读取中断，请重新打开。');
         return ok(bytes);
       }catch(error){return failure(error);}
     },
-    readDocumentChapter: async(id,index)=>{try{return ok(await sanitizeAndroidChapter(await native<string>("readDocumentChapter",{id,index}),native));}catch(e){return failure(e);}},
+    readDocumentChapter: async(id,index)=>{try{return ok(await sanitizeAndroidChapter(await native<string>("readDocumentChapter",{id,index}),native,platform === "ios" ? "omi:" : "https://omi.local"));}catch(e){return failure(e);}},
     closeDocument: id=>call("closeDocument",{id}),
     takeExternalOpen: async()=>{
       const selected=external.shift();if(selected)return ok(selected);
@@ -301,7 +301,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
       external.push(opened.data);listeners.forEach(fn=>fn());return ok(null);
     },
     removeTemporaryOpened:key=>write(d=>{d.temporaryOpened=d.temporaryOpened.filter(i=>i.resourceKey!==key);return null;}),
-    promoteTemporaryOpened:async()=>failure(new Error("请点击添加目录，授权文件所在的文件夹。Android 的单文件授权不能访问同目录中的其他文件。")),
+    promoteTemporaryOpened:async()=>failure(new Error("请点击添加目录，授权文件所在的文件夹。单文件授权不能访问同目录中的其他文件。")),
     changeLocalResource: input=>write(async d=>{
       await native("backupData",{data:d});
       if(input.action==="index"){Object.assign(d,updateResourceRecords(d,input.path));d.excludedResourcePaths=[...(d.excludedResourcePaths??[]),input.path];await native("saveData",{data:d});return {appData:d,newPath:null};}

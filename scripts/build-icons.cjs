@@ -19,3 +19,11 @@ images.forEach((png, index) => {
 fs.writeFileSync(path.join(root, 'resources/icon.ico'), Buffer.concat([header, ...images]));
 fs.writeFileSync(path.join(root, 'resources/icon.png'), new Resvg(svg, { fitTo: { mode: 'width', value: 512 } }).render().asPng());
 console.log('Generated OmiComic icon: SVG, 512px PNG, multi-resolution Windows ICO.');
+
+const icnsParts = [[128,'ic07'],[256,'ic08'],[512,'ic09'],[1024,'ic10']].map(([width, type]) => {
+  const png = new Resvg(svg, { fitTo: { mode: 'width', value: width } }).render().asPng();
+  const chunk = Buffer.alloc(8); chunk.write(type); chunk.writeUInt32BE(png.length + 8, 4);
+  return Buffer.concat([chunk, png]);
+});
+const icnsHeader = Buffer.alloc(8); icnsHeader.write('icns'); icnsHeader.writeUInt32BE(8 + icnsParts.reduce((n,b)=>n+b.length,0),4);
+fs.writeFileSync(path.join(root, 'resources/icon.icns'), Buffer.concat([icnsHeader, ...icnsParts]));

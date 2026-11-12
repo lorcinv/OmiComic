@@ -1,0 +1,18 @@
+{
+  "extends": "./electron-builder.json",
+  "extraResources": [
+    { "from": "node_modules/7zip-bin-full/mac/${arch}", "to": "7zip", "filter": ["7zz", "License.txt", "readme.txt"] }
+  ],
+  "mac": {
+    "target": ["dmg", "zip"],
+    "category": "public.app-category.books",
+    "icon": "resources/icon.icns",
+    "artifactName": "OmiComic-${version}-mac-${arch}.${ext}",
+    "hardenedRuntime": true,
+    "entitlements": "resources/mac-entitlements.plist",
+    "entitlementsInherit": "resources/mac-entitlements.plist",
+    "notarize": false,
+    "minimumSystemVersion": "12.0"
+  },
+  "dmg": { "title": "OmiComic ${version}" }
+}

@@ -1,3 +1,4 @@
+import { primaryModifier } from '../platform';
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 export function useCardScaleWheel(surface: RefObject<HTMLElement>, enabled: boolean,
@@ -13,7 +14,7 @@ export function useCardScaleWheel(surface: RefObject<HTMLElement>, enabled: bool
     let remainder = 0;
     let lastScope = "";
     function onWheel(event: WheelEvent) {
-      if (!event.ctrlKey || !Number.isFinite(event.deltaY) || event.deltaY === 0) return;
+      if (!primaryModifier(event) || !Number.isFinite(event.deltaY) || event.deltaY === 0) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       const control = target.closest<HTMLElement>(".card-scale-control");

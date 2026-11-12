@@ -259,6 +259,7 @@ export interface 应用信息 {
   name: string;
   version: string;
   platform: string;
+  arch?: string;
 }
 
 export interface LibraryCatalog { items: 文件条目[]; directories: number; skipped: number; scannedAt: number; complete?: boolean; removedPaths?: string[]; yielded?: boolean }

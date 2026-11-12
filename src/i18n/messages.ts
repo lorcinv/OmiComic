@@ -1,5 +1,17 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "OmiComic（Omi）是一款本地漫画阅读器，让收藏、整理和阅读回到简单、专注的体验。": ["OmiComic (Omi) is a local comic reader that keeps collecting, organizing and reading simple and focused.", "OmiComic（Omi）は、コレクションの整理と読書に集中できるローカル漫画リーダーです。"],
+  "发现新版本 {0}": ["Version {0} is available", "バージョン {0} が利用できます"],
+  "查看更新与下载": ["Release notes and downloads", "更新内容とダウンロード"],
+  "正在检查更新…": ["Checking for updates…", "更新を確認中…"],
+  "检查更新": ["Check for updates", "更新を確認"],
+  "有新版本时提醒，由你选择下载。": ["Get notified of new versions and choose when to download.", "新しいバージョンをお知らせします。ダウンロードは任意です。"],
+  "暂时无法检查更新，请检查网络后重试。": ["Could not check for updates. Check your connection and try again.", "更新を確認できません。接続を確認して再試行してください。"],
+  "当前已是此平台的最新版本。": ["You have the latest version for this platform.", "このプラットフォームの最新バージョンです。"],
+  "此平台暂未发布可安装的更新包。": ["No installable update is available for this platform yet.", "このプラットフォーム用の更新パッケージはまだ公開されていません。"],
+  "版本更新": ["Version update", "バージョン更新"],
+  "稍后": ["Later", "後で"],
+  "尺寸 {0} / {1}": ["Size {0} of {1}", "サイズ {0} / {1}"],
   "双击放大画面": ["Double-tap to zoom the image", "ダブルタップで画像を拡大"],
   "关闭后，点击翻页无需等待，仍可双指缩放。": ["Turn off to turn pages without a tap delay. Pinch to zoom remains available.", "オフにするとタップ後すぐにページを送ります。ピンチ操作による拡大・縮小は引き続き使えます。"],
   "跟随系统主题": ["Follow system theme", "システムのテーマに合わせる"],

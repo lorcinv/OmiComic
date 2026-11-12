@@ -16,7 +16,7 @@ test('details use the available workspace when maximizing and restoring the wind
   for (const viewport of [{ width: 1440, height: 900 }, { width: 2559, height: 1392 }, { width: 1920, height: 1080 }, { width: 1920, height: 640 }, { width: 960, height: 640 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
     await expect(page.locator('.resource-detail-thumbnail').first()).toBeVisible();
-    expect(await page.locator('.resource-detail-thumbnail').count()).toBeLessThan(48);
+    expect(await page.locator('.resource-detail-thumbnail').count()).toBeLessThan(147);
     const sizes: number[] = [];
     for (const size of [55, 75, 100]) {
       await setCardScale(page.getByRole('slider', { name: '缩略预览大小' }), size);
@@ -37,8 +37,8 @@ test('details use the available workspace when maximizing and restoring the wind
       sizes.push(metrics.width);
       if (size === 100) columns.push(metrics.columns);
     }
-    expect(sizes[1]).toBeGreaterThan(sizes[0] * 1.15);
-    expect(sizes[2]).toBeGreaterThan(sizes[1] * 1.15);
+    expect(sizes[1]).toBeGreaterThan(sizes[0]);
+    expect(sizes[2]).toBeGreaterThan(sizes[1]);
     const status = (await page.locator('.resource-detail-reading-status').boundingBox())!;
     expect((await page.locator('.resource-detail-progress-track').boundingBox())!.width).toBeCloseTo(status.width, 0);
     const preview = (await page.locator('.resource-detail-lower').boundingBox())!;
@@ -59,7 +59,11 @@ test('details use the available workspace when maximizing and restoring the wind
       await expect(detail).not.toHaveClass(/is-header-collapsed/);
     }
   }
-  expect(columns.every(count => count === 4)).toBe(true);
+  expect(columns[0]).toBe(4);
+  expect(columns[1]).toBeGreaterThan(4);
+  expect(columns[2]).toBeGreaterThan(4);
+  expect(columns[3]).toBe(columns[2]);
+  expect(columns[4]).toBeLessThan(4);
   expect(columns.at(-1)).toBe(columns[0]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

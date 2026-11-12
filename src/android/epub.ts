@@ -1,6 +1,6 @@
 import type { NativeCall } from "./bridge";
 
-export async function sanitizeAndroidChapter(payload: string, native: NativeCall, imageSource:'https://omi.local'|'data:'='https://omi.local'): Promise<string> {
+export async function sanitizeAndroidChapter(payload: string, native: NativeCall, imageSource:'https://omi.local'|'data:'|'omi:'='https://omi.local'): Promise<string> {
   const { html, path, entry } = JSON.parse(payload) as { html: string; path: string; entry: string };
   const source = new DOMParser().parseFromString(html, "text/html");
   const output = document.implementation.createHTMLDocument("");

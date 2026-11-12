@@ -7,7 +7,7 @@ import { ARCHIVE_LIMITS, createEntryGuard, failLimit, isImage, 压缩包服务�
 
 declare const __OMICOMIC_BUNDLED__: boolean | undefined;
 const path7z: string = typeof __OMICOMIC_BUNDLED__ !== "undefined" && __OMICOMIC_BUNDLED__
-  ? path.join(process.resourcesPath, "7zip", "7z.exe")
+  ? path.join(process.resourcesPath, "7zip", process.platform === 'win32' ? '7z.exe' : '7zz')
   : require("7zip-bin-full").path7z;
 
 // Only the bundled executable is used. No shell, user-supplied options, disk extraction or prompts.

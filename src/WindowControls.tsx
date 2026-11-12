@@ -36,7 +36,7 @@ function WindowControls() {
     };
   }, []);
 
-  if (全屏状态 || document.documentElement.dataset.platform === "android") return null;
+  if (全屏状态 || ['android', 'ios', 'darwin'].includes(document.documentElement.dataset.platform ?? '')) return null;
 
   return (
     <div className="window-controls" role="group" aria-label={t("窗口操作")}>

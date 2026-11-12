@@ -202,6 +202,28 @@
 [data-omi-layout="desktop"] .pagination-bar,
 [data-omi-layout="desktop"] .pagination-bar :is(button, input, span, .glass-select-trigger) { font-size: calc(var(--desktop-info-size, 12px) * var(--desktop-font-scale, 1)); }
 [data-omi-layout="desktop"] :is(.resource-list-scroll, .bookshelf-root-view) { overflow-anchor: none; }
+
+/* Seven size bands, anchored to the content widths in the default 1440px window.
+   auto-fill adds/removes columns instead of scaling every card with the window.
+   The +/-8% bands stay distinct even for the two smallest sizes. */
+[data-omi-layout="desktop"] :is(.resource-list, .bookshelf-folder-grid, .resource-detail-thumbnail-grid) {
+  --card-reference-width: 1174px;
+  --card-reference-gap: 14px;
+  --card-base-width: calc((var(--card-reference-width) + var(--card-reference-gap)) / var(--card-columns, 4) - var(--card-reference-gap));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--card-base-width) * .92)), 1fr));
+}
+[data-omi-layout="desktop"] .bookshelf-folder-grid { --card-reference-width: 1166px; }
+[data-omi-layout="desktop"] .resource-detail-thumbnail-grid {
+  --card-reference-width: 1098px;
+  --card-reference-gap: 10px;
+}
+[data-omi-layout="desktop"] :is(.resource-list, .bookshelf-folder-grid, .resource-detail-thumbnail-grid)
+  > :is(.resource-card, .bookshelf-folder-card, .resource-detail-thumbnail, .resource-detail-thumbnail-placeholder) {
+  width: 100%;
+  max-width: calc(var(--card-base-width) * 1.08);
+  justify-self: center;
+}
+
 [data-omi-layout="desktop"] .settings-help { font-size: calc(13px * var(--desktop-font-scale, 1)); line-height: 1.5; }
 [data-omi-layout="desktop"] .resource-card-page { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-omi-layout="desktop"] .navigation-actions { border-color: transparent; }

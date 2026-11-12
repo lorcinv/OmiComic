@@ -1949,7 +1949,7 @@ a,
 
 .resource-list,
 .bookshelf-folder-grid {
-  /* 每档固定列数、均分当前内容宽度，剩余空间不再变成右侧白边。 */
+  /* 基准列数作为兜底；桌面端的七档尺寸区间在 desktopTheme.css 中适配。 */
   grid-template-columns: repeat(var(--card-columns, 4), minmax(0, 1fr));
 }
 

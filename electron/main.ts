@@ -753,7 +753,7 @@ function 注册安全通道(): void {
   });
   ipcMain.handle("应用:获取信息", async () => {
     const metadata = JSON.parse(await 文件系统.readFile(path.join(app.getAppPath(), "package.json"), "utf8"));
-    return { name: "OmiComic", version: metadata.desktopVersion || app.getVersion(), platform: process.platform };
+    return { name: "OmiComic", version: metadata.desktopVersion || app.getVersion(), platform: process.platform, arch: process.arch };
   });
 
   ipcMain.handle("窗口:设置全屏", (事件, enabled: unknown) => {
@@ -2364,6 +2364,7 @@ function 注册安全通道(): void {
   });
 }
 
+let mainWindow: BrowserWindow | null = null;
 function 创建主窗口(): void {
   const 主窗口 = new BrowserWindow({
     width: 1440,
@@ -2374,7 +2375,8 @@ function 创建主窗口(): void {
     icon: app.isPackaged ? path.join(process.resourcesPath, "icon.ico") : path.join(__dirname, "..", "resources", "icon.ico"),
     backgroundColor: "#e9ebee",
     autoHideMenuBar: true,
-    frame: false,
+    frame: process.platform === 'darwin',
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 16 } } : {}),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -2385,6 +2387,8 @@ function 创建主窗口(): void {
     },
   });
 
+  mainWindow = 主窗口;
+  主窗口.on('closed', () => { if (mainWindow === 主窗口) mainWindow = null; });
   主窗口.once("ready-to-show", () => { if (!后台验证) 主窗口.show(); });
 
   主窗口.webContents.setWindowOpenHandler(({ url }) => {
@@ -2419,15 +2423,18 @@ app.whenReady().then(() => {
   configureLibraryCatalog(path.join(app.getPath('userData'), 'library-catalog-v1'));
   configureThumbnailDiskCache(path.join(app.getPath('userData'), 'thumbnail-cache-v1'));
   registerDesktopImageProtocol();
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([
+    { role: 'appMenu' }, { role: 'fileMenu' }, { role: 'editMenu' },
+    { label: 'View', submenu: [{ role: 'togglefullscreen' }] }, { role: 'windowMenu' },
+  ]) : null);
   注册安全通道();
   registerDocumentIpc(查找所属根目录);
   创建主窗口();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
       创建主窗口();
-    }
+    } else { mainWindow.show(); mainWindow.focus(); }
   });
 });
 }

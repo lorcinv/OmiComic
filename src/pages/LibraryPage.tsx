@@ -1,3 +1,4 @@
+import { primaryModifier } from '../platform';
 import { directoryOrder } from "../library/directoryOrder";
 import { cardDropAtPoint } from "../utils/cardDrag";
 import { FontSizeControl } from "../components/FontSizeControl";
@@ -2615,7 +2616,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         return;
       }
 
-      if (事件.ctrlKey && 事件.key.toLowerCase() === "a") {
+      if (primaryModifier(事件) && 事件.key.toLowerCase() === "a") {
         事件.preventDefault();
         全选当前选择视图();
         return;
@@ -2694,7 +2695,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     if (!isActive) return;
 
     const 聚焦搜索快捷键 = (事件: KeyboardEvent): void => {
-      if (!(事件.ctrlKey || 事件.metaKey) || 事件.key.toLocaleLowerCase() !== "k") return;
+      if (!(primaryModifier(事件) || 事件.metaKey) || 事件.key.toLocaleLowerCase() !== "k") return;
       const 目标 = 事件.target;
       if (目标 instanceof HTMLElement) {
         const 标签名 = 目标.tagName.toLowerCase();
@@ -2781,11 +2782,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   useEffect(() => {
     function 处理按键按下(事件: KeyboardEvent): void {
-      if (事件.key === "Control" || 事件.ctrlKey) 设置备注悬停快捷键按下(true);
+      if ((事件.key === "Control" || 事件.key === "Meta") || primaryModifier(事件)) 设置备注悬停快捷键按下(true);
     }
 
     function 处理按键松开(事件: KeyboardEvent): void {
-      if (事件.key === "Control" || !事件.ctrlKey) {
+      if ((事件.key === "Control" || 事件.key === "Meta") || !primaryModifier(事件)) {
         设置备注悬停快捷键按下(false);
         隐藏书架备注悬浮窗();
       }
@@ -3286,7 +3287,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
         return;
       }
 
-      if (当前右侧抽屉 === "tag-filter" && 事件.ctrlKey && 事件.key.toLocaleLowerCase() === "d") {
+      if (当前右侧抽屉 === "tag-filter" && primaryModifier(事件) && 事件.key.toLocaleLowerCase() === "d") {
         事件.preventDefault();
         设置已选标签列表([]);
         回到第一页();
@@ -3314,7 +3315,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
       const 目标 = 事件.target;
       if (目标 instanceof HTMLElement) {
         const 标签名 = 目标.tagName.toLowerCase();
-        if (标签名 === "textarea" && (事件.ctrlKey || 事件.metaKey)) {
+        if (标签名 === "textarea" && (primaryModifier(事件) || 事件.metaKey)) {
           事件.preventDefault();
           void 完成资源详情信息编辑();
           return;
@@ -4504,7 +4505,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   function 开始资源备注悬停(key: string, 备注文本: string, 事件: ReactMouseEvent<HTMLElement>): void {
     const 备注 = 备注文本.trim();
     const 子控件 = 事件.target instanceof Element ? 事件.target.closest('button, input, [role="button"], .preview-tag-row') : null;
-    if (!事件.ctrlKey || !备注 || 子控件 && 子控件 !== 事件.currentTarget) {
+    if (!primaryModifier(事件) || !备注 || 子控件 && 子控件 !== 事件.currentTarget) {
       隐藏书架备注悬浮窗();
       return;
     }
@@ -4536,7 +4537,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   function 更新资源备注悬停(key: string, 备注文本: string, 事件: ReactMouseEvent<HTMLElement>): void {
     const 备注 = 备注文本.trim();
     const 子控件 = 事件.target instanceof Element ? 事件.target.closest('button, input, [role="button"], .preview-tag-row') : null;
-    if (!事件.ctrlKey || !备注 || 子控件 && 子控件 !== 事件.currentTarget) {
+    if (!primaryModifier(事件) || !备注 || 子控件 && 子控件 !== 事件.currentTarget) {
       if (书架备注悬停Key.current === key) 隐藏书架备注悬浮窗();
       return;
     }
@@ -4558,7 +4559,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 显示路径悬浮窗(key: string, 路径文本: string, 事件: ReactMouseEvent<HTMLElement>): void {
     const 路径 = 路径文本.trim();
-    if (!路径 || 事件.ctrlKey) return;
+    if (!路径 || primaryModifier(事件)) return;
 
     if (书架备注悬停定时器.current !== null) {
       window.clearTimeout(书架备注悬停定时器.current);
@@ -4579,7 +4580,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
   function 更新路径悬停(key: string, 路径文本: string, 事件: ReactMouseEvent<HTMLElement>): void {
     const 路径 = 路径文本.trim();
-    if (!路径 || 事件.ctrlKey) {
+    if (!路径 || primaryModifier(事件)) {
       if (书架备注悬停Key.current === key) 隐藏书架备注悬浮窗();
       return;
     }
@@ -6355,7 +6356,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const key = (event: KeyboardEvent) => {
       if (event.target instanceof Element && event.target.closest('input,textarea,select')) return;
       if (event.key === 'Escape') { event.preventDefault(); 退出电脑书架选择(); }
-      else if (event.ctrlKey && event.key.toLowerCase() === 'a') { event.preventDefault(); 设置电脑已选书架(new Set(筛选后书架文件夹列表.map(item=>item.id))); }
+      else if (primaryModifier(event) && event.key.toLowerCase() === 'a') { event.preventDefault(); 设置电脑已选书架(new Set(筛选后书架文件夹列表.map(item=>item.id))); }
     };
     window.addEventListener('keydown',key); return () => window.removeEventListener('keydown',key);
   }, [电脑书架选择中, 筛选后书架文件夹列表]);
@@ -6385,8 +6386,8 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
 
     事件.preventDefault();
     框选抑制点击.current = false;
-    const baseKeys = 事件.ctrlKey ? Array.from(已选项目Key集合) : [];
-    if (!事件.ctrlKey && !(目标 instanceof Element && 目标.closest("[data-selection-key]"))) {
+    const baseKeys = primaryModifier(事件) ? Array.from(已选项目Key集合) : [];
+    if (!primaryModifier(事件) && !(目标 instanceof Element && 目标.closest("[data-selection-key]"))) {
       设置已选项目Key集合(new Set());
     }
     设置框选({
@@ -7359,7 +7360,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   }
 
   function 处理网格滚轮(事件: ReactWheelEvent<HTMLDivElement>): void {
-    if (连续列表启用 || 事件.ctrlKey || !是否显示分页 || Math.abs(事件.deltaY) < 1) return;
+    if (连续列表启用 || primaryModifier(事件) || !是否显示分页 || Math.abs(事件.deltaY) < 1) return;
 
     if (滚轮停止定时器.current !== null) {
       window.clearTimeout(滚轮停止定时器.current);

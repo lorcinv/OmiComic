@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { isAndroid } from '../platform';
+import { isNativeMobile } from '../platform';
 
 export default function useMobileLayout() {
-  const [mobile, setMobile] = useState(() => isAndroid() || window.matchMedia('(max-width:760px), (pointer:coarse)').matches);
+  const [mobile, setMobile] = useState(() => isNativeMobile() || window.matchMedia('(max-width:760px), (pointer:coarse)').matches);
   useEffect(() => {
     const query = window.matchMedia('(max-width:760px), (pointer:coarse)');
-    const update = () => setMobile(isAndroid() || query.matches);
+    const update = () => setMobile(isNativeMobile() || query.matches);
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
   }, []);

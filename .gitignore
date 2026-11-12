@@ -12,9 +12,6 @@ out/
 Thumbs.db
 
 # Local runtime/cache data
-.localappdata/
-.npm-cache/
-.smoke-user-data/
 
 # Electron/Vite build output
 dist-electron/
@@ -35,3 +32,11 @@ release/
 dist-android/
 android/build/
 .android-signing/
+
+dist-ios/
+ios/build/
+ios/OmiComic.xcodeproj/
+ios/Assets.xcassets/
+ios/TestFixtures/
+ios/Info.plist
+resources/icon.icns

@@ -53,30 +53,34 @@ async function selectScale(page: Page, value: number) {
   await page.locator('.view-options-menu > summary').click();
 }
 
-async function expectGridFilled(grid: Locator, columns: number, context: string) {
+async function expectGridSize(grid: Locator, referenceWidth: number, context: string, expectedColumns?: number) {
   const metrics = await grid.evaluate(element => {
     const style = getComputedStyle(element);
     const box = element.getBoundingClientRect();
-    const columns = style.gridTemplateColumns.split(' ').length;
-    const row = Array.from(element.children).slice(0, columns).map(card => card.getBoundingClientRect());
+    const tracks = style.gridTemplateColumns.split(' ').map(Number.parseFloat);
+    const columns = tracks.length;
+    const cards = Array.from(element.querySelectorAll(':scope > .resource-card, :scope > .bookshelf-folder-card, :scope > .resource-detail-thumbnail'));
+    const row = cards.slice(0, columns).map(card => card.getBoundingClientRect());
     return {
       columns, width: row[0].width, overflow: element.scrollWidth - element.clientWidth,
+      available: element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+      trackWidth: tracks[0],
       leftGap: row[0].left - box.left - element.clientLeft - parseFloat(style.paddingLeft),
-      rightGap: box.left + element.clientLeft + element.clientWidth - parseFloat(style.paddingRight) - row.at(-1)!.right,
       widthDifference: Math.max(...row.map(card => card.width)) - Math.min(...row.map(card => card.width)),
-      lastWidth: element.lastElementChild!.getBoundingClientRect().width,
+      lastWidth: cards.at(-1)!.getBoundingClientRect().width,
     };
   });
-  expect(metrics.columns, context).toBe(columns);
+  if (expectedColumns !== undefined) expect(metrics.columns, context).toBe(expectedColumns);
   expect(metrics.overflow, context).toBeLessThanOrEqual(1);
-  expect(Math.abs(metrics.leftGap), context).toBeLessThanOrEqual(1);
-  expect(Math.abs(metrics.rightGap), context).toBeLessThanOrEqual(1);
+  expect(metrics.width, `${context}: minimum size`).toBeGreaterThanOrEqual(Math.min(metrics.available, referenceWidth * .92) - 1);
+  expect(metrics.width, `${context}: maximum size`).toBeLessThanOrEqual(referenceWidth * 1.08 + 1);
+  expect(Math.abs(metrics.leftGap - (metrics.trackWidth - metrics.width) / 2), `${context}: centered capped card`).toBeLessThanOrEqual(1);
   expect(metrics.widthDifference, context).toBeLessThanOrEqual(1);
   expect(Math.abs(metrics.lastWidth - metrics.width), `${context}: incomplete final row`).toBeLessThanOrEqual(1);
   return metrics;
 }
 
-test('every detent fills the available width across all tabs, details and resized windows', async ({ page }) => {
+test('seven distinct size bands preserve default sizes and adapt column counts across tabs and window widths', async ({ page }) => {
   test.setTimeout(120000);
   await openLibrary(page);
   const detents = [40, 55, 75, 100, 125, 150, 200];
@@ -89,16 +93,21 @@ test('every detent fills the available width across all tabs, details and resize
     const cards = grid.locator(isShelf ? '.bookshelf-folder-card' : '.resource-card');
     await expect.poll(() => cards.count(), { message: view }).toBeGreaterThan(0);
     expect(await cards.count(), view).toBeLessThanOrEqual(isShelf ? 12 : 24);
-    for (const width of [960, 1280, 1440, 1800, 1920, 2559]) {
+    // Measured before the change at the default 1440px window; shelf padding is 4px wider per side.
+    const referenceWidths = isShelf ? [154.57, 182.67, 222, 281, 379.33, 576, 1166]
+      : [155.71, 184, 223.6, 283, 382, 580, 1174];
+    for (const width of [960, 1280, 1440, 1800, 1920, 2559, 3440]) {
       await page.setViewportSize({ width, height: 900 });
       const sizes: number[] = [];
       for (const [index, scale] of detents.entries()) {
         await selectScale(page, scale);
-        const metrics = await expectGridFilled(grid, 7 - index, `${view} ${width} ${scale}`);
+        const metrics = await expectGridSize(grid, referenceWidths[index], `${view} ${width} ${scale}`, width === 1440 ? 7 - index : undefined);
+        if (width === 1440) expect(metrics.width, `${view}: default size unchanged`).toBeCloseTo((metrics.available - (6 - index) * 14) / (7 - index), 0);
+        if (width >= 2559 && index === 0) expect(metrics.columns, `${view}: wide window adds columns`).toBeGreaterThan(7);
         sizes.push(metrics.width);
         if (view === '资源库' && width === 1440 && scale === 100) {
           await page.locator('.view-options-menu > summary').click();
-          await page.screenshot({ path: 'test-results/resource-scale-default.png' });
+          await page.screenshot({ path: 'test-results/resource-scale-default.png', fullPage: true });
           await page.locator('.view-options-menu > summary').click();
         }
       }
@@ -115,10 +124,16 @@ test('every detent fills the available width across all tabs, details and resize
       await expect(control.getByRole('button')).toHaveCount(0);
       for (const width of [960, 1440, 2559]) {
         await page.setViewportSize({ width, height: 900 });
+        const sizes: number[] = [];
         for (const [index, scale] of detents.entries()) {
           await setCardScale(control.getByRole('slider'), scale);
-          await expectGridFilled(preview, 7 - index, `${view} detail ${width} ${scale}`);
+          const referenceWidth = [148.29, 174.67, 211.6, 267, 359.33, 544, 1098][index];
+          const metrics = await expectGridSize(preview, referenceWidth, `${view} detail ${width} ${scale}`, width === 1440 ? 7 - index : undefined);
+          if (width === 1440) expect(Math.abs(metrics.width - referenceWidth)).toBeLessThan(1);
+          if (width === 2559 && index === 0) expect(metrics.columns).toBeGreaterThan(7);
+          sizes.push(metrics.width);
         }
+        for (let index = 1; index < sizes.length; index++) expect(sizes[index]).toBeGreaterThan(sizes[index - 1]);
       }
       await page.locator('.resource-detail-back').click();
     }
@@ -134,26 +149,26 @@ test('always-visible detents support dragging, keyboard and Ctrl wheel, with ind
   const control = page.getByRole('group', { name: '缩略图大小', exact: true });
   const slider = control.getByRole('slider');
   await expect(control.getByRole('button')).toHaveCount(0);
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 4 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
   await slider.hover();
   await page.keyboard.down('Control');
   await page.mouse.wheel(0, -120);
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 3 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 5 / 7');
   await page.mouse.wheel(0, 120);
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 4 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
   await page.keyboard.up('Control');
   await expect(control.getByRole('button')).toHaveCount(0);
   await expect(control.locator('.card-scale-track i')).toHaveCount(7);
   await slider.press('ArrowLeft');
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 5 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 3 / 7');
   await slider.press('ArrowRight');
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 4 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
   const bar = (await slider.boundingBox())!;
   await page.mouse.move(bar.x + 12, bar.y + bar.height / 2);
   await page.mouse.down();
   await page.mouse.move(bar.x + bar.width - 12, bar.y + bar.height / 2, { steps: 7 });
   await page.mouse.up();
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 1 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 7 / 7');
   await setCardScale(slider, 100);
   await page.screenshot({ path: 'test-results/resource-scale-detents.png' });
   await page.locator('.view-options-menu > summary').click();
@@ -178,14 +193,14 @@ test('always-visible detents support dragging, keyboard and Ctrl wheel, with ind
   expect(await page.evaluate(() => (window as any).__scaleSaves.length)).toBe(1);
   await setCardScale(slider, 40);
   await control.dispatchEvent('wheel', { ctrlKey: true, deltaY: 120 });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 7 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 1 / 7');
   // 触控板细碎的增量不会一个事件跳一档。
   await control.evaluate(element => {
     for (let index = 0; index < 5; index++) element.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -4, bubbles: true, cancelable: true }));
   });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 7 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 1 / 7');
   await control.dispatchEvent('wheel', { ctrlKey: true, deltaY: -20 });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 6 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 2 / 7');
   await setCardScale(slider, 125);
   await page.locator('.view-options-menu > summary').click();
 
@@ -195,22 +210,22 @@ test('always-visible detents support dragging, keyboard and Ctrl wheel, with ind
   const detailControl = page.getByRole('group', { name: '缩略预览大小' });
   const detailSlider = detailControl.getByRole('slider');
   await expect(detailControl.getByRole('button')).toHaveCount(0);
-  await expect(detailSlider).toHaveAttribute('aria-valuetext', '每行 4 张');
+  await expect(detailSlider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
   await detailControl.hover();
   await page.keyboard.down('Control');
   await page.mouse.wheel(0, -120);
-  await expect(detailSlider).toHaveAttribute('aria-valuetext', '每行 3 张');
+  await expect(detailSlider).toHaveAttribute('aria-valuetext', '尺寸 5 / 7');
   await detailSlider.hover();
   await page.mouse.wheel(0, 120);
   await page.keyboard.up('Control');
-  await expect(detailSlider).toHaveAttribute('aria-valuetext', '每行 4 张');
+  await expect(detailSlider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
   await expect(detail).not.toHaveClass(/is-header-collapsed/);
   expect(await preview.evaluate(element => element.scrollTop)).toBe(0);
   await page.locator('.resource-detail-cover').hover();
   await page.mouse.wheel(0, 120);
   await expect(detail).toHaveClass(/is-header-collapsed/);
   await preview.dispatchEvent('wheel', { ctrlKey: true, deltaY: 120 });
-  await expect(detailSlider).toHaveAttribute('aria-valuetext', '每行 5 张');
+  await expect(detailSlider).toHaveAttribute('aria-valuetext', '尺寸 3 / 7');
   await expect(detail).toHaveClass(/is-header-collapsed/);
   expect(await preview.evaluate(element => element.scrollTop)).toBe(0);
   await setCardScale(detailSlider, 150);
@@ -219,11 +234,11 @@ test('always-visible detents support dragging, keyboard and Ctrl wheel, with ind
   await page.reload();
   await page.getByRole('button', { name: '打开资源库', exact: true }).click();
   await page.locator('.view-options-menu > summary').click();
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 3 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 5 / 7');
   await page.locator('.view-options-menu > summary').click();
   await grid.locator('.resource-card').first().getByRole('button', { name: '打开资源信息', exact: true }).click();
-  await expect(detailSlider).toHaveAttribute('aria-valuetext', '每行 2 张');
-  // 回到默认四列仍使用同一个滑条，没有重置入口。
+  await expect(detailSlider).toHaveAttribute('aria-valuetext', '尺寸 6 / 7');
+  // 回到默认第四档仍使用同一个滑条，没有重置入口。
   await detailControl.dispatchEvent('wheel', { ctrlKey: true, deltaY: 120 });
   await setCardScale(detailSlider, 100);
   expect(await preview.evaluate(element => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(4);
@@ -234,12 +249,12 @@ test('always-visible detents support dragging, keyboard and Ctrl wheel, with ind
   await page.getByRole('tab', { name: /^外观/ }).click();
   const settingsControl = page.getByRole('group', { name: '卡片尺寸', exact: true });
   const settingsSlider = settingsControl.getByRole('slider');
-  await expect(settingsSlider).toHaveAttribute('aria-valuetext', '每行 3 张');
+  await expect(settingsSlider).toHaveAttribute('aria-valuetext', '尺寸 5 / 7');
   await settingsSlider.hover();
   await page.keyboard.down('Control');
   await page.mouse.wheel(0, -120);
   await page.keyboard.up('Control');
-  await expect(settingsSlider).toHaveAttribute('aria-valuetext', '每行 2 张');
+  await expect(settingsSlider).toHaveAttribute('aria-valuetext', '尺寸 6 / 7');
   await expect(settingsControl.getByRole('button')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/card-scale-settings-960.png' });
 });
@@ -249,17 +264,17 @@ test('previous custom scales snap to a detent and the first wheel step changes v
   await openLibrary(page);
   await page.locator('.view-options-menu > summary').click();
   const slider = page.getByRole('slider', { name: '缩略图大小', exact: true });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 4 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
   await slider.dispatchEvent('wheel', { ctrlKey: true, deltaY: -120 });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 3 张');
-  await expectGridFilled(page.locator('.resource-list'), 3, 'legacy list scale after first step');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 5 / 7');
+  await expectGridSize(page.locator('.resource-list'), 382, 'legacy list scale after first step', 3);
   await page.locator('.view-options-menu > summary').click();
   await page.locator('.resource-card').first().getByRole('button', { name: '打开资源信息', exact: true }).click();
   const detailSlider = page.getByRole('slider', { name: '缩略预览大小' });
-  await expect(detailSlider).toHaveAttribute('aria-valuetext', '每行 3 张');
+  await expect(detailSlider).toHaveAttribute('aria-valuetext', '尺寸 5 / 7');
   await detailSlider.dispatchEvent('wheel', { ctrlKey: true, deltaY: 120 });
-  await expect(detailSlider).toHaveAttribute('aria-valuetext', '每行 4 张');
-  await expectGridFilled(page.locator('.resource-detail-thumbnail-grid'), 4, 'legacy detail scale after first step');
+  await expect(detailSlider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
+  await expectGridSize(page.locator('.resource-detail-thumbnail-grid'), 267, 'legacy detail scale after first step', 4);
 });
 
 test('directional acceleration and edge feedback respect reduced motion', async ({ page }) => {
@@ -277,9 +292,9 @@ test('directional acceleration and edge feedback respect reduced motion', async 
     };
   });
   await control.dispatchEvent('wheel', { ctrlKey: true, deltaY: -120 });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 3 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 5 / 7');
   await control.dispatchEvent('wheel', { ctrlKey: true, deltaY: 120 });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 4 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 4 / 7');
   await setCardScale(slider, 200);
   await control.dispatchEvent('wheel', { ctrlKey: true, deltaY: -120 });
   const motions = await page.evaluate(() => (window as any).__scaleMotions);
@@ -290,7 +305,7 @@ test('directional acceleration and edge feedback respect reduced motion', async 
   const count = motions.length;
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await control.dispatchEvent('wheel', { ctrlKey: true, deltaY: 120 });
-  await expect(slider).toHaveAttribute('aria-valuetext', '每行 2 张');
+  await expect(slider).toHaveAttribute('aria-valuetext', '尺寸 6 / 7');
   expect(await page.evaluate(() => (window as any).__scaleMotions.length)).toBe(count);
   expect(await control.locator('.card-scale-thumb').evaluate(element => getComputedStyle(element).boxShadow)).toBe('none');
 });

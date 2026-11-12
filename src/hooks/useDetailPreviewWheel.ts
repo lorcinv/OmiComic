@@ -1,3 +1,4 @@
+import { primaryModifier } from '../platform';
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 interface DetailPreviewWheelOptions {
@@ -43,7 +44,7 @@ export function useDetailPreviewWheel({ enabled, panel, preview, collapsed, setC
 
     function onWheel(event: WheelEvent) {
       const grid = preview.current;
-      if (!grid || event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      if (!grid || primaryModifier(event) || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
       // 编辑和浮层保留自己的滚动，不吞掉输入操作。
       if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], .tag-completion-strip')) return;
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? grid.clientHeight : 1;

@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { tr } from '../i18n';
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
 
 export const 卡片缩放档位 = [40, 55, 75, 100, 125, 150, 200] as const;
@@ -23,7 +23,7 @@ function 获取卡片缩放档位(value: number): number {
 }
 
 export function 获取卡片列数(value: number): number {
-  // 兼容已经保存的缩放值；每档控制列数，由网格均分实际可用宽度。
+  // 保留已存档位，返回默认 1440px 窗口的基准列数；实际列数由尺寸区间和可用宽度决定。
   return 卡片缩放档位.length - 获取卡片缩放档位(value);
 }
 
@@ -50,7 +50,6 @@ export default function CardScaleControl({ value, label, scope, className = "", 
   const thumb = useRef<HTMLSpanElement>(null);
   const previous = useRef(value);
   const index = 获取卡片缩放档位(value);
-  const columns = 获取卡片列数(value);
   const fill = index / (卡片缩放档位.length - 1) * 100;
 
   useLayoutEffect(() => {
@@ -82,12 +81,12 @@ export default function CardScaleControl({ value, label, scope, className = "", 
           <span className="card-scale-thumb-position"><span ref={thumb} className="card-scale-thumb" /></span>
         </div>
         <input type="range" min={0} max={卡片缩放档位.length - 1} step={1} value={index}
-          aria-label={label} aria-valuetext={`每行 ${columns} 张`} disabled={disabled}
+          aria-label={label} aria-valuetext={tr`尺寸 ${index + 1} / ${卡片缩放档位.length}`} disabled={disabled}
           data-tooltip="缩放，支持ctrl+滚轮操作。"
           onChange={event => onChange(卡片缩放档位[Number(event.currentTarget.value)])}
           onPointerUp={onCommit} onKeyUp={onCommit} onBlur={onCommit} />
       </div>
-      <output aria-hidden="true">{columns}{t(" 列")}</output>
+      <output aria-hidden="true">{index + 1}/{卡片缩放档位.length}</output>
     </div>
   );
 }

@@ -1,0 +1,25 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const { Resvg } = require('@resvg/resvg-js');
+const root = path.resolve(__dirname, '..');
+const icon = path.join(root, 'ios/Assets.xcassets/AppIcon.appiconset');
+fs.mkdirSync(icon, { recursive: true });
+const png = new Resvg(fs.readFileSync(path.join(root, 'resources/icon.svg')), { background: '#f5f2eb', fitTo: { mode: 'width', value: 1024 } }).render().asPng();
+fs.writeFileSync(path.join(icon, 'icon.png'), png);
+fs.writeFileSync(path.join(icon, 'Contents.json'), JSON.stringify({ images: [{ filename: 'icon.png', idiom: 'universal', platform: 'ios', size: '1024x1024' }], info: { author: 'xcode', version: 1 } }, null, 2));
+fs.writeFileSync(path.join(root, 'ios/Assets.xcassets/Contents.json'), JSON.stringify({ info: { author: 'xcode', version: 1 } }));
+const fixtures = path.join(root, 'ios/TestFixtures');
+fs.mkdirSync(fixtures, { recursive: true });
+for (const relative of ['images/pixel.png', 'images/panorama-800x1200.jpg', 'documents/three-pages.pdf', 'android-archives/RAR4.rar', 'android-archives/RAR5.cbr', 'android-archives/Seven.7z', 'android-archives/Solid.cb7']) fs.copyFileSync(path.join(root, 'tests/fixtures', relative), path.join(fixtures, path.basename(relative)));
+// A small real EPUB with an image chapter exercises both the archive index and sanitized image delivery.
+const { execFileSync } = require('node:child_process');
+const epub = path.join(root, 'ios/build/epub');
+fs.mkdirSync(path.join(epub, 'META-INF'), { recursive: true }); fs.mkdirSync(path.join(epub, 'OPS'), { recursive: true });
+fs.writeFileSync(path.join(epub, 'mimetype'), 'application/epub+zip');
+fs.writeFileSync(path.join(epub, 'META-INF/container.xml'), '<container><rootfiles><rootfile full-path="OPS/book.opf"/></rootfiles></container>');
+fs.writeFileSync(path.join(epub, 'OPS/book.opf'), '<package><metadata/><manifest><item id="a" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/></spine></package>');
+fs.writeFileSync(path.join(epub, 'OPS/chapter.xhtml'), '<html><body><h1>Omi iOS</h1><p>阅读测试</p><img src="page.jpg"/></body></html>');
+fs.copyFileSync(path.join(fixtures, 'panorama-800x1200.jpg'), path.join(epub, 'OPS/page.jpg'));
+execFileSync(require('7zip-bin-full').path7z, ['a', '-tzip', path.join(fixtures, 'Sample.epub'), '.'], { cwd: epub, stdio: 'ignore' });
+execFileSync(require('7zip-bin-full').path7z, ['a', '-tzip', path.join(fixtures, 'Sample.cbz'), 'panorama-800x1200.jpg', 'pixel.png'], { cwd: fixtures, stdio: 'ignore' });
+console.log('Prepared iOS icons and native test fixtures.');

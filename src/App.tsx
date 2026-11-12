@@ -8,6 +8,7 @@ import HomePage from "./pages/HomePage";
 import WindowControls from "./WindowControls";
 import DesktopDirectoryDrop from './components/DesktopDirectoryDrop';
 import NoticeStack from './components/NoticeStack';
+import { UpdateReminder } from './components/UpdateCheck';
 import {useNoticeState} from './notifications';
 import { loadReader, warmReader } from './reader/loadReader';
 import {beginReaderOpening,cancelReaderOpening,readerOpeningCurrent} from './android/readerOpening';
@@ -481,6 +482,7 @@ function App() {
       {mobile && homeSettings && MobileSettings && BookReaderSettings && <MobileSettings settings={homeSettings} displayScope="recent" onSaved={settings => { setHomeSettings(settings); 应用主题设置(settings); }} onClose={() => void mobileNavigate(() => { setHomeSettings(null); 设置进度刷新令牌(value => value + 1); }, 'back')} bookSettings={<BookReaderSettings preferred={null} onSaved={() => 设置进度刷新令牌(value => value + 1)} />} />}
       {!mobile && <GlobalTooltip />}
       <NoticeStack/>
+      <UpdateReminder/>
       <WindowControls />
       <DesktopDirectoryDrop onAdded={() => {
         // A future first library mount must not reuse the pre-import snapshot.

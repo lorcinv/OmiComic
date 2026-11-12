@@ -24,7 +24,9 @@
     "package:prepare": "npm run build:icons && npm run build && node scripts/prepare-package.cjs",
     "package:dir": "npm run package:prepare && electron-builder --dir --win --x64 --publish never",
     "dist:win": "npm run package:prepare && electron-builder --win nsis --x64 --publish never",
-    "dist:portable": "npm run package:prepare && electron-builder --config electron-builder.portable.json --win zip --x64 --publish never"
+    "dist:portable": "npm run package:prepare && electron-builder --config electron-builder.portable.json --win zip --x64 --publish never",
+    "build:ios:renderer": "vite build --mode ios --outDir dist-ios",
+    "dist:mac": "npm run package:prepare && electron-builder --config electron-builder.mac.json --mac --publish never"
   },
   "dependencies": {
     "@lingo-reader/mobi-parser": "0.4.6",

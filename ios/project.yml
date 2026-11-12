@@ -1,0 +1,67 @@
+name: OmiComic
+options:
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  SwiftArchive:
+    url: https://github.com/matteo-pacini/libarchive-for-swift
+    revision: e8b70b7f0e15108a828362fe696e63898d5be916
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    PRODUCT_BUNDLE_IDENTIFIER: io.github.lorcinv.omicomic.ios
+    MARKETING_VERSION: "1.1.96"
+    CURRENT_PROJECT_VERSION: "1196"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGNING_ALLOWED: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  OmiComic:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    resources:
+      - path: ../dist-ios
+        type: folder
+      - path: Assets.xcassets
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: OmiComic
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIFileSharingEnabled: YES
+        LSSupportsOpeningDocumentsInPlace: YES
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Comics and books
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.image, public.zip-archive, com.rarlab.rar-archive, org.7-zip.7-zip-archive, com.adobe.pdf, org.idpf.epub-container, public.data]
+    dependencies:
+      - package: SwiftArchive
+        product: libarchive
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  OmiComicTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    resources:
+      - path: TestFixtures
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.lorcinv.omicomic.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: OmiComic
+schemes:
+  OmiComic:
+    build:
+      targets:
+        OmiComic: all
+        OmiComicTests: [test]
+    test:
+      targets: [OmiComicTests]

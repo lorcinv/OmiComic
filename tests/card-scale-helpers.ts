@@ -7,5 +7,5 @@ export async function setCardScale(slider: Locator, value: number) {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, String(index));
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }, index);
-  await expect(slider).toHaveAttribute('aria-valuetext', `每行 ${7 - index} 张`);
+  await expect(slider).toHaveAttribute('aria-valuetext', `尺寸 ${index + 1} / 7`);
 }

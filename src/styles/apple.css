@@ -1,0 +1,12 @@
+/* Keep native traffic lights clear on every desktop page, including the reader. */
+html[data-platform="darwin"] .app-shell { height: calc(100dvh - 48px); margin-top: 48px; }
+html[data-platform="darwin"] body::before { content: ""; position: fixed; inset: 0 0 auto; height: 48px; background: var(--背景色); -webkit-app-region: drag; }
+html[data-platform="darwin"] { --window-controls-height: 0px; }
+html[data-platform="darwin"] .reader-toolbar { padding-right: 16px; }
+html[data-platform="ios"] { --window-controls-height: 0px; }
+html[data-platform="ios"] body { min-width: 320px; height: 100dvh; -webkit-touch-callout: none; }
+html[data-platform="ios"] .app-shell { height: 100dvh; }
+html[data-platform="ios"] .reader-toolbar { padding-right: 16px; }
+html[data-platform="ios"] .reader-stage { touch-action: none; }
+html[data-platform="ios"] :is(input, textarea, select) { font-size: max(16px, 1em); }
+html[data-platform="ios"] .mobile-settings-page { height: 100dvh; }

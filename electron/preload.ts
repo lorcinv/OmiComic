@@ -6,6 +6,7 @@ export interface 应用信息 {
   name: string;
   version: string;
   platform: string;
+  arch?: string;
 }
 
 export type 资源类型 = "folder" | "image" | "archive" | "pdf" | "epub" | "mobi" | "unknown";
