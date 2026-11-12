@@ -88,10 +88,10 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {select('readerPageMode',t("默认单双页"),[{value:'single',label:'单页'},{value:'double',label:'双页'}])}
         {select('doublePageDirection',t("默认翻页方向"),[{value:'left-to-right',label:'从左到右'},{value:'right-to-left',label:'从右到左'}])}
         {toggle('doublePageFirstSingle',t("封面单独显示"))}{toggle('smartDetectSpreadPage',t("智能识别跨页图"))}
-        {toggle('readerVolumeKeys',t("音量键翻页"))}{toggle('readerVolumeKeysReversed',t("反转音量键翻页方向"))}
+        {isAndroid() && <>{toggle('readerVolumeKeys',t("音量键翻页"))}{toggle('readerVolumeKeysReversed',t("反转音量键翻页方向"))}</>}
         {toggle('mobilePanoramaTapPaging',t('全景点击翻页'))}
         {isAndroid() && <label className="settings-toggle"><span>{t('双击放大画面')}</span><input type="checkbox" checked={value.mobileReaderDoubleTapZoom !== false} onChange={event=>save({mobileReaderDoubleTapZoom:event.target.checked})}/></label>}
-        {range('readerVolumePanoramaPages',t("全景音量键翻页间隔"),.25,2,.25,1,' 页')}
+        {isAndroid() && range('readerVolumePanoramaPages',t("全景音量键翻页间隔"),.25,2,.25,1,' 页')}
       </>}
       {category==='book' && <>
         {select('bookSwitchButtonOpacity',t('上/下一篇按钮透明度'),[20,30,40,50,60,70,80].map(value=>({value,label:`${value}%`})),40)}
@@ -99,8 +99,8 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         {bookSettings}
       </>}
       {category==='performance' && <>
-        {range('androidReaderDiskCacheSizeMb',t("阅读页面磁盘缓存"),0,2048,128,512,' MB')}
-        {range('androidThumbnailCacheSizeMb',t("封面与预览磁盘缓存"),64,512,64,128,' MB')}
+        {isAndroid() && range('androidReaderDiskCacheSizeMb',t("阅读页面磁盘缓存"),0,2048,128,512,' MB')}
+        {isAndroid() && range('androidThumbnailCacheSizeMb',t("封面与预览磁盘缓存"),64,512,64,128,' MB')}
         {cacheInfo && <p className="settings-hint">{t("已用：阅读 ")}{(cacheInfo.readerBytes/1048576).toFixed(1)}{t(" MB · 封面 ")}{(cacheInfo.thumbnailBytes/1048576).toFixed(1)} MB</p>}
         {window.omicomic.clearAndroidReadCache && <button type="button" className="secondary-action" disabled={clearing} onClick={async()=>{setClearing(true);try{await queue.current;const r=await window.omicomic.clearAndroidReadCache!();if(r.ok){clearResourceThumbnailCache();setCacheInfo(r.data);}else setError(r.error.message);}catch{setError('缓存清理失败，请重试。');}finally{setClearing(false);}}}>{clearing?t("正在清理…"):t("清理磁盘缓存")}</button>}
         {range('readerMemoryCacheSizeMb',t("阅读图片内存缓存"),0,500,25,100,' MB')}

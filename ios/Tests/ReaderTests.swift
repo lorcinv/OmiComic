@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 import WebKit
 @testable import OmiComic
 

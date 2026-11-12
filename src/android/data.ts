@@ -325,5 +325,9 @@ export async function createAndroidApi(native: NativeCall, platform: "android" |
     setReaderChrome:(hidden,active=true,panorama=false)=>call("setReaderChrome",{hidden,active,panorama}),
     prepareEpubReaderViewport:path=>call("prepareEpubReaderViewport",{key:path}),
   };
+  if (platform === "ios") {
+    delete api.getAndroidCacheInfo; delete api.clearAndroidReadCache;
+    delete api.registerDocumentImage; delete api.renderDocumentImage;
+  }
   return api;
 }
