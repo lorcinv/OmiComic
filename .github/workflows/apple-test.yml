@@ -89,6 +89,8 @@ jobs:
         run: |
           mkdir -p release
           VERSION=$(node -p "require('./package.json').version")
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app/Info.plist)" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleSupportedPlatforms:0' ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app/Info.plist)" = 'iPhoneSimulator'
           ditto -c -k --sequesterRsrc --keepParent ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app "release/OmiComic-$VERSION-ios-simulator.zip"
       - uses: actions/upload-artifact@v4
         if: always()
