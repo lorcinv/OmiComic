@@ -63,14 +63,20 @@ jobs:
           set -o pipefail
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPhone")))')
           echo "IOS_DEVICE=$DEVICE" >> "$GITHUB_ENV"
-          xcodebuild test -project ios/OmiComic.xcodeproj -scheme OmiComic -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build/Derived -resultBundlePath ios/build/iPhone.xcresult CODE_SIGNING_ALLOWED=NO | tee ios/build/iphone.log
-          xcrun simctl io "$DEVICE" screenshot ios/build/iphone.png
+          xcodebuild test -project ios/OmiComic.xcodeproj -scheme OmiComic -parallel-testing-enabled NO -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build/Derived -resultBundlePath ios/build/iPhone.xcresult CODE_SIGNING_ALLOWED=NO | tee ios/build/iphone.log
       - name: Run native iPad tests
         run: |
           set -o pipefail
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for ds in json.load(sys.stdin)["devices"].values() for d in ds if d["name"].startswith("iPad")))')
-          xcodebuild test -project ios/OmiComic.xcodeproj -scheme OmiComic -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build/Derived -resultBundlePath ios/build/iPad.xcresult CODE_SIGNING_ALLOWED=NO | tee ios/build/ipad.log
-          xcrun simctl io "$DEVICE" screenshot ios/build/ipad.png
+          xcodebuild test -project ios/OmiComic.xcodeproj -scheme OmiComic -parallel-testing-enabled NO -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath ios/build/Derived -resultBundlePath ios/build/iPad.xcresult CODE_SIGNING_ALLOWED=NO | tee ios/build/ipad.log
+      - name: Export reading screenshots
+        if: always()
+        run: |
+          for DEVICE in iPhone iPad; do
+            if [ -d "ios/build/$DEVICE.xcresult" ]; then
+              xcrun xcresulttool export attachments --path "ios/build/$DEVICE.xcresult" --output-path "ios/build/screenshots/$DEVICE"
+            fi
+          done
       - name: Package simulator app
         run: |
           mkdir -p release
@@ -84,5 +90,5 @@ jobs:
             ios/build/*.xcresult
             ios/build/*.log
             ios/build/*.png
+            ios/build/screenshots
           retention-days: 30
-
