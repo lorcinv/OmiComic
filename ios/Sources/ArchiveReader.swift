@@ -30,7 +30,8 @@ enum ArchiveReader {
             guard count <= 30000, Date() < deadline else { throw OmiError("压缩包内容过多，请拆分后打开。") }
             guard let raw = archive_entry_pathname_utf8(entry) ?? archive_entry_pathname(entry) else { continue }
             let name = String(cString: raw)
-            if archive_entry_filetype(entry) == AE_IFREG && validName(name) && archive_entry_symlink(entry) == nil && archive_entry_hardlink(entry) == nil {
+            // AE_IFREG is a C macro unavailable to Swift; its POSIX file-type value is 0100000.
+            if archive_entry_filetype(entry) == 0o100000 && validName(name) && archive_entry_symlink(entry) == nil && archive_entry_hardlink(entry) == nil {
                 if try visit(archive, Entry(name: name, size: archive_entry_size(entry))) { break }
             }
             archive_read_data_skip(archive)
