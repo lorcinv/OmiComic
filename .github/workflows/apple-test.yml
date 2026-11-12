@@ -80,7 +80,8 @@ jobs:
       - name: Package simulator app
         run: |
           mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app release/OmiComic-1.1.96-ios-simulator.zip
+          VERSION=$(node -p "require('./package.json').version")
+          ditto -c -k --sequesterRsrc --keepParent ios/build/Derived/Build/Products/Debug-iphonesimulator/OmiComic.app "release/OmiComic-$VERSION-ios-simulator.zip"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
