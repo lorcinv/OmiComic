@@ -25,6 +25,9 @@ for (const mobile of [false, true]) test.describe(mobile ? 'phone about' : 'desk
     await expect(about).toContainText(version);
     await expect(about.locator('.omi-about__intro')).toContainText(language === 'zh-CN' ? '本地漫画阅读器' : language === 'en' ? 'local comic reader' : 'ローカル漫画リーダー');
     await expect(about.getByRole('link')).toHaveAttribute('href', 'https://github.com/lorcinv/OmiComic');
+    expect(await about.evaluate(el => el.lastElementChild?.classList.contains('omi-update-check'))).toBe(true);
+    expect(await about.locator('.omi-update-check').evaluate(el => el.previousElementSibling?.classList.contains('omi-about__guide'))).toBe(true);
+    await expect(about.locator('.omi-update-action [role="status"]')).toBeVisible();
     expect(await about.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   });
 });

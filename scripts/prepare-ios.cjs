@@ -28,7 +28,7 @@ const licenses = path.join(root, 'ios/Licenses'); fs.mkdirSync(licenses, {recurs
 fs.cpSync(path.join(root, 'resources/ios-licenses'), path.join(licenses, 'archive'), {recursive:true});
 for(const file of ['LICENSE','ASSET_CREDITS.md']) fs.copyFileSync(path.join(root,file),path.join(licenses,file));
 const lock = JSON.parse(fs.readFileSync(path.join(root,'package-lock.json'),'utf8'));
-const notices = ['OmiComic iOS simulator test build', 'Source: https://github.com/lorcinv/OmiComic/tree/codex/apple-test-20261112', 'libarchive-for-swift v1.0.0 (e8b70b7f0e15108a828362fe696e63898d5be916); licenses in archive/.', ''];
+const notices = ['OmiComic iOS simulator test build', 'Source: https://github.com/lorcinv/OmiComic/tree/v1.1.97', 'libarchive-for-swift v1.0.0 (e8b70b7f0e15108a828362fe696e63898d5be916); licenses in archive/.', ''];
 for(const [folder,pkg] of Object.entries(lock.packages)) {
   if(!folder.startsWith('node_modules/') || pkg.dev || !fs.existsSync(path.join(root,folder))) continue;
   const name=folder.replaceAll('node_modules/','').replaceAll('/','-');

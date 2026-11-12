@@ -1,5 +1,7 @@
 # 当前项目状态
 
+**1.1.97 · 2026-11-12**：Windows、macOS（Apple Silicon / Intel）与 Android 统一为 1.1.97，另提供 iOS 模拟器测试包。关于页更新按钮移到操作说明后，状态内置；补齐三语 Mac 说明。[版本说明](docs/releases/v1.1.97.md) · [Mac 与 iOS](docs/APPLE.md)。
+
 **1.1.96 · 2026-11-11**：浏览位置仅在本次运行期间保留，重启清零；恢复重复点击当前导航栏返回顶层顶部。源码分支 `codex/navigation-session-1.1.96`，[版本说明](docs/releases/v1.1.96.md) · [工作记录](docs/status/2026-11-11-1.1.96-navigation-session.md)。
 
 **1.1.95 发行 · 2026-11-11**：双端加入启动页和完整浏览位置记忆；手机默认缩放与 PC 统一为四种可选模式，移除双击放大项的说明小字。源码分支 `codex/startup-layout-1.1.95`，[发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95) · [版本说明](docs/releases/v1.1.95.md) · [发行记录](docs/status/2026-11-11-1.1.95-release.md)。

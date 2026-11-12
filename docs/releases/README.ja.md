@@ -2,12 +2,13 @@
 
 # リリース履歴
 
-過去のバージョンのダウンロードと更新履歴。
+最新版は Windows・macOS（Apple Silicon / Intel）・Android 向けの **1.1.97** です。iOS シミュレーター用テスト版も配布します。[更新内容](v1.1.97.md)。
 
-[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96)
+[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97)
 
 | バージョン | 対応環境 | リリース |
 | --- | --- | --- |
+| v1.1.97 | Windows x64 / macOS arm64, x64 / Android / iOS Simulator | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) |
 | v1.1.96 | Windows x64 / Android 1.1.96 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96) |
 | v1.1.95 | Windows x64 / Android 1.1.95 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95) |
 | v1.1.94 | Windows x64 / Android 1.1.94 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94) |

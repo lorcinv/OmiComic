@@ -61,3 +61,25 @@ for (const mobile of [false, true]) test.describe(mobile ? 'mobile guide' : 'des
     }
   });
 });
+
+for (const [column, language] of ['zh-CN', 'en', 'ja'].entries()) test(`Mac guide defaults and Command lookup in ${language}`, async ({ page }) => {
+  await page.addInitScript(installMock, { count: 12 });
+  await page.addInitScript(async language => {
+    window.omicomic.getAppInfo = async () => ({ name: 'OmiComic', version: 'test', platform: 'darwin', arch: 'arm64' });
+    (await window.omicomic.getAppData() as any).data.settings.language = language;
+  }, language);
+  await page.goto('/');
+  await page.locator('.omi-home__library').click();
+  await page.locator('.sidebar-settings-button').click();
+  await page.locator('#settings-category-about').click();
+  await page.locator('.omi-about__guide:visible').click();
+  const guide = page.locator('.omi-guide:visible');
+  await expect(guide.getByRole('button', { name: 'macOS', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.context().setOffline(true);
+  await guide.getByRole('searchbox').fill('arm64');
+  await expect(guide.locator('.omi-guide__answer')).toContainText('Intel');
+  await guide.getByRole('searchbox').fill('⌘');
+  await expect(guide.locator('.omi-guide__answer').filter({ hasText: '⌘' }).first()).toBeVisible();
+  await expect(guide.locator('#guide-shortcuts')).toContainText('Dock');
+  if (column === 0) await page.screenshot({ path: 'test-results/guide-macos.png' });
+});

@@ -1,9 +1,9 @@
 {
   "name": "omicomic",
-  "version": "1.1.96",
-  "desktopVersion": "1.1.96",
+  "version": "1.1.97",
+  "desktopVersion": "1.1.97",
   "private": true,
-  "description": "OmiComic Windows 与 Android 本地漫画阅读器",
+  "description": "OmiComic Windows、macOS 与 Android 本地漫画阅读器",
   "main": "dist-electron/main.js",
   "scripts": {
     "build:android:renderer": "vite build --mode android --outDir dist-android",

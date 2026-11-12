@@ -30,5 +30,14 @@ describe('platform-specific update reminders',()=>{
     render(<UpdateCheck/>); fireEvent.click(screen.getByRole('button',{name:/检查更新/}));
     await waitFor(()=>expect(screen.getByRole('status').textContent).toContain('请检查网络后重试'));
     expect(screen.getByRole('button',{name:/检查更新/})).not.toHaveProperty('disabled',true);
+    expect(screen.getByRole('button',{name:/检查更新/}).contains(screen.getByRole('status'))).toBe(true);
+  });
+  it('keeps the available-version result inside the action that opens its release page',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify([release('v1.1.99','OmiComic-Setup-1.1.99-x64.exe')]))));
+    render(<UpdateCheck/>); fireEvent.click(screen.getByRole('button',{name:/检查更新/}));
+    const link = await screen.findByRole('link',{name:/发现新版本 1.1.99/});
+    expect(link.getAttribute('href')).toBe(`${base}/releases/tag/v1.1.99`);
+    expect(link.contains(screen.getByRole('status'))).toBe(true);
+    expect(link.querySelector('button')).toBeNull();
   });
 });

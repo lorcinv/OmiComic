@@ -2,12 +2,13 @@
 
 # Release history
 
-Downloads and changelogs for previous versions.
+Current: **1.1.97** for Windows, macOS (Apple Silicon / Intel) and Android, with an iOS simulator test build. [Release notes](v1.1.97.md).
 
-[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96)
+[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97)
 
 | Version | Platform | Release |
 | --- | --- | --- |
+| v1.1.97 | Windows x64 / macOS arm64, x64 / Android / iOS Simulator | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) |
 | v1.1.96 | Windows x64 / Android 1.1.96 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96) |
 | v1.1.95 | Windows x64 / Android 1.1.95 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95) |
 | v1.1.94 | Windows x64 / Android 1.1.94 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94) |

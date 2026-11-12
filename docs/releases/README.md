@@ -2,14 +2,15 @@
 
 # 版本记录
 
-Windows 与 Android 最新版统一为 **1.1.96**，见 [本次更新](v1.1.96.md)。
+Windows、macOS 与 Android 最新版为 **1.1.97**，另提供 iOS 模拟器测试包。见 [本次更新](v1.1.97.md)。
 
 旧版下载与更新记录。
 
-[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96)
+[查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97)
 
 | 版本 | 平台 | 发行页 |
 | --- | --- | --- |
+| v1.1.97 | Windows x64 / macOS arm64, x64 / Android / iOS Simulator | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) |
 | v1.1.96 | Windows x64 / Android 1.1.96 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96) |
 | v1.1.95 | Windows x64 / Android 1.1.95 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95) |
 | v1.1.94 | Windows x64 / Android 1.1.94 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.94) |

@@ -1,31 +1,40 @@
-# Apple 测试版
+# macOS 与 iOS 模拟器
 
-本轮适配以 1.1.96 和七档卡片尺寸为基础。GitHub 的 `Apple test builds` 工作流生成 macOS 与 iOS 模拟器测试包，不创建正式 Release。
+[下载 OmiComic 1.1.97](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) · [中文操作说明](USER_GUIDE.zh-CN.md) · [English guide](USER_GUIDE.en.md) · [日本語ガイド](USER_GUIDE.ja.md)
 
-## macOS
+## macOS 安装
 
-- Apple Silicon 与 Intel 分别提供 DMG 和 ZIP。
-- 沿用桌面七档卡片尺寸，窗口变宽时增加列数。
-- 原生窗口按钮、应用菜单和 Command 快捷键；退出窗口后可从 Dock 重新打开。
-- 压缩包使用随包提供的对应架构 7-Zip，无需额外安装。
-- 当前是未公证的测试包；正式分发还需 Apple 开发者签名与公证。
+Apple Silicon（M 系列）选择文件名带 `mac-arm64` 的 DMG 或 ZIP；Intel Mac 选择 `mac-x64`。打开 DMG 后将 OmiComic 拖入“应用程序”；ZIP 解压后同样移动 `OmiComic.app`。两种格式的应用相同。
 
-本机编译：`npm ci`，然后 `npm run dist:mac`。构建需要 macOS。
+当前包没有 Apple Developer ID 签名与公证。确认下载来自本仓库的 Release 后，若提示无法验证开发者或未公证，可先尝试打开，再进入“系统设置 → 隐私与安全性 → 仍要打开”。具体提示和操作见 [Apple 官方说明](https://support.apple.com/en-us/102445)。
 
-## iOS 模拟器
+English: choose `arm64` for Apple Silicon or `x64` for Intel. Drag the app from the DMG into Applications, or extract the ZIP. This release is not Developer ID signed or notarized. For an unidentified-developer or notarization alert after checking the official download source, see [Apple’s first-launch instructions](https://support.apple.com/en-us/102445).
 
-下载并解压 `OmiComic-1.1.96-ios-simulator.zip`，在 Apple Silicon Mac 的 Xcode 模拟器中安装 `OmiComic.app`。可直接拖入模拟器，或运行 `xcrun simctl install booted /path/to/OmiComic.app`。此包由 GitHub 的 arm64 构建环境生成；Windows 上可查看随包保存的 iPhone/iPad 阅读截图。
+日本語：Apple Silicon は `arm64`、Intel Mac は `x64` を選び、DMG 内または ZIP を展開したアプリを「アプリケーション」に移動します。現在の配布版は Developer ID の署名・公証を行っていません。公式配布元を確認したうえで、開発元や公証に関する初回起動の警告は [Apple の案内](https://support.apple.com/ja-jp/102445)を参照してください。
 
-- 使用系统“文件”选择器添加目录，授权会随应用数据保存。
+## Mac 操作
+
+- 本地读取图片目录、ZIP/CBZ、RAR/CBR、7z/CB7、PDF、EPUB 和无 DRM 的 MOBI；对应架构的解压工具随包提供。
+- 七档卡片尺寸以默认窗口为基准，窗口变化时适度调整，宽窗口增加列数。
+- ⌘＋K 聚焦搜索，⌘＋滚轮调整卡片或阅读缩放，选择模式下 ⌘＋A 全选。
+- 使用原生窗口按钮；关闭窗口后从 Dock 重新打开，⌘＋Q 退出应用，Control＋⌘＋F 切换系统全屏。
+- 设置 → 关于 OmiComic → 操作说明，可切换 Windows、macOS、Android 分类；内容支持中文、English、日本語，离线可查。
+
+本机编译需要 macOS：运行 `npm ci`，再运行 `npm run dist:mac`。Windows 可通过 GitHub 的 **Apple test builds** 工作流构建，两种架构分别执行打包与真实应用测试。
+
+## iOS 模拟器测试版
+
+下载并解压 `OmiComic-1.1.97-ios-simulator.zip`，在 Apple Silicon Mac 的 Xcode 模拟器中安装 `OmiComic.app`。可拖入模拟器，或运行 `xcrun simctl install booted /path/to/OmiComic.app`。这不是 IPA，不能直接安装到实体 iPhone 或 iPad，也不是 TestFlight 版本。
+
+- 使用系统“文件”选择器添加目录并保存授权。
 - 共用移动端书架、标签、书签、进度及备份界面。
-- 本地读取图片、ZIP/CBZ、RAR/CBR、7z/CB7、PDF、EPUB；MOBI 复用现有解析器。
-- 适配 iPhone/iPad、安全区域、横竖屏和触摸缩放；音量键翻页保留在 Android。
-- 当前只生成模拟器 `.app`，不能安装到实体 iPhone。真机签名与 TestFlight 不在本轮范围内。
+- 本地读取图片、ZIP/CBZ、RAR/CBR、7z/CB7、PDF、EPUB；MOBI 使用现有解析器。
+- 适配 iPhone/iPad、安全区域、横竖屏和触摸缩放；音量键翻页仍是 Android 功能。
 
-本机编译：安装 Xcode 和 XcodeGen，运行 `npm ci`、`npm run build:ios:renderer`、`node scripts/prepare-ios.cjs`、`xcodegen generate --spec ios/project.yml`，打开 `ios/OmiComic.xcodeproj` 选择模拟器。
+本机编译：安装 Xcode 和 XcodeGen，运行 `npm ci`、`npm run build:ios:renderer`、`node scripts/prepare-ios.cjs`、`xcodegen generate --spec ios/project.yml`，打开 `ios/OmiComic.xcodeproj` 选择模拟器。GitHub 工作流运行 iPhone 与 iPad 测试，并保存阅读截图。
 
 ## 更新提醒
 
-关于页提供“检查更新”。启动 15 秒后静默检查，同一平台和版本每天最多一次；网络失败不打断阅读，手动检查会显示重试提示。
+关于页底部、操作说明后提供“检查更新”。检查结果和失败重试说明都在按钮内；发现新版后，点击该区域打开官方 Release 页面，自行下载。启动 15 秒后也会检查，同一平台和版本每天最多一次，网络失败不打断阅读。
 
-查询 GitHub 正式 Releases，并按安装包类型和 Mac 架构匹配。仅展示版本、更新摘要和官方 Release 页面；不会下载或安装。iOS 模拟器构建不算可在 iPhone 安装的更新。
+只查询正式 GitHub Releases，按平台及 Mac 架构匹配安装包，不自动下载或安装。iOS 模拟器 ZIP 不作为实体 iPhone 的更新包。

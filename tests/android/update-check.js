@@ -20,7 +20,7 @@ try{
   await tap(button('检查更新'));await wait(()=>status().includes('暂时无法检查更新'),'manual failure');
   window.fetch=(url,options)=>String(url).startsWith(endpoint)?Promise.resolve(new Response(JSON.stringify(payload),{status:200,headers:{'Content-Type':'application/json'}})):originalFetch(url,options);
   await tap(button('检查更新'));await wait(()=>status().includes('发现新版本 9.9.9'),'retry and available version');
-  const link=document.querySelector('.omi-update-result a');
+  const link=document.querySelector('.omi-update-check a');
   assert(link.href===releaseURL&&!link.target,'Release link must use native main-frame handoff');
   await tap(link);await pause(500);
   return {officialNetworkStatus:response.status,manualFailure:true,retry:true,releaseURL,version:(await window.omicomic.getAppInfo()).version};

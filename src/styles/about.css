@@ -7,8 +7,8 @@
 .omi-about__intro p { margin: 0 0 16px; }
 .omi-about__action { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; margin-top: 26px; padding: 16px 18px; border-radius: 12px; background: var(--控件背景); color: var(--控件文字); text-decoration: none; overflow-wrap: anywhere; }
 .omi-about__action strong { font-size: calc(13px * var(--desktop-font-scale, 1)); }
-.omi-about__action span:first-of-type { grid-column: 1; font-size: calc(12px * var(--desktop-font-scale, 1)); }
-.omi-about__action span:last-child { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: 21px; }
+.omi-about__action > span:first-of-type { grid-column: 1; font-size: calc(12px * var(--desktop-font-scale, 1)); }
+.omi-about__action > span:last-child { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: 21px; }
 .omi-about__action:hover { background: var(--控件悬停); }
 .omi-about__action:focus-visible { outline: 2px solid var(--强调色); outline-offset: 3px; }
 .omi-about__guide { box-sizing: border-box; width: 100%; margin-top: 12px; border: 0; text-align: left; font: inherit; cursor: pointer; }

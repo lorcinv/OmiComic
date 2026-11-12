@@ -37,7 +37,6 @@ export default function AboutOmiComic({ active = true }: { active?: boolean }) {
       <span>github.com/lorcinv/OmiComic</span>
       <span aria-hidden="true">↗</span>
     </a>
-    <UpdateCheck/>
     <button type="button" ref={guideButton} className="omi-about__action omi-about__guide" onClick={() => {
       scrollContainer.current = guideButton.current?.closest('.settings-window-content, .mobile-settings-body') ?? null;
       scrollPosition.current = scrollContainer.current?.scrollTop ?? 0;
@@ -47,5 +46,6 @@ export default function AboutOmiComic({ active = true }: { active?: boolean }) {
       <span>{t('按钮功能、快捷键与手机手势')}</span>
       <span aria-hidden="true">›</span>
     </button>
+    <UpdateCheck/>
   </div>;
 }

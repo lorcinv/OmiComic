@@ -14,10 +14,12 @@ for (let language = 0; language < 3; language++) {
   for (const section of data.sections) {
     output.push(`<a id="guide-${section.id}"></a>`, '', `## ${text(section.title)}`, '');
     for (const topic of section.topics) {
-      const platform = topic.platform ? ` · ${topic.platform === 'pc' ? 'Windows' : 'Android'}` : '';
+      const platforms = { pc: 'Windows', mac: 'macOS', android: 'Android', desktop: 'Windows / macOS' };
+      const platform = topic.platform ? ` · ${platforms[topic.platform]}` : '';
       output.push(`<details>`, `<summary>${text(topic.title)}${platform}</summary>`, '');
       if (topic.body) output.push(text(topic.body), '');
       if (topic.pc) output.push(`**Windows**${separator}${text(topic.pc)}`, '');
+      if (topic.mac) output.push(`**macOS**${separator}${text(topic.mac)}`, '');
       if (topic.android) output.push(`**Android**${separator}${text(topic.android)}`, '');
       if (topic.rows) {
         for (const row of topic.rows) output.push(`- **${text(row.label)}**${separator}${text(row.text)}`);
@@ -26,7 +28,7 @@ for (let language = 0; language < 3; language++) {
       output.push('</details>', '');
     }
   }
-  const file = ['README_使用方法.md', 'docs/USER_GUIDE.en.md', 'docs/USER_GUIDE.ja.md'][language];
+  const file = ['docs/USER_GUIDE.zh-CN.md', 'docs/USER_GUIDE.en.md', 'docs/USER_GUIDE.ja.md'][language];
   fs.writeFileSync(path.join(root, file), output.join('\n'));
   console.log(file);
 }

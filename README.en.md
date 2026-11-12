@@ -6,7 +6,7 @@
 
 **Organize your comics. Pick up where you left off.**
 
-OmiComic is a local comic reader for Windows and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and DRM-free MOBI, with bookshelves, categories, tags and favorites to organize your local collection.
+OmiComic is a local comic reader for Windows, macOS and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and DRM-free MOBI, with bookshelves, categories, tags and favorites to organize your local collection.
 
 ## [Support the author](docs/support.md)
 
@@ -22,12 +22,15 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.96 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Portable-1.1.96-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Setup-1.1.96-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.96 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-1.1.96-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.97 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Portable-1.1.97-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Setup-1.1.97-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.97 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-android.apk) |
+| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.zip) |
+| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.zip) |
+| iOS · Simulator (arm64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-ios-simulator.zip) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.96 (Windows / Android): browsing positions are remembered within the current session and reset on restart. Selecting the active navigation entry again returns to the top of its root level. [Release notes](docs/releases/v1.1.96.md) · [Version history](docs/releases/README.en.md).
+1.1.97 adds macOS support for Apple Silicon and Intel, seven desktop card sizes, and update notifications. Check for updates appears below the user guide, with results inside the action. An iOS simulator test build is also available. [Release notes](docs/releases/v1.1.97.md) · [Version history](docs/releases/README.en.md).
 
 ## Features
 
@@ -91,6 +94,12 @@ Browse and organize a full comic library with controls designed for a mouse and 
 </td>
 </tr>
 </table>
+
+## macOS
+
+Available for Apple Silicon (M-series, arm64) and Intel (x64). Open the DMG and drag OmiComic into Applications, or unzip the ZIP and move the app there. It shares the Windows library, reading tools and local formats, with native window controls, Command shortcuts and Dock reopening after closing the window.
+
+This release has no Apple Developer ID signature or notarization. See the [Mac installation guide](docs/APPLE.md) and the macOS tab in the in-app guide for first launch, ⌘+K search, ⌘+wheel zoom and window controls. iOS is currently a simulator test build, not an installable app for physical iPhones or iPads.
 
 ## Android
 

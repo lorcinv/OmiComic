@@ -5,7 +5,7 @@ import data from '../content/user-guide.json';
 import '../styles/user-guide.css';
 
 type Localized = readonly string[];
-type Topic = { id: string; title: Localized; platform?: string; body?: Localized; pc?: Localized; android?: Localized; rows?: { label: Localized; text: Localized }[] };
+type Topic = { id: string; title: Localized; platform?: string; body?: Localized; pc?: Localized; mac?: Localized; android?: Localized; rows?: { label: Localized; text: Localized }[] };
 type Section = { id: string; title: Localized; topics: Topic[] };
 const sections: Section[] = data.sections;
 
@@ -14,7 +14,7 @@ export default function UserGuide({ onBack }: { onBack: () => void }) {
   const language = useUiLanguage(mobile);
   const column = language === 'en' ? 1 : language === 'ja' ? 2 : 0;
   const text = (value: Localized) => value[column] ?? value[0];
-  const [platform, setPlatform] = useState<'pc' | 'android'>(mobile ? 'android' : 'pc');
+  const [platform, setPlatform] = useState<'pc' | 'mac' | 'android'>(document.documentElement.dataset.platform === 'darwin' ? 'mac' : mobile ? 'android' : 'pc');
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const root = useRef<HTMLElement>(null);
@@ -25,7 +25,7 @@ export default function UserGuide({ onBack }: { onBack: () => void }) {
     const haystack = normalize(body.filter(Boolean).map(value => text(value!)).join(' '));
     return words.every(word => haystack.includes(word));
   };
-  const visible = sections.map(section => ({ ...section, topics: section.topics.filter(topic => (!topic.platform || topic.platform === platform) && matches(section, topic)) })).filter(section => section.topics.length);
+  const visible = sections.map(section => ({ ...section, topics: section.topics.filter(topic => (!topic.platform || topic.platform === platform || topic.platform === 'desktop' && platform !== 'android') && matches(section, topic)) })).filter(section => section.topics.length);
 
   useLayoutEffect(() => {
     const scroll = root.current?.closest('.settings-window-content, .mobile-settings-body');
@@ -55,7 +55,7 @@ export default function UserGuide({ onBack }: { onBack: () => void }) {
     <header className="omi-guide__heading"><h3>{text(data.ui.title)}</h3></header>
     <div className="omi-guide__tools">
       <div className="omi-guide__platform" role="group" aria-label={text(data.ui.platform)}>
-        {(['pc', 'android'] as const).map(value => <button type="button" key={value} aria-pressed={platform === value} onClick={() => { setPlatform(value); setExpanded(new Set()); }}>{value === 'pc' ? 'Windows' : 'Android'}</button>)}
+        {(['pc', 'mac', 'android'] as const).map(value => <button type="button" key={value} aria-pressed={platform === value} onClick={() => { setPlatform(value); setExpanded(new Set()); }}>{value === 'pc' ? 'Windows' : value === 'mac' ? 'macOS' : 'Android'}</button>)}
       </div>
       <div className="omi-guide__search">
         <input type="search" aria-label={text(data.ui.search)} placeholder={text(data.ui.placeholder)} value={query} onChange={event => setQuery(event.target.value)} />

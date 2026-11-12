@@ -6,7 +6,7 @@
 
 **整理你的漫画，接着上次阅读。**
 
-OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、Android 双端漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和无 DRM 的 MOBI 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
+OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、macOS 与 Android漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和无 DRM 的 MOBI 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
 
 ## [支持作者](docs/support.md)
 
@@ -22,12 +22,15 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.96 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Portable-1.1.96-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-Setup-1.1.96-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.96 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.96/OmiComic-1.1.96-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.97 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Portable-1.1.97-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Setup-1.1.97-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.97 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-android.apk) |
+| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.zip) |
+| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.zip) |
+| iOS · Simulator (arm64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-ios-simulator.zip) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.96（Windows / Android）：浏览位置仅在本次使用期间保留，重启回到顶部；恢复再次点击当前导航栏返回顶层顶部。[本版更新](docs/releases/v1.1.96.md) · [更新记录](docs/releases/README.md)。
+1.1.97：新增 macOS Apple Silicon / Intel 支持，保留桌面七档卡片尺寸，加入更新提醒；“检查更新”位于操作说明后，结果显示在按钮内。另提供 iOS 模拟器测试包。[本版更新](docs/releases/v1.1.97.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 
@@ -92,6 +95,12 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 </tr>
 </table>
 
+## macOS
+
+支持 Apple Silicon（M 系列，arm64）与 Intel（x64）。打开 DMG，将 OmiComic 拖入“应用程序”，或解压 ZIP 后移动应用。提供与 Windows 相同的本地格式、书架、标签和阅读工具，支持原生窗口按钮、Command 快捷键及关闭窗口后从 Dock 重新打开。
+
+当前发行包没有 Apple 开发者签名与公证。首次打开的处理方式见 [Mac 安装说明](docs/APPLE.md)；内置操作说明可切换到 macOS，查看安装、⌘＋K 搜索、⌘＋滚轮缩放和窗口操作。iOS 目前只提供模拟器测试包，不能直接安装到实体 iPhone 或 iPad。
+
 ## Android 版
 
 以触摸操作为中心，从目录浏览到全屏阅读，一只手也能轻松切换。
@@ -149,7 +158,7 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 
 ## 更多
 
-[使用方法](README_使用方法.md) · [版本更新](CHANGELOG.md) · [反馈问题](https://github.com/lorcinv/OmiComic/issues) · [历史版本](docs/releases/README.md)
+[使用方法](docs/USER_GUIDE.zh-CN.md) · [版本更新](CHANGELOG.md) · [反馈问题](https://github.com/lorcinv/OmiComic/issues) · [历史版本](docs/releases/README.md)
 
 ## 开源许可证
 
