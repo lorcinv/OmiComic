@@ -1,5 +1,8 @@
 # Reader 25% zoom and older Android WebView fixes
 
+> Follow-up (2026-11-13): integrated into the main checkout and the 1.1.98 local delivery branch. See [delivery and verification record](status/2026-11-13-1.1.98-local-delivery.md). The status below describes the original Dot handoff before packaging.
+
+
 Date: 2026-11-13
 Base: d596013 (published 1.1.97 source)
 Status: local source fix, not published; affected Huawei Android 9 hardware not available for verification.

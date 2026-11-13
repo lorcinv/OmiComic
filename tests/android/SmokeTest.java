@@ -667,6 +667,7 @@ public final class SmokeTest extends Instrumentation {
           roots.put(new JSONObject().put("path",root).put("name","Tablet1179").put("addedAt",0).put("lastOpenedAt",0));
           lib.put("roots",roots).put("lastActiveRootPath",savedRoot).put("lastCurrentPath",savedRoot);
         data.getJSONObject("settings").put("showHomePage",true).put("mobileReaderAutoHide",false).put("mobileReaderPreviews",true).put("readerPageMode","single").put("readerDefaultPanorama",false).put("mobileCardLayout","grid").put("doublePageFirstSingle",false);
+        if(args.getString("fixture","").contains("delivery1198"))data.getJSONObject("settings").put("startupPage","home");
         if(args.getString("fixture","").contains("navmemory")){
           data.getJSONObject("settings").put("startupPage","home").remove("mobileViewDisplays");
           eval("localStorage.removeItem('omi-view-memory-v1')");
@@ -741,6 +742,7 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("tagpolish1177"))scriptAsset="android-tagpolish1177";
       if(fixture.startsWith("bottom1178"))scriptAsset="android-bottom-sheet1178";
       if(fixture.startsWith("tablet1179"))scriptAsset="android-tablet1179";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("delivery1198"))scriptAsset="delivery1198";
       if(fixture.startsWith("tablet1179")&&fixture.contains("perf1182"))scriptAsset="document-perf1182";
       if(fixture.startsWith("tablet1179")&&fixture.contains("drag1183"))scriptAsset="pdf-drag1183";
       if(fixture.startsWith("tablet1179")&&fixture.contains("bugs1183"))scriptAsset="reader-bugs1183";

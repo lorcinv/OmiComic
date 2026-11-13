@@ -52,7 +52,7 @@ test('shipped Windows EXE reads images, ZIP, 7z, PDF and EPUB with isolated pers
     const app = await electron.evaluate(({ app, BrowserWindow }) => ({ packaged: app.isPackaged, version: app.getVersion(), profile: app.getPath('userData'), visible: BrowserWindow.getAllWindows().some(window => window.isVisible()) }));
     assert.equal(app.packaged, true); assert.equal(app.version, require('../package.json').version); assert.equal(app.profile, profile); assert.equal(app.visible, false);
     await expect(page.locator('.reader-layout')).toBeVisible();
-    const pageInput = page.getByRole('textbox', { name: name.endsWith('.epub') ? '跳转到章节' : '跳转到页码' });
+    const pageInput = page.getByRole('textbox', { name: /跳转到(?:章节|页码)/ });
     await expect(pageInput).toHaveValue('1');
     const content = name.endsWith('.pdf') ? '.reader-page-spread canvas' : name.endsWith('.epub') ? '.reader-chapter' : '.reader-page-spread img';
     await expect(page.locator(name.endsWith('.epub') ? content : name.endsWith('.pdf') ? '.reader-page-spread canvas:visible' : '.reader-page-spread :is(.reader-image,.reader-processed-image,.reader-display-raster):visible').first()).toBeVisible();

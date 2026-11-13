@@ -1,5 +1,7 @@
 # 开发变更归档
 
+- [2026-11-13 · 1.1.98 本地交付](2026-11-13-1.1.98-local-delivery.md)：25% 缩放、旧安卓兼容、构建与安装包位置。
+
 当前版本记录见 [CHANGELOG](../../CHANGELOG.md)，开发现状见 [PROJECT_STATUS](../../PROJECT_STATUS.md)。以下文件保留早期实现背景，其中的旧范围限制不代表当前功能。
 
 - [CHANGELOG_07](changelog/CHANGELOG_07.md)：持久化、阅读进度、最近打开、进度条、资源库分页修复。

@@ -2,6 +2,8 @@
 
 # Release history
 
+Local Windows / Android build **1.1.98** is available in `release/OmiComic-1.1.98/`; see [local delivery notes](v1.1.98.md). It has not been published. macOS remains at 1.1.97.
+
 Current: **1.1.97** for Windows, macOS (Apple Silicon / Intel) and Android. [Release notes](v1.1.97.md).
 
 [Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97)
