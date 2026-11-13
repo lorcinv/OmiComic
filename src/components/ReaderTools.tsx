@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { MIN_READER_ZOOM, MAX_READER_ZOOM } from '../hooks/useReaderZoom';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { consumeDismissGesture } from '../hooks/consumeDismissGesture';
@@ -67,8 +68,8 @@ export default function ReaderTools(props: Props) {
     </button>}
     {panel && createPortal(<div className={`reader-tool-panel ${props.mobile?'is-mobile-tool-panel':''} ${panel==='zoom'?'reader-zoom-panel':''}`} ref={popup} role="dialog" aria-modal="false" aria-label={t(panel==='zoom'?'缩放':'画面调整')} style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 12}px)` }} onKeyDown={e => { if (e.key !== 'Escape') e.stopPropagation(); }}>
       {panel==='zoom'?<>
-        <label className="reader-tool-slider"><span>{t('缩放比例')}<output>{Math.round((props.zoom??1)*100)}%</output></span><input aria-label={t('缩放比例')} aria-valuetext={`${Math.round((props.zoom??1)*100)}%`} type="range" min="-100" max="100" step="1" value={Math.round(Math.log(props.zoom??1)/Math.log((props.zoom??1)<1?2:6)*100)} onChange={event=>{const value=Number(event.target.value);props.onZoom?.(Math.pow(value<0?2:6,value/100));}}/></label>
-        <div className="reader-zoom-ticks"><span>50%</span><span>100%</span><span>600%</span></div>
+        <label className="reader-tool-slider"><span>{t('缩放比例')}<output>{Math.round((props.zoom??1)*100)}%</output></span><input aria-label={t('缩放比例')} aria-valuetext={`${Math.round((props.zoom??1)*100)}%`} type="range" min="-100" max="100" step="1" value={Math.round(Math.log(props.zoom??1)/Math.log((props.zoom??1)<1?1/MIN_READER_ZOOM:MAX_READER_ZOOM)*100)} onChange={event=>{const value=Number(event.target.value);props.onZoom?.(Math.pow(value<0?1/MIN_READER_ZOOM:MAX_READER_ZOOM,value/100));}}/></label>
+        <div className="reader-zoom-ticks"><span>{MIN_READER_ZOOM*100}%</span><span>100%</span><span>{MAX_READER_ZOOM*100}%</span></div>
         <button className="reader-tool-reset" onClick={()=>props.onResetZoom?.()}>{t('重置大小')}</button>
       </>:<>
       {props.mobile && <div className="reader-tool-heading"><strong>{t("画面调整")}</strong><button aria-label={t("关闭面板")} onClick={() => setPanel(null)}><MobileIcon name="close"/></button></div>}

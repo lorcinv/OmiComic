@@ -261,7 +261,11 @@ export class DocumentSource {
     const saved = this.previewCache.get(index);
     if (saved) { this.previewCache.delete(index); this.previewCache.set(index, saved); return saved; }
     const body = this.bodySurfaces.get(index)?.deref() ?? this.bodyImages.get(index)?.deref();
-    if (!body?.width || !body.height) return;
+    return body ? this.imagePreview(index, body) : undefined;
+  }
+
+  private imagePreview(index: number|string, body: HTMLCanvasElement|HTMLImageElement): string|undefined {
+    if (!body.width || !body.height) return;
     const canvas = document.createElement('canvas'), scale = Math.min(1, 360 / Math.max(body.width, body.height));
     canvas.width = Math.max(1, Math.round(body.width * scale)); canvas.height = Math.max(1, Math.round(body.height * scale));
     try {
@@ -310,8 +314,10 @@ export class DocumentSource {
       }
       const page = await this.renderPage(index, signal, true, planned);
       if (!page.canvas && page.decodedImage) {
-        this.bodyImages.set(key,new WeakRef(page.decodedImage));
-        const saved=this.readyPreview(key);if(saved)return saved;
+        if(typeof WeakRef==='function')this.bodyImages.set(key,new WeakRef(page.decodedImage));
+        // WeakRef is an optional cache: older WebViews can still encode the
+        // freshly decoded native thumbnail without retaining a full-size image.
+        const saved=this.imagePreview(key,page.decodedImage);if(saved)return saved;
       }
       if (!page.canvas && page.html) {
         const { chapterPreview } = await import('./chapterPreview');
@@ -345,7 +351,7 @@ export class DocumentSource {
           return await this.nativePage(result.data.url,signal,workKey,prefetch);
         }
         const cacheKey=index,saved=this.bodyImages.get(cacheKey)?.deref(),image=saved?.src===result.data.url?saved:await this.image(result.data.url);signal.throwIfAborted();
-        this.bodyImages.set(cacheKey,new WeakRef(image));while(this.bodyImages.size>32)this.bodyImages.delete(this.bodyImages.keys().next().value!);
+        if(typeof WeakRef==='function')this.bodyImages.set(cacheKey,new WeakRef(image));while(this.bodyImages.size>32)this.bodyImages.delete(this.bodyImages.keys().next().value!);
         return{url:result.data.url,width:result.data.width||image.naturalWidth,height:result.data.height||image.naturalHeight,decodedImage:image,decodedBytes:image.naturalWidth*image.naturalHeight*4};
       }catch(error){signal.throwIfAborted();this.assertOpen();if(readerRequestCancelled(error))throw error;this.nativePdf=false;await this.fallbackPdf();}
     }
@@ -367,7 +373,7 @@ export class DocumentSource {
           const cacheKey=`${planned.chapter}:${planned.slice}`,saved=this.bodyImages.get(cacheKey)?.deref();
           const image=saved?.src===page.image?saved:await this.image(page.image);
           signal.throwIfAborted();
-          this.bodyImages.delete(cacheKey);this.bodyImages.set(cacheKey,new WeakRef(image));
+          this.bodyImages.delete(cacheKey);if(typeof WeakRef==='function')this.bodyImages.set(cacheKey,new WeakRef(image));
           while(this.bodyImages.size>32)this.bodyImages.delete(this.bodyImages.keys().next().value!);
           return {url:page.image,width:image.naturalWidth,height:image.naturalHeight,decodedImage:image,decodedBytes:image.naturalWidth*image.naturalHeight*4};
         }
@@ -417,7 +423,7 @@ export class DocumentSource {
       // base64 copy, or second image decode on the scroll thread.
       retained = true;
       if (!thumbnail) {
-        this.bodySurfaces.delete(index); this.bodySurfaces.set(index, new WeakRef(canvas));
+        this.bodySurfaces.delete(index); if(typeof WeakRef==='function')this.bodySurfaces.set(index, new WeakRef(canvas));
         while (this.bodySurfaces.size > 32) this.bodySurfaces.delete(this.bodySurfaces.keys().next().value!);
         const listeners = this.previewListeners.get(index);
         if (listeners?.size) {

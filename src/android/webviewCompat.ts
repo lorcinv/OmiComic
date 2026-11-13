@@ -2,6 +2,13 @@ import './pressFeedback';
 // System WebView can be much older than Android. Keep native implementations
 // when present, and install the same small shims before document code in workers.
 import './webviewCapabilities';
+import 'core-js/actual/array/at';
+import 'core-js/actual/object/from-entries';
+import 'core-js/actual/promise/all-settled';
+import 'core-js/actual/string/replace-all';
+import 'core-js/actual/string/match-all';
+import 'core-js/actual/queue-microtask';
+import './webviewCrypto';
 import 'core-js/actual/promise/with-resolvers';
 import 'core-js/actual/promise/try';
 import 'core-js/actual/structured-clone';

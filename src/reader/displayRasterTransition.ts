@@ -1,3 +1,4 @@
+import { animationFinished } from './animationFinished';
 import { alignDisplayRaster } from './displayGeometry';
 
 /** Retain the displayed pixels until the complete next quality level is painted.
@@ -12,7 +13,7 @@ export function displayRasterTransition(element: HTMLElement, source: HTMLCanvas
   const overlay = document.createElement('canvas');
   overlay.width = Math.max(1, Math.round(width * factor)); overlay.height = Math.max(1, Math.round(height * factor));
   overlay.className = 'reader-quality-transition'; overlay.setAttribute('aria-hidden', 'true');
-  overlay.style.cssText = 'position:absolute;inset:0;pointer-events:none;visibility:visible;z-index:1;';
+  overlay.style.cssText = 'position:absolute;top:0;right:0;bottom:0;left:0;pointer-events:none;visibility:visible;z-index:1;';
   try { const context = overlay.getContext('2d'); if (!context) return () => {}; context.drawImage(source, 0, 0, overlay.width, overlay.height); }
   catch { return () => {}; }
   element.appendChild(overlay); alignDisplayRaster(overlay, element);
@@ -20,6 +21,6 @@ export function displayRasterTransition(element: HTMLElement, source: HTMLCanvas
   const animation = overlay.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-in-out', fill: 'forwards' });
   let disposed = false;
   const dispose = () => { if (disposed) return; disposed = true; animation.cancel(); overlay.remove(); overlay.width = overlay.height = 0; onBytes(0); };
-  animation.finished.then(dispose, dispose);
+  animationFinished(animation).then(dispose, dispose);
   return dispose;
 }

@@ -19,7 +19,9 @@ function AndroidChapter({html,title,width,height,style,onPrepared}:Props){
     // Android chapter HTML is sanitized before this point. A shadow tree keeps
     // its styles contained and paints text synchronously during a page handoff.
     const body=chapter.body;
-    root.replaceChildren(...[...chapter.head.querySelectorAll('style')].map(style=>style.cloneNode(true)),body);
+    while(root.firstChild)root.removeChild(root.firstChild);
+    for(const style of chapter.head.querySelectorAll('style'))root.appendChild(style.cloneNode(true));
+    root.appendChild(body);
     if(document.documentElement.dataset.colorTheme==='night'){
       const palette=getComputedStyle(document.documentElement);
       body.style.backgroundColor=palette.getPropertyValue('--面板色');body.style.color=palette.getPropertyValue('--主文字');

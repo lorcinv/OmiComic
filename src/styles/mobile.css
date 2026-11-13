@@ -790,3 +790,14 @@ html[data-platform="android"] :is(.mobile-resource-card,.omi-home__book)[data-om
 html[data-platform="android"] .mobile-resource-card { -webkit-tap-highlight-color:transparent; }
 
 html[data-platform="android"] .reader-tool-panel.is-mobile-tool-panel { bottom:calc(12px + var(--android-reader-safe-bottom,0px)); max-height:calc(100dvh - 24px - var(--android-reader-safe-top,0px) - var(--android-reader-safe-bottom,0px)) !important; }
+
+/* Portalled menus must remain clickable without :has() (older Android WebViews). */
+[data-platform="android"] .glass-select-options.is-portal { z-index:1300; }
+@supports not (aspect-ratio:2/3) {
+  [data-platform="android"] .omi-home.is-mobile-home .omi-home__cover { height:0; min-height:0; max-height:none; padding-top:150%; }
+  [data-platform="android"] .mobile-bookshelf-shell { height:0; padding-top:133.333%; }
+  @media (min-width:600px) and (min-height:500px) and (orientation:landscape) {
+    [data-platform="android"] .omi-home.is-mobile-home .omi-home__book { grid-template-columns:calc((100vh - 244px)/3) minmax(0,1fr); grid-template-rows:max-content minmax(0,1fr) max-content; }
+    [data-platform="android"] .omi-home.is-mobile-home .omi-home__cover { height:calc((100vh - 244px)/2); max-height:100%; padding-top:0; }
+  }
+}

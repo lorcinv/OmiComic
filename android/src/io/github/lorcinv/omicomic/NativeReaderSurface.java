@@ -569,7 +569,7 @@ final class NativeReaderSurface extends View {
   private void applyFrame(JSONObject args){
     try{
       float factor=getWidth()/(float)args.getDouble("viewportWidth");
-      Frame next=new Frame();next.clip=rect(args.getJSONArray("clip"),factor);next.panorama=args.optBoolean("panorama");next.restoring=args.optBoolean("restoring");next.scrubbing=next.panorama&&args.optBoolean("scrubbing");next.zoom=(float)Math.max(.5,Math.min(6,args.optDouble("zoom",1)));
+      Frame next=new Frame();next.clip=rect(args.getJSONArray("clip"),factor);next.panorama=args.optBoolean("panorama");next.restoring=args.optBoolean("restoring");next.scrubbing=next.panorama&&args.optBoolean("scrubbing");next.zoom=(float)Math.max(.25,Math.min(6,args.optDouble("zoom",1)));
       JSONArray visible=args.optJSONArray("visible");if(visible!=null)synchronized(cacheLock){Set<String> wanted=new HashSet<>();for(int i=0;i<visible.length()&&i<48;i++)wanted.add(visible.optString(i));if(!wanted.equals(visibleKeys)){visibleKeys.clear();visibleKeys.addAll(wanted);refreshBodyPriorities();foreground.reprioritize();prefetch.reprioritize();}}
       JSONArray expected=args.optJSONArray("expected");if(expected!=null)for(int i=0;i<expected.length()&&i<48;i++)next.expected.add(rect(expected.getJSONArray(i),factor));
       List<Slot> nextPreviews=new ArrayList<>();JSONArray previewRects=args.optJSONArray("previews");

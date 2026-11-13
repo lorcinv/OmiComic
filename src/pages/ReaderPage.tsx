@@ -1,3 +1,4 @@
+import { animationFinished } from '../reader/animationFinished';
 import { useReadableNeighbours } from '../hooks/useReadableNeighbours';
 import ReaderBookSwitch from '../components/ReaderBookSwitch';
 import { resourcePosition } from "../reader/originalDirectoryContext";
@@ -888,7 +889,7 @@ function ReaderPage({
     const 中心矩形 = 中心页.getBoundingClientRect();
     入场.animations = 入场.pages.filter(页面 => !页面图片状态表[Number(页面.dataset.readerPageIndex)]?.error)
       .map(页面 => 创建全景聚拢动画(页面, 中心矩形, 垂直阅读, 距离, false, 0));
-    void Promise.allSettled(入场.animations.map(动画 => 动画.finished)).then(() => {
+    void Promise.allSettled(入场.animations.map(动画 => animationFinished(动画))).then(() => {
       if (全景入场聚拢.current === 入场) 清理全景入场聚拢();
     });
   }, [手机布局, 漫画首屏优先, 模式2, isActive, resource?.resourceKey, 阅读视图初始化中, entryPending, 显示阅读索引, 阅读流向, 模式2可见页面Key, 页面图片状态表, 页面解码完成]);
@@ -2588,7 +2589,7 @@ function ReaderPage({
       { transform: `translate3d(${x}px, ${y}px, 0) scale(${模式2跳转缩放})`, opacity: 0.94 },
     ], { duration: 模式2离场动画毫秒, easing: "cubic-bezier(0.3, 0, 0.3, 1)", fill: "both" });
     全景跳转动画列表.current.push(离场动画);
-    return 离场动画.finished.catch(() => undefined);
+    return animationFinished(离场动画).catch(() => undefined);
   }
 
   async function 播放模式2方向跳转动画(
@@ -2632,7 +2633,7 @@ function ReaderPage({
       { duration: 260, easing: "cubic-bezier(0.22, 0.61, 0.36, 1)", fill: "both" },
     );
     全景跳转动画列表.current.push(滑入动画, ...新页动画, 旧页动画);
-    await Promise.allSettled([滑入动画, ...新页动画, 旧页动画].map(动画 => 动画.finished));
+    await Promise.allSettled([滑入动画, ...新页动画, 旧页动画].map(动画 => animationFinished(动画)));
   }
 
   function 完成模式2定位(目标索引: number): void {

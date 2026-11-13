@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => ({
     watch: { ignored: ["**/.cache/**", "**/.packaged-app/**", "**/android/build/**", "**/dist-android/**", "**/dist-electron/**", "**/release/**", "**/test-results/**"] },
   },
   build: {
-    target: mode === 'android' ? 'chrome94' : undefined,
+    target: mode === 'android' ? 'chrome70' : undefined,
     outDir: "dist",
     emptyOutDir: true,
   },

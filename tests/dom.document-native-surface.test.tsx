@@ -36,3 +36,23 @@ it('PDF panorama preloads use its fill axis and ordinary reading keeps fit-windo
     source.setReaderSession(88);await source.readPage(0);expect(render).toHaveBeenLastCalledWith(expect.any(String),0,false,undefined);
   }finally{source.dispose();}
 });
+
+
+it('native PDF thumbnails do not depend on WeakRef support',async()=>{
+  const weakRef=globalThis.WeakRef;
+  const source=await setup('pdf');
+  window.omicomic.openDocument=vi.fn(async()=>({ok:true,data:{nativePdf:true,size:4000,chapters:[{index:0,name:'One'}]}}));
+  const render=window.omicomic.renderDocumentPage=vi.fn(async()=>({ok:true as const,data:{url:'https://omi.local/media/pdf-preview',width:240,height:360}}));
+  const image=document.createElement('img');image.width=240;image.height=360;
+  Object.defineProperties(image,{naturalWidth:{value:240},naturalHeight:{value:360},decode:{value:async()=>{}}});
+  vi.spyOn(window,'Image').mockImplementation(function(){return image;});
+  const drawImage=vi.fn();vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage} as any);
+  vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockReturnValue('data:image/jpeg;base64,preview');
+  try{
+    Object.defineProperty(globalThis,'WeakRef',{configurable:true,writable:true,value:undefined});
+    await source.open();const preview=await source.readPreview(0),cached=await source.readPreview(0);
+    Object.defineProperty(globalThis,'WeakRef',{configurable:true,writable:true,value:weakRef});
+    expect(preview).toBe('data:image/jpeg;base64,preview');expect(cached).toBe(preview);
+    expect(drawImage).toHaveBeenCalledWith(image,0,0,240,360);expect(render).toHaveBeenCalledTimes(1);
+  }finally{source.dispose();Object.defineProperty(globalThis,'WeakRef',{configurable:true,writable:true,value:weakRef});}
+});

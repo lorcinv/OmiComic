@@ -1,3 +1,4 @@
+import '../android/webviewCompat';
 import { initMobiFile, initKf8File } from '@lingo-reader/mobi-parser';
 import { inspectMobi, MAX_MOBI_BYTES } from './mobiLimits';
 import { documentRaster, documentRasterInfo } from './documentRaster';
@@ -34,7 +35,7 @@ async function chapter(index:number){
   for(const match of content.html.matchAll(/\bsrc=["'](blob:[^"']+)["']/gi)){
     const url=match[1];if(replacements.has(url)||!owned.has(url)||images.length>=100)continue;
     const blob=await(await fetch(url)).blob();if(blob.size>8*1024*1024)continue;
-    const data=await blob.arrayBuffer(),type=documentRaster(new Uint8Array(data),content.html.replace(/<[^>]*>/g,'').replace(/&[^;]+;|\s/g,'').length<40?100_000_000:16_000_000);if(!type)continue;
+    const data=await new Response(blob).arrayBuffer(),type=documentRaster(new Uint8Array(data),content.html.replace(/<[^>]*>/g,'').replace(/&[^;]+;|\s/g,'').length<40?100_000_000:16_000_000);if(!type)continue;
     total+=data.byteLength;if(total>16*1024*1024)throw Error('MOBI 章节图片过大。');
     const name=`mobi-image-${images.length}.raster`;replacements.set(url,name);images.push({name,type,data});
   }
@@ -57,7 +58,7 @@ async function preview(index:number){
   if(typeof OffscreenCanvas==='undefined'||typeof createImageBitmap==='undefined')return null;
   const content=await cachedChapter(index),image=content.images[0];if(!image)return null;const size=documentRasterInfo(new Uint8Array(image.data));if(size.height>size.width*3)return null;
   const bitmap=await createImageBitmap(new Blob([image.data],{type:image.type}),{resizeWidth:360});
-  try{const scale=Math.min(1,480/bitmap.height),canvas=new OffscreenCanvas(Math.max(1,Math.round(bitmap.width*scale)),Math.max(1,Math.round(bitmap.height*scale)));canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);return(await canvas.convertToBlob({type:'image/jpeg',quality:.8})).arrayBuffer();}finally{bitmap.close();}
+  try{const scale=Math.min(1,480/bitmap.height),canvas=new OffscreenCanvas(Math.max(1,Math.round(bitmap.width*scale)),Math.max(1,Math.round(bitmap.height*scale)));canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);return new Response(await canvas.convertToBlob({type:'image/jpeg',quality:.8})).arrayBuffer();}finally{bitmap.close();}
 }
 let queue=Promise.resolve();
 self.onmessage=event=>{

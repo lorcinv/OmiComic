@@ -194,7 +194,7 @@ Yes. Open location browses the containing folder temporarily without adding a sa
 <details>
 <summary>How do I zoom and pan?</summary>
 
-Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow and remains scrollable when reduced. Free zoom ranges from 50% to 600%; 100% is the default size of the current fit mode, rather than the original pixel ratio. After panning an enlarged image, release to coast. Press to stop, drag in the opposite direction to reverse, or let the image stop at its boundary.
+Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow and remains scrollable when reduced. Free zoom ranges from 25% to 600%; 100% is the default size of the current fit mode, rather than the original pixel ratio. After panning an enlarged image, release to coast. Press to stop, drag in the opposite direction to reverse, or let the image stop at its boundary.
 
 **Windows**: Open Zoom to the right of Image adjustments for a slider centered on 100% and Reset size below it. Ctrl+wheel zooms; left-drag pans; double-click the center to reset. Reset animates smoothly and can be interrupted by a new zoom or drag. F toggles immersive reading; move to the top or bottom for tools.
 

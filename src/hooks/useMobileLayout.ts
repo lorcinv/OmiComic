@@ -6,8 +6,13 @@ export default function useMobileLayout() {
   useEffect(() => {
     const query = window.matchMedia('(max-width:760px), (pointer:coarse)');
     const update = () => setMobile(isNativeMobile() || query.matches);
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
+    if (query.addEventListener) {
+      query.addEventListener('change', update);
+      return () => query.removeEventListener('change', update);
+    }
+    // Android 9 can retain a WebView whose MediaQueryList only has addListener.
+    query.addListener(update);
+    return () => query.removeListener(update);
   }, []);
   return mobile;
 }

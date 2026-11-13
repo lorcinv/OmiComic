@@ -1,0 +1,2 @@
+import {defineConfig} from '@playwright/test';
+export default defineConfig({testDir:'.',testMatch:'legacy-startup.e2e.ts',outputDir:'../test-results/legacy-startup',workers:1,timeout:30000,use:{baseURL:'http://127.0.0.1:5198',viewport:{width:960,height:600},hasTouch:true,launchOptions:{executablePath:process.env.OMI_TABLET_BROWSER||undefined,args:['--no-sandbox']}},webServer:{cwd:process.cwd(),command:'npx vite preview --outDir dist-android --host 127.0.0.1 --port 5198',url:'http://127.0.0.1:5198',reuseExistingServer:false},reporter:[['list']]});

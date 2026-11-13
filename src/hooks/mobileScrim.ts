@@ -1,3 +1,4 @@
+import { animationFinished } from '../reader/animationFinished';
 import { useLayoutEffect, useRef } from 'react';
 
 const layers = new Map<symbol, number>();
@@ -20,7 +21,7 @@ function draw(duration = 0) {
   if (duration && element.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
     const current = element.animate([{ opacity: from }, { opacity: next }], { duration, easing: 'linear' });
     animation = current;
-    void current.finished.then(() => { if (animation === current) animation = null; }).catch(() => undefined);
+    void animationFinished(current).then(() => { if (animation === current) animation = null; }).catch(() => undefined);
   }
 }
 /** One shade for the whole mobile overlay stack. Replacing a layer in one

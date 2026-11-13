@@ -7,7 +7,7 @@ import { primaryModifier } from '../platform';
 
 type View = { scale: number; x: number; y: number };
 const initial: View = { scale: 1, x: 0, y: 0 };
-export const MIN_READER_ZOOM = .5, MAX_READER_ZOOM = 6;
+export const MIN_READER_ZOOM = .25, MAX_READER_ZOOM = 6;
 export const READER_DOUBLE_TAP_ZOOM = 2;
 export function isReaderCenter(x: number, y: number, box: Pick<DOMRect, 'left'|'top'|'width'|'height'>) {
   const rx=(x-box.left)/box.width,ry=(y-box.top)/box.height;
@@ -226,5 +226,5 @@ export default function useReaderZoom(stage: RefObject<HTMLDivElement>, resetKey
     if(points.current.size)base();else{drag.current=null;gesture.current=false;pinching.current=false;}
   };
   const clampPan=(pan:{x:number;y:number},fit:{width:number;height:number})=>{const value=constrain({...current.current,...pan},fit);return {x:value.x,y:value.y};};
-  return {active:Math.abs(view.scale-1)>.001,scale:view.scale,x:view.x,y:view.y,setScale,toggleAt,zoomAnchor,stop:interrupt,canDoubleClick:()=>!panned.current&&!caught.current&&!pinching.current,stoppedInertiaTap:()=>stoppedInertiaTap.current,clampPan,panTo:(x:number,y:number)=>{interrupt();apply({...current.current,x,y});},pageOverflow:()=>pageOverflow.current,reset:()=>reset(),down,move,up,cancel,style:(options.panorama?{scale:'1',translate:`${view.x}px ${view.y}px`}:readerMotionStyle(view.x,view.y,view.scale)) as CSSProperties};
+  return {active:Math.abs(view.scale-1)>.001,scale:view.scale,x:view.x,y:view.y,setScale,toggleAt,zoomAnchor,stop:interrupt,canDoubleClick:()=>!panned.current&&!caught.current&&!pinching.current,stoppedInertiaTap:()=>stoppedInertiaTap.current,clampPan,panTo:(x:number,y:number)=>{interrupt();apply({...current.current,x,y});},pageOverflow:()=>pageOverflow.current,reset:()=>reset(),down,move,up,cancel,style:readerMotionStyle(view.x,view.y,options.panorama?1:view.scale) as CSSProperties};
 }

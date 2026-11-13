@@ -1,3 +1,4 @@
+import { animationFinished } from '../reader/animationFinished';
 import { tr, t } from '../i18n';
 import { useLayoutEffect, useRef, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -50,7 +51,7 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
     const animation=element.animate([{transform:transform(from)},{transform:transform(to)}],options);
     scrim.set(to, options.duration);
     motion.current=animation;
-    animation.finished.then(()=>{
+    animationFinished(animation).then(()=>{
       if(motion.current!==animation)return;
       // Commit the endpoint before cancelling, so unmount cannot flash it open.
       paint(to);animation.cancel();motion.current=null;finish();

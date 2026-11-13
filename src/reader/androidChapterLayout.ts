@@ -101,7 +101,7 @@ export async function paginateChapter(input:string,signal:AbortSignal,presentati
       };
       const pages=new Proxy(new Array<string>(points.length),{has(target,key){return typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length||Reflect.has(target,key);},get(target,key,receiver){if(typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length)return makePage(Number(key));return Reflect.get(target,key,receiver);}});
       const previews=new Proxy(new Array<string>(points.length),{has(target,key){return typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length||Reflect.has(target,key);},get(target,key,receiver){if(typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length){makePage(Number(key));return previewCache.get(Number(key))??'';}return Reflect.get(target,key,receiver);}});
-      done(undefined,{pages,previews,bytes:()=>input.length*4+[...pageCache.values()].reduce((n,p)=>n+p.length*2,0),dispose:()=>{pageCache.clear();previewCache.clear();points.length=0;flow.replaceChildren();}});
+      done(undefined,{pages,previews,bytes:()=>input.length*4+[...pageCache.values()].reduce((n,p)=>n+p.length*2,0),dispose:()=>{pageCache.clear();previewCache.clear();points.length=0;while(flow.firstChild)flow.removeChild(flow.firstChild);}});
     })().catch(done);};
     frame.srcdoc=presentation.html;document.body.append(frame);
   });
