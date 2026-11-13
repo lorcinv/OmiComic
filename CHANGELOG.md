@@ -1,11 +1,11 @@
 # 版本更新
 
-## 1.1.98 — 2026-11-13（本地交付）
+## 1.1.98 — 2026-11-13
 
 - 最小阅读缩放降至 25%，覆盖桌面、安卓及横纵全景。
 - 改善旧 Android WebView 启动、动画及界面兼容，增加启动失败重试。
 - Windows / Android 1.1.98，Android 版本码 10198；Mac 保持 1.1.97。
-- [版本说明](docs/releases/v1.1.98.md) · [交付记录](docs/status/2026-11-13-1.1.98-local-delivery.md)。本版未公开发布。
+- [版本说明](docs/releases/v1.1.98.md) · [交付记录](docs/status/2026-11-13-1.1.98-local-delivery.md) · [GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98)。
 
 ## 1.1.97
 

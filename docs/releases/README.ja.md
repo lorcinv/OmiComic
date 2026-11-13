@@ -2,14 +2,13 @@
 
 # リリース履歴
 
-Windows / Android のローカル配布版 **1.1.98** は `release/OmiComic-1.1.98/` にあります。[ローカル版の変更内容](v1.1.98.md)。GitHub では未公開で、macOS は 1.1.97 のままです。
+Windows / Android の最新版は **1.1.98** です。macOS の配布版は **1.1.97** のままです。[更新内容](v1.1.98.md)。
 
-最新版は Windows・macOS（Apple Silicon / Intel）・Android 向けの **1.1.97** です。[更新内容](v1.1.97.md)。
-
-[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97)
+[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98)
 
 | バージョン | 対応環境 | リリース |
 | --- | --- | --- |
+| v1.1.98 | Windows x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98) |
 | v1.1.97 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) |
 | v1.1.96 | Windows x64 / Android 1.1.96 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96) |
 | v1.1.95 | Windows x64 / Android 1.1.95 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95) |

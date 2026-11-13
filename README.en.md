@@ -22,14 +22,14 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.97 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Portable-1.1.97-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Setup-1.1.97-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.97 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.98 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Portable-1.1.98-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Setup-1.1.98-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.98 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-1.1.98-android.apk) |
 | macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.zip) |
 | macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.zip) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.1.97 adds macOS support for Apple Silicon and Intel, seven desktop card sizes, and update notifications. Check for updates appears below the user guide, with results inside the action. [Release notes](docs/releases/v1.1.97.md) · [Version history](docs/releases/README.en.md).
+1.1.98 lowers the minimum reader zoom to 25% on Windows and Android and improves startup and UI compatibility with older Android WebViews. macOS packages remain at 1.1.97. [Release notes](docs/releases/v1.1.98.md) · [Version history](docs/releases/README.en.md).
 
 ## Features
 

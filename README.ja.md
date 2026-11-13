@@ -22,14 +22,14 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.97 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Portable-1.1.97-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-Setup-1.1.97-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.97 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-android.apk) |
+| PC · Windows x64 | [OmiComic 1.1.98 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Portable-1.1.98-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Setup-1.1.98-x64.exe) |
+| Android 8.0+ | [OmiComic 1.1.98 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-1.1.98-android.apk) |
 | macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.zip) |
 | macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.zip) |
 
 Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
 
-1.1.97：Apple Silicon / Intel の macOS に対応。デスクトップのカードは7段階を維持し、更新通知を追加しました。操作ガイドの下に更新確認ボタンを配置し、結果もその中に表示します。[更新内容](docs/releases/v1.1.97.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.1.98：Windows / Android の最小表示倍率を25%に変更し、古い Android WebView の起動と画面表示の互換性を改善しました。macOS の配布版は1.1.97のままです。[更新内容](docs/releases/v1.1.98.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 
