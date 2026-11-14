@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { _electron, expect } = require('@playwright/test');
-test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, reopen', {timeout: 180000}, async () => {
+test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, 25% zoom, reopen', {timeout: 180000}, async () => {
   const output = path.resolve('test-results/apple-desktop'); await fs.mkdir(output, {recursive:true});
   const profile = await fs.mkdtemp(path.join(output, 'profile-'));
   const env = {...process.env, OMICOMIC_TEST_PROFILE:profile, OMICOMIC_TEST_HEADLESS:'1'}; delete env.ELECTRON_RUN_AS_NODE; delete env.VITE_DEV_SERVER_URL;
@@ -11,6 +11,7 @@ test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, r
   try {
     const page = await app.firstWindow(); await page.waitForFunction(()=>!!window.omicomic);
     const info = await page.evaluate(()=>window.omicomic.getAppInfo()); assert.equal(info.platform,'darwin'); assert.equal(info.arch,process.arch);
+    assert.equal(info.version,require('../package.json').desktopVersion || require('../package.json').version);
     assert.equal(await page.evaluate(()=>document.documentElement.dataset.platform),'darwin');
     assert.ok(await app.evaluate(({Menu})=>Menu.getApplicationMenu().items.length >= 4));
     const source = path.resolve('tests/fixtures/android-archives');
@@ -60,6 +61,35 @@ test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, r
     await expect.poll(async()=>Number(await stage.getAttribute('data-reader-zoom'))).toBeGreaterThan(1);
     assert.equal(await progress.getAttribute('aria-valuenow'),before);
     await page.screenshot({path:path.join(output,'mac-reader.png')});
+    const minimumZoom=[];
+    for(const [flow,name] of [['ordinary','RAR4.rar'],['horizontal','RAR5.cbr'],['vertical','Seven.7z']]) {
+      await page.keyboard.press('Escape');await expect(stage).toBeHidden();
+      const file=path.join(source,name);
+      const saved=await page.evaluate(async({file,flow})=>{
+        const opened=await window.omicomic.getResourcePages({path:file,type:'archive'});
+        if(!opened.ok)return opened;
+        const resource=opened.data,now=Date.now();
+        return window.omicomic.saveReadingProgress({resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:0,totalPages:resource.total,percent:0,completed:false,hasStartedReading:true,firstReadAt:now,updatedAt:now,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:flow==='vertical'?'vertical':'horizontal',panorama:flow!=='ordinary',immersive:false}});
+      },{file,flow});
+      assert.equal(saved.ok,true,JSON.stringify(saved));
+      await app.evaluate(({app},file)=>app.emit('open-file',{preventDefault(){}},file),file);
+      await expect(stage).toBeVisible();
+      await expect(page.locator('.reader-layout')).toHaveAttribute('aria-busy','false');
+      if(flow==='ordinary')await expect(stage).not.toHaveClass(/\bis-panorama\b/);
+      else await expect(stage).toHaveClass(/\bis-panorama\b/);
+      await expect(stage).toHaveClass(new RegExp(`is-flow-${flow==='vertical'?'vertical':'horizontal'}`));
+      await expect.poll(()=>stage.locator('img.reader-image').evaluateAll(images=>images.some(image=>image.complete&&image.naturalWidth>0))).toBe(true);
+      const pageBefore=await progress.getAttribute('aria-valuenow'),bounds=await stage.boundingBox();
+      await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
+      await page.keyboard.down('Meta');await page.mouse.wheel(0,2000);await page.keyboard.up('Meta');
+      await expect(stage).toHaveAttribute('data-reader-zoom','0.25');
+      await page.screenshot({path:path.join(output,`mac-${flow}-25.png`)});
+      await expect(stage).toHaveAttribute('data-reader-zoom','0.25');
+      await page.keyboard.down('Meta');await page.mouse.wheel(0,-600);await page.keyboard.up('Meta');
+      await expect.poll(async()=>Number(await stage.getAttribute('data-reader-zoom'))).toBeGreaterThan(.8);
+      assert.equal(await progress.getAttribute('aria-valuenow'),pageBefore);
+      minimumZoom.push({flow,minimum:0.25,expanded:Number(await stage.getAttribute('data-reader-zoom')),pageUnchanged:true});
+    }
     // Exercise the native window close path used by the traffic-light button.
     // Playwright's page.close() closes WebContents directly and can tear down
     // its browser connection while the last hidden decoder is also closing.
@@ -71,6 +101,6 @@ test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, r
     await expect.poll(async()=>app.windows().filter(w=>!w.isClosed()&&w.url().endsWith('/index.html')).length).toBe(1);
     const reopened=app.windows().find(w=>!w.isClosed()&&w.url().endsWith('/index.html'));
     await expect(reopened.locator('.app-shell')).toBeVisible();
-    await fs.writeFile(path.join(output,'result.json'),JSON.stringify({info,archives:4,pdf:true,measurements,commandWheel:true,reopened:true},null,2));
+    await fs.writeFile(path.join(output,'result.json'),JSON.stringify({info,archives:4,pdf:true,measurements,commandWheel:true,minimumZoom,reopened:true},null,2));
   } finally { await app.close(); }
 });
