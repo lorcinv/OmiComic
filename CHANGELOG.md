@@ -5,14 +5,14 @@
 - Android：修复旧版 WebView 连续模式的页面错位，以及恢复进度后当前页移出屏幕的问题。
 - Android：EPUB 图片读取失败或格式不支持时显示原因，保留重试、跳过和恢复能力，避免失败页面被缓存为空白成功页。
 - 手机错误原因支持换行；保留现有阅读模式、缩放和手势。未新增纯矢量 SVG 渲染支持。
-- Android 1.1.99 / 10199；Windows 保持 1.1.98，macOS 保持 1.1.97。
+- Android 1.1.99 / 10199；Windows 为 1.1.98，macOS 已补发 1.1.98。
 - [版本说明](docs/releases/v1.1.99.md) · [验证记录](docs/status/2026-11-14-1.1.99-release.md) · [GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.99)。
 
 ## 1.1.98 — 2026-11-13
 
 - 最小阅读缩放降至 25%，覆盖桌面、安卓及横纵全景。
 - 改善旧 Android WebView 启动、动画及界面兼容，增加启动失败重试。
-- Windows / Android 1.1.98，Android 版本码 10198；Mac 保持 1.1.97。
+- Windows / macOS / Android 1.1.98，Android 版本码 10198；Mac arm64、x64 安装包于 2026-11-14 补发。
 - [版本说明](docs/releases/v1.1.98.md) · [交付记录](docs/status/2026-11-13-1.1.98-local-delivery.md) · [GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98)。
 
 ## 1.1.97

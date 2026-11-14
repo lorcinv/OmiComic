@@ -2,14 +2,14 @@
 
 # 版本记录
 
-Android 最新版为 **1.1.99**，见 [本次更新](v1.1.99.md)。Windows 保持 **1.1.98**，macOS 保持 **1.1.97**。
+Android 最新版为 **1.1.99**，见 [本次更新](v1.1.99.md)。Windows 与 macOS 均为 **1.1.98**。
 
 [查看最新版](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.99)
 
 | 版本 | 平台 | 发行页 |
 | --- | --- | --- |
 | v1.1.99 | Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.99) |
-| v1.1.98 | Windows x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98) |
+| v1.1.98 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98) |
 | v1.1.97 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) |
 | v1.1.96 | Windows x64 / Android 1.1.96 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.96) |
 | v1.1.95 | Windows x64 / Android 1.1.95 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.95) |
