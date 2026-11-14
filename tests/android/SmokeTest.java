@@ -743,6 +743,7 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.startsWith("bottom1178"))scriptAsset="android-bottom-sheet1178";
       if(fixture.startsWith("tablet1179"))scriptAsset="android-tablet1179";
       if(fixture.startsWith("tablet1179")&&fixture.contains("delivery1198"))scriptAsset="delivery1198";
+      if(fixture.startsWith("tablet1179")&&fixture.contains("epubRecovery1198"))scriptAsset="epub-recovery1198";
       if(fixture.startsWith("tablet1179")&&fixture.contains("perf1182"))scriptAsset="document-perf1182";
       if(fixture.startsWith("tablet1179")&&fixture.contains("drag1183"))scriptAsset="pdf-drag1183";
       if(fixture.startsWith("tablet1179")&&fixture.contains("bugs1183"))scriptAsset="reader-bugs1183";

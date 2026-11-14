@@ -23,13 +23,13 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 | 平台 | 安装包 |
 | --- | --- |
 | PC · Windows x64 | [OmiComic 1.1.98 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Portable-1.1.98-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Setup-1.1.98-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.98 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-1.1.98-android.apk) |
+| Android 8.0+ | [OmiComic 1.1.99 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.99/OmiComic-1.1.99-android.apk) |
 | macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-arm64.zip) |
 | macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.97/OmiComic-1.1.97-mac-x64.zip) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.98：Windows / Android 最小阅读缩放降至 25%，改善旧版 Android WebView 启动与界面兼容。Mac 安装包保持 1.1.97。[本版更新](docs/releases/v1.1.98.md) · [更新记录](docs/releases/README.md)。
+1.1.99：修复 Android EPUB 连续模式在旧内核中的页面错位，图片读取失败时提供提示、重试和跳过。Windows 保持 1.1.98，Mac 保持 1.1.97。[本版更新](docs/releases/v1.1.99.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 

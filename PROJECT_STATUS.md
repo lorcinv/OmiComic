@@ -1,5 +1,7 @@
 # 当前项目状态
 
+**Android 1.1.99 · 2026-11-14**：修复旧 Android WebView 的 EPUB 连续模式错位，图片失败时保留错误提示、重试和跳过。Android 为 1.1.99 / 10199，Windows 保持 1.1.98，Mac 保持 1.1.97。74 项相关逻辑检查、16 项新旧内核浏览器检查及正式 APK 的 6 组模拟器检查通过；Android 9 真机与反馈 EPUB 原件仍待验证。[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.99) · [版本说明](docs/releases/v1.1.99.md) · [发行记录](docs/status/2026-11-14-1.1.99-release.md)。
+
 **1.1.98 发行 · 2026-11-13**：最小缩放 25%，补齐旧 Android WebView 兼容。主目录已同步；交付分支 `codex/release-1.1.98`，安装包统一放在 `release/OmiComic-1.1.98/`。Windows / Android 为 1.1.98，Mac 保持 1.1.97。[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98)。[版本说明](docs/releases/v1.1.98.md) · [构建位置与验证记录](docs/status/2026-11-13-1.1.98-local-delivery.md)。
 
 **1.1.97 · 2026-11-12**：Windows、macOS（Apple Silicon / Intel）与 Android 统一为 1.1.97。关于页更新按钮移到操作说明后，状态内置；补齐三语 Mac 说明。[版本说明](docs/releases/v1.1.97.md) · [Mac 安装说明](docs/APPLE.md) · [验证与全量回归未完成项](docs/status/2026-11-12-1.1.97-release.md)。

@@ -80,6 +80,8 @@ export const messages: Record<string, readonly [string, string]> = {
   "文档读取中断，请重新打开。": ["The document read was interrupted. Open it again.", "文書の読み込みが中断されました。開き直してください。"],
   "文档读取失败，请重新打开。": ["Could not read the document. Open it again.", "文書を読み込めませんでした。開き直してください。"],
   "重试此页": ["Retry this page", "このページを再読み込み"],
+  "本页图片读取失败，请重试。": ["Could not read this page's image. Please retry.", "このページの画像を読み込めませんでした。再試行してください。"],
+  "本页使用的 EPUB 图片格式暂不支持。": ["This page uses an EPUB image format that is not supported yet.", "このページで使用されている EPUB 画像形式にはまだ対応していません。"],
   "全景点击翻页": ["Tap to turn pages in panorama", "パノラマでタップしてページ送り"],
   "缩放比例": ["Zoom level", "拡大率"],
   "松开添加到资源库": ["Drop to add to library", "ドロップしてライブラリに追加"],

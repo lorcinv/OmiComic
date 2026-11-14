@@ -190,7 +190,17 @@ export class DocumentSource {
       const savedId=this.resource.requestedPageId??(this.resource.readerInit?.progress?.currentPageIndex===this.startIndex?this.resource.readerInit.progress.currentPageId:undefined);
       const saved=/^epub-(?:chapter|text):(\d+)/.exec(savedId??'');
       const chapter=Math.min(chapters.length-1,saved?Number(saved[1]):Math.max(0,Math.min(this.startIndex,chapters.length-1)));
-      if(chapter>=0)await this.layoutChapter(chapter);
+      if(chapter>=0){
+        try{await this.layoutChapter(chapter);}
+        catch(error){
+          this.assertOpen();
+          if(type!=='epub'||!isAndroid())throw error;
+          // The EPUB index is valid even when its first picture cannot be
+          // read. Keep that chapter addressable for the existing page error,
+          // retry and next-page controls; never cache an empty success.
+          this.chapterCounts.set(chapter,1);this.rebuildPages();
+        }
+      }
       chapters=this.documentPages!.map((page,index)=>({index,name:page.name}));
     }
     this.pdfSize=opened.result.data.size;

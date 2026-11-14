@@ -621,6 +621,7 @@ body:has(.mobile-settings-surface,.root-delete-overlay) .glass-select-options.is
 .mobile-folder-front .mobile-folder-seam { fill:none; stroke:color-mix(in srgb,var(--面板色) 60%,transparent); }
 .mobile-bookshelf-shell .mobile-bookshelf-mark { inset:14% 0 25%; }
 .reader-layout.is-mobile-reader .reader-page-frame[aria-hidden="true"] { visibility:hidden; pointer-events:none; }
+.reader-layout.is-mobile-reader .reader-page-error em { white-space:normal; overflow-wrap:break-word; }
 
 /* Shared metadata fields edit independently on desktop and phone. */
 .desktop-detail-metadata .resource-detail-field-label { display:flex; align-items:center; justify-content:space-between; gap:10px; }
