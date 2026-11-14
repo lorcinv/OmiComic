@@ -22,14 +22,14 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.1.98 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Portable-1.1.98-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-Setup-1.1.98-x64.exe) |
-| Android 8.0+ | [OmiComic 1.1.99 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.1.99/OmiComic-1.1.99-android.apk) |
-| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-1.1.98-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-1.1.98-mac-arm64.zip) |
-| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-1.1.98-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.1.98/OmiComic-1.1.98-mac-x64.zip) |
+| PC · Windows x64 | [OmiComic 1.2.0 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-Portable-1.2.0-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-Setup-1.2.0-x64.exe) |
+| Android 8.0+ | [OmiComic 1.2.0 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-android.apk) |
+| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-arm64.zip) |
+| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-x64.zip) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.1.99：修复 Android EPUB 连续模式在旧内核中的页面错位，图片读取失败时提供提示、重试和跳过。Windows 为 1.1.98，Mac 已补发 1.1.98。[本版更新](docs/releases/v1.1.99.md) · [更新记录](docs/releases/README.md)。
+1.2.0：Windows、macOS 与 Android 统一更新，修复 GIF／WebP／APNG 动图播放，调整关于页间距与图标，PC 新增默认关闭的“默认进入沉浸模式”。[本版更新](docs/releases/v1.2.0.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 

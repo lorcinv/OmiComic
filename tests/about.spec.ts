@@ -29,5 +29,16 @@ for (const mobile of [false, true]) test.describe(mobile ? 'phone about' : 'desk
     expect(await about.locator('.omi-update-check').evaluate(el => el.previousElementSibling?.classList.contains('omi-about__guide'))).toBe(true);
     await expect(about.locator('.omi-update-action [role="status"]')).toBeVisible();
     expect(await about.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    const layout = await about.evaluate(el => {
+      const cards = [...el.querySelectorAll('.omi-about__action')].map(node => node.getBoundingClientRect());
+      const icons = [...el.querySelectorAll('.omi-about__icon')].map(node => {
+        const icon = node.getBoundingClientRect(), card = node.parentElement!.getBoundingClientRect();
+        return Math.abs(icon.y + icon.height / 2 - card.y - card.height / 2);
+      });
+      return { gaps: [cards[1].top - cards[0].bottom, cards[2].top - cards[1].bottom], icons };
+    });
+    expect(layout.gaps).toEqual([12, 12]);
+    expect(layout.icons.every(offset => offset < 1)).toBe(true);
+    if(language === 'zh-CN') await page.screenshot({path:`test-results/about-1.2.0-${mobile?'android-layout':'desktop'}.png`,fullPage:true});
   });
 });

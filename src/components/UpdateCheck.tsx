@@ -3,6 +3,7 @@ import { checkForUpdates, type AvailableUpdate, type UpdateResult } from '../upd
 import { t, tr } from '../i18n';
 import { isNativeMobile } from '../platform';
 import '../styles/updates.css';
+import AboutActionIcon from './AboutActionIcon';
 
 export default function UpdateCheck() {
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,7 @@ export default function UpdateCheck() {
         <span>{t('查看更新与下载')}</span>
       </> : result?.kind === 'current' ? t('当前已是此平台的最新版本。') : result?.kind === 'unavailable' ? t('此平台暂未发布可安装的更新包。') : t('有新版本时提醒，由你选择下载。')}
     </span>
-    <span aria-hidden="true">{update ? '↗' : '↻'}</span>
+    <AboutActionIcon kind={update ? 'external' : 'refresh'} />
   </>;
   return <section className="omi-update-check">
     {update ? <a className="omi-about__action omi-update-action" href={update.url} target={isNativeMobile() ? undefined : '_blank'} rel="noopener noreferrer">{content}</a> :

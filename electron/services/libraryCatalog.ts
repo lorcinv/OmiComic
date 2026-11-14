@@ -104,7 +104,7 @@ async function discover(job: Job, metadata: boolean, root: string): Promise<Bloc
   for (const entry of entries) {
     if (entry.isSymbolicLink()) continue;
     const extension = path.extname(entry.name).slice(1).toLowerCase();
-    if (entry.isFile() && /^(jpg|jpeg|png|webp|gif|bmp)$/.test(extension)) { containsImages = true; continue; }
+    if (entry.isFile() && /^(jpg|jpeg|png|apng|webp|gif|bmp)$/.test(extension)) { containsImages = true; continue; }
     const type = entry.isDirectory() ? 'folder' : entry.isFile() ? extensions.get(extension) : undefined;
     if (!type) continue;
     const file = path.join(job.path, entry.name);

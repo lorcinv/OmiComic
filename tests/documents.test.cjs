@@ -7,6 +7,19 @@ const { PDFDocumentSource } = require('../dist-electron/services/pdfService.js')
 const { EPUBDocumentSource } = require('../dist-electron/services/epubService.js');
 const { resolveEpubPath, sanitizeChapter } = require('../dist-electron/services/epubWorker.js');
 
+for(const name of ['animated.gif','animated.webp','animated.png','animated.apng','static.webp','static.png']) test(`EPUB preserves animation metadata for ${name}`,async()=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'omicomic-epub-animation-')),file=path.join(dir,'book.epub');
+  const image=await fs.readFile(path.join(__dirname,'fixtures/animations',name));
+  await fs.writeFile(file,zip([
+    ['META-INF/container.xml','<container><rootfiles><rootfile full-path="book.opf"/></rootfiles></container>'],
+    ['book.opf','<package><manifest><item id="page" href="page.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="page"/></spine></package>'],
+    ['page.xhtml',`<html><body><img src="${name}"/></body></html>`],[name,image],
+  ]));
+  const book=new EPUBDocumentSource(file);
+  try{await book.request('index');const html=await book.request('chapter',0);assert.match(html,/data:image\/(png|gif|webp);base64/);assert.equal(html.includes('data-omi-animated="true"'),name.startsWith('animated'));}
+  finally{await book.close();assert.equal(path.dirname(dir),path.resolve(os.tmpdir()));assert.ok(path.basename(dir).startsWith('omicomic-epub-animation-'));await fs.rm(dir,{recursive:true,force:true});}
+});
+
 test('EPUB paths stay inside archive; no network, drive, or traversal paths', () => {
   assert.equal(resolveEpubPath('OPS/text/chapter.xhtml', '../img/1.png'), 'OPS/img/1.png');
   for (const value of ['https://bad/x', 'file:///etc/passwd', '../../escape', '%2e%2e/%2e%2e/secret', '//bad/x', 'C:\\secret', '%00x']) assert.throws(() => resolveEpubPath('OPS/book.opf', value));

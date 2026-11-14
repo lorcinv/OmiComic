@@ -23,6 +23,7 @@ final class NativeReaderSurface extends View {
   private final Object cacheLock=new Object();
   private final LinkedHashMap<String,Integer> workingKeys=new LinkedHashMap<>();
   private final LinkedHashMap<String,String> pageKeys=new LinkedHashMap<>(16,.75f,true);
+  private final LinkedHashMap<String,AnimatedSource> animatedSources=new LinkedHashMap<>(16,.75f,true);
   private final LinkedHashMap<String,Long> rasterSizes=new LinkedHashMap<>(16,.75f,true);
   private String reheating="",lastReheat="";
   private long windowReheats;
@@ -198,6 +199,11 @@ final class NativeReaderSurface extends View {
   private long requestSeek(long expected,long seek,String key)throws IOException{
     synchronized(cacheLock){checkGeneration(expected);if(seek>=0&&workingKeys.containsKey(key))return seekGeneration;checkSeek(seek);return seek;}
   }
+  private static final class AnimatedSource extends IOException {
+    final String url;final int width,height,bytes;
+    AnimatedSource(String url,int width,int height,int bytes){super("Animated source");this.url=url;this.width=width;this.height=height;this.bytes=bytes;}
+    JSONObject result()throws Exception{return new JSONObject().put("url",url).put("width",width).put("height",height).put("encodedBytes",bytes).put("decodedBytes",(long)width*height*4).put("native",false).put("animated",true);}
+  }
   private void prepared(Reply reply,Raster raster,long expected,long seek,String key,boolean speculative){
     try{requestSeek(expected,seek,key);if(speculative)synchronized(cacheLock){clearPrefetches++;}
       synchronized(cacheLock){rasterSizes.put(raster.url,(long)raster.bitmap.getAllocationByteCount());while(rasterSizes.size()>512)rasterSizes.remove(rasterSizes.keySet().iterator().next());}
@@ -226,7 +232,11 @@ final class NativeReaderSurface extends View {
         // Prepared callers wait for a clear body, including first-page warm-up.
         // Building a thumbnail and queuing a second decode only delays that reply.
         loadAsync(url,targetW,targetH,expected,requestSeek(expected,expectedSeek,key),key,true,(raster,readError)->{
-        if(readError!=null){reply.complete(null,readError);return;}
+        if(readError!=null){
+          Throwable cause=readError;while(cause.getCause()!=null&&!(cause instanceof AnimatedSource))cause=cause.getCause();
+          if(cause instanceof AnimatedSource){try{requestSeek(expected,expectedSeek,key);reply.complete(((AnimatedSource)cause).result(),null);}catch(Exception invalid){reply.complete(null,invalid);}}
+          else reply.complete(null,readError);return;
+        }
         try{
         if(raster.preview){
           // A prepared reply means clear pixels are ready. Never block the
@@ -269,6 +279,7 @@ final class NativeReaderSurface extends View {
     PendingRaster work;boolean owner=false;
     synchronized(cacheLock){
       seek=requestSeek(expected,seek,key);
+      AnimatedSource animation=animatedSources.get(url);if(animation!=null)throw animation;
       Raster cached=cache.get(url);if(cached!=null){
         bitmapHits++;
         if(!key.isEmpty()&&cached.request!=null){
@@ -315,6 +326,11 @@ final class NativeReaderSurface extends View {
       checkWork(work);
       BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(data,0,data.length,bounds);
       if(bounds.outWidth<=0||bounds.outHeight<=0||(long)bounds.outWidth*bounds.outHeight>100000000L)throw new IOException("图片尺寸超出上限。");
+      if(ImageAnimation.animated(data)){
+        AnimatedSource animation=new AnimatedSource(url,bounds.outWidth,bounds.outHeight,data.length);
+        synchronized(cacheLock){animatedSources.put(url,animation);while(animatedSources.size()>512)animatedSources.remove(animatedSources.keySet().iterator().next());}
+        throw animation;
+      }
       int orientation=1;try{orientation=new android.media.ExifInterface(new ByteArrayInputStream(data)).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION,1);}catch(IOException ignored){}
       if(orientation<1||orientation>8)orientation=1;
       int displayWidth=orientation>=5?bounds.outHeight:bounds.outWidth,displayHeight=orientation>=5?bounds.outWidth:bounds.outHeight;

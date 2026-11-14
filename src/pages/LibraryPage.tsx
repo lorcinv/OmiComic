@@ -9507,17 +9507,6 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                     />
                     <span>{t("默认开启全景连环画模式")}</span>
                   </label>
-                  <label className="settings-toggle mobile-hidden">
-                    <input
-                      type="checkbox"
-                      checked={默认开启沉浸}
-                      onChange={(事件) => {
-                        设置默认开启沉浸(事件.target.checked);
-                        保存界面设置({ readerDefaultImmersive: 事件.target.checked });
-                      }}
-                    />
-                    <span>{t("默认开启沉浸模式")}</span>
-                  </label>
                   <div className="settings-row">
                     <span>{t("默认阅读流向")}</span>
                     <GlassSelect
@@ -9592,6 +9581,17 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                   hidden={当前设置分类 !== "reader"}
                 >
                   <h3>{t("漫画阅读设置")}</h3>
+                  <label className="settings-toggle mobile-hidden">
+                    <input
+                      type="checkbox"
+                      checked={默认开启沉浸}
+                      onChange={(事件) => {
+                        设置默认开启沉浸(事件.target.checked);
+                        保存界面设置({ readerDefaultImmersive: 事件.target.checked });
+                      }}
+                    />
+                    <span>{t("默认进入沉浸模式")}</span>
+                  </label>
                   {isAndroid() && <div className="mobile-volume-settings">
                     <label className="settings-toggle"><input type="checkbox" checked={音量键翻页} onChange={event => { 设置音量键翻页(event.target.checked); 保存界面设置({ readerVolumeKeys: event.target.checked }); }} /><span>{t("音量键翻页")}</span></label>
                     <p>{t("阅读时，音量＋上一页、音量－下一页。退出阅读后恢复调节音量。")}</p>

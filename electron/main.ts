@@ -87,7 +87,7 @@ app.setAppUserModelId("io.github.lorcinv.omicomic");
 const 后台验证 = process.env.OMICOMIC_TEST_HEADLESS === "1" && !!process.env.OMICOMIC_TEST_PROFILE;
 if (后台验证) app.setPath("userData", path.resolve(process.env.OMICOMIC_TEST_PROFILE!));
 const 已授权根目录 = new Set<string>();
-const 图片扩展名 = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
+const 图片扩展名 = new Set(["jpg", "jpeg", "png", "apng", "webp", "bmp", "gif"]);
 const 压缩包扩展名 = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 const 自然排序器 = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 let 当前阅读器会话Id = 0;
@@ -172,7 +172,7 @@ function 是支持的图片(名称: string): boolean {
 function 获取图片媒体类型(名称: string): string {
   const 扩展名 = path.extname(名称).slice(1).toLowerCase();
   if (扩展名 === "jpg" || 扩展名 === "jpeg") return "image/jpeg";
-  if (扩展名 === "png") return "image/png";
+  if (扩展名 === "png" || 扩展名 === "apng") return "image/png";
   if (扩展名 === "webp") return "image/webp";
   if (扩展名 === "bmp") return "image/bmp";
   if (扩展名 === "gif") return "image/gif";
@@ -710,7 +710,7 @@ function 注册安全通道(): void {
   ipcMain.handle("外部文件:选择", async 事件 => {
     try {
       const 选项 = { title: "直接打开文件", properties: ["openFile", "multiSelections"] as Array<"openFile" | "multiSelections">,
-        filters: [{ name: "漫画、图片与文档", extensions: ["jpg", "jpeg", "png", "webp", "bmp", "gif", "zip", "cbz", "rar", "cbr", "7z", "cb7", "pdf", "epub", "mobi"] }] };
+        filters: [{ name: "漫画、图片与文档", extensions: ["jpg", "jpeg", "png", "apng", "webp", "bmp", "gif", "zip", "cbz", "rar", "cbr", "7z", "cb7", "pdf", "epub", "mobi"] }] };
       const 窗口 = BrowserWindow.fromWebContents(事件.sender);
       const 结果 = 窗口 ? await dialog.showOpenDialog(窗口, 选项) : await dialog.showOpenDialog(选项);
       if (!结果.canceled) 接收外部文件(结果.filePaths);

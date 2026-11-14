@@ -1,5 +1,7 @@
 # 当前项目状态
 
+**1.2.0 发行 · 2026-11-14**：Windows、macOS（Apple Silicon / Intel）与 Android 统一为 1.2.0，Android 版本码 10200。修复 GIF、WebP、APNG 及 EPUB 内嵌动图播放，统一关于页入口间距与 SVG 图标；PC 增加默认关闭的“默认进入沉浸模式”。Windows 安装版和便携版、原签名 APK、两种 Mac 架构的 DMG / ZIP、源码与校验文件已发布。[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.0) · [版本说明](docs/releases/v1.2.0.md) · [构建来源与验证记录](docs/status/2026-11-14-1.2.0-animations.md)。
+
 **Mac 1.1.98 补发 · 2026-11-14**：Apple Silicon、Intel 的 DMG 与 ZIP 补充到 [1.1.98 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98)，包含 25% 最小缩放。Windows 与 Mac 为 1.1.98，Android 为 1.1.99。[Mac 补发记录](docs/status/2026-11-14-1.1.98-mac-release.md)。
 
 **Android 1.1.99 · 2026-11-14**：修复旧 Android WebView 的 EPUB 连续模式错位，图片失败时保留错误提示、重试和跳过。Android 为 1.1.99 / 10199，Windows 保持 1.1.98，Mac 保持 1.1.97。74 项相关逻辑检查、16 项新旧内核浏览器检查及正式 APK 的 6 组模拟器检查通过；Android 9 真机与反馈 EPUB 原件仍待验证。[GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.99) · [版本说明](docs/releases/v1.1.99.md) · [发行记录](docs/status/2026-11-14-1.1.99-release.md)。

@@ -1,5 +1,14 @@
 # 版本更新
 
+## 1.2.0 — 2026-11-14
+
+- Windows、macOS 与 Android 统一为 1.2.0，Android 版本码 10200。
+- 修复 GIF、动画 WebP 和 APNG 在画面处理后停成静态图片的问题；文件夹、压缩包和 EPUB 内嵌动图同步处理，补齐 .apng 打开支持。
+- 关于页三个入口统一间距，SVG 图标重新绘制并垂直居中。
+- PC“漫画阅读设置”增加“默认进入沉浸模式”，默认关闭。
+- 动图继续使用原始动画与基础滤镜；锐化、降噪仅处理静态图片。
+- [版本说明](docs/releases/v1.2.0.md) · [验证记录](docs/status/2026-11-14-1.2.0-animations.md) · [GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.0)。
+
 ## 1.1.99 — 2026-11-14
 
 - Android：修复旧版 WebView 连续模式的页面错位，以及恢复进度后当前页移出屏幕的问题。

@@ -2,12 +2,13 @@
 
 # Release history
 
-Current: **1.1.99** for Android. Windows and macOS are at **1.1.98**. [Release notes](v1.1.99.md).
+Current: **1.2.0** for Windows, macOS and Android. [Release notes](v1.2.0.md).
 
-[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.99)
+[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.0)
 
 | Version | Platform | Release |
 | --- | --- | --- |
+| v1.2.0 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.0) |
 | v1.1.99 | Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.99) |
 | v1.1.98 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98) |
 | v1.1.97 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) |

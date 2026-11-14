@@ -17,6 +17,7 @@
   !insertmacro ${ACTION} "jpg"
   !insertmacro ${ACTION} "jpeg"
   !insertmacro ${ACTION} "png"
+  !insertmacro ${ACTION} "apng"
   !insertmacro ${ACTION} "webp"
   !insertmacro ${ACTION} "bmp"
   !insertmacro ${ACTION} "gif"

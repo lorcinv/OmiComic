@@ -17,6 +17,7 @@ export interface DocumentPage {
   canvas?: HTMLCanvasElement;
   decodedImage?: HTMLImageElement;
   native?: boolean;
+  animated?: boolean;
 }
 
 const preparedDocuments=new Map<string,DocumentSource>();
@@ -84,7 +85,7 @@ export class DocumentSource {
     const saved=this.chapterLayouts.get(index);if(saved){this.chapterLayouts.delete(index);this.chapterLayouts.set(index,saved);return;}
     const existing=this.layoutPending.get(index);if(existing)return existing;
     const task=(async()=>{
-      const html=await this.chapter(index),image=androidChapterPresentation(html),tiles=image.image&&image.width&&image.height&&image.height>image.width*3?Math.ceil(image.height/(image.width*1.5)):0,layout=tiles?{pages:Array.from({length:tiles},()=>html),previews:Array.from({length:tiles},()=>'')}:image.image?{pages:[html],previews:['']}:await paginateChapter(html,this.abortController.signal,image);this.assertOpen();
+      const html=await this.chapter(index),image=androidChapterPresentation(html),tiles=!image.animated&&image.image&&image.width&&image.height&&image.height>image.width*3?Math.ceil(image.height/(image.width*1.5)):0,layout=tiles?{pages:Array.from({length:tiles},()=>html),previews:Array.from({length:tiles},()=>'')}:image.image?{pages:[html],previews:['']}:await paginateChapter(html,this.abortController.signal,image);this.assertOpen();
       if(image.image)this.chapterImages.set(index,image);
       this.chapterLayouts.set(index,layout);const changed=(this.chapterCounts.get(index)??1)!==layout.pages.length;this.chapterCounts.set(index,layout.pages.length);
       let bytes=[...this.chapterLayouts.values()].reduce((sum,item)=>sum+(item.bytes?.()??item.pages.reduce((n,p)=>n+p.length*2,0)),0);
@@ -125,7 +126,7 @@ export class DocumentSource {
     try{return await task;}finally{this.chapterPending.delete(index);}
   }
   private async imageTile(page:ReturnType<typeof androidChapterPresentation>|undefined,chapter:number,slice:number,preview:boolean,signal:AbortSignal,prefetch:boolean|(()=>boolean)=false):Promise<DocumentPage|undefined>{
-    if(!page?.image||!page.width||!page.height||page.height<=page.width*3)return;
+    if(page?.animated||!page?.image||!page.width||!page.height||page.height<=page.width*3)return;
     const count=Math.ceil(page.height/(page.width*1.5));if(this.chapterCounts.get(chapter)!==count){this.chapterCounts.set(chapter,count);this.rebuildPages();}
     const pitch=Math.ceil(page.width*1.5),top=slice*pitch,height=Math.min(pitch,page.height-top);if(height<=0)throw Error('图片分页无效。');
     if(page.image.startsWith('https://omi.local/')&&window.omicomic.renderDocumentImage){const result=await window.omicomic.renderDocumentImage(page.image,slice,preview);if(!result.ok)throw Error(result.error.message);if(!preview&&this.readerSession!==undefined&&hasAndroidRenderer())return this.nativePage(result.data.url,signal,JSON.stringify([this.resource.resourceKey,`${chapter}:${slice}`]),prefetch);const image=await this.image(result.data.url);signal.throwIfAborted();return{...result.data,decodedImage:image,decodedBytes:image.naturalWidth*image.naturalHeight*4};}
@@ -385,7 +386,7 @@ export class DocumentSource {
           signal.throwIfAborted();
           this.bodyImages.delete(cacheKey);if(typeof WeakRef==='function')this.bodyImages.set(cacheKey,new WeakRef(image));
           while(this.bodyImages.size>32)this.bodyImages.delete(this.bodyImages.keys().next().value!);
-          return {url:page.image,width:image.naturalWidth,height:image.naturalHeight,decodedImage:image,decodedBytes:image.naturalWidth*image.naturalHeight*4};
+          return {url:page.image,animated:page.animated,width:image.naturalWidth,height:image.naturalHeight,decodedImage:image,decodedBytes:image.naturalWidth*image.naturalHeight*4};
         }
         return {url:`epub:${this.id}:${index}`,html:page.html,width:TEXT_PAGE_WIDTH,height:TEXT_PAGE_HEIGHT};
       }

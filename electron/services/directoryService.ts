@@ -15,7 +15,7 @@ export interface DirectoryScanOptions {
   stat?: (filePath: string) => Promise<Stats>;
 }
 const collator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
-const imageExtensions = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
+const imageExtensions = new Set(["jpg", "jpeg", "png", "apng", "webp", "bmp", "gif"]);
 const archiveExtensions = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 export const DIRECTORY_STAT_CONCURRENCY = 24;
 let activeStats = 0;

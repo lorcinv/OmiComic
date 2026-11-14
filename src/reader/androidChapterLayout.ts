@@ -6,7 +6,7 @@ export function androidChapterPresentation(input:string, page=0) {
   const doc=new DOMParser().parseFromString(input,'text/html');
   const text=(doc.body.textContent??'').trim();
   const imagePage=doc.images.length===1 && (!text || /^(?:第\s*\d+\s*[页頁]|page\s*\d+|\d+)$/i.test(text));
-  if(imagePage)return {image:doc.images[0].getAttribute('src')!,preview:doc.images[0].getAttribute('data-omi-preview')??undefined,width:Number(doc.images[0].getAttribute('width'))||undefined,height:Number(doc.images[0].getAttribute('height'))||undefined,html:input};
+  if(imagePage)return {animated:doc.images[0].getAttribute('data-omi-animated')==='true',image:doc.images[0].getAttribute('src')!,preview:doc.images[0].getAttribute('data-omi-preview')??undefined,width:Number(doc.images[0].getAttribute('width'))||undefined,height:Number(doc.images[0].getAttribute('height'))||undefined,html:input};
   const flow=doc.createElement('div');flow.className='omi-text-flow';
   while(doc.body.firstChild)flow.append(doc.body.firstChild);
   doc.body.append(flow);

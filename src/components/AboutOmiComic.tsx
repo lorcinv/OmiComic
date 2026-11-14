@@ -6,6 +6,7 @@ import omiIcon from '../../resources/icon.svg';
 import '../styles/about.css';
 import UserGuide from './UserGuide';
 import UpdateCheck from './UpdateCheck';
+import AboutActionIcon from './AboutActionIcon';
 
 export const OMI_GITHUB_URL = 'https://github.com/lorcinv/OmiComic';
 
@@ -35,7 +36,7 @@ export default function AboutOmiComic({ active = true }: { active?: boolean }) {
     <a className="omi-about__action omi-about__github" href={OMI_GITHUB_URL} target={isAndroid() ? undefined : '_blank'} rel="noopener noreferrer">
       <strong>{t('项目主页 · GitHub')}</strong>
       <span>github.com/lorcinv/OmiComic</span>
-      <span aria-hidden="true">↗</span>
+      <AboutActionIcon kind="external" />
     </a>
     <button type="button" ref={guideButton} className="omi-about__action omi-about__guide" onClick={() => {
       scrollContainer.current = guideButton.current?.closest('.settings-window-content, .mobile-settings-body') ?? null;
@@ -44,7 +45,7 @@ export default function AboutOmiComic({ active = true }: { active?: boolean }) {
     }}>
       <strong>{t('操作说明')}</strong>
       <span>{t('按钮功能、快捷键与手机手势')}</span>
-      <span aria-hidden="true">›</span>
+      <AboutActionIcon kind="next" />
     </button>
     <UpdateCheck/>
   </div>;

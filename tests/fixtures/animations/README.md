@@ -1,0 +1,1 @@
+Synthetic red/blue frames, 320 ms each, created with Pillow. Animated PNG is tested with both .png and .apng extensions. metadata.png adds a valid 300 KiB text chunk before acTL. static.png contains misleading animation chunk names in plain text. No third-party artwork.

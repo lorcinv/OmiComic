@@ -99,7 +99,7 @@ final class NativeArchives implements Closeable {
     if(path.startsWith("/")||path.matches("^[A-Za-z]:.*"))return false;
     for(String part:path.split("/"))if(part.equals(".."))return false;
     int dot=name.lastIndexOf('.');
-    return dot>=0&&Arrays.asList("jpg","jpeg","png","webp","gif","bmp").contains(name.substring(dot+1).toLowerCase(Locale.ROOT));
+    return dot>=0&&Arrays.asList("jpg","jpeg","png","apng","webp","gif","bmp").contains(name.substring(dot+1).toLowerCase(Locale.ROOT));
   }
   static boolean archive(String name){
     if(name==null||name.startsWith("__MACOSX/")||name.indexOf('\0')>=0)return false;

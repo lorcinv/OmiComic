@@ -96,6 +96,7 @@ interface 页面图片状态 {
   canvas?: HTMLCanvasElement;
   native?: boolean;
   prefetchFailed?: boolean;
+  animated?: boolean;
 }
 
 interface 页面原始尺寸 {
@@ -300,7 +301,8 @@ function 创建初始阅读状态(
   设置 = resource?.readerInit?.settings ?? 默认阅读器设置,
   进度 = resource?.readerInit?.progress ?? null,
 ) {
-  const 视图 = 进度?.readerViewState ?? 创建默认阅读视图(设置);
+  const 保存视图 = 进度?.readerViewState ?? 创建默认阅读视图(设置);
+  const 视图 = isAndroid() ? 保存视图 : { ...保存视图, immersive: 设置.readerDefaultImmersive === true };
   const 恢复保存位置 = !resource?.requestedPageId && 进度?.currentPageIndex === initialPageIndex;
   const 索引 = resource ? resolvePageIndex(resource.pages,
     resource.requestedPageId ?? (恢复保存位置 ? 进度?.currentPageId : undefined),
@@ -1761,7 +1763,7 @@ function ReaderPage({
         return { pageIndex: 页面.index, state: { ...内容, error: null, loading: false } };
       }
       if(原生图片核心&&!/\.gif$/i.test(页面.name)){
-        const prepared=await prepareNativeReaderPage<Pick<页面图片状态,'url'|'width'|'height'|'decodedBytes'|'native'>>(()=>({
+        const prepared=await prepareNativeReaderPage<Pick<页面图片状态,'url'|'width'|'height'|'decodedBytes'|'native'|'animated'|'encodedBytes'>>(()=>({
           sourcePath:页面.sourcePath,archiveInnerPath:页面.archiveInnerPath,type:页面.type,session:阅读器会话Id.current,prefetch:typeof prefetch==='function'?prefetch():prefetch,
           workKey:原生页面Key(页面),
           seek:模式2 ? undefined : 原生跳页代号.current,
@@ -1811,6 +1813,7 @@ function ReaderPage({
               width: decodedImage?.naturalWidth || 结果.data.width,
               height: decodedImage?.naturalHeight || 结果.data.height,
               encodedBytes: 结果.data.encodedBytes,
+              animated: 结果.data.animated,
               decodedImage,
             }
           : { url: "", error: 结果.error.message, loading: false },
@@ -4542,7 +4545,8 @@ function ReaderPage({
                         ...(手机全景进入中 && 页面.index !== 显示阅读索引 ? {visibility:'hidden'} : {}),
                       }}
                     >
-                      <ReaderImageEffects nativeZoom={自由缩放.scale>1.001} samplingPriority={模式2 ? undefined : 当前页组索引.includes(页面.index)} layoutKey={[模式2, 阅读流向, 缩放模式, 可用区域.width, 可用区域.height].join(":")} alignmentKey={[模式2 ? 全景窗口中心索引 : 显示页组索引.join('|'), 阅读流向, 可用区域.width, 可用区域.height, 自由缩放.scale].join(":")} settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.native && 页面.type !== 'epub-chapter' && Boolean(状态.url)} sampleable={!状态.canvas && !/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} sourceBytes={状态.encodedBytes} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${resource.resourceKey}:${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
+                      {/* Animated sources must stay in an image element; bitmap processing keeps only one frame. */}
+                      <ReaderImageEffects nativeZoom={自由缩放.scale>1.001} samplingPriority={模式2 ? undefined : 当前页组索引.includes(页面.index)} layoutKey={[模式2, 阅读流向, 缩放模式, 可用区域.width, 可用区域.height].join(":")} alignmentKey={[模式2 ? 全景窗口中心索引 : 显示页组索引.join('|'), 阅读流向, 可用区域.width, 可用区域.height, 自由缩放.scale].join(":")} settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.animated && !状态.native && 页面.type !== 'epub-chapter' && !/\.gif$/i.test(页面.name) && Boolean(状态.url)} sampleable={!状态.animated && !状态.canvas && !/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} sourceBytes={状态.encodedBytes} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${resource.resourceKey}:${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
                       {状态.error ? (
                         <div className="reader-page-error" role="alert">
                           <span>{t("第 ")}{页面.index + 1} {阅读单位}{t("加载失败")}</span>
@@ -4613,13 +4617,13 @@ function ReaderPage({
                 })}
               </div>
             )}
-            {[...手机滑页图组].map(([key,group])=><ReaderSwipePreview key={key} groupKey={key} active={group.active} gammaId={伽马滤镜Id} pages={group.pages} sizes={group.sizes} adjustments={原生图片核心?DEFAULT_ADJUSTMENTS:画面调整} onPrepared={手机滑页.onPrepared} onBytes={更新显示缩放缓存} pan={group.active&&自由缩放.scale>1?手机邻页平移:undefined} style={{left:阅读区域.current?.scrollLeft??0,top:阅读区域.current?.scrollTop??0,width:可用区域.width,height:可用区域.height,visibility:group.active?'visible':'hidden',transform:`translate3d(${group.direction*(阅读区域.current?.clientWidth??可用区域.width)+(group.active?手机滑页.offset:0)}px,0,0)`}}/>)}
+            {[...手机滑页图组].map(([key,group])=><ReaderSwipePreview key={key} groupKey={key} active={group.active} gammaId={伽马滤镜Id} pages={group.pages} sizes={group.sizes} adjustments={画面调整} onPrepared={手机滑页.onPrepared} onBytes={更新显示缩放缓存} pan={group.active&&自由缩放.scale>1?手机邻页平移:undefined} style={{left:阅读区域.current?.scrollLeft??0,top:阅读区域.current?.scrollTop??0,width:可用区域.width,height:可用区域.height,visibility:group.active?'visible':'hidden',transform:`translate3d(${group.direction*(阅读区域.current?.clientWidth??可用区域.width)+(group.active?手机滑页.offset:0)}px,0,0)`}}/>)}
           </>
         )}
       </div>
 
       {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews pages={resource.pages} current={进度预览索引} currentGroup={进度预览组} followingProgress={进度拖动比例!==null} width={阅读器设置.mobilePreviewWidth ?? 88} documentSource={文档源}
-        nativeImage={原生图片核心 && !/\.gif$/i.test(resource.pages[进度预览索引]?.name ?? '') ? 页面图片状态表[进度预览索引]?.url || null : undefined}
+        nativeImage={页面图片状态表[进度预览索引]?.native ? 页面图片状态表[进度预览索引]?.url || null : undefined}
         nativeImages={页面图片状态表} nativePages={原生图片核心&&!模式2?原生窗口索引:undefined} nativeRadius={!模式2 && 内存缓存上限字节 > 0 ? Math.min(2,预加载页数) : 0}
         onPage={index => { 实时拖动阅读比例(index/Math.max(1,总页数-1)); if(模式2) 提交模式2自由位置(); }}/>}
       <footer

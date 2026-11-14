@@ -50,7 +50,7 @@ test('shipped Windows EXE reads images, ZIP, 7z, PDF and EPUB with isolated pers
     const page = await electron.firstWindow();
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const app = await electron.evaluate(({ app, BrowserWindow }) => ({ packaged: app.isPackaged, version: app.getVersion(), profile: app.getPath('userData'), visible: BrowserWindow.getAllWindows().some(window => window.isVisible()) }));
-    assert.equal(app.packaged, true); assert.equal(app.version, require('../package.json').version); assert.equal(app.profile, profile); assert.equal(app.visible, false);
+    assert.equal(app.packaged, true); assert.equal(app.version, require('../package.json').desktopVersion || require('../package.json').version); assert.equal(app.profile, profile); assert.equal(app.visible, false);
     await expect(page.locator('.reader-layout')).toBeVisible();
     const pageInput = page.getByRole('textbox', { name: /跳转到(?:章节|页码)/ });
     await expect(pageInput).toHaveValue('1');
