@@ -29,7 +29,7 @@ final class ExternalFiles {
       default:return "";
     }
   }
-  static boolean supported(String name){return name!=null&&name.toLowerCase(Locale.ROOT).matches(".+\\.(jpg|jpeg|png|webp|gif|bmp|zip|cbz|rar|cbr|7z|cb7|pdf|epub|mobi)");}
+  static boolean supported(String name){return name!=null&&name.toLowerCase(Locale.ROOT).matches(".+\\.(jpg|jpeg|png|apng|webp|gif|bmp|zip|cbz|rar|cbr|7z|cb7|pdf|epub|mobi)");}
   static String name(String name,String mime){
     String safe=name==null?"":name.replace('/','_').replace('\\','_').replace('\0','_').trim();
     if(safe.isEmpty()||safe.equals(".")||safe.equals(".."))safe="打开的文件";

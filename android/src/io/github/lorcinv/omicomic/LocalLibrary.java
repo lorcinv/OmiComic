@@ -283,7 +283,7 @@ final class LocalLibrary {
     return Integer.compare(a.length(),b.length());
   }
   private String extension(String name){int i=name.lastIndexOf('.');return i<0?"":name.substring(i+1).toLowerCase(Locale.ROOT);}
-  private boolean image(String name){return Arrays.asList("jpg","jpeg","png","webp","gif","bmp").contains(extension(name));}
+  private boolean image(String name){return Arrays.asList("jpg","jpeg","png","apng","webp","gif","bmp").contains(extension(name));}
   private String type(Entry e){if(e.directory)return "folder";String ext=extension(e.name);if(image(e.name))return "image";if(ext.equals("pdf")||ext.equals("epub")||ext.equals("mobi"))return ext;if(Arrays.asList("zip","cbz","rar","cbr","7z","cb7").contains(ext))return "archive";return "unknown";}
   private JSONObject item(Entry e)throws Exception{return new JSONObject().put("id",e.path).put("path",e.path).put("name",e.name).put("type",type(e)).put("extension",extension(e.name)).put("size",e.size).put("modifiedAt",e.modified);}
   private JSONObject directory(String path)throws Exception{
@@ -661,12 +661,12 @@ final class LocalLibrary {
       // PDF bases depend on the current viewport, unlike sampled image files.
       // Older releases may have saved a generic PNG level for this same URL.
       if(item==null||item.pdfDoc!=null||!identity(resolve(item.path)).equals(item.identity))return null;
-      byte[] saved=readerRasters.get("adaptive-raster-info-v3:"+Uri.parse(url).getLastPathSegment());
+      byte[] saved=readerRasters.get("adaptive-raster-info-v4:"+Uri.parse(url).getLastPathSegment());
       return saved==null?null:new JSONObject(new String(saved,java.nio.charset.StandardCharsets.UTF_8));
     }catch(Exception invalid){return null;}
   }
   void saveReaderRasterInfo(String url,int width,int height,int orientation){
-    try{readerRasters.put("adaptive-raster-info-v3:"+Uri.parse(url).getLastPathSegment(),new JSONObject().put("width",width).put("height",height).put("orientation",orientation).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}catch(JSONException ignored){}
+    try{readerRasters.put("adaptive-raster-info-v4:"+Uri.parse(url).getLastPathSegment(),new JSONObject().put("width",width).put("height",height).put("orientation",orientation).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}catch(JSONException ignored){}
   }
   private WebResourceResponse mediaResponse(String mime,byte[] bytes){
     WebResourceResponse result=MainActivity.response(mime,new ByteArrayInputStream(bytes),200,"OK");
@@ -948,7 +948,7 @@ final class LocalLibrary {
   private JSONObject documentImageInfo(String url,String preview,byte[] bytes)throws Exception{
     BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
     if(options.outWidth<1||options.outHeight<1||(long)options.outWidth*options.outHeight>100000000L)throw new IOException("图片尺寸超出上限。");
-    return new JSONObject().put("url",url).put("preview",preview).put("width",options.outWidth).put("height",options.outHeight);
+    return new JSONObject().put("url",url).put("preview",preview).put("animated",ImageAnimation.animated(bytes)).put("width",options.outWidth).put("height",options.outHeight);
   }
   private JSONObject registerDocumentImage(JSONObject input)throws Exception{
     Doc d=documents.get(input.getString("id"));if(d==null||d.closed)throw new IOException("文档已关闭。");

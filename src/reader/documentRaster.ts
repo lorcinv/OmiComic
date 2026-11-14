@@ -1,3 +1,5 @@
+import { imageAnimation } from '../../electron/shared/imageAnimation';
+
 /** Raster metadata only; never decode unbounded document resources. */
 export function documentRasterInfo(data:Uint8Array){
   const v=new DataView(data.buffer,data.byteOffset,data.byteLength),ascii=(offset:number,n:number)=>String.fromCharCode(...data.subarray(offset,offset+n));
@@ -14,7 +16,7 @@ export function documentRasterInfo(data:Uint8Array){
     mime='image/jpeg';let i=2;const sof=new Set([192,193,194,195,197,198,199,201,202,203,205,206,207]);
     while(i+8<data.length){if(data[i++]!==255)continue;while(data[i]===255)i++;const marker=data[i++];if(marker===218||marker===217)break;if(marker===1||marker>=208&&marker<=216)continue;if(i+2>data.length)break;const size=v.getUint16(i);if(size<2||i+size>data.length)break;if(sof.has(marker)&&size>=7){height=v.getUint16(i+3);width=v.getUint16(i+5);break;}i+=size;}
   }
-  return {width,height,mime};
+  return {width,height,mime,animated:imageAnimation(data)===true};
 }
 
 export function documentRaster(data:Uint8Array,maxPixels=16_000_000):string|null{

@@ -4,9 +4,10 @@ import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { SharedImageRead } from './sharedImageRead';
+import { imageAnimation, probeImageAnimation } from '../shared/imageAnimation';
 
 type Dimensions = { width?: number; height?: number };
-type Entry = Dimensions & { token: string; key: string; file: string; signature: string; mime: string; bytes: number;
+type Entry = Dimensions & { token: string; key: string; file: string; signature: string; mime: string; bytes: number; animated?: boolean;
   buffer?: Buffer; load?: (signal: AbortSignal) => Promise<Buffer>; read: SharedImageRead; header?: Promise<void> };
 const signature = (stat: { size: number; mtimeMs: number; ctimeMs: number }) => `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
 const entries = new Map<string, Entry>(), tokens = new Map<string, Entry>();
@@ -14,7 +15,7 @@ const buffered = new Map<string, Entry>();
 // Compressed/source bytes are independent from the reader's decoded-image window.
 const byteLimit = Math.min(256 * 1024 ** 2, Math.max(64 * 1024 ** 2, os.totalmem() / 128));
 let bytes = 0;
-const result = (entry: Entry) => ({ url: `omicomic-image://page/${entry.token}`, width: entry.width, height: entry.height, encodedBytes: entry.bytes });
+const result = (entry: Entry) => ({ url: `omicomic-image://page/${entry.token}`, width: entry.width, height: entry.height, encodedBytes: entry.bytes, animated: entry.animated });
 
 function remember(entry: Entry) {
   entries.set(entry.key, entry); tokens.set(entry.token, entry);
@@ -55,12 +56,18 @@ export async function prepareDesktopImage(file: string, mime: string, dimensions
   } else { entries.delete(key); entries.set(key, entry); if (archive) entry.load = archive.load; }
     if (archive) {
       const buffer = await read(entry, signal);
-      Object.assign(entry, dimensions(buffer)); entry.bytes = buffer.length;
+      Object.assign(entry, dimensions(buffer)); entry.bytes = buffer.length; entry.animated = imageAnimation(buffer) === true;
     } else {
       const current = entry;
       current.header ??= (async () => {
         const handle = await fs.open(file, 'r');
-        try { const header = Buffer.alloc(Math.min(stat.size, 256 * 1024)); await handle.read(header, 0, header.length, 0); Object.assign(current, dimensions(header)); }
+        try {
+          const header = Buffer.alloc(Math.min(stat.size, 256 * 1024)); await handle.read(header, 0, header.length, 0); Object.assign(current, dimensions(header));
+          current.animated = imageAnimation(header) ?? await probeImageAnimation(async (offset, size) => {
+            const buffer = Buffer.alloc(size), result = await handle.read(buffer, 0, size, offset);
+            return buffer.subarray(0, result.bytesRead);
+          }, stat.size);
+        }
         finally { await handle.close(); }
       })().catch(error => { current.header = undefined; throw error; });
       await current.header;

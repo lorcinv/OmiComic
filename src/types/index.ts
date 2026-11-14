@@ -344,6 +344,7 @@ export interface 获取页面图片输入 {
 
 export interface 页面图片结果 {
   url: string;
+  animated?: boolean;
   width?: number;
   height?: number;
   encodedBytes?: number;

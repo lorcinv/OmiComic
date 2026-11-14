@@ -766,9 +766,10 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.contains("bookshelf1194"))scriptAsset="bookshelf1194";
       if(fixture.contains("navmemory"))scriptAsset="navigation-memory";
       if(fixture.equals("updates1196"))scriptAsset="update-check";
+      if(fixture.contains("animations1200"))scriptAsset="animations1200";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
-      deadline=System.currentTimeMillis()+((fixture.contains("bugs1187")||fixture.contains("cutout1191"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
+      deadline=System.currentTimeMillis()+((fixture.contains("bugs1187")||fixture.contains("cutout1191")||fixture.contains("animations1200"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
       String result;
       if(mode.equals("authorize1141")){
         // A background WebView pauses JavaScript callbacks while SAF owns the window.
@@ -1018,6 +1019,17 @@ public final class SmokeTest extends Instrumentation {
         }
         String rotation=eval("window.__omiRotation??null");
         if(!"null".equals(rotation)){runOnMainSync(()->activity.setRequestedOrientation(Integer.parseInt(rotation)));eval("window.__omiRotation=null");}
+        String pixelRequest=(String)new JSONTokener(eval("JSON.stringify(window.__omiPixels||null)")).nextValue();
+        if(!"null".equals(pixelRequest)){
+          JSONObject rect=new JSONObject(pixelRequest);int[] location=new int[2];runOnMainSync(()->web.getLocationOnScreen(location));
+          double scale=web.getWidth()/rect.getDouble("viewport");int x=location[0]+(int)Math.round(rect.getDouble("x")*scale),y=location[1]+(int)Math.round(rect.getDouble("y")*scale);
+          JSONArray pixels=new JSONArray();for(int n=0;n<8;n++){
+            android.graphics.Bitmap capture=getUiAutomation().takeScreenshot();if(capture==null)throw new IOException("No screen pixels");
+            int color=capture.getPixel(Math.max(0,Math.min(capture.getWidth()-1,x)),Math.max(0,Math.min(capture.getHeight()-1,y)));capture.recycle();
+            pixels.put(new JSONArray().put(android.graphics.Color.red(color)).put(android.graphics.Color.green(color)).put(android.graphics.Color.blue(color)));Thread.sleep(135);
+          }
+          eval("window.__omiPixelResult="+pixels+";window.__omiPixels=null");
+        }
         String shot=(String)new JSONTokener(eval("JSON.stringify(window.__omiShot||null)")).nextValue();
         if(!"null".equals(shot)){
           String name=(String)new JSONTokener(shot).nextValue();

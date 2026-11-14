@@ -103,3 +103,13 @@ test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, 2
     await fs.writeFile(path.join(output,'result.json'),JSON.stringify({info,archives:4,pdf:true,measurements,commandWheel:true,minimumZoom,reopened:true},null,2));
   } finally { await app.close(); }
 });
+
+// Run the same screen-pixel animation checks against both packaged Mac architectures.
+require('./reader-gif.electron.cjs');
+test('records packaged animation coverage', async () => {
+  const output=path.resolve('test-results/apple-desktop/result.json');
+  const result=JSON.parse(await fs.readFile(output,'utf8'));result.animations=[];
+  for(const format of ['gif','webp','png','apng'])for(const source of ['folder','archive'])
+    result.animations.push(JSON.parse(await fs.readFile(`test-results/reader-animation-${format}-${source}.json`,'utf8')));
+  await fs.writeFile(output,JSON.stringify(result,null,2));
+});

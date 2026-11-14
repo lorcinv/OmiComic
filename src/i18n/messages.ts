@@ -1769,7 +1769,7 @@ export const messages: Record<string, readonly [string, string]> = {
     "Applies to books opened for the first time. Existing books keep their settings. Vertical continuous mode temporarily uses single pages and restores your layout on exit.",
     "初めて開く作品に適用します。読書済みの作品は前回の設定を使います。縦の連続表示中は一時的に単ページになり、終了すると元に戻ります。"
   ],
-  "默认开启沉浸模式": [
+  "默认进入沉浸模式": [
     "Immersive mode by default",
     "没入モードを既定にする"
   ],

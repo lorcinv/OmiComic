@@ -49,7 +49,7 @@ export function createEntryGuard(totalLimit: number = ARCHIVE_LIMITS.totalBytes)
     seen.add(entry.virtualPath);
   };
 }
-export function isImage(name: string): boolean { return /\.(?:jpe?g|png|webp|bmp|gif)$/i.test(name); }
+export function isImage(name: string): boolean { return /\.(?:jpe?g|png|apng|webp|bmp|gif)$/i.test(name); }
 export function normalizeArchiveError(error: unknown): 压缩包服务错误 {
   if (error instanceof 压缩包服务错误) return error;
   const message = error instanceof Error ? error.message : String(error);

@@ -13,7 +13,7 @@ import {
   type 压缩包图片条目,
 } from "./archiveService";
 
-const 图片扩展名 = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif"]);
+const 图片扩展名 = new Set(["jpg", "jpeg", "png", "apng", "webp", "bmp", "gif"]);
 const 压缩包扩展名 = new Set(["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
 const 自然排序器 = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 // A compressed scan can exceed 12 MiB without being an unsafe raster surface.
