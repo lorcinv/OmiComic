@@ -1,6 +1,6 @@
 # macOS
 
-[下载 OmiComic 1.1.97](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.97) · [中文操作说明](USER_GUIDE.zh-CN.md) · [English guide](USER_GUIDE.en.md) · [日本語ガイド](USER_GUIDE.ja.md)
+[下载 OmiComic 1.1.98](https://github.com/lorcinv/OmiComic/releases/tag/v1.1.98) · [中文操作说明](USER_GUIDE.zh-CN.md) · [English guide](USER_GUIDE.en.md) · [日本語ガイド](USER_GUIDE.ja.md)
 
 ## macOS 安装
 
