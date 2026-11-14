@@ -1,47 +1,25 @@
-name: macOS builds
+name: Publish verified Mac 1.1.98 packages
 on:
-  push:
-    branches: ['codex/apple-test-*']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+  actions: read
 concurrency:
-  group: apple-test-${{ github.ref }}
-  cancel-in-progress: true
+  group: mac-1.1.98-asset-upload
+  cancel-in-progress: false
 jobs:
-  macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: node -e "if(process.arch !== '${{ matrix.arch }}') throw Error(process.arch)"
-      - run: npm run dist:mac
-      - name: Exercise packaged native reader
-        run: |
-          APP=$(find release -path '*/OmiComic.app/Contents/MacOS/OmiComic' -type f -print -quit)
-          OMICOMIC_PACKAGED_EXE="$PWD/$APP" node --test tests/apple-desktop.electron.cjs
+      - name: Validate and upload previously tested Mac packages
+        run: python3 scripts/publish-mac1198.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: OmiComic-mac-${{ matrix.arch }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            test-results/apple-desktop/*.png
-            test-results/apple-desktop/result.json
+          name: Mac-1.1.98-publication-verification
+          path: .cache/mac1198-upload/reports/
           retention-days: 30
