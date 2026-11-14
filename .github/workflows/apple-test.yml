@@ -1,4 +1,4 @@
-name: Publish verified Mac 1.1.98 packages
+name: Update Mac 1.1.98 download notes
 on:
   push:
     branches: ['codex/mac-1.1.98-asset-upload']
@@ -17,8 +17,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - name: Validate and upload previously tested Mac packages
-        run: python3 scripts/publish-mac1198.py
+      - name: Update verified release download notes
+        run: python3 scripts/publish-mac1198-notes.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
