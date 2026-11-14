@@ -3,6 +3,7 @@ import path from "node:path";
 import yauzl from "yauzl";
 import { XMLParser } from "fast-xml-parser";
 import sanitizeHtml from "sanitize-html";
+import { imageAnimation } from '../shared/imageAnimation';
 import { safeRasterImage, rasterDimensions } from "./documentImageSafety";
 
 const MAX_ENTRY = 16 * 1024 * 1024;
@@ -32,9 +33,9 @@ export function resolveEpubPath(base: string, reference: string): string {
 export function sanitizeChapter(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: ["p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr", "strong", "em", "b", "i", "u", "s", "blockquote", "pre", "code", "ul", "ol", "li", "dl", "dt", "dd", "table", "thead", "tbody", "tr", "th", "td", "caption", "img", "ruby", "rt", "rp", "sup", "sub"],
-    allowedAttributes: { img: ["src", "alt", "width", "height"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
+    allowedAttributes: { img: ["src", "alt", "width", "height", "data-omi-animated"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
     allowedSchemes: ["data"], allowedSchemesByTag: { img: ["data"] }, allowProtocolRelative: false,
-    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...(/^[1-9]\d{0,5}$/.test(attrs.width||"")?{width:attrs.width}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.height||"")?{height:attrs.height}:{}), ...( /^data:image\/(png|jpeg|gif|webp);base64,[a-z\d+/=]+$/i.test(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
+    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...(attrs['data-omi-animated']==='true'?{'data-omi-animated':'true'}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.width||"")?{width:attrs.width}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.height||"")?{height:attrs.height}:{}), ...( /^data:image\/(png|jpeg|gif|webp);base64,[a-z\d+/=]+$/i.test(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
   });
 }
 async function createBook(filePath: string) {
@@ -77,22 +78,22 @@ async function createBook(filePath: string) {
       let html = (await read(current.path, 4 * 1024 * 1024)).toString("utf8");
       // First sanitize to inert image placeholders; never preserve publisher CSS, URLs, or SVG.
       html = sanitizeHtml(html, { allowedTags: [...sanitizeHtml.defaults.allowedTags, "img", "ruby", "rt", "rp"], allowedAttributes: { img: ["src", "alt", "width", "height"] }, allowedSchemes: [], allowProtocolRelative: false, transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { src: attrs.src || "", alt: attrs.alt || "" } }), image: (_tag,attrs)=>({tagName:"img",attribs:{src:attrs["xlink:href"]||attrs.href||"",alt:""}}) } });
-      const replacements = new Map<string, string>(),dimensions=new Map<string,{width:number;height:number}>(); let bytes = 0;
+      const replacements = new Map<string, string>(),dimensions=new Map<string,{width:number;height:number;animated:boolean}>(); let bytes = 0;
       for (const match of html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)) {
         const reference = match[1]; if (replacements.has(reference)) continue;
         if (replacements.size >= 100) break;
         try {
           const imagePath = resolveEpubPath(current.path, reference.replace(/&amp;/g, "&"));
           const extension = path.posix.extname(imagePath).toLowerCase();
-          const mime: Record<string, string> = { ".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".gif": "gif", ".webp": "webp" };
+          const mime: Record<string, string> = { ".png": "png", ".apng": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".gif": "gif", ".webp": "webp" };
           if (!mime[extension]) continue;
           const data = await read(imagePath, 8 * 1024 * 1024); bytes += data.length;
           if (bytes > MAX_CHAPTER) throw new Error("EPUB 章节图片超过安全上限。");
-          if (!safeRasterImage(data,100_000_000,100000)) continue;dimensions.set(reference,rasterDimensions(data));
+          if (!safeRasterImage(data,100_000_000,100000)) continue;dimensions.set(reference,{...rasterDimensions(data),animated:imageAnimation(data)===true});
           replacements.set(reference, `data:image/${mime[extension]};base64,${data.toString("base64")}`);
         } catch (error) { if (bytes > MAX_CHAPTER) throw error; }
       }
-      html=html.replace(/<img[^>]*\ssrc="([^"]*)"[^>]*>/g,(tag,reference)=>{const size=dimensions.get(reference);return size?tag.replace(/>$/,` width="${size.width}" height="${size.height}">`):tag;});
+      html=html.replace(/<img[^>]*\ssrc="([^"]*)"[^>]*>/g,(tag,reference)=>{const size=dimensions.get(reference);return size?tag.replace(/>$/,` width="${size.width}" height="${size.height}"${size.animated?' data-omi-animated="true"':''}>`):tag;});
       html = embedChapterImages(html, replacements);
       const content = sanitizeChapter(html);
       if (Buffer.byteLength(content, "utf8") > MAX_SERIALIZED_CHAPTER - DOCUMENT_WRAPPER_RESERVE) throw new Error("EPUB 章节序列化内容超过安全上限。");
@@ -100,7 +101,7 @@ async function createBook(filePath: string) {
     }
     async function cover(): Promise<{ bytes: Uint8Array; name: string } | null> {
       const coverId = list<any>(opf?.metadata?.meta).find(item => item.name === "cover")?.content;
-      const images = [...manifest.values()].filter(item => /^image\/(jpeg|png|gif|webp)$/.test(item["media-type"]));
+      const images = [...manifest.values()].filter(item => /^image\/(jpeg|png|apng|gif|webp)$/.test(item["media-type"]));
       const candidates: string[] = [];
       for (const item of images.filter(item => String(item.properties || "").split(/\s+/).includes("cover-image"))) candidates.push(resolveEpubPath(opfPath, item.href));
       const legacy = manifest.get(String(coverId));

@@ -109,7 +109,7 @@ require('./reader-gif.electron.cjs');
 test('records packaged animation coverage', async () => {
   const output=path.resolve('test-results/apple-desktop/result.json');
   const result=JSON.parse(await fs.readFile(output,'utf8'));result.animations=[];
-  for(const format of ['gif','webp','png','apng'])for(const source of ['folder','archive'])
+  for(const format of ['gif','webp','png','apng'])for(const source of ['folder','archive','epub'])
     result.animations.push(JSON.parse(await fs.readFile(`test-results/reader-animation-${format}-${source}.json`,'utf8')));
   await fs.writeFile(output,JSON.stringify(result,null,2));
 });

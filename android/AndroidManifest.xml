@@ -10,7 +10,7 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <data android:scheme="content"/><data android:scheme="file"/>
-        <data android:mimeType="image/jpeg"/><data android:mimeType="image/png"/>
+        <data android:mimeType="image/jpeg"/><data android:mimeType="image/png"/><data android:mimeType="image/apng"/>
         <data android:mimeType="image/webp"/><data android:mimeType="image/gif"/><data android:mimeType="image/bmp"/>
         <data android:mimeType="application/pdf"/><data android:mimeType="application/epub+zip"/>
         <data android:mimeType="application/x-mobipocket-ebook"/><data android:mimeType="application/x-mobi"/>
@@ -30,13 +30,13 @@
         <data android:pathPattern=".*\\.rar" android:pathSuffix=".rar"/><data android:pathSuffix=".RAR"/><data android:pathPattern=".*\\.cbr" android:pathSuffix=".cbr"/><data android:pathSuffix=".CBR"/>
         <data android:pathPattern=".*\\.7z" android:pathSuffix=".7z"/><data android:pathSuffix=".7Z"/><data android:pathPattern=".*\\.cb7" android:pathSuffix=".cb7"/><data android:pathSuffix=".CB7"/>
         <data android:pathPattern=".*\\.pdf" android:pathSuffix=".pdf"/><data android:pathSuffix=".PDF"/><data android:pathPattern=".*\\.epub" android:pathSuffix=".epub"/><data android:pathSuffix=".EPUB"/><data android:pathPattern=".*\\.mobi" android:pathSuffix=".mobi"/><data android:pathSuffix=".MOBI"/>
-        <data android:pathPattern=".*\\.jpg" android:pathSuffix=".jpg"/><data android:pathSuffix=".JPG"/><data android:pathPattern=".*\\.jpeg" android:pathSuffix=".jpeg"/><data android:pathSuffix=".JPEG"/><data android:pathPattern=".*\\.png" android:pathSuffix=".png"/><data android:pathSuffix=".PNG"/>
+        <data android:pathPattern=".*\\.jpg" android:pathSuffix=".jpg"/><data android:pathSuffix=".JPG"/><data android:pathPattern=".*\\.jpeg" android:pathSuffix=".jpeg"/><data android:pathSuffix=".JPEG"/><data android:pathPattern=".*\\.png" android:pathSuffix=".png"/><data android:pathSuffix=".PNG"/><data android:pathPattern=".*\\.apng" android:pathSuffix=".apng"/><data android:pathSuffix=".APNG"/>
         <data android:pathPattern=".*\\.webp" android:pathSuffix=".webp"/><data android:pathSuffix=".WEBP"/><data android:pathPattern=".*\\.gif" android:pathSuffix=".gif"/><data android:pathSuffix=".GIF"/><data android:pathPattern=".*\\.bmp" android:pathSuffix=".bmp"/><data android:pathSuffix=".BMP"/>
       </intent-filter>
       <intent-filter>
         <action android:name="android.intent.action.SEND"/>
         <category android:name="android.intent.category.DEFAULT"/>
-        <data android:mimeType="image/jpeg"/><data android:mimeType="image/png"/>
+        <data android:mimeType="image/jpeg"/><data android:mimeType="image/png"/><data android:mimeType="image/apng"/>
         <data android:mimeType="image/webp"/><data android:mimeType="image/gif"/><data android:mimeType="image/bmp"/>
         <data android:mimeType="application/pdf"/><data android:mimeType="application/epub+zip"/>
         <data android:mimeType="application/x-mobipocket-ebook"/><data android:mimeType="application/x-mobi"/>

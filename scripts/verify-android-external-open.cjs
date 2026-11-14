@@ -4,7 +4,7 @@ const { execFileSync } = require('node:child_process');
 const { XMLParser } = require('fast-xml-parser');
 const root = path.resolve(__dirname, '..');
 const array = value => value == null ? [] : Array.isArray(value) ? value : [value];
-const requiredMime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'application/pdf', 'application/epub+zip', 'application/x-mobipocket-ebook', 'application/x-mobi', 'application/zip', 'application/x-zip', 'application/x-zip-compressed', 'application/x-cbz', 'application/vnd.comicbook+zip', 'application/x-rar', 'application/x-rar-compressed', 'application/vnd.rar', 'application/x-cbr', 'application/vnd.comicbook-rar', 'application/x-7z-compressed', 'application/x-cb7', 'application/octet-stream'];
+const requiredMime = ['image/jpeg', 'image/png', 'image/apng', 'image/webp', 'image/gif', 'image/bmp', 'application/pdf', 'application/epub+zip', 'application/x-mobipocket-ebook', 'application/x-mobi', 'application/zip', 'application/x-zip', 'application/x-zip-compressed', 'application/x-cbz', 'application/vnd.comicbook+zip', 'application/x-rar', 'application/x-rar-compressed', 'application/vnd.rar', 'application/x-cbr', 'application/vnd.comicbook-rar', 'application/x-7z-compressed', 'application/x-cb7', 'application/octet-stream'];
 
 function checkActivity(activity) {
   const filters = array(activity?.['intent-filter']);
@@ -16,7 +16,7 @@ function checkActivity(activity) {
     if (action === 'VIEW') for (const scheme of ['content', 'file']) if (!data.some(d => d['android:scheme'] === scheme)) throw new Error(`Missing VIEW scheme: ${scheme}`);
   }
   const filenames = filters.find(f => array(f.action).some(a => a['android:name'] === 'android.intent.action.VIEW') && !array(f.data).some(d => d['android:mimeType']));
-  for (const suffix of ['cbz', 'cbr', 'cb7', 'zip', 'rar', '7z', 'pdf', 'epub', 'mobi', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp']) {
+  for (const suffix of ['cbz', 'cbr', 'cb7', 'zip', 'rar', '7z', 'pdf', 'epub', 'mobi', 'jpg', 'jpeg', 'png', 'apng', 'webp', 'gif', 'bmp']) {
     if (!array(filenames?.data).some(d => d['android:pathSuffix'] === `.${suffix}` || String(d['android:pathPattern']).endsWith(`.${suffix}`))) throw new Error(`Missing filename association: ${suffix}`);
   }
 }

@@ -19,7 +19,7 @@ final class ExternalFiles {
   static String extension(String mime){
     if(mime==null)return "";
     switch(mime.toLowerCase(Locale.ROOT).split(";",2)[0].trim()){
-      case "image/jpeg":return "jpg";case "image/png":return "png";case "image/webp":return "webp";
+      case "image/jpeg":return "jpg";case "image/png":return "png";case "image/apng":return "apng";case "image/webp":return "webp";
       case "image/gif":return "gif";case "image/bmp":return "bmp";
       case "application/pdf":return "pdf";case "application/epub+zip":return "epub";
       case "application/x-mobi":case "application/x-mobipocket-ebook":return "mobi";

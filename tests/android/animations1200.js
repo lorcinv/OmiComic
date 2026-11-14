@@ -17,9 +17,9 @@ const sample=async(label,format,source)=>{
   const colors=window.__omiPixelResult;assert(colors.some(([r,g,b])=>r>b+100)&&colors.some(([r,g,b])=>b>r+100),'Animation paused '+format+'/'+source+'/'+label+' '+JSON.stringify(colors));
   results.push({label,format,source,colors});
 };
-for(const format of ['gif','webp','png','apng'])for(const source of ['folder','archive']){
-  const name='Animated-'+format+(source==='archive'?'.cbz':'');await wait(()=>card(name),'book '+name);await settled();
-  const book=await value(api.getResourcePages({path:root+'/Animations1200/'+name}));assert(book.total===2,'Page enumeration '+name);
+for(const format of ['gif','webp','png','apng'])for(const source of ['folder','archive','epub']){
+  const name='Animated-'+format+(source==='epub'?'.epub':source==='archive'?'.cbz':'');await wait(()=>card(name),'book '+name);await settled();
+  const book=await value(api.getResourcePages({path:root+'/Animations1200/'+name}));if(source!=='epub')assert(book.total===2,'Page enumeration '+name);
   await value(api.saveReadingProgress({resourceKey:book.resourceKey,sourcePath:book.sourcePath,sourceType:book.sourceType,title:name,currentPageIndex:0,totalPages:2,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:'horizontal',panorama:source==='archive',immersive:false}}));
   card(name).querySelector('strong').click();await wait(()=>active('.reader-layout')?.getAttribute('aria-busy')==='false','reader');await settled();await sample('adjusted',format,source);
   // Static WebP retains the native reader, while animated WebP stays live in WebView.
@@ -30,10 +30,10 @@ for(const format of ['gif','webp','png','apng'])for(const source of ['folder','a
   window.dispatchEvent(new Event('omi-reader-back',{cancelable:true}));await wait(()=>!active('.reader-stage'),'reader closed');await settled();
 }
 window.dispatchEvent(new Event('omi-open-settings'));
-const button=text=>[...document.querySelectorAll('button')].find(e=>e.getBoundingClientRect().width&&e.textContent.trim()===text);
+const button=text=>[...document.querySelectorAll('button')].find(e=>e.getBoundingClientRect().width&&(e.textContent.trim()===text||e.querySelector('strong')?.textContent===text));
 await wait(()=>button('关于 OmiComic'),'about category');button('关于 OmiComic').click();await wait(()=>document.querySelector('.omi-about'),'about');
 const actions=[...document.querySelectorAll('.omi-about__action')],cards=actions.map(e=>e.getBoundingClientRect());
 const gaps=[cards[1].top-cards[0].bottom,cards[2].top-cards[1].bottom];assert(gaps.every(g=>Math.abs(g-12)<1),'About gaps '+gaps);
 for(const action of actions){const a=action.getBoundingClientRect(),icon=action.querySelector('svg').getBoundingClientRect();assert(Math.abs(icon.y+icon.height/2-a.y-a.height/2)<1,'About icon alignment');}
-window.__omiShot='animations1200-about';await wait(()=>!window.__omiShot,'about screenshot');
+await pause(700);window.__omiShot='animations1200-about';await wait(()=>!window.__omiShot,'about screenshot');
 return {version:(await api.getAppInfo()).version,results,staticNative:true,aboutGaps:gaps};

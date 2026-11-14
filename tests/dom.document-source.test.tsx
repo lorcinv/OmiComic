@@ -32,6 +32,14 @@ it('EPUB opens without loading the PDF runtime', async () => {
   } finally { book.dispose(); }
 });
 
+it.each([false,true])('long EPUB image animation=%s keeps the appropriate page layout',async animated=>{
+  const book=await source('epub');
+  window.omicomic.openDocument=vi.fn(async()=>({ok:true,data:{size:100,chapters:[{index:0,name:'Image'}]}}));
+  window.omicomic.readDocumentChapter=vi.fn(async()=>({ok:true,data:`<html><body><img src="data:image/png;base64,AA==" width="96" height="512" ${animated?'data-omi-animated="true"':''}></body></html>`}));
+  try { expect((await book.open()).total).toBe(animated?1:4); }
+  finally {book.dispose();}
+});
+
 it('PDF still initializes the range reader and releases its worker on close', async () => {
   const book = await source('pdf');
   window.omicomic.openDocument = vi.fn(async () => ({ ok: true, data: { size: 100, chapters: [] } }));
