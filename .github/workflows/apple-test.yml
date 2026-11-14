@@ -1,5 +1,7 @@
 name: Publish verified Mac 1.1.98 packages
 on:
+  push:
+    branches: ['codex/mac-1.1.98-asset-upload']
   workflow_dispatch:
 permissions:
   contents: write
