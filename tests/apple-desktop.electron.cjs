@@ -75,8 +75,7 @@ test('packaged Apple reader: native app menu, real archives, PDF, seven sizes, 2
       await app.evaluate(({app},file)=>app.emit('open-file',{preventDefault(){}},file),file);
       await expect(stage).toBeVisible();
       await expect(page.locator('.reader-layout')).toHaveAttribute('aria-busy','false');
-      if(flow==='ordinary')await expect(stage).not.toHaveClass(/\bis-panorama\b/);
-      else await expect(stage).toHaveClass(/\bis-panorama\b/);
+      await expect.poll(()=>stage.evaluate(element=>element.classList.contains('is-panorama'))).toBe(flow!=='ordinary');
       await expect(stage).toHaveClass(new RegExp(`is-flow-${flow==='vertical'?'vertical':'horizontal'}`));
       await expect.poll(()=>stage.locator('img.reader-image').evaluateAll(images=>images.some(image=>image.complete&&image.naturalWidth>0))).toBe(true);
       const pageBefore=await progress.getAttribute('aria-valuenow'),bounds=await stage.boundingBox();
