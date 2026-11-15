@@ -8,28 +8,28 @@
 
 OmiComic は、ローカルでの高速起動とすっきりした読書体験を重視した、Windows・macOS・Android 対応の漫画リーダーです。画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、DRM なし MOBI に対応し、本棚、カテゴリー、タグ、お気に入りでローカルの漫画を整理できます。
 
-## [作者を応援する](docs/support.md)
+## ダウンロード
 
-OmiComic がお役に立ちましたら、作者を応援していただけるとうれしいですヽ(✿ﾟ▽ﾟ)ノ
+現在のバージョン：**1.2.1**。
+
+| 対応環境 | パッケージ |
+| --- | --- |
+| Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
+| macOS · Apple Silicon（M シリーズ、arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
+| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
+
+- **Windows**：インストーラー版は EXE を実行します。インストール不要のポータブル版は ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。
+- **Android**：APK をインストールします。既存のアプリをそのまま更新できます。
+- **macOS**：M シリーズは Apple Silicon、Intel プロセッサーは Intel を選びます。[バージョンの選び方](docs/APPLE.md#mac-download)。現在の配布版は署名・公証を行っていません。[インストールと初回起動](docs/APPLE.md#mac-install)をご確認ください。
+
+1.2.1：横長ページの分割を追加し、デスクトップの読書設定をサイドバーに整理しました。Android のボタン操作とプレビュー方向を改善し、一部 EPUB の白紙表示を修正しました。[更新内容](docs/releases/v1.2.1.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 紹介動画
 
 https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 [▶ Bilibili で紹介動画を見る（中国語）](https://www.bilibili.com/video/BV17QnU6sE2L/)
-
-## ダウンロード
-
-| 対応環境 | パッケージ |
-| --- | --- |
-| PC · Windows x64 | [OmiComic 1.2.1 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) |
-| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
-| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
-| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
-
-Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。 Android：APK をインストールして、既存のアプリを更新できます。
-
-1.2.1：横長ページの分割を追加し、デスクトップの読書設定をサイドバーに整理しました。Android のボタン操作とプレビュー方向を改善し、一部 EPUB の白紙表示を修正しました。[更新内容](docs/releases/v1.2.1.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 機能
 
@@ -46,6 +46,24 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 <table>
 <tr>
 <td width="50%" valign="top">
+<h3>本棚</h3>
+<p>シリーズ、作者、読書予定に合わせて本棚を作り、カテゴリーで整理。マウスの中ボタンでカードをドラッグして並べ替えられます。</p>
+<a href="docs/images/v1.1.36/windows-shelves.png"><img src="docs/images/v1.1.36/windows-shelves.png" width="100%" alt="本棚"></a>
+</td>
+<td width="50%" valign="top">
+<h3>リーダー</h3>
+<p>見開き、ウィンドウに合わせる表示、パノラマ、没入モードに対応。進捗バーで移動し、明るさ・コントラスト・画像効果をすぐに調整できます。</p>
+<a href="docs/images/v1.1.36/windows-reader.png"><img src="docs/images/v1.1.36/windows-reader.png" width="100%" alt="リーダー"></a>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>Windows の詳細：ライブラリ、タグ、プレビュー、設定</summary>
+
+<table>
+<tr>
+<td width="50%" valign="top">
 <h3>ホーム</h3>
 <p>最近読んだ作品の表紙、ページ番号、進捗を表示。表紙をダブルクリックするか、ホバー時の「続きを読む」で再開できます。</p>
 <a href="docs/images/v1.1.40/windows-home.png"><img src="docs/images/v1.1.40/windows-home.png" width="100%" alt="ホーム"></a>
@@ -58,26 +76,14 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 </tr>
 <tr>
 <td width="50%" valign="top">
-<h3>本棚</h3>
-<p>シリーズ、作者、読書予定に合わせて本棚を作り、カテゴリーで整理。マウスの中ボタンでカードをドラッグして並べ替えられます。</p>
-<a href="docs/images/v1.1.36/windows-shelves.png"><img src="docs/images/v1.1.36/windows-shelves.png" width="100%" alt="本棚"></a>
-</td>
-<td width="50%" valign="top">
 <h3>タグの絞り込み</h3>
 <p>あいまい一致や完全一致でタグを絞り込み、同じパネルでタグを管理・削除できます。</p>
 <a href="docs/images/v1.1.36/windows-tags.png"><img src="docs/images/v1.1.36/windows-tags.png" width="100%" alt="タグの絞り込み"></a>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <h3>作品詳細とページプレビュー</h3>
 <p>表紙、進捗、タグ、紹介文、ページ一覧を確認。紹介文はダブルクリックで編集でき、サムネイルをダブルクリックするとそのページから読めます。</p>
 <a href="docs/images/v1.1.36/windows-detail.png"><img src="docs/images/v1.1.36/windows-detail.png" width="100%" alt="作品詳細とページプレビュー"></a>
-</td>
-<td width="50%" valign="top">
-<h3>リーダー</h3>
-<p>見開き、ウィンドウに合わせる表示、パノラマ、没入モードに対応。進捗バーで移動し、明るさ・コントラスト・画像効果をすぐに調整できます。</p>
-<a href="docs/images/v1.1.36/windows-reader.png"><img src="docs/images/v1.1.36/windows-reader.png" width="100%" alt="リーダー"></a>
 </td>
 </tr>
 <tr>
@@ -94,6 +100,8 @@ Windows：ZIP をすべて展開し、<code>OmiComic.exe</code> を起動しま�
 </tr>
 </table>
 
+</details>
+
 ## macOS 版
 
 Apple Silicon（M シリーズ、arm64）と Intel（x64）に対応します。DMG を開き、OmiComic を「アプリケーション」にドラッグするか、ZIP を展開してアプリを移動します。Windows と同じローカル形式・本棚・読書ツールに加え、標準のウィンドウボタン、Command キー、閉じたウィンドウの Dock からの再表示に対応します。
@@ -103,6 +111,24 @@ Apple Silicon（M シリーズ、arm64）と Intel（x64）に対応します。
 ## Android 版
 
 タッチ操作に合わせた画面で、フォルダーの閲覧から全画面の読書へスムーズに切り替えられます。
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<h3>本棚</h3>
+<p>読書予定に合わせて作品を本棚にまとめられます。長押しで選択・並べ替えを行い、カテゴリーで整理できます。</p>
+<a href="docs/images/v1.1.36/android-shelves.png"><img src="docs/images/v1.1.36/android-shelves.png" height="440" alt="本棚"></a>
+</td>
+<td width="50%" valign="top">
+<h3>リーダー</h3>
+<p>画面中央をタップすると読書ツールを表示。スワイプや音量キーでページを送り、ピンチで拡大し、自動読書も使えます。</p>
+<a href="docs/images/v1.1.36/android-reader.png"><img src="docs/images/v1.1.36/android-reader.png" height="440" alt="リーダー"></a>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>Android の詳細：フォルダー、プレビュー、設定</summary>
 
 <table>
 <tr>
@@ -124,21 +150,9 @@ Apple Silicon（M シリーズ、arm64）と Intel（x64）に対応します。
 <a href="docs/images/v1.1.36/android-folders.png"><img src="docs/images/v1.1.36/android-folders.png" height="440" alt="フォルダーの閲覧"></a>
 </td>
 <td width="50%" valign="top">
-<h3>本棚</h3>
-<p>読書予定に合わせて作品を本棚にまとめられます。長押しで選択・並べ替えを行い、カテゴリーで整理できます。</p>
-<a href="docs/images/v1.1.36/android-shelves.png"><img src="docs/images/v1.1.36/android-shelves.png" height="440" alt="本棚"></a>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
 <h3>作品詳細</h3>
 <p>表紙、タグ、紹介文、ページプレビューを確認して、読みたいページから開けます。</p>
 <a href="docs/images/v1.1.36/android-detail.png"><img src="docs/images/v1.1.36/android-detail.png" height="440" alt="作品詳細"></a>
-</td>
-<td width="50%" valign="top">
-<h3>リーダー</h3>
-<p>画面中央をタップすると読書ツールを表示。スワイプや音量キーでページを送り、ピンチで拡大し、自動読書も使えます。</p>
-<a href="docs/images/v1.1.36/android-reader.png"><img src="docs/images/v1.1.36/android-reader.png" height="440" alt="リーダー"></a>
 </td>
 </tr>
 <tr>
@@ -154,6 +168,12 @@ Apple Silicon（M シリーズ、arm64）と Intel（x64）に対応します。
 </td>
 </tr>
 </table>
+
+</details>
+
+## [作者を応援する](docs/support.md)
+
+OmiComic がお役に立ちましたら、作者を応援していただけるとうれしいですヽ(✿ﾟ▽ﾟ)ノ
 
 ## 関連リンク
 

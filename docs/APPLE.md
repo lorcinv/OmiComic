@@ -4,7 +4,28 @@
 
 ## macOS 安装
 
-Apple Silicon（M 系列）选择文件名带 `mac-arm64` 的 DMG 或 ZIP；Intel Mac 选择 `mac-x64`。打开 DMG 后将 OmiComic 拖入“应用程序”；ZIP 解压后同样移动 `OmiComic.app`。两种格式的应用相同。
+<a id="mac-download"></a>
+
+### 如何选择版本
+
+在苹果菜单中打开“关于本机”，查看“芯片”或“处理器”：
+
+| 你的 Mac | 下载版本 |
+| --- | --- |
+| Apple M 系列芯片 | Apple Silicon · 文件名含 `mac-arm64` |
+| Intel 处理器 | Intel · 文件名含 `mac-x64` |
+
+不确定芯片类型时，可参考 [Apple 的识别说明](https://support.apple.com/zh-cn/116943)。同一架构的 DMG 与 ZIP 包含相同的应用，选择一种即可。
+
+English: in Apple menu → About This Mac, check Chip or Processor. Choose `mac-arm64` for Apple M-series chips or `mac-x64` for Intel. DMG and ZIP contain the same app.
+
+日本語：Apple メニュー →「この Mac について」でチップまたはプロセッサーを確認します。Apple M シリーズは `mac-arm64`、Intel は `mac-x64` を選びます。同じアーキテクチャの DMG と ZIP に含まれるアプリは同じです。
+
+<a id="mac-install"></a>
+
+### 安装与首次打开
+
+打开 DMG 后将 OmiComic 拖入“应用程序”；ZIP 解压后同样移动 `OmiComic.app`。
 
 当前包没有 Apple Developer ID 签名与公证。确认下载来自本仓库的 Release 后，若提示无法验证开发者或未公证，可先尝试打开，再进入“系统设置 → 隐私与安全性 → 仍要打开”。具体提示和操作见 [Apple 官方说明](https://support.apple.com/en-us/102445)。
 

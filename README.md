@@ -6,30 +6,30 @@
 
 **整理你的漫画，接着上次阅读。**
 
-OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、macOS 与 Android漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和无 DRM 的 MOBI 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
+OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、macOS 与 Android 漫画阅读器。支持图片、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB 和无 DRM 的 MOBI 等格式，提供书架、分类、标签与收藏功能，方便整理本地漫画。
 
-## [支持作者](docs/support.md)
+## 下载
 
-如果你觉得软件对你有帮助，可以支持一下作者，这会对作者有很大的鼓励ヽ(✿ﾟ▽ﾟ)ノ
+当前版本：**1.2.1**。
+
+| 平台 | 安装包 |
+| --- | --- |
+| Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
+| macOS · Apple Silicon（M 系列，arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
+| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
+
+- **Windows**：安装版运行 EXE，按提示安装；免安装版完整解压 ZIP 后运行 <code>OmiComic.exe</code>。
+- **Android**：安装 APK，可直接覆盖升级。
+- **macOS**：M 系列选 Apple Silicon，Intel 芯片选 Intel。[如何选择版本](docs/APPLE.md#mac-download) · 当前包未签名、未公证，[安装与首次打开说明](docs/APPLE.md#mac-install)。
+
+1.2.1：新增横页拆分，整理桌面阅读侧栏，优化 Android 按钮反馈与预览方向，修复部分 EPUB 空白页。[本版更新](docs/releases/v1.2.1.md) · [更新记录](docs/releases/README.md)。
 
 ## 视频演示
 
 https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 [▶ 在 B 站观看演示](https://www.bilibili.com/video/BV17QnU6sE2L/)
-
-## 下载
-
-| 平台 | 安装包 |
-| --- | --- |
-| PC · Windows x64 | [OmiComic 1.2.1 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) |
-| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
-| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
-| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
-
-Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
-
-1.2.1：新增横页拆分，整理桌面阅读侧栏，优化 Android 按钮反馈与预览方向，修复部分 EPUB 空白页。[本版更新](docs/releases/v1.2.1.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 
@@ -46,6 +46,24 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 <table>
 <tr>
 <td width="50%" valign="top">
+<h3>书架</h3>
+<p>按系列、作者或阅读计划建立书架，用分类整理不同收藏。中键拖动卡片即可调整顺序。</p>
+<a href="docs/images/v1.1.36/windows-shelves.png"><img src="docs/images/v1.1.36/windows-shelves.png" width="100%" alt="书架"></a>
+</td>
+<td width="50%" valign="top">
+<h3>阅读器</h3>
+<p>支持双页、适应窗口、全景和沉浸阅读。通过底部进度条跳页，实时调整亮度、对比度和图像效果。</p>
+<a href="docs/images/v1.1.36/windows-reader.png"><img src="docs/images/v1.1.36/windows-reader.png" width="100%" alt="阅读器"></a>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>展开 Windows 详细介绍：资源库、标签、预览与设置</summary>
+
+<table>
+<tr>
+<td width="50%" valign="top">
 <h3>首页</h3>
 <p>最近阅读集中展示封面、页码和进度。双击封面，或点击悬停时出现的“继续阅读”，回到上次读到的位置。</p>
 <a href="docs/images/v1.1.40/windows-home.png"><img src="docs/images/v1.1.40/windows-home.png" width="100%" alt="首页"></a>
@@ -58,26 +76,14 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 </tr>
 <tr>
 <td width="50%" valign="top">
-<h3>书架</h3>
-<p>按系列、作者或阅读计划建立书架，用分类整理不同收藏。中键拖动卡片即可调整顺序。</p>
-<a href="docs/images/v1.1.36/windows-shelves.png"><img src="docs/images/v1.1.36/windows-shelves.png" width="100%" alt="书架"></a>
-</td>
-<td width="50%" valign="top">
 <h3>标签筛选</h3>
 <p>按模糊或精准匹配筛选标签，在同一面板中管理和清理标签。</p>
 <a href="docs/images/v1.1.36/windows-tags.png"><img src="docs/images/v1.1.36/windows-tags.png" width="100%" alt="标签筛选"></a>
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <h3>详情与页面预览</h3>
 <p>查看封面、进度、标签和简介，通过缩略图浏览整本漫画。双击简介编辑，双击缩略图从对应页开始阅读。</p>
 <a href="docs/images/v1.1.36/windows-detail.png"><img src="docs/images/v1.1.36/windows-detail.png" width="100%" alt="详情与页面预览"></a>
-</td>
-<td width="50%" valign="top">
-<h3>阅读器</h3>
-<p>支持双页、适应窗口、全景和沉浸阅读。通过底部进度条跳页，实时调整亮度、对比度和图像效果。</p>
-<a href="docs/images/v1.1.36/windows-reader.png"><img src="docs/images/v1.1.36/windows-reader.png" width="100%" alt="阅读器"></a>
 </td>
 </tr>
 <tr>
@@ -94,6 +100,8 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 </tr>
 </table>
 
+</details>
+
 ## macOS
 
 支持 Apple Silicon（M 系列，arm64）与 Intel（x64）。打开 DMG，将 OmiComic 拖入“应用程序”，或解压 ZIP 后移动应用。提供与 Windows 相同的本地格式、书架、标签和阅读工具，支持原生窗口按钮、Command 快捷键及关闭窗口后从 Dock 重新打开。
@@ -103,6 +111,24 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 ## Android 版
 
 以触摸操作为中心，从目录浏览到全屏阅读，一只手也能轻松切换。
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<h3>书架</h3>
+<p>按阅读计划把漫画放进不同书架。长按选择、调整顺序，分类管理不同收藏。</p>
+<a href="docs/images/v1.1.36/android-shelves.png"><img src="docs/images/v1.1.36/android-shelves.png" height="440" alt="书架"></a>
+</td>
+<td width="50%" valign="top">
+<h3>阅读器</h3>
+<p>点击画面中央唤出工具，支持滑动翻页、双指缩放、音量键翻页和自动阅读。</p>
+<a href="docs/images/v1.1.36/android-reader.png"><img src="docs/images/v1.1.36/android-reader.png" height="440" alt="阅读器"></a>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>展开 Android 详细介绍：目录、预览与设置</summary>
 
 <table>
 <tr>
@@ -124,21 +150,9 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 <a href="docs/images/v1.1.36/android-folders.png"><img src="docs/images/v1.1.36/android-folders.png" height="440" alt="目录浏览"></a>
 </td>
 <td width="50%" valign="top">
-<h3>书架</h3>
-<p>按阅读计划把漫画放进不同书架。长按选择、调整顺序，分类管理不同收藏。</p>
-<a href="docs/images/v1.1.36/android-shelves.png"><img src="docs/images/v1.1.36/android-shelves.png" height="440" alt="书架"></a>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
 <h3>漫画详情</h3>
 <p>查看封面、标签、简介和页面预览，从需要的页面开始阅读。</p>
 <a href="docs/images/v1.1.36/android-detail.png"><img src="docs/images/v1.1.36/android-detail.png" height="440" alt="漫画详情"></a>
-</td>
-<td width="50%" valign="top">
-<h3>阅读器</h3>
-<p>点击画面中央唤出工具，支持滑动翻页、双指缩放、音量键翻页和自动阅读。</p>
-<a href="docs/images/v1.1.36/android-reader.png"><img src="docs/images/v1.1.36/android-reader.png" height="440" alt="阅读器"></a>
 </td>
 </tr>
 <tr>
@@ -154,6 +168,12 @@ Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安�
 </td>
 </tr>
 </table>
+
+</details>
+
+## [支持作者](docs/support.md)
+
+如果你觉得软件对你有帮助，可以支持一下作者，这会对作者有很大的鼓励ヽ(✿ﾟ▽ﾟ)ノ
 
 ## 更多
 
