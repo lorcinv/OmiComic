@@ -22,14 +22,14 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | Platform | Package |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.2.0 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-Portable-1.2.0-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-Setup-1.2.0-x64.exe) |
-| Android 8.0+ | [OmiComic 1.2.0 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-android.apk) |
-| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-arm64.zip) |
-| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-x64.zip) |
+| PC · Windows x64 | [OmiComic 1.2.1 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) |
+| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
+| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
+| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
 
 Windows: extract the entire ZIP and run <code>OmiComic.exe</code>. Android: install the APK over your existing installation.
 
-1.2.0 brings Windows, macOS and Android to the same version, fixes GIF/WebP/APNG playback, aligns the About page spacing and icons, and adds a desktop option to open comics in immersive mode, off by default. [Release notes](docs/releases/v1.2.0.md) · [Version history](docs/releases/README.en.md).
+1.2.1 adds spread splitting, refines the desktop reading sidebar, improves Android button feedback and preview direction, and fixes blank pages in some EPUB files. [Release notes](docs/releases/v1.2.1.md) · [Version history](docs/releases/README.en.md).
 
 ## Features
 

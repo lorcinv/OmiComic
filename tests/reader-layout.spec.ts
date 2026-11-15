@@ -166,6 +166,7 @@ test('Escape removes incidental button outlines while Tab retains a keyboard ind
   await expect(zoom).toHaveCSS('outline-style', 'none');
   await expect(page.locator('.reader-layout')).toBeVisible();
   await page.keyboard.press('Tab');
-  await expect(immersive).toBeFocused();
-  await expect(immersive).not.toHaveCSS('outline-style', 'none');
+  const next = page.getByRole('button', { name: '缩放', exact: true });
+  await expect(next).toBeFocused();
+  await expect(next).not.toHaveCSS('outline-style', 'none');
 });

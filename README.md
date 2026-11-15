@@ -22,14 +22,14 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 | 平台 | 安装包 |
 | --- | --- |
-| PC · Windows x64 | [OmiComic 1.2.0 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-Portable-1.2.0-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-Setup-1.2.0-x64.exe) |
-| Android 8.0+ | [OmiComic 1.2.0 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-android.apk) |
-| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-arm64.zip) |
-| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.0/OmiComic-1.2.0-mac-x64.zip) |
+| PC · Windows x64 | [OmiComic 1.2.1 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) · [Setup EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) |
+| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
+| macOS · Apple Silicon | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
+| macOS · Intel | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
 
 Windows：完整解压 ZIP 后运行 <code>OmiComic.exe</code>。 Android：安装 APK，可直接覆盖升级。
 
-1.2.0：Windows、macOS 与 Android 统一更新，修复 GIF／WebP／APNG 动图播放，调整关于页间距与图标，PC 新增默认关闭的“默认进入沉浸模式”。[本版更新](docs/releases/v1.2.0.md) · [更新记录](docs/releases/README.md)。
+1.2.1：新增横页拆分，整理桌面阅读侧栏，优化 Android 按钮反馈与预览方向，修复部分 EPUB 空白页。[本版更新](docs/releases/v1.2.1.md) · [更新记录](docs/releases/README.md)。
 
 ## 功能
 

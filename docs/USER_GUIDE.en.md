@@ -182,6 +182,12 @@ Yes. Open location browses the containing folder temporarily without adding a sa
 <details>
 <summary>What do the reading controls do?</summary>
 
+**Windows**: The horizontal ellipsis beside Immersive opens the sidebar with fitting, spread splitting and image adjustments expanded. Click outside or press Esc to close it without turning a page.
+
+**macOS**: The horizontal ellipsis beside Immersive opens the sidebar with fitting, spread splitting and image adjustments expanded. Click outside or press Esc to close it without turning a page.
+
+**Android**: Reading settings place spread splitting on the second row and Immersive beside Image adjustments on the third. Active controls use the theme accent color.
+
 - **Single / double**: Choose pages shown together; narrow windows show one page at a time.
 - **Reading direction**: Switch left-to-right / right-to-left.
 - **Horizontal / vertical**: Change how pages are arranged.
@@ -192,13 +198,20 @@ Yes. Open location browses the containing folder temporarily without adding a sa
 </details>
 
 <details>
+<summary>How do I split wide pages and read their page numbers?</summary>
+
+Spread splitting is off by default and saved per book. In normal single-page mode, image and PDF pages with a width-to-height ratio of at least 1.2 are divided down the middle, in the selected reading order. The original page total stays unchanged: 12L/100 and 12R/100 identify the physical left and right halves. Bookmarks and resume retain the half. Double-page and panorama modes show the whole page; splitting returns in normal single-page mode. This changes display only and also cuts wide illustrations in half.
+
+</details>
+
+<details>
 <summary>How do I zoom and pan?</summary>
 
 Normal reading offers fit window, width, height or original size. Panorama chooses fitting from the reading flow and remains scrollable when reduced. Free zoom ranges from 25% to 600%; 100% is the default size of the current fit mode, rather than the original pixel ratio. After panning an enlarged image, release to coast. Press to stop, drag in the opposite direction to reverse, or let the image stop at its boundary.
 
-**Windows**: Open Zoom to the right of Image adjustments for a slider centered on 100% and Reset size below it. Ctrl+wheel zooms; left-drag pans; double-click the center to reset. Reset animates smoothly and can be interrupted by a new zoom or drag. F toggles immersive reading; move to the top or bottom for tools.
+**Windows**: Open Zoom in the top toolbar for a slider centered on 100% and Reset size below it. Ctrl+wheel zooms; left-drag pans; double-click the center to reset. Reset animates smoothly and can be interrupted by a new zoom or drag. F toggles immersive reading; move to the top or bottom for tools.
 
-**macOS**: Open Zoom to the right of Image adjustments for a slider centered on 100% and Reset size below it. ⌘+wheel zooms; left-drag pans; double-click the center to reset. Reset animates smoothly and can be interrupted by a new zoom or drag. F toggles immersive reading; move to the top or bottom for tools.
+**macOS**: Open Zoom in the top toolbar for a slider centered on 100% and Reset size below it. ⌘+wheel zooms; left-drag pans; double-click the center to reset. Reset animates smoothly and can be interrupted by a new zoom or drag. F toggles immersive reading; move to the top or bottom for tools.
 
 **Android**: Pinch to zoom. Double-tap to zoom the image is enabled by default: double-tap the detail you want to see to enlarge it to 2×; double-tap again to reset. Drag horizontally to turn normal pages or spreads. When enlarged, pan to the image edge and keep dragging to turn. Panorama scrolls continuously. Zoomed single and double pages can fill the status-bar and camera area while controls stay clear of the camera.
 
