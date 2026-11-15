@@ -1,7 +1,7 @@
 <div align="center">
   <img src="resources/icon.png" width="112" height="112" alt="OmiComic">
   <h1>OmiComic</h1>
-  <p><strong>整理你的漫画，接着上次阅读。</strong></p>
+  <p><strong>整理你的漫画，享受沉浸阅读</strong></p>
   <p><strong>简体中文</strong> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a></p>
   <p>
     <a href="https://github.com/lorcinv/OmiComic/releases/latest"><img src="https://img.shields.io/github/v/release/lorcinv/OmiComic?label=release&amp;color=4b7c88" alt="最新版本"></a>
