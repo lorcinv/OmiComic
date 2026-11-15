@@ -1,10 +1,15 @@
-[简体中文](README.md) · [English](README.en.md) · **日本語**
-
-<div align="center"><img src="resources/icon.png" width="88" alt="OmiComic"></div>
-
-# OmiComic
-
-**漫画を整理して、前回の続きから。**
+<div align="center">
+  <img src="resources/icon.png" width="112" height="112" alt="OmiComic">
+  <h1>OmiComic</h1>
+  <p><strong>漫画を整理して、前回の続きから。</strong></p>
+  <p><a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <strong>日本語</strong></p>
+  <p>
+    <a href="https://github.com/lorcinv/OmiComic/releases/latest"><img src="https://img.shields.io/github/v/release/lorcinv/OmiComic?label=release&amp;color=4b7c88" alt="最新リリース"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-68776b" alt="GPL-3.0-only"></a>
+    <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-65758b" alt="Windows・macOS・Android 対応">
+  </p>
+  <p><a href="#ダウンロード">ダウンロード</a> · <a href="#紹介動画">紹介動画</a> · <a href="#機能">機能</a> · <a href="docs/support.md">作者を応援する</a></p>
+</div>
 
 OmiComic は、ローカルでの高速起動とすっきりした読書体験を重視した、Windows・macOS・Android 対応の漫画リーダーです。画像、ZIP／CBZ、RAR／CBR、7z／CB7、PDF、EPUB、DRM なし MOBI に対応し、本棚、カテゴリー、タグ、お気に入りでローカルの漫画を整理できます。
 

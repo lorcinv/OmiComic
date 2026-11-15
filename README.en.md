@@ -1,10 +1,15 @@
-[简体中文](README.md) · **English** · [日本語](README.ja.md)
-
-<div align="center"><img src="resources/icon.png" width="88" alt="OmiComic"></div>
-
-# OmiComic
-
-**Organize your comics. Pick up where you left off.**
+<div align="center">
+  <img src="resources/icon.png" width="112" height="112" alt="OmiComic">
+  <h1>OmiComic</h1>
+  <p><strong>Organize your comics. Pick up where you left off.</strong></p>
+  <p><a href="README.md">简体中文</a> · <strong>English</strong> · <a href="README.ja.md">日本語</a></p>
+  <p>
+    <a href="https://github.com/lorcinv/OmiComic/releases/latest"><img src="https://img.shields.io/github/v/release/lorcinv/OmiComic?label=release&amp;color=4b7c88" alt="Latest release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-68776b" alt="GPL-3.0-only"></a>
+    <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-65758b" alt="Available for Windows, macOS and Android">
+  </p>
+  <p><a href="#download">Download</a> · <a href="#video-demo">Video demo</a> · <a href="#features">Features</a> · <a href="docs/support.md">Support the author</a></p>
+</div>
 
 OmiComic is a local comic reader for Windows, macOS and Android, focused on fast startup and a clean reading experience. It supports images, ZIP/CBZ, RAR/CBR, 7z/CB7, PDF, EPUB and DRM-free MOBI, with bookshelves, categories, tags and favorites to organize your local collection.
 
