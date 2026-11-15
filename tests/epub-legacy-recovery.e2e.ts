@@ -2,7 +2,7 @@ import {test,expect,type Page,type CDPSession} from '@playwright/test';
 import {installMock} from './mock';
 
 type Flow='ordinary'|'horizontal'|'vertical'|'rtl';
-async function open(page:Page,flow:Flow,content:'image'|'unreadable'|'unsupported'='image',index=0){
+async function open(page:Page,flow:Flow,content:'image'|'unreadable'|'unsupported'|'prefixed'='image',index=0){
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.addInitScript(installMock,{count:12});
   await page.addInitScript(({flow,content,index})=>{
@@ -26,7 +26,8 @@ async function open(page:Page,flow:Flow,content:'image'|'unreadable'|'unsupporte
       state.reads++;
       const {sanitizeAndroidChapter}=await import(/* @vite-ignore */location.origin+'/src/android/epub.ts');
       const native=async()=>{if(index===0&&state.fail)throw Error('fixture image read failure');if(index===0&&content==='unsupported')return null;return{url:imageUrl(),width:800,height:1200};};
-      try{return{ok:true,data:await sanitizeAndroidChapter(JSON.stringify({path:'/comics/sample.epub',entry:'OPS/page.xhtml',html:`<html><body><img src="images/page.${content==='unsupported'?'svg':'jpg'}"></body></html>`}),native,'data:')};}
+      const html=content==='prefixed'?'<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head><h:title>Hidden cover title</h:title></h:head><h:body><s:svg xmlns:s="http://www.w3.org/2000/svg"><s:image xlink:href="images/page.jpg"/></s:svg></h:body></h:html>':`<html><body><img src="images/page.${content==='unsupported'?'svg':'jpg'}"></body></html>`;
+      try{return{ok:true,data:await sanitizeAndroidChapter(JSON.stringify({path:'/comics/sample.epub',entry:'OPS/page.xhtml',html}),native,'data:')};}
       catch(error){return{ok:false,error:{code:'READ_FAILED',message:(error as Error).message}};}
     };
   },{flow,content,index});
@@ -77,6 +78,11 @@ test('first EPUB page remains aligned in continuous mode',async({page},testInfo)
   const errors=await open(page,'horizontal');await aligned(page,0);
   await page.screenshot({path:testInfo.outputPath('first-page.png'),fullPage:true});
   expect(errors).toEqual([]);
+});
+
+test('namespace-prefixed XHTML and SVG pictures paint instead of a blank EPUB page',async({page},testInfo)=>{
+  const errors=await open(page,'ordinary','prefixed');await aligned(page,0);expect(errors).toEqual([]);
+  await page.screenshot({path:testInfo.outputPath('epub-namespaces.png'),fullPage:true});
 });
 
 test('switching ordinary, horizontal and vertical EPUB modes preserves the current page',async({page})=>{

@@ -35,7 +35,7 @@ test('packaged reader persists split halves and distinct bookmarks with unchange
     await page.getByRole('button',{name:'上一页',exact:true}).click();await expect(input(page)).toHaveValue('1L');await expect(page.getByRole('button',{name:'取消当前页书签',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'尾页',exact:true}).click();await expect(input(page)).toHaveValue('3R');
     await page.getByRole('button',{name:'上一页',exact:true}).click();await expect(input(page)).toHaveValue('3L');
-    await expect.poll(async()=>{const data=(await page.evaluate(()=>window.omicomic.getAppData())).data;return data.readingProgress[resourceKey]?.completed;}).toBe(false);
+    await expect.poll(async()=>{const data=(await page.evaluate(()=>window.omicomic.getAppData())).data;const saved=data.readingProgress[resourceKey];return {index:saved?.currentPageIndex,half:saved?.readerViewState?.splitPageHalf,completed:saved?.completed};}).toEqual({index:2,half:'L',completed:false});
     await app.close();app=null;page=await launch(file===archive?archive:book);
     await expect(input(page)).toHaveValue('3L');
     const restored=(await page.evaluate(()=>window.omicomic.getAppData())).data;

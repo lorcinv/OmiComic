@@ -1,3 +1,4 @@
+import {expectReaderFit} from './helpers/readerControls.cjs';
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
 import { FIT_MODE_OPTIONS } from '../electron/shared/readerPreferences';
@@ -74,7 +75,7 @@ for(const mobile of [false,true])test.describe(mobile?'Android default fit':'PC 
     if(option.value==='fit-height')await page.screenshot({path:`test-results/default-fit-${mobile?'android':'pc'}.png`});
     if(mobile){await page.getByRole('button',{name:'返回设置',exact:true}).click();await page.getByRole('button',{name:'关闭设置',exact:true}).click();}else await page.keyboard.press('Escape');
     await openBook(page,mobile);
-    if(!mobile)await expect(page.locator('.reader-fit-select')).toContainText(option.label);
+    if(!mobile)await expectReaderFit(page,option.label);
     const metrics=await page.locator('.reader-stage').evaluate(stage=>{
       const style=getComputedStyle(stage),image=stage.querySelector('img')!.getBoundingClientRect();
       return {width:image.width,height:image.height,availableWidth:stage.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),availableHeight:stage.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom)};
@@ -91,6 +92,6 @@ for(const mobile of [false,true])test.describe(mobile?'Android default fit':'PC 
     await page.evaluate(async()=>{await window.omicomic.updateSettings({readerDefaultFitMode:'fit-width'});});
     await page.reload();await openBook(page,mobile);
     if(mobile)await expect.poll(()=>page.locator('.reader-page-spread img').first().evaluate(image=>image.getBoundingClientRect().width)).toBeCloseTo(800,0);
-    else await expect(page.locator('.reader-fit-select')).toContainText('原始尺寸');
+    else await expectReaderFit(page,'原始尺寸');
   });
 });

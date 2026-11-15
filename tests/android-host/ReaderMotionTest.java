@@ -89,4 +89,23 @@ public class ReaderMotionTest {
   @Test public void missingPageBodyDoesNotReplaceVisiblePage()throws Exception{
     start("https://omi.local/media/archive");Object held=get(surface,"current");int pixel=screen.getPixel(width/2,height/2);apply("https://omi.local/media/not-decoded",-400,-600,false);assertSame("missing page replaced decoded pixels",held,get(surface,"current"));assertEquals(pixel,screen.getPixel(width/2,height/2));
   }
+  @Test public void splitHalvesClipPixelsAndShareOneDecodedSource()throws Exception{
+    String url="https://omi.local/media/archive";start(url);
+    for(String half:new String[]{"L","R"}){
+      float x=half.equals("L")?100:-100;
+      JSONArray rect=new JSONArray(new float[]{x,0,x+400,600}),clip=new JSONArray(new int[]{100,0,300,600});
+      JSONObject next=frame(url,0,0,false);next.put("zoom",1).put("expected",new JSONArray().put(clip));
+      next.getJSONArray("slots").getJSONObject(0).put("rect",rect).put("clip",clip).put("half",half);
+      invoke(surface,"applyFrame",new Class[]{JSONObject.class},next);draw();
+      assertEquals("wrong physical half",half.equals("L")?Color.RED:Color.GREEN,screen.getPixel(150,150));
+      assertEquals("lower half pixels lost",half.equals("L")?Color.BLUE:Color.YELLOW,screen.getPixel(150,450));
+      assertEquals("split painted outside its clip",(int)get(surface,"background"),screen.getPixel(350,150));
+      assertEquals("halves duplicated decoded image cache",1,((Map)get(surface,"cache")).size());
+    }
+    JSONObject full=frame(url,0,0,false);JSONArray rect=new JSONArray(new int[]{0,0,400,600});
+    full.put("zoom",1).put("expected",new JSONArray().put(rect));full.getJSONArray("slots").getJSONObject(0).put("rect",rect);
+    invoke(surface,"applyFrame",new Class[]{JSONObject.class},full);draw();
+    assertEquals("old split clip leaked into full page",Color.RED,screen.getPixel(50,150));
+    assertEquals(Color.GREEN,screen.getPixel(350,150));
+  }
 }
