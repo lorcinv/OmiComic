@@ -47,6 +47,13 @@ test('mixed scan-prefix ZIP pages form one numeric sequence without changing ent
  assert.equal((await archive.读取压缩包单张图片(p,'书名090.png')).toString(),'书名090.png');
 });
 
+test('mixed GIF/JPG ZIP pages retain numeric order and original entry bytes',async t=>{
+ const names=require('./helpers/mixedImageNames.cjs');
+ const p=await fixture(t,'mixed-animation.cbz',[...names].reverse().map(name=>({name,data:Buffer.from(name)})));
+ assert.deepEqual((await archive.读取压缩包图片列表(p)).map(e=>e.virtualPath),names);
+ assert.equal((await archive.读取压缩包单张图片(p,'00016-GIF.gif')).toString(),'00016-GIF.gif');
+});
+
 test('nested ZIP/ZIP and ZIP/RAR pages retain exact names, bytes, and natural page order', async t => {
  const inner=zip([{name:'页10.png',data:Buffer.from('ten')},{name:'页2.png',data:Buffer.from('two')}]);
  const p=await fixture(t,'nested.zip',[{name:'卷 [1].zip',data:inner},{name:'卷2.rar',data:rar([{name:'1.jpg',data:Buffer.from('rar inner')}])}]);

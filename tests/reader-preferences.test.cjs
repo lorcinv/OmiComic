@@ -17,10 +17,22 @@ test('mixed scan prefixes calibrate page numbers while preserving cover, suffixe
 });
 
 test('calibrated filename order remains transitive and independent of ZIP entry order',()=>{
-  const names=['cover.png','P000A.jpg','[0.jpg','P002.png','书名010.png','foo3.jpg','bar20.jpg','baz.jpg','chapter1/01.png','chapter2/P001.png','1-02.png','1-10.png'];
+  const names=['cover.png','P000A.jpg','[0.jpg','P002.png','书名010.png','foo3.jpg','bar20.jpg','baz.jpg','chapter1/01.png','chapter2/P001.png','1-02.png','1-10.png','00016-GIF.gif','00021- GIF.gif','001a-PNG.png','001b.jpg'];
   const sorted=[...names].sort(compareComicPagePaths);
   assert.deepEqual([...names].reverse().sort(compareComicPagePaths),sorted);
   for(let i=0;i<sorted.length;i++)for(let j=i+1;j<sorted.length;j++)assert.ok(compareComicPagePaths(sorted[i],sorted[j])<0);
+});
+test('format labels after page numbers do not move GIF pages behind JPG pages',()=>{
+  const expected=require('./helpers/mixedImageNames.cjs');
+  const rows=[...expected].reverse().map((name,index)=>({name,index,type:'archive-image',sourcePath:'mixed.cbz',archiveInnerPath:name,modifiedAt:123}));
+  const ordered=sortReaderPages(rows,'name-asc');
+  assert.deepEqual(ordered.map(p=>p.name),expected);
+  assert.deepEqual(sortReaderPages(rows,'name-desc').map(p=>p.name),[...expected].reverse());
+  assert.deepEqual(sortReaderPages(rows,'time-desc').map(p=>p.name),expected);
+  const id='archive-image:00016-GIF.gif';
+  assert.equal(resolvePageIndex(ordered,id,undefined,12),3);
+  assert.ok(bookmarkMatches({pageIndex:12,pageId:id,sourceType:'archive'},3,ordered[3].pageId));
+  assert.deepEqual(['0003.webp','0002-APNG.apng','0001a_PNG.png','0001b.jpg'].sort(compareComicPagePaths),['0001a_PNG.png','0001b.jpg','0002-APNG.apng','0003.webp']);
 });
 test('natural sort, time ties and missing times are deterministic in either direction', () => {
   assert.deepEqual(names('name-asc'), ['1.png','2.png','3.png','10.png','20.png']);

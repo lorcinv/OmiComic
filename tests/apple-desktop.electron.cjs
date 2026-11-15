@@ -116,3 +116,4 @@ test('records packaged animation coverage', async () => {
 
 // Exercise the new split-page path against each packaged Mac architecture.
 if(process.platform==='darwin')require('./reader-split-pages.electron.cjs');
+if(process.platform==='darwin')require('./mixed-image-order.electron.cjs');

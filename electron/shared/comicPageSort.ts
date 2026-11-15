@@ -4,7 +4,11 @@ const natural = (a: string, b: string) => collator.compare(a, b) || ordinal(a, b
 
 function leafKey(name: string) {
   const stem = name.replace(/\.[^.]+$/, '').normalize('NFKC');
-  const numbered = /^[^\d]*?(\d+)([a-z]?)$/i.exec(stem);
+  // Scans may label the format in the stem: 00016-GIF.gif / 00021- GIF.gif.
+  // Ignore only this trailing format label, preserving the original identity
+  // and the rule against guessing page numbers in multi-number names.
+  const pageStem = stem.replace(/[-_ ]+(?:gif|jpe?g|png|apng|webp|bmp)$/i, '');
+  const numbered = /^[^\d]*?(\d+)([a-z]?)$/i.exec(pageStem);
   if (/^(?:_?c|cover|front[-_ ]?cover|folder|封面)$/i.test(stem)) return { rank: 0, number: '', suffix: '' };
   // Only a single page-number group is unambiguous. Multi-number chapter/page
   // names retain their usual natural order; do not guess which number is a page.
