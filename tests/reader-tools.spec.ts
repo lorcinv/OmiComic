@@ -53,7 +53,10 @@ async function resume(page: Page) {
   else {await page.getByRole('button',{name:/^最近阅读/}).click();await page.locator('.resource-card[data-selection-key="'+selectedBooks.get(page)+'"]').dblclick();}
   await expectReaderPixels(page.locator('.reader-image').first());
 }
-async function adjust(page: Page) { await page.getByRole('button',{name:'阅读设置',exact:true}).click(); }
+async function adjust(page: Page) {
+  const mobile = (await page.locator('.reader-layout').getAttribute('class'))?.includes('is-mobile-reader');
+  await page.getByRole('button',{name:mobile?'画面调整':'阅读设置',exact:true}).click();
+}
 async function slider(page: Page, label: string, value: number) {
   await page.getByRole('slider',{name:label,exact:true}).fill(String(value));
 }
