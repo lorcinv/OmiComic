@@ -1,4 +1,5 @@
 import { primaryModifier } from '../platform';
+import { parseSplitIdentity } from '../../electron/shared/splitPages';
 import { directoryOrder } from "../library/directoryOrder";
 import { cardDropAtPoint } from "../utils/cardDrag";
 import { FontSizeControl } from "../components/FontSizeControl";
@@ -6991,7 +6992,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     const 信息 = 类型信息[类型];
     const 当前标签 = 解析标签输入(整理标签输入);
     const 进度文本 = 是书签
-      ? `第 ${资源信息目标.item.pageIndex + 1} / ${资源信息目标.item.totalPages} ${(资源信息目标.item.sourceType === "epub" || 资源信息目标.item.sourceType==="mobi") ? "章" : "页"}`
+      ? `第 ${资源信息目标.item.pageIndex + 1}${parseSplitIdentity(资源信息目标.item.pageId).half ?? ''} / ${资源信息目标.item.totalPages} ${(资源信息目标.item.sourceType === "epub" || 资源信息目标.item.sourceType==="mobi") ? "章" : "页"}`
       : 资源信息目标.progressText;
     const 已保存备注 = 是书签
       ? 获取整理备注(资源信息目标.item)
@@ -8559,11 +8560,11 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
                       ? { status: "loaded" as const, url: 项目.thumbnailUrl }
                       : { status: "idle" as const, url: null }
                   );
-                  const 页码文本 = `第 ${项目.pageIndex + 1} / ${项目.totalPages} ${(项目.sourceType === "epub" || 项目.sourceType==="mobi") ? "章" : "页"}`;
+                  const 页码文本 = `第 ${项目.pageIndex + 1}${parseSplitIdentity(项目.pageId).half ?? ''} / ${项目.totalPages} ${(项目.sourceType === "epub" || 项目.sourceType==="mobi") ? "章" : "页"}`;
                   const 标签列表 = 获取整理标签(项目);
                   const 书签备注 = 获取整理备注(项目);
                   const 路径失效 = 路径是否失效(文件.path);
-                  if (手机布局) return 渲染手机资源卡片(文件, { resourceKey: 项目.resourceKey, sourcePath: 项目.sourcePath, sourceType: 项目.sourceType, title: 项目.title }, 项目.id, () => void 打开书签项目(项目), `${项目.pageIndex + 1}/${项目.totalPages}`, 标签列表, 项目);
+                  if (手机布局) return 渲染手机资源卡片(文件, { resourceKey: 项目.resourceKey, sourcePath: 项目.sourcePath, sourceType: 项目.sourceType, title: 项目.title }, 项目.id, () => void 打开书签项目(项目), `${项目.pageIndex + 1}${parseSplitIdentity(项目.pageId).half ?? ''}/${项目.totalPages}`, 标签列表, 项目);
                   return (
                     <button
                       key={项目.id}

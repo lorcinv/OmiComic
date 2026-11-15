@@ -1,3 +1,4 @@
+import { parseSplitIdentity, sourcePageProgress } from '../shared/splitPages';
 import { desktopTypography, mobileTypography } from "../shared/desktopTypography";
 import { normalizeThemePreferences } from '../shared/colorTheme';
 import { normalizeStartupPage, type StartupPage } from '../shared/startupPage';
@@ -638,10 +639,10 @@ function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
       Math.max(0, Math.floor(读取数字(值.currentPageIndex) ?? 0)),
       totalPages - 1,
     );
-    const percent = totalPages > 0 ? Math.round(((currentPageIndex + 1) / totalPages) * 100) : 0;
+    const readerViewState = 修正阅读视图状态(值.readerViewState);
+    const { percent, completed } = sourcePageProgress(currentPageIndex, totalPages, readerViewState);
     const firstReadAt = 读取数字(值.firstReadAt) ?? Date.now();
     const updatedAt = 读取数字(值.updatedAt) ?? firstReadAt;
-    const completed = currentPageIndex >= totalPages - 1;
     const hasStartedReading = typeof 值.hasStartedReading === "boolean"
       ? 值.hasStartedReading
       : currentPageIndex > 0 || completed || 值.completed === true;
@@ -660,7 +661,7 @@ function 修正阅读进度(输入: unknown): Record<string, ReadingProgress> {
       hasStartedReading,
       firstReadAt,
       updatedAt,
-      readerViewState: 修正阅读视图状态(值.readerViewState),
+      readerViewState,
     };
   }
 
@@ -1365,13 +1366,12 @@ export async function 保存阅读进度(进度: ReadingProgress): Promise<Readi
   const 已有进度 = 数据.readingProgress[进度.resourceKey];
   const totalPages = Math.max(1, Math.floor(进度.totalPages));
   const currentPageIndex = Math.min(Math.max(0, Math.floor(进度.currentPageIndex)), totalPages - 1);
-  const percent = Math.round(((currentPageIndex + 1) / totalPages) * 100);
   const updatedAt = Date.now();
-  const completed = currentPageIndex >= totalPages - 1;
-  const hasStartedReading = Boolean(已有进度?.hasStartedReading || 进度.hasStartedReading || currentPageIndex > 0 || completed);
   const readerViewState = 进度.readerViewState === undefined
     ? 已有进度?.readerViewState
     : 修正阅读视图状态(进度.readerViewState) ?? 已有进度?.readerViewState;
+  const { percent, completed } = sourcePageProgress(currentPageIndex, totalPages, readerViewState);
+  const hasStartedReading = Boolean(已有进度?.hasStartedReading || 进度.hasStartedReading || currentPageIndex > 0 || completed);
   const 修正进度: ReadingProgress = {
     ...进度,
     currentPageIndex,
@@ -2280,7 +2280,7 @@ export async function 切换阅读页面顺序(resource: { resourceKey: string; 
     if (bookmark.resourceKey !== resource.resourceKey) continue;
     const oldIndex = resolvePageIndex(previous, bookmark.pageId, bookmark.archiveInnerPath ?? bookmark.pageName, bookmark.pageIndex);
     const identity = bookmark.pageId ?? pageIdentity(previous[oldIndex]);
-    const newIndex = pages.findIndex(page => pageIdentity(page) === identity);
+    const newIndex = pages.findIndex(page => pageIdentity(page) === parseSplitIdentity(identity).identity);
     if (newIndex >= 0) Object.assign(bookmark, { pageId: identity, pageIndex: newIndex, totalPages: pages.length, pageName: pages[newIndex].name });
   }
   const view = old?.readerViewState ?? { fitMode: data.settings.readerDefaultFitMode, pageMode: data.settings.readerPageMode, pageDirection: data.settings.doublePageDirection, flow: data.settings.readerDefaultFlow, panorama: false, immersive: false };

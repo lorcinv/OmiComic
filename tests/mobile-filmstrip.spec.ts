@@ -115,3 +115,18 @@ test('a progress tap stays centered while the previous body page is finishing',a
   const next=railOf(page).getByRole('button',{name:'第 75 页：74.png',exact:true});await next.tap();
   await expect.poll(()=>railOf(page).evaluate(el=>el.scrollLeft)).toBeCloseTo(74*96,0);
 });
+
+
+test('reversing the reading direction flips the filmstrip and keeps native scrolling mapped to source pages',async({page})=>{
+  await setup(page);await page.evaluate(()=>(window as any).__rtl(true));
+  await expect(railOf(page)).toHaveAttribute('data-reading-direction','rtl');
+  await expect.poll(()=>railOf(page).evaluate(el=>el.scrollLeft)).toBeCloseTo((2499-20)*96,0);
+  const names=await page.locator('.mobile-filmstrip-page button').evaluateAll(els=>els.map(el=>Number(/第 (\d+) 页/.exec(el.getAttribute('aria-label')!)?.[1])));
+  expect(names.every((n,i)=>!i||n<names[i-1])).toBe(true);
+  await swipe(page,{from:.2,to:.8,duration:200,hold:150});await settle(page);
+  const selected=await page.evaluate(()=>(window as any).__pages.at(-1));expect(selected).toBeGreaterThan(20);
+  const physical=await railOf(page).evaluate(el=>el.scrollLeft);expect(2499-Math.round(physical/96)).toBe(selected);
+  await page.evaluate(()=>(window as any).__rtl(false));
+  await expect.poll(()=>railOf(page).evaluate(el=>el.scrollLeft)).toBeCloseTo(selected*96,0);
+  await selectedFollows(page);
+});

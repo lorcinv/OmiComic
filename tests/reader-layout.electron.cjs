@@ -1,3 +1,4 @@
+const { chooseReaderFit, expectReaderFit } = require('./helpers/readerControls.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -30,12 +31,8 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   const page = await app.firstWindow(); await page.emulateMedia({ reducedMotion: 'reduce' });
   const info = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, version: app.getVersion(), profile: app.getPath('userData') }));
   assert.equal(info.packaged, true); assert.equal(info.version, require('../package.json').version); assert.equal(info.profile, profile);
-  const zoom = page.getByRole('combobox', { name: '缩放方式' });
-  await expect(zoom).toBeEnabled(); await expect(zoom).toContainText('适应窗口');
-  const fit = async label => {
-    await zoom.click(); await page.getByRole('option', { name: label, exact: true }).click();
-    await expect(zoom).toContainText(label); await expect(zoom).toHaveAttribute('aria-expanded', 'false');
-  };
+  await expectReaderFit(page,'适应窗口',false);
+  const fit = label => chooseReaderFit(page,label);
   const pixels = index => page.locator(`[data-reader-page-index="${index}"] :is(.reader-image,.reader-processed-image,.reader-display-raster):visible`).first();
   const jump = async number => { const input = page.getByRole('textbox', { name: '跳转到页码' }); await input.fill(String(number)); await input.press('Enter'); await expect(pixels(number-1)).toBeVisible(); };
   const contained = async () => expect.poll(() => page.locator('.reader-stage').evaluate(stage => {
@@ -75,7 +72,7 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   await fs.writeFile('test-results/packaged-reader-centered.png', Buffer.from(capture, 'base64'));
   await jump(6); await page.locator('.reader-stage').evaluate(stage => { stage.scrollTop = 1000; });
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
-  await expect(zoom).toBeDisabled(); await expect(zoom).toContainText('适应高度');
+  await expectReaderFit(page,'适应高度',true);
   await expect.poll(() => page.locator('.reader-stage').evaluate(stage => stage.scrollTop)).toBe(0);
   const pageX = index => page.locator(`[data-reader-page-index="${index}"]`).evaluate(el => el.getBoundingClientRect().x);
   await expect.poll(async () => await pageX(6) - await pageX(5)).toBeGreaterThan(0);
@@ -85,13 +82,13 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   await page.getByRole('button', { name: '当前从右到左阅读，点击切换为从左到右', exact: true }).click();
   await expect.poll(async () => await pageX(6) - await pageX(5)).toBeGreaterThan(0);
   await page.getByRole('button', { name: '当前横向阅读，点击切换纵向阅读', exact: true }).click();
-  await expect(zoom).toContainText('适应宽度'); await expect(zoom).toBeDisabled();
+  await expectReaderFit(page,'适应宽度',true);
   await expect.poll(() => page.locator('[data-reader-page-index="5"] img').evaluate(img => {
     const stage = document.querySelector('.reader-stage'), css = getComputedStyle(stage);
     return Math.abs(img.getBoundingClientRect().width - stage.clientWidth + parseFloat(css.paddingLeft) + parseFloat(css.paddingRight));
   })).toBeLessThan(1);
   await page.getByRole('button', { name: '关闭全景连环画', exact: true }).click();
-  await expect(zoom).toContainText('适应宽度'); await expect(zoom).toBeEnabled();
+  await expectReaderFit(page,'适应宽度',false);
   await fit('适应窗口'); await contained();
   const immersive = page.getByRole('button', { name: '沉浸', exact: true });
   await immersive.click(); await expect(page.locator('.reader-layout')).toHaveClass(/is-immersive/);

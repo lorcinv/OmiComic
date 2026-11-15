@@ -43,7 +43,7 @@ for(const sharpen of [0,40])test(`zoom reads source pixels with sharpen=${sharpe
   const viewport=page.locator('.reader-page-frame:not([aria-hidden="true"]) .reader-viewport-raster').first();
   await expect(page.locator('.has-display-raster')).toHaveCount(1);
   if(sharpen){
-    await page.getByRole('button',{name:'画面调整',exact:true}).click();
+    await page.getByRole('button',{name:'阅读设置',exact:true}).click();
     await page.getByRole('slider',{name:'锐化',exact:true}).fill(String(sharpen));await page.keyboard.press('Escape');
     await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready');
     // Processing already outputs a display-sized image. No second sampling pass.

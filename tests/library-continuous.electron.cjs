@@ -1,3 +1,4 @@
+const { chooseReaderFit, expectReaderFit } = require('./helpers/readerControls.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -62,9 +63,7 @@ test('packaged library scrolls continuously and identifies real collection folde
   await page.screenshot({ path: 'test-results/packaged-library-continuous.png' });
   await page.getByRole('button', { name: '首页', exact: true }).click();
   await cards.filter({ hasText: '001 图片' }).dblclick();
-  const fit = page.getByRole('combobox', { name: '缩放方式', exact: true });
-  await expect(fit).toBeEnabled();
-  assert.equal(Math.round((await fit.boundingBox()).width), 96);
-  const result = { executable, version: info.version, libraryPassed: true, folders: 130, pageSize: 63, fitWidth: 96 };
+  await expectReaderFit(page,'适应窗口',false);
+  const result = { executable, version: info.version, libraryPassed: true, folders: 130, pageSize: 63, expandedFitControls: true };
   await fs.writeFile('test-results/library-continuous-smoke.json', JSON.stringify(result, null, 2) + '\n');
 });

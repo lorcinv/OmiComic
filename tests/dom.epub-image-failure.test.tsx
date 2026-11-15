@@ -34,6 +34,16 @@ it('keeps the supported SVG raster wrapper and its dimensions',async()=>{
   expect(doc.querySelector('svg,script')).toBeNull();
 });
 
+it.each([
+  '<h:html xmlns:h="http://www.w3.org/1999/xhtml"><h:head><h:title>Hidden title</h:title></h:head><h:body><h:img src="page.jpg"/></h:body></h:html>',
+  '<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:image xlink:href="page.jpg"/><s:script>evil()</s:script></s:svg>',
+])('keeps namespace-prefixed EPUB pictures instead of returning a blank chapter',async html=>{
+  const native=vi.fn(async()=>({url:'https://omi.local/media/page',width:800,height:1200})) as NativeCall;
+  const doc=new DOMParser().parseFromString(await sanitizeAndroidChapter(payload(html),native),'text/html');
+  expect(doc.images).toHaveLength(1);expect(doc.images[0].getAttribute('src')).toBe('https://omi.local/media/page');
+  expect(doc.body.textContent).toBe('');expect(native).toHaveBeenCalledTimes(1);
+});
+
 it('preserves readable mixed content if a decorative image fails',async()=>{
   const result=await sanitizeAndroidChapter(payload('<h1>正文</h1><p>这一段仍然可以阅读。</p><img src="decoration.jpg">'),unavailable);
   expect(result).toContain('这一段仍然可以阅读。');

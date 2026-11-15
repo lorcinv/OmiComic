@@ -1,5 +1,8 @@
 // UI text only; filenames, tags and notes are never translated.
 export const messages: Record<string, readonly [string, string]> = {
+  "跨页拆分": ["Split wide pages", "横長ページを分割"],
+  "适应方式": ["Page fit", "表示サイズ"],
+  "仅图片和 PDF 的普通单页模式可用": ["Available for images and PDFs in single-page mode without continuous scrolling", "画像・PDF の通常の単ページ表示で利用できます"],
   "OmiComic（Omi）是一款本地漫画阅读器，让收藏、整理和阅读回到简单、专注的体验。": ["OmiComic (Omi) is a local comic reader that keeps collecting, organizing and reading simple and focused.", "OmiComic（Omi）は、コレクションの整理と読書に集中できるローカル漫画リーダーです。"],
   "发现新版本 {0}": ["Version {0} is available", "バージョン {0} が利用できます"],
   "查看更新与下载": ["Release notes and downloads", "更新内容とダウンロード"],

@@ -1,4 +1,4 @@
-// A short touch press remains visible after a fast tap. Scrolling cancels it.
+// Reader controls release immediately; library cards retain their short flash.
 if (typeof document !== 'undefined') {
   let pressed: HTMLElement | undefined, origin: {id:number;x:number;y:number} | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -11,7 +11,7 @@ if (typeof document !== 'undefined') {
     pressed=button; origin={id:event.pointerId,x:event.clientX,y:event.clientY}; button.dataset.omiPressed='true';
   }, true);
   document.addEventListener('pointermove', event => { if(origin?.id===event.pointerId && Math.hypot(event.clientX-origin.x,event.clientY-origin.y)>10)clear(); }, true);
-  document.addEventListener('pointerup', event => { if(origin?.id!==event.pointerId)return;origin=undefined; timer=setTimeout(clear,pressed?.matches('.mobile-resource-card,.omi-home__book')?180:120); }, true);
+  document.addEventListener('pointerup', event => { if(origin?.id!==event.pointerId)return;origin=undefined; if(pressed?.closest('.reader-layout,.reader-actions,.reader-tool-panel,.mobile-reader-previews')){clear();return;} timer=setTimeout(clear,pressed?.matches('.mobile-resource-card,.omi-home__book')?180:120); }, true);
   document.addEventListener('pointercancel', event => {if(origin?.id===event.pointerId)clear();}, true);
   window.addEventListener('blur', clear);
 }

@@ -52,7 +52,7 @@ test('desktop image transport preserves bytes, authorizations, full resolution, 
   await page.locator('.omi-home__library').click();
   await page.locator('.resource-card').filter({hasText:'01 # 图片'}).dblclick();
   await expect(page.locator('.reader-page-frame :is(.reader-image,.reader-processed-image,.reader-display-raster,.reader-viewport-raster):visible').first()).toBeVisible();
-  await page.getByRole('button',{name:'画面调整',exact:true}).click();
+  await page.getByRole('button',{name:'阅读设置',exact:true}).click();
   await expect(page.getByRole('checkbox',{name:'启用画面调整'})).toHaveCount(0);
   await page.getByRole('slider',{name:'亮度',exact:true}).fill('125');
   await expect(page.locator('.reader-effects').first()).toHaveCSS('filter',/brightness\(1.25\)/);

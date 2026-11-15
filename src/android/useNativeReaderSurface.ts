@@ -49,7 +49,7 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
       });
       if(changed)observeLayout();
     });
-    if(scene)observer.observe(scene,{attributes:true,childList:true,subtree:true,attributeFilter:['style','class','hidden','aria-hidden','width','height','data-native-image','data-native-preview','data-native-work-key','data-reader-zoom','data-reader-restoring','data-reader-scrubbing','data-reader-entry-pending','data-viewport-ready','data-panorama-jump-phase','data-panorama-entry-phase','data-panorama-jump-direction','data-panorama-transition-role','data-swipe-active']});
+    if(scene)observer.observe(scene,{attributes:true,childList:true,subtree:true,attributeFilter:['style','class','hidden','aria-hidden','width','height','data-native-image','data-native-preview','data-native-work-key','data-reader-page-crop','data-reader-zoom','data-reader-restoring','data-reader-scrubbing','data-reader-entry-pending','data-viewport-ready','data-panorama-jump-phase','data-panorama-entry-phase','data-panorama-jump-direction','data-panorama-transition-role','data-swipe-active']});
     const overlays=new MutationObserver(mark);overlays.observe(document.body,{childList:true});
     observeLayout();
     element?.addEventListener('scroll',mark);window.addEventListener('resize',mark);window.visualViewport?.addEventListener('resize',mark);
@@ -67,7 +67,7 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
         const styles=new Map<Element,CSSStyleDeclaration>(),rects=new Map<Element,DOMRect>([[element,clip]]);
         const styleFor=(node:Element)=>{let value=styles.get(node);if(!value){value=getComputedStyle(node);styles.set(node,value);}return value;};
         const rectFor=(node:Element)=>{let value=rects.get(node);if(!value){value=node.getBoundingClientRect();rects.set(node,value);}return value;};
-        const slots:Array<{url:string;rect:number[];alpha:number}>=[];
+        const slots:Array<{url:string;rect:number[];alpha:number;clip?:number[];half?:string}>=[];
         const expected:number[][]=[];
         const visible=new Set<string>();
         const nodes=element.querySelectorAll<HTMLElement>('[data-native-image]');
@@ -77,7 +77,7 @@ export default function useNativeReaderSurface(stage:RefObject<HTMLDivElement>, 
           if(styleFor(node).visibility==='hidden')continue;
           let alpha=1;
           for(let parent:HTMLElement|null=node;parent&&parent!==element;parent=parent.parentElement)alpha*=Number(styleFor(parent).opacity);
-          if(alpha>0){const rect=nativeRasterRectangle(r,window.devicePixelRatio||1);slots.push({url:node.dataset.nativeImage!,rect,alpha});expected.push(rect);const key=node.closest<HTMLElement>('[data-native-work-key]')?.dataset.nativeWorkKey;if(key)visible.add(key);}
+          if(alpha>0){const rect=nativeRasterRectangle(r,window.devicePixelRatio||1);const crop=node.closest<HTMLElement>('[data-reader-page-crop]'),cropRect=crop?nativeRasterRectangle(rectFor(crop),window.devicePixelRatio||1):undefined;slots.push({url:node.dataset.nativeImage!,rect,alpha,...(cropRect?{clip:cropRect,half:crop!.dataset.readerPageCrop}:{})});expected.push(cropRect??rect);const key=node.closest<HTMLElement>('[data-native-work-key]')?.dataset.nativeWorkKey;if(key)visible.add(key);}
         }
         // Unprepared figures have no native URL yet. Their visible geometry
         // still belongs to this frame; omitting it used to commit a blank edge.

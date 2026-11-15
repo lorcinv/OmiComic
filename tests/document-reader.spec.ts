@@ -1,3 +1,4 @@
+import { chooseReaderFit, expectReaderFit } from './helpers/readerControls.cjs';
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
 
@@ -87,7 +88,7 @@ test('EPUB retains document order, supports display effects and explicitly disab
   await seedDocument(page);
   await expect(page.getByRole('textbox',{name:'跳转到页码'})).toBeEnabled();
   await expect(page.getByRole('button',{name:'阅读器设置',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'画面调整',exact:true}).click();
+  await page.getByRole('button',{name:'阅读设置',exact:true}).click();
   await expect(page.getByRole('slider',{name:'锐化',exact:true})).toBeDisabled();
   await expect(page.getByRole('slider',{name:'降噪',exact:true})).toBeDisabled();
   await page.getByRole('slider',{name:'伽马',exact:true}).fill('1.4');
@@ -114,13 +115,13 @@ test('EPUB uses shared modes, outer scrolling, bookmarks and persisted view stat
   await page.getByRole('button', { name: '当前双页，点击切换单页', exact: true }).click();
   await jump.fill('3'); await jump.press('Enter');
   await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').getByRole('heading', { name: '章节 3', exact: true })).toBeVisible();
-  await page.getByRole('combobox', { name: '缩放方式' }).click(); await page.getByRole('option', { name: '适应宽度', exact: true }).click();
+  await chooseReaderFit(page,'适应宽度');
   await expect.poll(() => page.locator('.reader-stage').evaluate(element => element.scrollHeight / element.clientHeight)).toBeGreaterThan(2);
   await page.locator('.reader-stage').hover(); await page.mouse.wheel(0, 650);
   await expect.poll(() => page.locator('.reader-stage').evaluate(element => element.scrollTop)).toBeGreaterThan(100);
   await expect(jump).toHaveValue('3');
   expect(await page.locator('.reader-chapter iframe').getAttribute('sandbox')).toBe('allow-same-origin');
-  await page.getByRole('combobox', { name: '缩放方式' }).click(); await page.getByRole('option', { name: '适应高度', exact: true }).click();
+  await chooseReaderFit(page,'适应高度');
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
   await expect(page.locator('.reader-stage')).toHaveClass(/(^|\s)is-panorama(\s|$)/);
   await jump.fill('20'); await jump.press('Enter');
@@ -248,8 +249,7 @@ test('panorama navigation and mode changes keep the page visible during scrollin
   await expect(jump).toHaveValue(String(beforeExit));
   await expect(page.frameLocator('.reader-page-frame:not([aria-hidden=true]) .reader-chapter iframe').locator('body')).toContainText('段落');
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
-  await expect(page.getByRole('combobox', { name: '缩放方式' })).toBeDisabled();
-  await expect(page.getByRole('combobox', { name: '缩放方式' })).toContainText('适应高度');
+  await expectReaderFit(page,'适应高度',true);
   const beforeFlow = await scrollThenClick('当前横向阅读，点击切换纵向阅读');
   await expect(page.locator('.reader-layout')).toHaveClass(/is-flow-vertical/);
   await expect(jump).toHaveValue(String(beforeFlow));

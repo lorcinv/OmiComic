@@ -60,3 +60,15 @@ it('keeps reading moving geometry during animation and responds to inherited vis
   expect(geometry().slots.map((slot:any)=>slot.url)).toEqual(['b']);expect(geometry().zoom).toBe(1.75);
   await mutations(()=>first.removeAttribute('aria-hidden'));nextFrame();expect(geometry().slots.map((slot:any)=>slot.url)).toEqual(['a','b']);
 });
+
+it('sends separate half clips while retaining the original native source URL and raster size',async()=>{
+  const view=render(<Scene/>),source=view.container.querySelector<HTMLElement>('[data-native-image="a"]')!,crop=document.createElement('div');
+  crop.dataset.readerPageCrop='L';crop.getBoundingClientRect=()=>new DOMRect(10,0,50,200);
+  await mutations(()=>{source.before(crop);crop.append(source);});nextFrame();
+  expect(geometry().slots[0]).toMatchObject({url:'a',rect:[10,0,110,200],clip:[10,0,60,200],half:'L'});
+  expect(geometry().expected[0]).toEqual([10,0,60,200]);
+  await mutations(()=>{crop.dataset.readerPageCrop='R';left=-39.75;});nextFrame();
+  expect(geometry().slots[0]).toMatchObject({url:'a',rect:[-40,0,60,200],clip:[10,0,60,200],half:'R'});
+  await mutations(()=>{crop.before(source);crop.remove();});nextFrame();
+  expect(geometry().slots[0]).not.toHaveProperty('clip');
+});

@@ -40,6 +40,23 @@ it('desktop EPUB and MOBI previews use the live document session',async()=>{
 });
 
 describe('Android page preview scheduling', () => {
+  it('reverses the visible order and scroll mapping without changing the current page',async()=>{
+    const pages=Array.from({length:30},(_,index)=>page(index)),onPage=vi.fn();
+    const scroll=vi.spyOn(HTMLElement.prototype,'scrollTo').mockImplementation(function(this:HTMLElement,options:any){this.scrollLeft=options.left;});
+    const view=render(<MobileReaderPreviews pages={pages} current={10} width={88} onPage={onPage}/>);
+    await flush();
+    const rail=view.container.querySelector('.mobile-reader-filmstrip') as HTMLElement;
+    view.rerender(<MobileReaderPreviews pages={pages} current={10} width={88} onPage={onPage} rtl/>);
+    await flush();expect(rail.scrollLeft).toBe(19*96);expect(onPage).not.toHaveBeenCalled();
+    const labels=[...view.container.querySelectorAll('.mobile-filmstrip-page button')].map(el=>Number(/第 (\d+) 页/.exec(el.getAttribute('aria-label')!)?.[1]));
+    expect(labels.length).toBeGreaterThan(2);expect(labels.every((n,i)=>!i||n<labels[i-1])).toBe(true);
+    fireEvent.pointerDown(rail);rail.scrollLeft=18*96;fireEvent.scroll(rail);
+    expect(onPage).toHaveBeenLastCalledWith(11);
+    view.rerender(<MobileReaderPreviews pages={pages} current={11} width={88} onPage={onPage} rtl/>);
+    view.rerender(<MobileReaderPreviews pages={pages} current={11} width={88} onPage={onPage}/>);
+    await flush();expect(rail.scrollLeft).toBe(11*96);
+    expect(onPage.mock.calls).toEqual([[11]]);scroll.mockRestore();
+  });
   it('does not wait for pages outside the directional native preload window',async()=>{
     vi.spyOn(HTMLElement.prototype,'clientWidth','get').mockReturnValue(390);
     const pages=Array.from({length:30},(_,i)=>page(i));

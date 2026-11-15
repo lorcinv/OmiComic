@@ -1,3 +1,4 @@
+import { chooseReaderFit, expectReaderFit } from './helpers/readerControls.cjs';
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
 import { expectReaderPixels } from './readerPixels';
@@ -28,12 +29,7 @@ async function open(page: Page, sizes = [[600, 900], [600, 900], [1200, 1000], [
   await expectReaderPixels(page.locator('.reader-page-spread img').first());
 }
 
-async function fit(page: Page, label: string) {
-  await page.getByRole('combobox', { name: '缩放方式' }).click();
-  await page.getByRole('option', { name: label, exact: true }).click();
-  await expect(page.getByRole('combobox', { name: '缩放方式' })).toContainText(label);
-  await expect(page.getByRole('combobox', { name: '缩放方式' })).toHaveAttribute('aria-expanded', 'false');
-}
+async function fit(page: Page, label: string) { await chooseReaderFit(page,label); }
 
 async function jump(page: Page, value: number) {
   const input = page.getByRole('textbox', { name: '跳转到页码' });
@@ -47,7 +43,7 @@ async function contained(page: Page, centered = true) {
     const x = box.left + parseFloat(css.paddingLeft), y = box.top + parseFloat(css.paddingTop);
     const width = stage.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
     const height = stage.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
-    const images = [...stage.querySelectorAll<HTMLImageElement>('.reader-page-spread img')];
+    const images = [...stage.querySelectorAll<HTMLImageElement>('.reader-page-frame:not([aria-hidden="true"]) img')];
     const bounds = stage.querySelector('.reader-page-spread')!.getBoundingClientRect();
     return images.every(image => {
       const r = image.getBoundingClientRect();
@@ -59,7 +55,7 @@ async function contained(page: Page, centered = true) {
 
 test('ordinary reader contains extreme images and centers short fit-width pages', async ({ page }) => {
   await open(page);
-  await expect(page.getByRole('combobox', { name: '缩放方式' })).toContainText('适应窗口');
+  await expectReaderFit(page,'适应窗口');
   for (const index of [5, 6]) {
     await jump(page, index); await contained(page);
     if (index === 5) {
@@ -114,8 +110,7 @@ test('panorama uses its cross axis, clears old scroll, and restores the ordinary
   await page.locator('.reader-stage').evaluate(stage => { stage.scrollTop = 900; });
   await expect.poll(() => page.locator('.reader-stage').evaluate(stage => stage.scrollTop)).toBeGreaterThan(100);
   await page.getByRole('button', { name: '开启全景连环画', exact: true }).click();
-  const zoom = page.getByRole('combobox', { name: '缩放方式' });
-  await expect(zoom).toBeDisabled(); await expect(zoom).toContainText('适应高度');
+  await expectReaderFit(page,'适应高度',true);
   await expect.poll(() => page.locator('.reader-stage').evaluate(stage => stage.scrollTop + Math.abs(stage.scrollLeft))).toBe(0);
   await jump(page, 5);
   await expect.poll(() => page.locator('[data-reader-page-index="4"] img').evaluate(image => {
@@ -123,13 +118,13 @@ test('panorama uses its cross axis, clears old scroll, and restores the ordinary
     return Math.abs(image.getBoundingClientRect().height - (stage.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom)));
   })).toBeLessThan(1);
   await page.getByRole('button', { name: '当前横向阅读，点击切换纵向阅读', exact: true }).click();
-  await expect(zoom).toContainText('适应宽度'); await expect(zoom).toBeDisabled();
+  await expectReaderFit(page,'适应宽度',true);
   await expect.poll(() => page.locator('[data-reader-page-index="4"] img').evaluate(image => {
     const stage = document.querySelector('.reader-stage')!, css = getComputedStyle(stage);
     return Math.abs(image.getBoundingClientRect().width - (stage.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight)));
   })).toBeLessThan(1);
   await page.getByRole('button', { name: '关闭全景连环画', exact: true }).click();
-  await expect(zoom).toBeEnabled(); await expect(zoom).toContainText('适应宽度'); await contained(page);
+  await expectReaderFit(page,'适应宽度',false); await contained(page);
 });
 
 test('restoring the final page keeps it visible inside its fitted pair', async ({ page }) => {
@@ -165,7 +160,7 @@ test('Escape removes incidental button outlines while Tab retains a keyboard ind
   await immersive.click(); await page.keyboard.press('Escape');
   await expect(page.locator('.reader-layout')).not.toHaveClass(/is-immersive/);
   await expect(immersive).toHaveCSS('outline-style', 'none');
-  const zoom = page.getByRole('combobox', { name: '缩放方式' });
+  const zoom = page.getByRole('button', { name: '阅读设置', exact:true });
   await zoom.click(); await page.keyboard.press('Escape');
   await expect(zoom).toHaveAttribute('aria-expanded', 'false');
   await expect(zoom).toHaveCSS('outline-style', 'none');

@@ -5,20 +5,24 @@ import DetailPagePreview from './DetailPagePreview';
 import type { DocumentSource } from '../reader/documentSource';
 import {requestMobilePagePreview} from '../reader/mobilePagePreviews';
 
-export default function MobileReaderPreviews({ pages, current, currentGroup, followingProgress = false, width, onPage, nativeImage, nativeImages, nativePages, nativeRadius = 0, documentSource }: {
+export default function MobileReaderPreviews({ pages, current, currentGroup, followingProgress = false, rtl = false, width, onPage, nativeImage, nativeImages, nativePages, nativeRadius = 0, documentSource }: {
   pages: 阅读页面项[]; current: number; width: number; onPage: (index: number) => void; nativeImage?: string | null;
-  currentGroup?: readonly number[]; followingProgress?: boolean;
+  currentGroup?: readonly number[]; followingProgress?: boolean; rtl?: boolean;
   nativeImages?: Record<number, { url: string; native?: boolean; error?: string | null; prefetchFailed?: boolean }>; nativeRadius?: number; nativePages?: readonly number[];
   documentSource?: DocumentSource;
 }) {
   const stride=width+8;
+  // Keep browser scrolling LTR; only map visual positions to source pages.
+  // This avoids differing negative scrollLeft conventions in Android WebViews.
+  const visualIndex=(index:number)=>rtl?pages.length-1-index:index;
+  const sourceIndex=visualIndex;
   const rail=useRef<HTMLDivElement>(null), programmatic=useRef<number|null>(null), timer=useRef<ReturnType<typeof setTimeout>>();
-  const moving=useRef(false), requested=useRef(current), align=useRef<number|null>(current*stride);
+  const moving=useRef(false), requested=useRef(current), align=useRef<number|null>(visualIndex(current)*stride);
   const pending=useRef<number[]>([]);
   const progressTarget=useRef<number|null>(null);
   if(followingProgress)progressTarget.current=current;
   const ownsScroll=useRef(false),publishTimer=useRef<ReturnType<typeof setTimeout>>(),lastPublish=useRef(0),lastSent=useRef(current);
-  const direction=useRef(1),lastOffset=useRef(current*stride);
+  const direction=useRef(rtl?-1:1),lastOffset=useRef(visualIndex(current)*stride);
   const drag=useRef<{id:number;x:number;left:number;moved:boolean}|null>(null),suppressClick=useRef(false);
   const onPageRef=useRef(onPage);onPageRef.current=onPage;
   const requestPage=(index:number,immediate=false)=>{
@@ -29,8 +33,8 @@ export default function MobileReaderPreviews({ pages, current, currentGroup, fol
     if(immediate||Date.now()-lastPublish.current>=100){clearTimeout(publishTimer.current);publish();}
     else if(!publishTimer.current)publishTimer.current=setTimeout(publish,100-(Date.now()-lastPublish.current));
   };
-  const [offset,setOffset]=useState(current*stride), [viewport,setViewport]=useState(360);
-  const geometry=useRef({stride,viewport});
+  const [offset,setOffset]=useState(visualIndex(current)*stride), [viewport,setViewport]=useState(360);
+  const geometry=useRef({stride,viewport,rtl,count:pages.length});
   const settled=useRef({center:current,pages:new Set<number>()});
   if(settled.current.center!==current)settled.current={center:current,pages:new Set()};
   const nativeTargets=new Set((nativePages??Array.from({length:nativeRadius*2+1},(_,i)=>current-nativeRadius+i)).filter(index=>index>=0&&index<pages.length&&Math.abs(index-current)<=nativeRadius));
@@ -42,13 +46,21 @@ export default function MobileReaderPreviews({ pages, current, currentGroup, fol
     resize(); const observer=new ResizeObserver(resize); observer.observe(el); return () => observer.disconnect();
   }, []);
   useLayoutEffect(() => {
+    const reordered=geometry.current.rtl!==rtl || rtl&&geometry.current.count!==pages.length;
     const resized=geometry.current.stride!==stride || Math.abs(geometry.current.viewport-viewport)>=1;
-    geometry.current={stride,viewport};
+    geometry.current={stride,viewport,rtl,count:pages.length};
+    if(reordered){
+      clearTimeout(timer.current);clearTimeout(publishTimer.current);
+      pending.current=[];drag.current=null;ownsScroll.current=false;moving.current=false;
+      progressTarget.current=null;requested.current=current;lastSent.current=current;
+      direction.current=rtl?-1:1;lastOffset.current=visualIndex(current)*stride;
+      align.current=lastOffset.current;setOffset(lastOffset.current);return;
+    }
     if(!followingProgress&&progressTarget.current!==null){
       const target=progressTarget.current;
       if(current!==target&&!currentGroup?.includes(target))return;
       progressTarget.current=null;requested.current=target;lastSent.current=target;clearTimeout(publishTimer.current);pending.current=[];
-      ownsScroll.current=true;moving.current=false;align.current=target*stride;setOffset(target*stride);return;
+      ownsScroll.current=true;moving.current=false;align.current=visualIndex(target)*stride;setOffset(align.current);return;
     }
     // Reader updates caused by this strip must not scroll it a second time.
     // A paired-page reader may report the other page in the same group.
@@ -64,18 +76,18 @@ export default function MobileReaderPreviews({ pages, current, currentGroup, fol
     pending.current=[];
     // Outside explicit progress seeks, keep the current page inside a central
     // band. A normal page turn need not drag it back to the exact centre.
-    const left=rail.current?.scrollLeft??0,slack=Math.min(Math.max(stride,viewport*.24),Math.max(0,(viewport-width)/2-8)),target=current*stride;
+    const left=rail.current?.scrollLeft??0,slack=Math.min(Math.max(stride,viewport*.24),Math.max(0,(viewport-width)/2-8)),target=visualIndex(current)*stride;
     const next=followingProgress||resized?target:Math.max(target-slack,Math.min(target+slack,left));
     if(Math.abs(next-left)<1)return;
     align.current=next;setOffset(next);
-  }, [current,stride,viewport,followingProgress,pages.length]);
+  }, [current,stride,viewport,followingProgress,pages.length,rtl]);
   useLayoutEffect(() => {
     if(!rail.current || align.current===null || Math.abs(offset-align.current)>.01) return;
     // Mount the destination's virtual pages before an explicit progress seek.
     // User scrolling never schedules a second positioning operation.
     rail.current.scrollTo({left:align.current,behavior:'instant'});
     programmatic.current=rail.current.scrollLeft;align.current=null;
-  }, [offset,current,stride,viewport,followingProgress]);
+  }, [offset,current,stride,viewport,followingProgress,rtl,pages.length]);
   useEffect(() => {
     const el=rail.current;
     const end=()=>{if(!drag.current)moving.current=false;clearTimeout(timer.current);requestPage(requested.current,true);};
@@ -96,28 +108,28 @@ export default function MobileReaderPreviews({ pages, current, currentGroup, fol
     if(!gesture?.moved)return false;
     // Only mouse dragging is implemented here. Touch keeps the browser's
     // compositor scrolling and inertia, without a release snap or recenter.
-    const left=rail.current!.scrollLeft,index=Math.max(0,Math.min(pages.length-1,Math.round(left/stride)));
+    const left=rail.current!.scrollLeft,index=sourceIndex(Math.max(0,Math.min(pages.length-1,Math.round(left/stride))));
     suppressClick.current=true;setOffset(left);requestPage(index,true);return true;
   };
   useEffect(() => () => {clearTimeout(timer.current);clearTimeout(publishTimer.current);}, []);
   // Follow the actual offset throughout native inertia. Mount only the visible
   // pages plus one on each side, including during a long fling.
   const center=Math.max(0,Math.min(pages.length-1,offset/stride));
-  const selected=progressTarget.current??(ownsScroll.current?Math.round(center):current);
+  const selected=progressTarget.current??(ownsScroll.current?sourceIndex(Math.round(center)):current);
   const radius=Math.ceil(viewport/stride/2)+1;
   const start=Math.max(0,Math.floor(center)-radius), end=Math.min(pages.length,Math.ceil(center)+radius+1);
   useEffect(()=>{
     if(documentSource||!ownsScroll.current)return;
     // Warm a short directional runway in the same bounded preview cache.
     const requests=Array.from({length:3},(_,step)=>direction.current>0?end+step:start-1-step)
-      .filter(index=>index>=0&&index<pages.length).map(index=>requestMobilePagePreview(pages[index],8+Math.abs(index-selected)));
+      .filter(index=>index>=0&&index<pages.length).map(sourceIndex).map(index=>requestMobilePagePreview(pages[index],8+Math.abs(index-selected)));
     for(const request of requests)void request.promise.catch(()=>undefined);
     return()=>requests.forEach(request=>request.cancel());
-  },[start,end,documentSource]);
+  },[start,end,documentSource,rtl]);
   // The body and tiny previews have separate budgets. A missing body page
   // must not freeze the whole visible strip behind a large source decode.
   return <section className="mobile-reader-previews" aria-label={t("拖动页面预览")}>
-    <div className="mobile-reader-filmstrip" ref={rail} onPointerDown={event=>{
+    <div className="mobile-reader-filmstrip" dir="ltr" data-reading-direction={rtl?'rtl':'ltr'} ref={rail} onPointerDown={event=>{
         if(event.pointerType==='mouse'&&(event.button!==0||!event.isPrimary))return;
         progressTarget.current=null;suppressClick.current=false;programmatic.current=null;moving.current=true;ownsScroll.current=true;clearTimeout(timer.current);
         // Capturing and preventing touch moves disables native fast scrolling.
@@ -148,7 +160,7 @@ export default function MobileReaderPreviews({ pages, current, currentGroup, fol
         // Native momentum may resume after a slow frame. An idle timer is not
         // evidence that scrolling ended; always follow a real changed offset.
         moving.current=true;ownsScroll.current=true;
-        const index=Math.max(0,Math.min(pages.length-1,Math.round(left/stride)));
+        const index=sourceIndex(Math.max(0,Math.min(pages.length-1,Math.round(left/stride))));
         requestPage(index);
         // Older WebViews may omit scrollend. This only ends gesture ownership;
         // it never changes the scroll position after native inertia finishes.
@@ -156,11 +168,11 @@ export default function MobileReaderPreviews({ pages, current, currentGroup, fol
       }}>
       <div className="mobile-filmstrip-track" style={{width:pages.length*stride+viewport-width-8,paddingLeft:(viewport-width)/2,paddingRight:(viewport-width)/2}}>
         <div style={{width:start*stride,flex:'none'}}/>
-        {pages.slice(start,end).map(page => {
+        {Array.from({length:end-start},(_,offset)=>pages[sourceIndex(start+offset)]).map(page => {
           const shared = nativeImages?.[page.index];
           const native = page.index===current && nativeImage ? nativeImage
             : shared?.native && shared.url && nativeTargets.has(page.index) && !/\.gif$/i.test(page.name) ? shared.url : undefined;
-          return <div key={page.index} className="mobile-filmstrip-page" style={{width}}><DetailPagePreview page={page} selected={page.index===selected} nativeImage={native} documentSource={documentSource} previewPriority={Math.abs(page.index-selected)+(direction.current*(page.index-selected)<-1?2:0)} eager onSelect={() => {progressTarget.current=null;ownsScroll.current=true;moving.current=false;clearTimeout(timer.current);align.current=page.index*stride;setOffset(page.index*stride);requestPage(page.index,true);}} onOpen={() => {}}/></div>;
+          return <div key={page.index} className="mobile-filmstrip-page" style={{width}}><DetailPagePreview page={page} selected={page.index===selected} nativeImage={native} documentSource={documentSource} previewPriority={Math.abs(page.index-selected)+(direction.current*(rtl?-1:1)*(page.index-selected)<-1?2:0)} eager onSelect={() => {progressTarget.current=null;ownsScroll.current=true;moving.current=false;clearTimeout(timer.current);align.current=visualIndex(page.index)*stride;setOffset(align.current);requestPage(page.index,true);}} onOpen={() => {}}/></div>;
         })}
       </div>
     </div>

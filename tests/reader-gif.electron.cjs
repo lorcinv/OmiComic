@@ -64,7 +64,7 @@ for (const format of ['gif', 'webp', 'png', 'apng']) for (const source of ['fold
     results.push({ label, colors, ...state });
   };
   const adjust = async (sharpen, denoise, brightness = 100) => {
-    await page.getByRole('button', { name: '画面调整', exact: true }).click();
+    await page.getByRole('button', { name: '阅读设置', exact: true }).click();
     if(source!=='epub'){
     await page.getByRole('slider', { name: '锐化', exact: true }).fill(String(sharpen));
     await page.getByRole('slider', { name: '降噪', exact: true }).fill(String(denoise));

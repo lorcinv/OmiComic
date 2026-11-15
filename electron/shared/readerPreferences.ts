@@ -1,4 +1,5 @@
 import { compareComicPagePaths } from './comicPageSort';
+import { parseSplitIdentity, type SplitHalf } from './splitPages';
 export type PageSort = "name-asc" | "name-desc" | "time-asc" | "time-desc";
 export const FIT_MODE_OPTIONS = [
   { value: 'fit-window', label: '适应窗口' },
@@ -12,6 +13,8 @@ export interface ImageAdjustments {
 }
 export interface AutoReadOptions { intervalSeconds: number; scrollPixelsPerSecond: number }
 export interface ReaderPreferences {
+  splitWidePages?: boolean;
+  splitPageHalf?: SplitHalf;
   pageSort?: PageSort;
   adjustments?: ImageAdjustments;
   autoRead?: AutoReadOptions;
@@ -36,7 +39,7 @@ export function normalizeAutoRead(value: unknown): AutoReadOptions {
   return { intervalSeconds: number(v.intervalSeconds, 5, 1, 60), scrollPixelsPerSecond: number(v.scrollPixelsPerSecond, 80, 10, 400) };
 }
 export function normalizeReaderPreferences(value: ReaderPreferences): ReaderPreferences {
-  return { pageSort: normalizePageSort(value.pageSort), adjustments: normalizeAdjustments(value.adjustments), autoRead: normalizeAutoRead(value.autoRead), pairingAnchorId: typeof value.pairingAnchorId === "string" ? value.pairingAnchorId : undefined };
+  return { splitWidePages: value.splitWidePages === true, splitPageHalf: value.splitPageHalf === 'L' || value.splitPageHalf === 'R' ? value.splitPageHalf : undefined, pageSort: normalizePageSort(value.pageSort), adjustments: normalizeAdjustments(value.adjustments), autoRead: normalizeAutoRead(value.autoRead), pairingAnchorId: typeof value.pairingAnchorId === "string" ? value.pairingAnchorId : undefined };
 }
 export interface IdentifiedPage { index: number; name: string; type: string; sourcePath: string; virtualPath?: string; archiveInnerPath?: string; pageId?: string; modifiedAt?: number }
 export function pageIdentity(page: IdentifiedPage): string {
@@ -57,10 +60,12 @@ export function sortReaderPages<T extends IdentifiedPage>(pages: T[], mode: Page
   }).map((page, index) => ({ ...page, index, pageId: pageIdentity(page) }));
 }
 export function resolvePageIndex(pages: IdentifiedPage[], identity: string | undefined, name: string | undefined, fallback: number): number {
+  identity = parseSplitIdentity(identity).identity;
   const found = identity ? pages.findIndex(page => pageIdentity(page) === identity) : name ? pages.findIndex(page => page.name === name || page.archiveInnerPath === name) : -1;
   return found >= 0 ? found : Math.max(0, Math.min(pages.length - 1, fallback));
 }
 export function bookmarkMatches(bookmark: { pageId?: string; pageName?: string; archiveInnerPath?: string; sourceType: string; pageIndex: number }, index: number, identity?: string): boolean {
+  if (parseSplitIdentity(identity).half || parseSplitIdentity(bookmark.pageId).half) return Boolean(identity && identity === bookmark.pageId);
   if (!identity) return bookmark.pageIndex === index;
   if (!bookmark.pageId && (bookmark.sourceType === 'pdf' || (bookmark.sourceType === 'epub' || bookmark.sourceType==='mobi'))) return bookmark.pageIndex === index;
   const legacyName = bookmark.archiveInnerPath ?? bookmark.pageName;

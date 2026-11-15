@@ -5180,12 +5180,14 @@ a,
   box-shadow: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .reader-back:hover,
 .reader-actions button:hover,
 .reader-footer button:hover {
   border-color: var(--控件边框);
   background: var(--控件悬停);
   color: var(--主文字);
+}
 }
 
 .reader-back {
@@ -5354,10 +5356,12 @@ a,
   box-shadow: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .reader-reading-actions .reader-page-count-toggle.is-active:hover {
   border-color: var(--控件边框);
   color: var(--主文字);
   background: var(--控件悬停);
+}
 }
 
 .reader-reading-actions .reader-flow-toggle,
@@ -5368,11 +5372,13 @@ a,
   box-shadow: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .reader-reading-actions .reader-flow-toggle:hover,
 .reader-reading-actions .reader-direction-toggle:hover,
 .reader-zoom-actions .reader-panorama-toggle:hover {
   border-color: var(--控件边框);
   background: var(--控件悬停);
+}
 }
 
 .reader-zoom-actions .reader-panorama-toggle.is-active,
@@ -5788,7 +5794,9 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
 .reader-tool-panel { position: fixed; z-index: 410; width: min(356px, calc(100vw - 16px)); overflow-y: auto; padding: 16px; border: 1px solid var(--控件边框); border-radius: 12px; background: color-mix(in srgb, var(--面板色) 94%, transparent); backdrop-filter: blur(20px); box-shadow: 0 12px 40px color-mix(in srgb, var(--阴影基色) 16%, transparent); color: var(--主文字); font-size: calc(13px * var(--desktop-font-scale, 1)); overscroll-behavior: contain; }
 .reader-tool-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .reader-tool-panel button { border: 1px solid var(--控件边框); background: var(--控件背景); color: var(--控件文字); font: inherit; }
+@media (hover: hover) and (pointer: fine) {
 .reader-tool-panel button:hover { background: var(--控件悬停); }
+}
 .reader-tool-heading button { width: 28px; height: 28px; padding: 0; border-radius: 8px; }
 .reader-tool-section { display: grid; gap: 12px; padding: 14px 0; border-top: 1px solid var(--边框色); }
 .reader-tool-section .glass-select { width: 100%; }
@@ -6160,10 +6168,12 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
   stroke-width: 1.8;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .reader-bookmark-button:hover {
   border-color: var(--控件边框);
   background: var(--控件背景);
   color: var(--主文字);
+}
 }
 
 .reader-bookmark-button.is-active {
@@ -6173,10 +6183,12 @@ button:focus-visible { outline: 2px solid var(--控件边框); outline-offset: 2
   box-shadow: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
 .reader-bookmark-button.is-active:hover {
   border-color: var(--控件边框);
   background: var(--控件背景);
   color: var(--主文字);
+}
 }
 
 .reader-bookmark-button.is-active .reader-bookmark-icon {

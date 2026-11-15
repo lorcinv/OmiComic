@@ -48,7 +48,7 @@ test('desktop pointer drags cannot select chrome, but detail and reader titles a
   await page.locator('.resource-detail-read-button').click(); await expectReaderPixels(page.locator('.reader-image').first());
   await drag(page.locator('#reader-title')); expect(await selection()).not.toBe('');
   await expect(page.locator('.reader-footer')).toHaveCSS('user-select','none');
-  await page.getByRole('button',{name:'画面调整',exact:true}).click();
+  await page.getByRole('button',{name:'阅读设置',exact:true}).click();
   await expect(page.getByRole('checkbox',{name:'启用画面调整'})).toHaveCount(0);
   await expect(page.locator('.reader-tool-comparison')).toHaveCount(0);
   await page.getByRole('slider',{name:'亮度',exact:true}).fill('120');

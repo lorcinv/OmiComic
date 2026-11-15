@@ -24,6 +24,7 @@ function alignedElf(bytes, abi) {
 async function main() {
   const png = require('../android/dependencies.json').pngj;
   const pngFile = path.join(root, '.cache', `pngj-${png.version}.jar`);
+  fs.mkdirSync(path.dirname(pngFile), {recursive:true});
   if (!fs.existsSync(pngFile)) {
     const response = await fetch(png.url);
     if (!response.ok) throw new Error(`PNG decoder download: ${response.status}`);

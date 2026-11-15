@@ -1,3 +1,4 @@
+import { chooseReaderFit, expectReaderFit } from './helpers/readerControls.cjs';
 import { test, expect, type Page } from '@playwright/test';
 import { installMock } from './mock';
 import { expectReaderPixels } from './readerPixels';
@@ -52,7 +53,7 @@ async function resume(page: Page) {
   else {await page.getByRole('button',{name:/^最近阅读/}).click();await page.locator('.resource-card[data-selection-key="'+selectedBooks.get(page)+'"]').dblclick();}
   await expectReaderPixels(page.locator('.reader-image').first());
 }
-async function adjust(page: Page) { await page.getByRole('button',{name:'画面调整',exact:true}).click(); }
+async function adjust(page: Page) { await page.getByRole('button',{name:'阅读设置',exact:true}).click(); }
 async function slider(page: Page, label: string, value: number) {
   await page.getByRole('slider',{name:label,exact:true}).fill(String(value));
 }
@@ -116,7 +117,7 @@ test('auto paging advances groups, waits for loads, stops at the end and never r
 
 test('manual actions, panels, blur and background pause without automatic resume',async({page})=>{
   await open(page,{count:20});await interval(page);
-  const actions=[async()=>page.getByRole('button',{name:'下一页',exact:true}).click(),async()=>jump(page,4),async()=>page.locator('.reader-stage').click({position:{x:5,y:5}}),async()=>page.getByRole('slider',{name:'阅读进度',exact:true}).click({position:{x:50,y:4}}),async()=>page.getByRole('combobox',{name:'缩放方式'}).click(),async()=>adjust(page),async()=>page.evaluate(()=>window.dispatchEvent(new Event('blur'))),async()=>page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));})];
+  const actions=[async()=>page.getByRole('button',{name:'下一页',exact:true}).click(),async()=>jump(page,4),async()=>page.locator('.reader-stage').click({position:{x:5,y:5}}),async()=>page.getByRole('slider',{name:'阅读进度',exact:true}).click({position:{x:50,y:4}}),async()=>page.getByRole('button',{name:'阅读设置',exact:true}).click(),async()=>adjust(page),async()=>page.evaluate(()=>window.dispatchEvent(new Event('blur'))),async()=>page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));})];
   for(const action of actions){if(await page.locator('.reader-tool-panel').count())await page.keyboard.press('Escape');await play(page).click();await expect(pause(page)).toBeVisible();await action();await expect(play(page)).toBeVisible();if(await page.getByRole('listbox').count())await page.keyboard.press('Escape');}
   const before=await page.getByRole('textbox',{name:'跳转到页码'}).inputValue();await page.waitForTimeout(1200);await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue(before);
 });
@@ -166,7 +167,7 @@ test('all color effects alter rendered pixels, compare restores original, reset 
 
 test('worker processing is real, bounded for large pages, consistent in pairs and removable',async({page})=>{
   test.setTimeout(60000);
-  await open(page,{count:30,large:true});await page.getByRole('combobox',{name:'缩放方式'}).click();await page.getByRole('option',{name:'原始尺寸',exact:true}).click();
+  await open(page,{count:30,large:true});await chooseReaderFit(page,'原始尺寸');
   await page.evaluate(()=>{const times:number[]=[];(window as any).__processingFrames=times;(window as any).__sampleProcessing=true;let last=performance.now();const frame=(now:number)=>{times.push(now-last);last=now;if((window as any).__sampleProcessing)requestAnimationFrame(frame);};requestAnimationFrame(frame);});
   const start=Date.now();await adjust(page);await slider(page,'锐化',80);await slider(page,'降噪',75);await page.keyboard.press('Escape');
   await expect(page.locator('.reader-effects').first()).toHaveAttribute('data-processing','ready',{timeout:15000});

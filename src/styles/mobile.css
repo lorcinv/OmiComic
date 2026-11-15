@@ -802,3 +802,7 @@ html[data-platform="android"] .reader-tool-panel.is-mobile-tool-panel { bottom:c
     [data-platform="android"] .omi-home.is-mobile-home .omi-home__cover { height:calc((100vh - 244px)/2); max-height:100%; padding-top:0; }
   }
 }
+
+/* Reader taps end on release, without desktop hover or a delayed fade. */
+html[data-platform="android"] :is(.reader-layout,.reader-actions,.reader-tool-panel,.mobile-reader-previews) button { transition:none; -webkit-tap-highlight-color:transparent; }
+html[data-platform="android"] :is(.reader-layout,.reader-actions,.reader-tool-panel,.mobile-reader-previews) button:not(:disabled):active:not([data-omi-pressed="true"]) { opacity:1!important; }

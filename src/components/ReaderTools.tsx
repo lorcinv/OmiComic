@@ -1,6 +1,6 @@
 import { t } from '../i18n';
 import { MIN_READER_ZOOM, MAX_READER_ZOOM } from '../hooks/useReaderZoom';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { consumeDismissGesture } from '../hooks/consumeDismissGesture';
 import MobileIcon from './MobileIcon';
@@ -10,7 +10,7 @@ interface Props {
   disabled: boolean; epub: boolean;
   adjustments: ImageAdjustments; onAdjustments: (value: ImageAdjustments) => void;
   running: boolean; onPlay: () => void; onPanel: (open: boolean) => void;
-  mobile?: boolean;
+  mobile?: boolean; hideAdjustments?: boolean; trailing?: ReactNode;
   zoom?: number; onZoom?: (scale:number)=>void; onResetZoom?: ()=>void;
 }
 function Slider({ label, value, min, max, step = 1, unit = '', disabled = false, onChange }: {
@@ -57,11 +57,11 @@ export default function ReaderTools(props: Props) {
     window.addEventListener('omi-reader-close-panel', back);
     return () => { document.removeEventListener('pointerdown', outside, true); window.removeEventListener('keydown', key, true); window.removeEventListener('omi-reader-close-panel', back); };
   }, [panel]);
-  const adjust = <K extends keyof ImageAdjustments>(key: K, value: ImageAdjustments[K]) => props.onAdjustments({ ...props.adjustments, enabled: true, [key]: value });
   return <div className="reader-extra-tools" ref={tools}>
-    <button ref={adjustmentsButton} className={panel === 'adjustments' ? 'is-active' : ''} disabled={props.disabled} aria-expanded={panel === 'adjustments'} aria-haspopup="dialog" aria-label={t("画面调整")} title={t("画面调整")} onClick={() => setPanel(panel === 'adjustments' ? null : 'adjustments')}>
+    {!props.hideAdjustments && <button ref={adjustmentsButton} className={panel === 'adjustments' ? 'is-active' : ''} disabled={props.disabled} aria-expanded={panel === 'adjustments'} aria-haspopup="dialog" aria-label={t("画面调整")} title={t("画面调整")} onClick={() => setPanel(panel === 'adjustments' ? null : 'adjustments')}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16M12 4v16M19 4v16M2 9h6M9 15h6M16 7h6" /></svg><span>{t("画面调整")}</span>
-    </button>
+    </button>}
+    {props.trailing}
     {!props.mobile && <button ref={zoomButton} disabled={props.disabled} className={`reader-zoom-toggle${panel==='zoom'?' is-active':''}`} aria-label={t('缩放')} aria-expanded={panel==='zoom'} aria-haspopup="dialog" onClick={()=>setPanel(panel==='zoom'?null:'zoom')}>{t('缩放')} {Math.round((props.zoom??1)*100)}%</button>}
     {!props.mobile && <button data-reader-auto-play className={props.running ? 'is-active' : ''} disabled={props.disabled} onClick={() => { setPanel(null); props.onPlay(); }} aria-pressed={props.running} aria-label={props.running ? t("暂停自动阅读") : t("开始自动阅读")} title={props.running ? t("暂停自动阅读") : t("开始自动阅读")}>
       <svg viewBox="0 0 24 24" aria-hidden="true" className="reader-play-icon">{props.running ? <path d="M7 5h3v14H7zM14 5h3v14h-3z"/> : <path d="m8 5 11 7-11 7Z"/>}</svg>
@@ -73,6 +73,15 @@ export default function ReaderTools(props: Props) {
         <button className="reader-tool-reset" onClick={()=>props.onResetZoom?.()}>{t('重置大小')}</button>
       </>:<>
       {props.mobile && <div className="reader-tool-heading"><strong>{t("画面调整")}</strong><button aria-label={t("关闭面板")} onClick={() => setPanel(null)}><MobileIcon name="close"/></button></div>}
+        <ReaderAdjustmentControls {...props}/>
+      </>}
+    </div>, document.body)}
+  </div>;
+}
+
+export function ReaderAdjustmentControls(props: Pick<Props,'adjustments'|'onAdjustments'|'epub'>) {
+  const adjust = <K extends keyof ImageAdjustments>(key: K, value: ImageAdjustments[K]) => props.onAdjustments({ ...props.adjustments, enabled: true, [key]: value });
+  return <>
         <div className="reader-tool-section"><strong>{t("基础调整")}</strong>
           <Slider label={t("亮度")} value={props.adjustments.brightness} min={50} max={150} unit="%" onChange={v => adjust('brightness', v)} />
           <Slider label={t("对比度")} value={props.adjustments.contrast} min={50} max={150} unit="%" onChange={v => adjust('contrast', v)} />
@@ -89,7 +98,5 @@ export default function ReaderTools(props: Props) {
           {props.epub && <p>{t("EPUB 支持基础调整与滤镜。")}</p>}
         </div>
         <button className="reader-tool-reset" onClick={() => props.onAdjustments({ ...DEFAULT_ADJUSTMENTS })}>{t("恢复默认")}</button>
-      </>}
-    </div>, document.body)}
-  </div>;
+  </>;
 }

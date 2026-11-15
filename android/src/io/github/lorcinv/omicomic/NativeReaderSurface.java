@@ -87,7 +87,7 @@ final class NativeReaderSurface extends View {
     PendingRaster request;int fullSample,refinementAttempts;boolean promoting,persistable;long retryAfter,persistedEpoch=-1;CompletableFuture<Raster> clearFuture;
     Raster(String url,Bitmap bitmap,int w,int h,int sample,int orientation){this.url=url;this.bitmap=bitmap;this.orientation=orientation;width=orientation>=5?h:w;height=orientation>=5?w:h;this.sample=sample;Matrix transform=orientationMatrix(orientation);RectF area=new RectF(0,0,w,h);transform.mapRect(area);transform.postTranslate(-area.left,-area.top);toOriginal=new Matrix();transform.invert(toOriginal);}
   }
-  private static final class Slot {String url;RectF rect,clip;float alpha;Raster raster;}
+  private static final class Slot {String url,half="";RectF rect,clip;float alpha;Raster raster;}
   private static final class Frame {RectF clip;boolean panorama,restoring,scrubbing;float zoom=1;List<Slot> slots=new ArrayList<>();List<RectF> expected=new ArrayList<>();}
   private static final class Tile {Bitmap bitmap;Rect source;}
   private static final class TilePlan {Slot slot;int sample;float density;List<Rect> regions=new ArrayList<>();List<String> keys=new ArrayList<>();long bytes;}
@@ -595,18 +595,20 @@ final class NativeReaderSurface extends View {
       if(slots.length()==0&&(args.optBoolean("nativeExpected")||args.optBoolean("loading")))return;
       synchronized(cacheLock){
         pinned.clear();if(current!=null)for(Slot slot:current.slots)pinned.add(slot.url);
-        for(int i=0;i<slots.length()&&i<48;i++){JSONObject item=slots.getJSONObject(i);Slot slot=new Slot();slot.url=item.getString("url");slot.rect=rasterRect(item.getJSONArray("rect"),factor);slot.alpha=(float)item.optDouble("alpha",1);slot.raster=cache.get(slot.url);next.slots.add(slot);pinned.add(slot.url);}
-        plannedDetails.keySet().retainAll(pinned);
+        for(int i=0;i<slots.length()&&i<48;i++){JSONObject item=slots.getJSONObject(i);Slot slot=new Slot();slot.url=item.getString("url");slot.rect=rasterRect(item.getJSONArray("rect"),factor);slot.clip=item.has("clip")?rasterRect(item.getJSONArray("clip"),factor):null;slot.half=item.optString("half","");slot.alpha=(float)item.optDouble("alpha",1);slot.raster=cache.get(slot.url);next.slots.add(slot);pinned.add(slot.url);}
+        Set<String> views=new HashSet<>();if(current!=null)for(Slot slot:current.slots)views.add(viewKey(slot));for(Slot slot:next.slots)views.add(viewKey(slot));plannedDetails.keySet().retainAll(views);
       }
       pendingFrame=next;commitFrame();
     }catch(Exception invalid){android.util.Log.w("OmiComic","Invalid reader geometry",invalid);}
   }
   private static RectF rect(JSONArray a,float scale)throws JSONException{return new RectF((float)a.getDouble(0)*scale,(float)a.getDouble(1)*scale,(float)a.getDouble(2)*scale,(float)a.getDouble(3)*scale);}
   private static RectF rasterRect(JSONArray a,float scale)throws JSONException{RectF r=rect(a,scale);float left=Math.round(r.left),top=Math.round(r.top);return new RectF(left,top,left+Math.round(r.width()),top+Math.round(r.height()));}
+  // Presentation differs per half during a swipe; source rasters and tiles stay shared.
+  private static String viewKey(Slot slot){return slot.half.isEmpty()?slot.url:slot.url+"\n"+slot.half;}
   private static boolean coversExpected(Frame frame,List<RectF> expected){
     if(expected.isEmpty())return true;
     Region covered=new Region();
-    for(Slot slot:frame.slots)if(slot.raster!=null&&slot.alpha>0){RectF area=new RectF(slot.rect);if(area.intersect(frame.clip))covered.op(new Rect((int)Math.floor(area.left-.25f),(int)Math.floor(area.top-.25f),(int)Math.ceil(area.right+.25f),(int)Math.ceil(area.bottom+.25f)),Region.Op.UNION);}
+    for(Slot slot:frame.slots)if(slot.raster!=null&&slot.alpha>0){RectF area=new RectF(slot.rect);if(slot.clip!=null&&!area.intersect(slot.clip))continue;if(area.intersect(frame.clip))covered.op(new Rect((int)Math.floor(area.left-.25f),(int)Math.floor(area.top-.25f),(int)Math.ceil(area.right+.25f),(int)Math.ceil(area.bottom+.25f)),Region.Op.UNION);}
     for(RectF wanted:expected){RectF area=new RectF(wanted);if(!area.intersect(frame.clip))continue;
       Rect bounds=new Rect((int)Math.ceil(area.left),(int)Math.ceil(area.top),(int)Math.floor(area.right),(int)Math.floor(area.bottom));
       if(bounds.isEmpty())continue;Region missing=new Region(bounds);missing.op(covered,Region.Op.DIFFERENCE);if(!missing.isEmpty())return false;
@@ -672,7 +674,7 @@ final class NativeReaderSurface extends View {
   }
   private void prepareFrameDetail(Frame frame){
     List<TilePlan> plans=new ArrayList<>();Set<String> wanted=new HashSet<>();
-    for(Slot slot:frame.slots){TilePlan plan=tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size()),true);if(plan!=null){plans.add(plan);wanted.addAll(plan.keys);TilePlan ahead=plannedDetails.get(slot.url);if(ahead!=null)wanted.addAll(ahead.keys);}}
+    for(Slot slot:frame.slots){TilePlan plan=tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size()),true);if(plan!=null){plans.add(plan);wanted.addAll(plan.keys);TilePlan ahead=plannedDetails.get(viewKey(slot));if(ahead!=null)wanted.addAll(ahead.keys);}}
     synchronized(cacheLock){pendingDetailKeys.clear();pendingDetailKeys.addAll(wanted);visibleTiles.addAll(wanted);}
     for(TilePlan plan:plans)tilesReady(plan,true);
   }
@@ -690,38 +692,40 @@ final class NativeReaderSurface extends View {
     List<TilePlan> plans=new ArrayList<>();Set<String> wanted=new HashSet<>();visibleAdjustments.clear();
     Set<String> pageUrls=new HashSet<>();
     for(Slot slot:frame.slots){
-      pageUrls.add(slot.url);
-      TilePresentation shown=tilePresentations.get(slot.url);
-      if(shown==null){shown=new TilePresentation();tilePresentations.put(slot.url,shown);}
+      pageUrls.add(viewKey(slot));
+      TilePresentation shown=tilePresentations.get(viewKey(slot));
+      if(shown==null){shown=new TilePresentation();tilePresentations.put(viewKey(slot),shown);}
       TilePlan plan=holdQuality?atSlotOrNull(shown.current,slot):tilePlan(slot,frame.clip,tileBudget()/Math.max(1,frame.slots.size()));
       plans.add(plan);if(plan!=null)wanted.addAll(plan.keys);if(slot.raster!=null)visibleAdjustments.add(rasterAdjustmentKey(slot.raster)+effectsKey);
       if(shown.current!=null)wanted.addAll(shown.current.keys);
       if(shown.previous!=null)wanted.addAll(shown.previous.keys);
-      TilePlan ahead=plannedDetails.get(slot.url);if(!holdQuality&&plan!=null&&ahead!=null)wanted.addAll(ahead.keys);
+      TilePlan ahead=plannedDetails.get(viewKey(slot));if(!holdQuality&&plan!=null&&ahead!=null)wanted.addAll(ahead.keys);
     }
     tilePresentations.keySet().retainAll(pageUrls);completeTilePlans.keySet().retainAll(pageUrls);
     for(String key:wanted)visibleAdjustments.add(key+effectsKey);
     synchronized(cacheLock){visibleTiles.clear();visibleTiles.addAll(wanted);visibleTiles.addAll(pendingDetailKeys);trim();}
     // Decode the next complete sharp region while the current one still covers
     // the viewport. Its keys share the existing two-region memory reservation.
-    if(!holdQuality)for(int i=0;i<frame.slots.size();i++){Slot slot=frame.slots.get(i);TilePlan ahead=plannedDetails.get(slot.url);if(plans.get(i)!=null&&ahead!=null)tilesReady(atSlot(ahead,slot),true);}
+    if(!holdQuality)for(int i=0;i<frame.slots.size();i++){Slot slot=frame.slots.get(i);TilePlan ahead=plannedDetails.get(viewKey(slot));if(plans.get(i)!=null&&ahead!=null)tilesReady(atSlot(ahead,slot),true);}
     canvas.save();canvas.clipRect(frame.clip);lastDrawSharp=true;
     for(int i=0;i<frame.slots.size();i++){Slot slot=frame.slots.get(i);
       Raster raster=slot.raster;if(raster==null)continue;
+      if(slot.clip!=null){canvas.save();canvas.clipRect(slot.clip);}
       paint.setAlpha(Math.round(slot.alpha*255));
       // Ordinary pages draw their original bitmap at every zoom level.
       Bitmap base=adjust(rasterAdjustmentKey(raster),raster.bitmap);canvas.drawBitmap(base,null,slot.rect,paint);
-      TilePresentation shown=tilePresentations.get(slot.url);TilePlan target=plans.get(i);
+      TilePresentation shown=tilePresentations.get(viewKey(slot));TilePlan target=plans.get(i);
       if(!sameTiles(shown.current,target)&&tilesReady(target,true)&&(target==null||coversDetail(target,slot,frame.clip))){
         shown.previous=null;shown.current=target;shown.started=0;
       }
-      if(shown.current!=null){paint.setAlpha(Math.round(slot.alpha*255));drawTiles(canvas,atSlot(shown.current,slot),false);completeTilePlans.put(slot.url,shown.current);}
-      else completeTilePlans.remove(slot.url);
+      if(shown.current!=null){paint.setAlpha(Math.round(slot.alpha*255));drawTiles(canvas,atSlot(shown.current,slot),false);completeTilePlans.put(viewKey(slot),shown.current);}
+      else completeTilePlans.remove(viewKey(slot));
       if(!holdQuality&&raster.sample>1&&slot.rect.width()>raster.bitmap.getWidth()*1.001f){
-        TilePlan detail=shown.current;RectF visible=new RectF(slot.rect);visible.intersect(frame.clip);
+        TilePlan detail=shown.current;RectF visible=new RectF(slot.rect);visible.intersect(frame.clip);if(slot.clip!=null)visible.intersect(slot.clip);
         if(detail==null)lastDrawSharp=false;
         else{Rect area=detail.regions.get(0);RectF coverage=new RectF(slot.rect.left+area.left*slot.rect.width()/raster.width,slot.rect.top+area.top*slot.rect.height()/raster.height,slot.rect.left+area.right*slot.rect.width()/raster.width,slot.rect.top+area.bottom*slot.rect.height()/raster.height);coverage.inset(-1,-1);float scale=Math.max(slot.rect.width()/raster.width,slot.rect.height()/raster.height);if(!coverage.contains(visible)||detail.density+.0001f<Math.min(1,scale)||!tilesReady(detail,false))lastDrawSharp=false;}
       }
+      if(slot.clip!=null)canvas.restore();
     }
     canvas.restore();
     if(!holdQuality)restoreTilePlans.clear();
@@ -735,7 +739,7 @@ final class NativeReaderSurface extends View {
   private TilePlan atSlotOrNull(TilePlan old,Slot slot){return old==null?null:atSlot(old,slot);}
   private boolean coversDetail(TilePlan plan,Slot slot,RectF clip){
     if(plan==null||plan.regions.size()!=1)return false;
-    RectF visible=new RectF(slot.rect);if(!visible.intersect(clip))return true;
+    RectF visible=new RectF(slot.rect);if(!visible.intersect(clip)||slot.clip!=null&&!visible.intersect(slot.clip))return true;
     Rect area=plan.regions.get(0);Raster raster=slot.raster;
     RectF covered=new RectF(slot.rect.left+(float)area.left/raster.width*slot.rect.width(),slot.rect.top+(float)area.top/raster.height*slot.rect.height(),slot.rect.left+(float)area.right/raster.width*slot.rect.width(),slot.rect.top+(float)area.bottom/raster.height*slot.rect.height());
     covered.inset(-.25f,-.25f);return covered.contains(visible);
@@ -770,15 +774,15 @@ final class NativeReaderSurface extends View {
     // force a sharper level merely because the source was sampled at decode.
     if(slot.rect.width()<=raster.bitmap.getWidth()*1.001f&&slot.rect.height()<=raster.bitmap.getHeight()*1.001f)return null;
     int sample=1;while(sample*2<=raster.sample&&sample*2*scale<=1)sample*=2;
-    RectF visible=new RectF(slot.rect);if(!visible.intersect(clip))return null;
+    RectF visible=new RectF(slot.rect);if(!visible.intersect(clip)||slot.clip!=null&&!visible.intersect(slot.clip))return null;
     Rect required=new Rect(Math.max(0,(int)Math.floor((visible.left-slot.rect.left)/slot.rect.width()*raster.width)),Math.max(0,(int)Math.floor((visible.top-slot.rect.top)/slot.rect.height()*raster.height)),Math.min(raster.width,(int)Math.ceil((visible.right-slot.rect.left)/slot.rect.width()*raster.width)),Math.min(raster.height,(int)Math.ceil((visible.bottom-slot.rect.top)/slot.rect.height()*raster.height)));
-    TilePresentation shown=tilePresentations.get(slot.url);
+    TilePresentation shown=tilePresentations.get(viewKey(slot));
     TilePlan reuse=coveringPlan(shown==null?null:shown.current,slot,required,sample,allocation);
-    TilePlan planned=coveringPlan(plannedDetails.get(raster.url),slot,required,sample,allocation);
+    TilePlan planned=coveringPlan(plannedDetails.get(viewKey(slot)),slot,required,sample,allocation);
     // Let useful in-flight work finish. A moving viewport must not continually
     // discard its almost-ready pixels and restart decoding at a new rectangle.
     // The next draw plans the latest viewport after this job completes.
-    TilePlan inFlight=plannedDetails.get(raster.url);
+    TilePlan inFlight=plannedDetails.get(viewKey(slot));
     if(planned==null&&inFlight!=null&&inFlight.sample<=sample&&inFlight.density+.00001f>=detailDensity(slot,sample)&&inFlight.bytes<=allocation/2&&inFlight.regions.size()==1&&Rect.intersects(inFlight.regions.get(0),required)){
       synchronized(cacheLock){if(!Collections.disjoint(tilesPending.keySet(),inFlight.keys))return reuse!=null?reuse:atSlot(inFlight,slot);}
     }
@@ -812,7 +816,7 @@ final class NativeReaderSurface extends View {
       // never takes memory reserved for the old sharp frame or a second page.
       if(plan.bytes<=allocation/2&&plan.bytes+retained<=allocation&&(!library.isDocumentPage(raster.url)||plan.bytes<=24_000_000L)){
         if(reuse!=null){Rect old=reuse.regions.get(0);boolean extendsAhead=aheadX<0&&left<old.left||aheadX>0&&right>old.right||aheadY<0&&top<old.top||aheadY>0&&bottom>old.bottom;if(!extendsAhead||sample!=reuse.sample)return reuse;}
-        plannedDetails.put(raster.url,plan);detailPlansCreated++;return reuse==null?plan:reuse;
+        plannedDetails.put(viewKey(slot),plan);detailPlansCreated++;return reuse==null?plan:reuse;
       }
     }
     sample*=2;

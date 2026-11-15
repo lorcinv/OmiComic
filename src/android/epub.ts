@@ -5,17 +5,20 @@ export async function sanitizeAndroidChapter(payload: string, native: NativeCall
   const source = new DOMParser().parseFromString(html, "text/html");
   const output = document.implementation.createHTMLDocument("");
   const allowed = new Set(["p","div","span","h1","h2","h3","h4","h5","h6","br","hr","strong","b","em","i","u","s","blockquote","ul","ol","li","pre","code","table","thead","tbody","tr","th","td","img","ruby","rt","rp","sup","sub"]);
-  const blocked = new Set(["script","style","iframe","object","embed","math","form","input","button","link","meta","base"]);
+  const blocked = new Set(["head","title","script","style","iframe","object","embed","math","form","input","button","link","meta","base"]);
+  // DOMParser's HTML mode keeps an XML prefix in localName (h:img, s:image).
+  // EPUB XHTML is XML; normalize the name before both allow and block checks.
+  const tagName = (node: Element) => node.localName.toLowerCase().split(':').at(-1)!;
   let count = 0, images = 0, failedImages = 0, unsupportedImages = 0;
   async function append(node: Node, parent: Node): Promise<void> {
     if (++count > 50000) throw new Error("章节内容过大。");
     if (node.nodeType === Node.TEXT_NODE) { parent.appendChild(output.createTextNode(node.textContent ?? "")); return; }
     if (!(node instanceof Element)) return;
-    const tag = node.localName.toLowerCase(); if (blocked.has(tag)) return;
+    const tag = tagName(node); if (blocked.has(tag)) return;
     // Fixed-layout EPUBs often wrap a raster in SVG. Keep only those local
     // raster references, never executable SVG nodes or their attributes.
     if (tag === "svg") {
-      const rasters=[...node.querySelectorAll('image')];
+      const rasters=[...node.getElementsByTagName('*')].filter(child=>tagName(child)==='image');
       if(!rasters.length)unsupportedImages++;
       for (const image of rasters) await append(image, parent);
       return;

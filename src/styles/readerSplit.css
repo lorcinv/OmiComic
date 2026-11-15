@@ -1,0 +1,28 @@
+.reader-page-crop { position: relative; flex: none; overflow: hidden; }
+.reader-page-crop-content { position: relative; flex: none; }
+.reader-page-crop-content > .reader-effects { width: 100%; height: 100%; }
+.reader-split-toggle { display: inline-flex; align-items: center; gap: 7px; }
+.reader-split-toggle svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.reader-more-toggle svg { display: block; width: 20px; height: 20px; fill: currentColor; }
+.reader-tool-panel.reader-display-sidebar { z-index: 1200; top: 0; right: 0; bottom: 0; width: min(360px, calc(100vw - 20px)); max-height: none; padding: 0; border-radius: 12px 0 0 0; display: flex; flex-direction: column; overflow: hidden; -webkit-app-region: no-drag; }
+.reader-sidebar-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--边框色); flex: none; }
+.reader-sidebar-heading > strong { font-size: 15px; }
+.reader-sidebar-content { overflow-y: auto; overscroll-behavior: contain; padding: 0 18px 18px; min-height: 0; }
+.reader-sidebar-content > .reader-tool-section:first-child { border-top: 0; }
+.reader-fit-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.reader-fit-options button { padding: 9px 8px; border-radius: 7px; }
+.reader-display-sidebar button[aria-pressed="true"],
+.reader-extra-tools button.is-active { background: var(--强调色); border-color: var(--强调色); color: var(--强调文字); }
+.reader-sidebar-split .reader-split-toggle { width: 100%; padding: 10px; border-radius: 7px; }
+.reader-split-state { margin-left: auto; color: inherit; }
+.mobile-sheet .reader-split-toggle { min-width: 0; gap: 5px; }
+.mobile-sheet .reader-extra-tools > button:first-child { flex: 1; }
+.mobile-sheet .reader-extra-tools > button:last-child:not(:first-child) { flex: 0 0 auto; }
+.mobile-sheet .reader-zoom-actions { flex-wrap: nowrap; }
+.mobile-sheet .reader-zoom-actions .reader-fit-select { min-width: 0; flex: 1; }
+@media (max-width: 390px) {
+  .mobile-sheet .reader-zoom-actions { gap: 5px; }
+  .mobile-sheet .reader-zoom-actions button { padding-left: 9px; padding-right: 9px; }
+  .mobile-sheet .reader-zoom-actions .reader-panorama-toggle { min-width: 64px; }
+  .mobile-sheet .reader-split-toggle svg { width: 17px; }
+}

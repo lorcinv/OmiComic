@@ -1,6 +1,6 @@
 // Keep the closing gesture from reaching controls revealed by an unmounted popup.
-export function consumeDismissGesture(event: Event): void {
-  if (document.documentElement.dataset.platform !== 'android' && !window.matchMedia('(max-width:760px), (pointer:coarse)').matches) return;
+export function consumeDismissGesture(event: Event, desktop = false): void {
+  if (!desktop && document.documentElement.dataset.platform !== 'android' && !window.matchMedia('(max-width:760px), (pointer:coarse)').matches) return;
   event.preventDefault(); event.stopImmediatePropagation();
   if (event.type !== 'pointerdown' && event.type !== 'mousedown') return;
   let timer: ReturnType<typeof setTimeout>;

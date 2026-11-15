@@ -1,3 +1,7 @@
+import ReaderDisplaySidebar from '../components/ReaderDisplaySidebar';
+import '../styles/readerSplit.css';
+import ReaderPageCrop from '../components/ReaderPageCrop';
+import { adjacentSplitPosition, splitHalf, splitPart, splitIdentity, parseSplitIdentity, SPLIT_WIDE_RATIO, type SplitPart } from '../../electron/shared/splitPages';
 import { animationFinished } from '../reader/animationFinished';
 import { useReadableNeighbours } from '../hooks/useReadableNeighbours';
 import ReaderBookSwitch from '../components/ReaderBookSwitch';
@@ -302,7 +306,9 @@ function 创建初始阅读状态(
   进度 = resource?.readerInit?.progress ?? null,
 ) {
   const 保存视图 = 进度?.readerViewState ?? 创建默认阅读视图(设置);
-  const 视图 = isAndroid() ? 保存视图 : { ...保存视图, immersive: 设置.readerDefaultImmersive === true };
+  const 请求半页 = parseSplitIdentity(resource?.requestedPageId).half;
+  const 原视图 = { ...保存视图, ...(进度?.currentPageIndex !== initialPageIndex ? { splitPageHalf: undefined } : {}), ...(!isAndroid() ? { immersive: 设置.readerDefaultImmersive === true } : {}) };
+  const 视图: ReaderViewState = 请求半页 ? { ...原视图, splitWidePages: true, splitPageHalf: 请求半页, pageMode: 'single', panorama: false } : 原视图;
   const 恢复保存位置 = !resource?.requestedPageId && 进度?.currentPageIndex === initialPageIndex;
   const 索引 = resource ? resolvePageIndex(resource.pages,
     resource.requestedPageId ?? (恢复保存位置 ? 进度?.currentPageId : undefined),
@@ -409,8 +415,12 @@ function ReaderPage({
   const [顶部栏可见, 设置顶部栏可见] = useState(!初始阅读状态.视图.immersive);
   const [底部栏可见, 设置底部栏可见] = useState(!初始阅读状态.视图.immersive);
   const [页码输入聚焦, 设置页码输入聚焦] = useState(false);
+  const 页码输入已修改 = useRef(false);
   const [阅读流向, 设置阅读流向] = useState<阅读流向>(初始阅读状态.视图.flow);
   const [全景模式, 设置全景模式] = useState(初始阅读状态.视图.panorama);
+  const [拆分宽页, 设置拆分宽页] = useState(初始阅读状态.视图.splitWidePages === true);
+  const [拆页位置, 设置拆页位置] = useState<Record<number, SplitPart>>({ [初始阅读状态.索引]: splitPart(初始阅读状态.视图.splitPageHalf, 初始阅读状态.视图.pageDirection === 'right-to-left') });
+  const [桌面阅读设置打开, 设置桌面阅读设置打开] = useState(false);
   const [双页配对起点, 设置双页配对起点] = useState(初始阅读状态.配对起点);
   const [页面排序, 设置页面排序] = useState<PageSort>(normalizePageSort(初始阅读状态.视图.pageSort));
   const [画面调整, 设置画面调整] = useState(() => 手机布局
@@ -617,6 +627,14 @@ function ReaderPage({
       获取已知页面原始尺寸(first), 获取已知页面原始尺寸(second), 可用区域, 全景模式 ? "fit-height" : 缩放模式,
     ),
   };
+  const 支持拆页 = Boolean(resource && resource.sourceType !== 'epub' && resource.sourceType !== 'mobi');
+  const 拆页模式 = 拆分宽页 && 支持拆页 && !全景模式 && 有效页模式 === 'single';
+  const 页面需要拆分 = (index: number) => {
+    if (!拆页模式) return false;
+    const size = 获取已知页面原始尺寸(index);
+    return Boolean(size && size.height > 0 && size.width / size.height >= SPLIT_WIDE_RATIO);
+  };
+  const 页面拆分半边 = (index: number, part = 拆页位置[index] ?? 0) => 页面需要拆分(index) ? splitHalf(part, 阅读器设置.doublePageDirection === 'right-to-left') : undefined;
   const 是跨页横图 = (索引: number): boolean => (
     有效阅读器设置.smartDetectSpreadPage
     && 有效阅读器设置.readerPageMode === "double"
@@ -668,10 +686,13 @@ function ReaderPage({
   const 当前显示跨页横图 = 有效阅读器设置.readerPageMode === "double"
     && 显示页组索引.length === 1
     && 是跨页横图(显示页组索引[0] ?? -1);
-  const 当前页组包含首页 = 全景模式 ? 显示阅读索引 === 0 : 当前页组索引.includes(0);
+  const 当前拆分半边 = 页面拆分半边(安全索引);
+  const 显示拆分半边 = 页面拆分半边(显示阅读索引);
+  const 当前拆页部分 = 拆页位置[安全索引] ?? 0;
+  const 当前页组包含首页 = (全景模式 ? 显示阅读索引 === 0 : 当前页组索引.includes(0)) && (!当前拆分半边 || 当前拆页部分 === 0);
   const 当前页组包含尾页 = 总页数 > 0 && (
     全景模式 ? 显示阅读索引 === 总页数 - 1 : 当前页组索引.includes(总页数 - 1)
-  );
+  ) && (!拆页模式 || Boolean(获取已知页面原始尺寸(安全索引)) || Boolean(页面图片状态表[安全索引]?.error)) && (!当前拆分半边 || 当前拆页部分 === 1);
   const 显示进度索引 = 当前页组包含尾页 ? 总页数 - 1 : 显示阅读索引;
   const 页模式按钮文本 = 有效阅读器设置.readerPageMode === "double" ? "2" : "1";
   const 从右到左阅读 = 阅读器设置.doublePageDirection === "right-to-left";
@@ -980,8 +1001,10 @@ function ReaderPage({
   const 显示进度百分比 = 进度拖动比例 === null ? 进度百分比 : 进度拖动比例 * 100;
   const 进度预览索引 = 进度拖动比例 === null ? 显示进度索引 : Math.round(进度拖动比例 * Math.max(0, 总页数 - 1));
   const 进度预览组 = 全景模式 ? [进度预览索引] : 计算页组索引(规范化页组主索引(进度预览索引, 总页数, 有效阅读器设置, 页面是跨页横图), 总页数, 有效阅读器设置, 页面是跨页横图);
-  const 手机进度文本 = `${总页数 ? (进度预览组[0] ?? 0) + 1 : 0}${进度预览组.length > 1 ? `~${进度预览组.at(-1)! + 1}` : ''}/${总页数}`;
-  const 电脑进度文本 = (从右到左阅读 ? [...进度预览组].reverse() : 进度预览组).map(index => String(index+1)).join(' | ');
+  const 页码后缀 = (index: number) => 进度拖动比例 === null ? 页面拆分半边(index) ?? '' : '';
+  const 当前页码文本 = `${显示进度索引+1}${页码后缀(显示阅读索引)}`;
+  const 手机进度文本 = `${总页数 ? (进度预览组[0] ?? 0) + 1 : 0}${页码后缀(进度预览组[0]??0)}${进度预览组.length > 1 ? `~${进度预览组.at(-1)! + 1}` : ''}/${总页数}`;
+  const 电脑进度文本 = (从右到左阅读 ? [...进度预览组].reverse() : 进度预览组).map(index => `${index+1}${页码后缀(index)}`).join(' | ') + (显示拆分半边 ? `/${总页数}` : '');
 
   function 调整画面(value: typeof 画面调整) {
     const next = 手机布局 ? { ...value, enabled: true } : value;
@@ -1146,6 +1169,10 @@ function ReaderPage({
 
   function 计算页面图片样式(页面索引: number): CSSProperties {
     let 尺寸 = 获取已知页面原始尺寸(页面索引);
+    if (尺寸 && 页面需要拆分(页面索引)) {
+      const halfSize = fitPage({width:尺寸.width/2,height:尺寸.height},可用区域,缩放模式);
+      return {width:`${halfSize.width*2}px`,height:`${halfSize.height}px`,maxWidth:'none',maxHeight:'none'};
+    }
     if (模式2) {
       尺寸 = 计算模式2页面尺寸(页面索引);
     } else if (尺寸) {
@@ -1162,7 +1189,8 @@ function ReaderPage({
 
   function 创建当前阅读进度(): ReadingProgress | null {
     if (!resource || !显示阅读页面 || resource.total <= 0) return null;
-    const percent = Math.round(((显示进度索引 + 1) / Math.max(1, resource.total)) * 100);
+    const portion = 显示拆分半边 && (拆页位置[显示阅读索引] ?? 0) === 0 ? .5 : 1;
+    const percent = 拆页模式 ? Math.min(当前页组包含尾页 ? 100 : 99, Math.round(((显示进度索引 + portion) / Math.max(1, resource.total)) * 100)) : Math.round(((显示进度索引 + 1) / Math.max(1, resource.total)) * 100);
     const 当前时间 = Date.now();
     const completed = 当前页组包含尾页;
     return {
@@ -1176,10 +1204,12 @@ function ReaderPage({
       currentPageName: resource.pages[显示进度索引]?.name ?? 显示阅读页面.name,
       percent,
       completed,
-      hasStartedReading: 显示阅读索引 > 0 || completed,
+      hasStartedReading: 显示阅读索引 > 0 || Boolean(显示拆分半边 && (拆页位置[显示阅读索引] ?? 0) === 1) || completed,
       firstReadAt: 当前时间,
       updatedAt: 当前时间,
       readerViewState: {
+        splitWidePages: 拆分宽页,
+        splitPageHalf: 显示拆分半边,
         fitMode: 缩放模式,
         pageMode: 阅读器设置.readerPageMode,
         pairingAnchor: 双页配对起点,
@@ -1267,29 +1297,40 @@ function ReaderPage({
 
   const 手机触点 = useRef<{ id: number; x: number; y: number; time: number; type: string; moved: boolean } | null>(null);
   const 安卓双击 = useReaderDoubleTap(阅读区域, isNativeMobile() && 阅读器设置.mobileReaderDoubleTapZoom !== false && isActive && interactive && !阅读视图初始化中,
-    `${resource?.resourceKey}:${显示页组索引[0]}:${缩放模式}:${全景模式}:${阅读流向}`,
+    `${resource?.resourceKey}:${显示页组索引[0]}:${显示拆分半边??''}:${缩放模式}:${全景模式}:${阅读流向}`,
     (x,y)=>执行阅读单击(x,y,'touch'), (x,y)=>自由缩放.toggleAt(x,y));
   const 手机放大翻页位置 = useRef<{index:number;x:number;y:number}|null>(null);
-  const 手机滑页=useMobilePageSwipe(阅读区域,手机布局&&isActive&&interactive&&!模式2&&!阅读视图初始化中,从右到左阅读,`${resource?.resourceKey}:${显示页组索引[0]??-1}`,
+  const 阅读位置键 = (index: number, part: SplitPart = 拆页位置[index] ?? 0) => `${resource?.resourceKey}:${index}${拆页模式 ? `:${part}` : ''}`;
+  const 滑页索引解码 = (token: number) => 拆页模式 ? Math.floor(token / 2) : token;
+  const 滑页部分解码 = (token: number): SplitPart => 拆页模式 && token % 2 ? 1 : 0;
+  const 手机滑页=useMobilePageSwipe(阅读区域,手机布局&&isActive&&interactive&&!模式2&&!阅读视图初始化中,从右到左阅读,阅读位置键(显示页组索引[0]??-1),
     direction=>{
       if(!resource)return null;
+      if(拆页模式){
+        const target=adjacentSplitPosition(安全索引,当前拆页部分,direction,总页数,页面需要拆分(安全索引));
+        return target ? {index:target.index*2+target.part,key:阅读位置键(target.index,target.part)} : null;
+      }
       const index=direction>0?计算下一页组主索引(安全索引,总页数,有效阅读器设置,是跨页横图):计算上一页组主索引(安全索引,总页数,有效阅读器设置,是跨页横图);
       if(index===安全索引)return null;
-      return {index,key:`${resource.resourceKey}:${index}`};
-    },index=>{for(const page of 计算页组索引(index,总页数,有效阅读器设置,页面是跨页横图))void 确保页面图片就绪(page);},index=>{if(自由缩放.scale>1)手机放大翻页位置.current={index,...手机邻页平移};void 跳转到页面索引(index);}, direction => {
+      return {index,key:阅读位置键(index)};
+    },token=>{for(const page of 计算页组索引(滑页索引解码(token),总页数,有效阅读器设置,页面是跨页横图))void 确保页面图片就绪(page);},token=>{
+      const index=滑页索引解码(token);
+      if(自由缩放.scale>1)手机放大翻页位置.current={index,...手机邻页平移};
+      void 跳转到页面索引(index,undefined,false,滑页部分解码(token));
+    }, direction => {
       if (direction > 0 && 当前页组包含尾页) 设置跨本提示("next");
       else if (direction < 0 && 当前页组包含首页) 设置跨本提示("previous");
     });
-  const 手机滑页索引=手机滑页.target?计算页组索引(手机滑页.target.index,总页数,有效阅读器设置,页面是跨页横图):[];
+  const 手机滑页索引=手机滑页.target?计算页组索引(滑页索引解码(手机滑页.target.index),总页数,有效阅读器设置,页面是跨页横图):[];
   const 手机滑页视觉索引=从右到左阅读?[...手机滑页索引].reverse():手机滑页索引;
-  const 手机滑页页面=手机滑页视觉索引.map(index=>({...resource!.pages[index],...页面图片状态引用.current[index],url:页面图片状态引用.current[index]?.url??'',width:页面图片状态引用.current[index]?.width??600,height:页面图片状态引用.current[index]?.height??900}));
+  const 手机滑页页面=手机滑页视觉索引.map(index=>({...resource!.pages[index],...页面图片状态引用.current[index],url:页面图片状态引用.current[index]?.url??'',width:页面图片状态引用.current[index]?.width??600,height:页面图片状态引用.current[index]?.height??900,half:页面拆分半边(index,滑页部分解码(手机滑页.target!.index))}));
   const 手机滑页已就绪=手机滑页页面.length>0&&手机滑页页面.every(page=>Boolean(page.url||page.error));
-  const 手机滑页尺寸=手机滑页已就绪?fitSpread(手机滑页页面,可用区域,缩放模式).map(size=>({width:size.width*自由缩放.scale,height:size.height*自由缩放.scale})):[];
+  const 手机滑页尺寸=手机滑页已就绪?fitSpread(手机滑页页面.map(page=>({...page,width:page.half?page.width/2:page.width})),可用区域,缩放模式).map(size=>({width:size.width*自由缩放.scale,height:size.height*自由缩放.scale})):[];
   const 手机邻页宽度=手机滑页尺寸.reduce((sum,size)=>sum+size.width,0),手机邻页高度=Math.max(0,...手机滑页尺寸.map(size=>size.height));
   const 手机邻页平移=手机滑页已就绪?自由缩放.clampPan({x:手机滑页.screenDirection*Math.max(0,(手机邻页宽度-可用区域.width)/2),y:自由缩放.y},{width:手机邻页宽度/自由缩放.scale,height:手机邻页高度/自由缩放.scale}):{x:0,y:0};
   const 手机滑页图组 = new Map<string,{index:number;direction:number;pages:typeof 手机滑页页面;sizes:typeof 手机滑页尺寸;active:boolean}>();
   if (手机滑页已就绪 && 手机滑页.target) 手机滑页图组.set(手机滑页.target.key,{index:手机滑页.target.index,direction:手机滑页.screenDirection,pages:手机滑页页面,sizes:手机滑页尺寸,active:true});
-  if (手机文档成组预读 && 手机布局 && !模式2 && 后台预读已启用 && 桌面相邻页组 && resource) {
+  if (!拆页模式 && 手机文档成组预读 && 手机布局 && !模式2 && 后台预读已启用 && 桌面相邻页组 && resource) {
     let bytes = 0;
     const budget = Math.min(64 * 1024 * 1024, 内存缓存上限字节 * .25);
     for (const [direction,indices] of [[1,桌面相邻页组.next],[-1,桌面相邻页组.previous]] as const) {
@@ -1301,17 +1342,17 @@ function ReaderPage({
       if(bytes+size>budget)continue;
       bytes+=size;
       const order=从右到左阅读?[...indices].reverse():indices;
-      const pages=order.map(i=>({...resource.pages[i],...页面图片状态表[i],url:页面图片状态表[i].url,width:页面图片状态表[i].width??600,height:页面图片状态表[i].height??900}));
+      const pages=order.map(i=>({...resource.pages[i],...页面图片状态表[i],url:页面图片状态表[i].url,width:页面图片状态表[i].width??600,height:页面图片状态表[i].height??900,half:undefined}));
       手机滑页图组.set(key,{index,direction:direction*(从右到左阅读?-1:1),pages,sizes:fitSpread(pages,可用区域,缩放模式).map(size=>({width:size.width*自由缩放.scale,height:size.height*自由缩放.scale})),active:false});
     }
   }
   useLayoutEffect(()=>{
     自由缩放.stop();
-  },[模式2?null:显示页组索引.join('|'),isActive,interactive]);
+  },[模式2?null:显示页组索引.join('|'),显示拆分半边,isActive,interactive]);
   useLayoutEffect(()=>{
     const pending=手机放大翻页位置.current;
     if(pending&&显示页组索引.includes(pending.index)){手机放大翻页位置.current=null;自由缩放.panTo(pending.x,pending.y);}
-  },[显示页组索引.join('|')]);
+  },[显示页组索引.join('|'),显示拆分半边]);
   useEffect(()=>{手机滑页.cancel();},[resource?.resourceKey]);
   useMobileReaderAutoHide(手机布局 && isActive && interactive, 手机工具栏可见, 阅读器设置.mobileReaderAutoHide !== false,
     手机阅读设置打开 || 手机页面预览打开 || 进度拖动比例 !== null || 阅读视图初始化中, () => 设置手机工具栏可见(false));
@@ -2786,7 +2827,7 @@ function ReaderPage({
     return true;
   }
 
-  function 跳转到页面索引(索引: number, 回退比例?: number, 重新配对 = false): Promise<void> {
+  function 跳转到页面索引(索引: number, 回退比例?: number, 重新配对 = false, part: SplitPart = 0): Promise<void> {
     if (阅读视图初始化中) return Promise.resolve();
     if (!resource || resource.total <= 0) return Promise.resolve();
     if (重新配对) 设置双页配对起点(限制索引(索引, resource.total));
@@ -2804,6 +2845,7 @@ function ReaderPage({
       const 方式 = 来自进度跳页 ? "jump" : "slide";
       return 切换模式2页面(目标索引, 方式);
     }
+    if (拆页模式) 设置拆页位置(old => ({ [安全索引]:old[安全索引]??0, [目标索引]:part }));
     设置当前索引(目标索引);
     return Promise.resolve();
   }
@@ -3287,6 +3329,9 @@ function ReaderPage({
     设置书签错误(null);
     设置当前页已书签(false);
     设置阅读器设置(初始阅读状态.设置);
+    设置拆分宽页(初始阅读状态.视图.splitWidePages === true);
+    设置拆页位置({[起始索引]:splitPart(初始阅读状态.视图.splitPageHalf,初始阅读状态.视图.pageDirection==='right-to-left')});
+    设置桌面阅读设置打开(false);
     设置双页配对起点(初始阅读状态.配对起点);
     设置阅读流向(初始阅读状态.视图.flow);
     设置缩放模式(初始阅读状态.视图.fitMode);
@@ -3330,6 +3375,8 @@ function ReaderPage({
           阅读进度结果?.ok ? 阅读进度结果.data : null
         ) ?? 应用数据结果.data.readingProgress[初始化资源Key] ?? null;
         const { 视图: 阅读视图, 设置: 新阅读器设置, 索引: 恢复索引, 配对起点 } = 创建初始阅读状态(resource, initialPageIndex, 应用设置, 已保存进度);
+        设置拆分宽页(阅读视图.splitWidePages === true);
+        设置拆页位置({[恢复索引]:splitPart(阅读视图.splitPageHalf,阅读视图.pageDirection==='right-to-left')});
         设置页面排序(normalizePageSort(阅读视图.pageSort));
         设置画面调整(手机布局 ? { ...normalizeAdjustments(应用设置.mobileImageAdjustments), enabled: true } : normalizeAdjustments(阅读视图.adjustments));
         设置自动阅读设置(normalizeAutoRead(阅读视图.autoRead));
@@ -3394,6 +3441,9 @@ function ReaderPage({
     阅读视图已加载资源Key,
     显示阅读索引,
     显示进度索引,
+    拆分宽页,
+    显示拆分半边,
+    当前页组包含尾页,
     双页配对起点,
     页面排序,
     画面调整,
@@ -3511,7 +3561,7 @@ function ReaderPage({
     }
 
     let 已取消 = false;
-    void window.omicomic.isPageBookmarked(resource.resourceKey, 显示阅读索引, 显示阅读页面 ? pageIdentity(显示阅读页面) : undefined)
+    void window.omicomic.isPageBookmarked(resource.resourceKey, 显示阅读索引, 显示阅读页面 ? splitIdentity(pageIdentity(显示阅读页面),显示拆分半边) : undefined)
       .then((结果) => {
         if (已取消) return;
         if (结果.ok) {
@@ -3531,7 +3581,7 @@ function ReaderPage({
     return () => {
       已取消 = true;
     };
-  }, [resource, 显示阅读索引]);
+  }, [resource, 显示阅读索引, 显示拆分半边]);
 
   useLayoutEffect(() => {
     if (!isActive || !阅读区域.current) return;
@@ -3981,6 +4031,7 @@ function ReaderPage({
     设置跨本提示(null);
     if(自由缩放.active)自由缩放.setScale(1);
     if (全景滚屏到相邻页(-1)) return;
+    if (拆页模式) { const target=adjacentSplitPosition(安全索引,当前拆页部分,-1,总页数,页面需要拆分(安全索引)); if(target)void 跳转到页面索引(target.index,undefined,false,target.part); return; }
     跳转到页面索引(计算上一页组主索引(安全索引, 总页数, 有效阅读器设置, 是跨页横图));
   }
 
@@ -3990,6 +4041,7 @@ function ReaderPage({
     设置跨本提示(null);
     if(自由缩放.active)自由缩放.setScale(1);
     if (全景滚屏到相邻页(1)) return;
+    if (拆页模式) { const target=adjacentSplitPosition(安全索引,当前拆页部分,1,总页数,页面需要拆分(安全索引)); if(target)void 跳转到页面索引(target.index,undefined,false,target.part); return; }
     跳转到页面索引(计算下一页组主索引(安全索引, 总页数, 有效阅读器设置, 是跨页横图));
   }
 
@@ -3998,7 +4050,7 @@ function ReaderPage({
   }
 
   function 跳到尾页(): void {
-    跳转到页面索引(Math.max(0, 总页数 - 1));
+    跳转到页面索引(Math.max(0, 总页数 - 1),undefined,false,拆页模式?1:0);
   }
 
   async function 切换相邻资源(方向: "previous" | "next"): Promise<void> {
@@ -4030,6 +4082,7 @@ function ReaderPage({
         ? 文档页面 ? 目标资源.pageIndex ?? 0 : resolvePageIndex(结果.data.pages, 目标资源.pageId, 目标资源.pageName, 目标资源.pageIndex ?? 0)
         : 进度?.currentPageIndex ?? 0;
       const 起始页 = Math.min(Math.max(目标页码, 0), 文档页面 ? Number.MAX_SAFE_INTEGER : Math.max(0, 结果.data.total - 1));
+      if (openContext.source === "bookmarks") 结果.data.requestedPageId = 目标资源.pageId;
       if (手机布局) onSwitchResource(结果.data, 起始页, 新上下文, motion);
       else onSwitchResource(结果.data, 起始页, 新上下文);
     } finally {
@@ -4057,7 +4110,7 @@ function ReaderPage({
 
     const 修正页码 = Math.min(Math.max(输入页码, 1), resource.total);
     const 目标索引 = 限制索引(修正页码 - 1, resource.total);
-    if (目标索引 === 显示进度索引) return;
+    if (目标索引 === 显示进度索引 && (!拆页模式 || 当前拆页部分 === 0)) return;
     void 跳转到页面索引(目标索引, undefined, true);
     设置页码输入(String(目标索引 + 1));
   }
@@ -4073,7 +4126,7 @@ function ReaderPage({
       sourceType: resource.sourceType,
       title: resource.title,
       pageIndex: 显示阅读索引,
-      pageId: pageIdentity(显示阅读页面),
+      pageId: splitIdentity(pageIdentity(显示阅读页面),显示拆分半边),
       totalPages: resource.total,
       pageName: 显示阅读页面.name,
       archiveInnerPath: 显示阅读页面.archiveInnerPath,
@@ -4157,8 +4210,8 @@ function ReaderPage({
   const 自动阅读 = useAutoRead({
     keepPlayingOnInteraction: 手机布局,
     active: isActive && interactive && !阅读视图初始化中,
-    modeKey: `${resource?.resourceKey}:${阅读流向}:${全景模式}:${有效页模式}:${从右到左阅读}:${缩放模式}:${页面排序}`,
-    pageKey: 当前页组Key,
+    modeKey: `${resource?.resourceKey}:${阅读流向}:${全景模式}:${有效页模式}:${从右到左阅读}:${缩放模式}:${页面排序}:${拆页模式}`,
+    pageKey: `${当前页组Key}:${当前拆分半边 ?? ''}`,
     ready: 全景模式 ? Boolean(页面图片状态表[显示阅读索引]?.url && !页面图片状态表[显示阅读索引]?.loading) : 目标页组已准备,
     failed: Boolean(文档错误 || 错误信息 || 当前页组索引.some(index => 页面图片状态表[index]?.error)),
     continuous: 全景模式, atEnd: 当前页组包含尾页, settings: 自动阅读设置,
@@ -4198,6 +4251,22 @@ function ReaderPage({
   useEffect(() => {
     if (!自动阅读.running && 全景模式 && !阅读视图初始化中) 提交模式2自由位置();
   }, [自动阅读.running]);
+
+  function 渲染拆页按钮() {
+    const disabled=阅读视图初始化中||!支持拆页||全景模式||有效页模式!=='single';
+    return <button className={`reader-split-toggle ${拆分宽页?'is-active':''}`} aria-label={t('跨页拆分')} aria-pressed={拆分宽页} disabled={disabled} title={disabled?t('仅图片和 PDF 的普通单页模式可用'):t('跨页拆分')} onClick={()=>{
+      设置拆分宽页(value=>!value);设置拆页位置({[安全索引]:0});设置跨本提示(null);自由缩放.reset();
+    }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v16h5M15 4h5v16h-5"/><path d="M12 3v18" strokeDasharray="2 3"/></svg><span>{t('跨页拆分')}</span>{!手机布局&&<span className="reader-split-state">{t(拆分宽页?'开':'关')}</span>}</button>;
+  }
+  function 渲染沉浸按钮() {
+    return <button className={沉浸模式?'is-active':''} onClick={()=>设置沉浸全屏(!沉浸模式)} disabled={阅读视图初始化中} aria-pressed={沉浸模式}>{t('沉浸')}</button>;
+  }
+  const 工具面板打开 = useRef(false);
+  useEffect(()=>{
+    阅读面板打开.current=桌面阅读设置打开||工具面板打开.current;
+    if(桌面阅读设置打开){自动阅读.pause();清理顶部栏隐藏定时器();设置顶部栏可见(true);}
+    else 安排顶部栏隐藏();
+  },[桌面阅读设置打开]);
 
   function 渲染书签按钮(附加类名: string) {
     return (
@@ -4253,6 +4322,7 @@ function ReaderPage({
       style={!resource?.readerInit && 阅读视图初始化中 && !错误信息 && !文档错误 ? { visibility: "hidden" } : undefined}
     >
       <GammaFilter id={伽马滤镜Id} gamma={画面调整.gamma} />
+      {!手机布局 && <ReaderDisplaySidebar open={桌面阅读设置打开&&isActive} onClose={()=>设置桌面阅读设置打开(false)} fitMode={全景模式?垂直阅读?'fit-width':'fit-height':缩放模式} onFit={选择缩放模式} fitDisabled={阅读视图初始化中||全景模式} adjustments={画面调整} onAdjustments={调整画面} epub={resource?.sourceType==='epub'||resource?.sourceType==='mobi'} splitControl={渲染拆页按钮()}/>}
       {进度保存错误 && <div className="document-save-error" role="alert">{t(进度保存错误 ?? '')}<button aria-label={t("关闭进度提示")} onClick={() => 设置进度保存错误(null)}>×</button></div>}
       {可隐藏工具栏 && !手机布局 && (
         <>
@@ -4376,7 +4446,7 @@ function ReaderPage({
               </svg>
               {手机布局 && <span className="mobile-mode-label">{t("连续")}</span>}
             </button>
-            <GlassSelect<阅读器缩放模式>
+            {手机布局 ? <GlassSelect<阅读器缩放模式>
               className="reader-fit-select"
               value={全景模式 ? 垂直阅读 ? "fit-width" : "fit-height" : 缩放模式}
               options={uiOptions([
@@ -4389,23 +4459,16 @@ function ReaderPage({
               title={全景模式 ? tr`全景${t(垂直阅读 ? "纵向自动适应宽度" : "横向自动适应高度")}` : t("普通阅读缩放方式")}
               disabled={阅读视图初始化中 || 全景模式}
               onChange={选择缩放模式}
-            />
-            <button
-              className={沉浸模式 ? "is-active" : ""}
-              onClick={() => {
-                设置沉浸全屏(!沉浸模式);
-              }}
-              disabled={阅读视图初始化中}
-              aria-pressed={沉浸模式}
-            >{t("沉浸")}</button>
+            /> : <>{渲染沉浸按钮()}<button className={`reader-more-toggle ${桌面阅读设置打开?'is-active':''}`} data-reader-more aria-label={t('阅读设置')} title={t('阅读设置')} aria-haspopup="dialog" aria-expanded={桌面阅读设置打开} disabled={阅读视图初始化中} onClick={()=>设置桌面阅读设置打开(value=>!value)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></>}
+            {手机布局 && 渲染拆页按钮()}
           </div>
-          <ReaderTools mobile={手机布局} zoom={自由缩放.scale} onZoom={自由缩放.setScale} onResetZoom={自由缩放.reset} disabled={阅读视图初始化中} epub={(resource?.sourceType === 'epub' || resource?.sourceType==='mobi')} adjustments={画面调整} onAdjustments={调整画面} running={自动阅读.running}
+          <ReaderTools mobile={手机布局} hideAdjustments={!手机布局} trailing={手机布局?渲染沉浸按钮():undefined} zoom={自由缩放.scale} onZoom={自由缩放.setScale} onResetZoom={自由缩放.reset} disabled={阅读视图初始化中} epub={(resource?.sourceType === 'epub' || resource?.sourceType==='mobi')} adjustments={画面调整} onAdjustments={调整画面} running={自动阅读.running}
             onPlay={() => {
               取消全景异步导航(true);
               if (手机布局) { 设置手机阅读设置打开(false); 设置手机工具栏可见(false); }
               自动阅读.toggle();
             }}
-            onPanel={open => { 阅读面板打开.current = open; if (open) { if(!手机布局)自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
+            onPanel={open => { 工具面板打开.current=open; 阅读面板打开.current = open||桌面阅读设置打开; if (open) { if(!手机布局)自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
           {isAndroid() && <div className="mobile-volume-settings">
             <label className="settings-toggle"><input type="checkbox" checked={阅读器设置.mobileReaderDoubleTapZoom !== false} onChange={event => void 保存音量键设置({mobileReaderDoubleTapZoom:event.target.checked})}/><span>{t("双击放大画面")}</span></label>
             <label className="settings-toggle"><input type="checkbox" checked={Boolean(阅读器设置.readerVolumeKeys)} onChange={event => void 保存音量键设置({ readerVolumeKeys: event.target.checked })}/><span>{t("音量键翻页")}</span></label>
@@ -4527,10 +4590,13 @@ function ReaderPage({
                             : "is-after-current-page",
                         Math.abs(页面.index - 显示阅读索引) === 1 ? "is-neighbor-page" : "",
                       ].filter(Boolean).join(" ");
+                  const 裁切半边 = 状态.error ? undefined : 页面拆分半边(页面.index);
+                  const 裁切样式 = 裁切半边 ? 计算页面图片样式(页面.index) : undefined;
                   return (
                     <figure
                       className={`reader-page-frame ${模式2位置类名}`}
                       data-reader-page-index={页面.index}
+                      data-reader-half={裁切半边}
                       data-native-work-key={原生图片核心||手机文档成组预读 ? 原生页面Key(页面) : undefined}
                       key={页面.index}
                       aria-hidden={!模式2 && !显示页组索引.includes(页面.index) ? true : undefined}
@@ -4545,6 +4611,7 @@ function ReaderPage({
                         ...(手机全景进入中 && 页面.index !== 显示阅读索引 ? {visibility:'hidden'} : {}),
                       }}
                     >
+                      <ReaderPageCrop half={裁切半边} width={parseFloat(String(裁切样式?.width??0))/2} height={parseFloat(String(裁切样式?.height??0))}>
                       {/* Animated sources must stay in an image element; bitmap processing keeps only one frame. */}
                       <ReaderImageEffects nativeZoom={自由缩放.scale>1.001} samplingPriority={模式2 ? undefined : 当前页组索引.includes(页面.index)} layoutKey={[模式2, 阅读流向, 缩放模式, 可用区域.width, 可用区域.height].join(":")} alignmentKey={[模式2 ? 全景窗口中心索引 : 显示页组索引.join('|'), 阅读流向, 可用区域.width, 可用区域.height, 自由缩放.scale].join(":")} settings={状态.native ? DEFAULT_ADJUSTMENTS : 画面调整} gammaId={伽马滤镜Id} processable={!状态.animated && !状态.native && 页面.type !== 'epub-chapter' && !/\.gif$/i.test(页面.name) && Boolean(状态.url)} sampleable={!状态.animated && !状态.canvas && !/\.gif$/i.test(页面.name)} sourceWidth={状态.width} sourceHeight={状态.height} sourceBytes={状态.encodedBytes} onRasterBytes={bytes=>更新显示缩放缓存(`${resource.resourceKey}:${页面.index}`,bytes)} sourceKey={`${resource.resourceKey}:${pageIdentity(页面)}:${状态.url ? 'ready' : 'loading'}:${状态.width}:${状态.height}`}>
                       {状态.error ? (
@@ -4612,6 +4679,7 @@ function ReaderPage({
                         </div>
                       )}
                       </ReaderImageEffects>
+                      </ReaderPageCrop>
                     </figure>
                   );
                 })}
@@ -4622,7 +4690,7 @@ function ReaderPage({
         )}
       </div>
 
-      {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews pages={resource.pages} current={进度预览索引} currentGroup={进度预览组} followingProgress={进度拖动比例!==null} width={阅读器设置.mobilePreviewWidth ?? 88} documentSource={文档源}
+      {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews rtl={从右到左阅读} pages={resource.pages} current={进度预览索引} currentGroup={进度预览组} followingProgress={进度拖动比例!==null} width={阅读器设置.mobilePreviewWidth ?? 88} documentSource={文档源}
         nativeImage={页面图片状态表[进度预览索引]?.native ? 页面图片状态表[进度预览索引]?.url || null : undefined}
         nativeImages={页面图片状态表} nativePages={原生图片核心&&!模式2?原生窗口索引:undefined} nativeRadius={!模式2 && 内存缓存上限字节 > 0 ? Math.min(2,预加载页数) : 0}
         onPage={index => { 实时拖动阅读比例(index/Math.max(1,总页数-1)); if(模式2) 提交模式2自由位置(); }}/>}
@@ -4644,7 +4712,7 @@ function ReaderPage({
         </button>}
         {!手机布局 && <>
         {阅读器设置.readerHideFooterControls && (
-          <span className="reader-progress-count">{总页数 > 0 ? 显示进度索引 + 1 : 0} / {总页数}</span>
+          <span className="reader-progress-count">{总页数 > 0 ? 当前页码文本 : 0}/{总页数}</span>
         )}
         <div className="reader-footer-controls previous-controls" aria-hidden={阅读器设置.readerHideFooterControls}>
           {从右到左阅读 ? (
@@ -4665,9 +4733,10 @@ function ReaderPage({
               inputMode="numeric"
               aria-label={(resource?.sourceType === "epub" || resource?.sourceType==="mobi") && !resource?.documentPaginated ? t("跳转到章节") : t("跳转到页码")}
               disabled={阅读视图初始化中 || !resource}
-              value={resource ? (页码输入聚焦 ? 页码输入 : String(显示进度索引 + 1)) : "0"}
-              onChange={(事件) => 设置页码输入(事件.target.value)}
+              value={resource ? (页码输入聚焦 ? 页码输入 : 当前页码文本) : "0"}
+              onChange={(事件) => { 页码输入已修改.current = true; 设置页码输入(事件.target.value); }}
               onFocus={(事件) => {
+                页码输入已修改.current = false;
                 设置页码输入聚焦(true);
                 设置页码输入(String(显示进度索引 + 1));
                 设置底部栏可见(true);
@@ -4676,15 +4745,17 @@ function ReaderPage({
               }}
               onBlur={() => {
                 设置页码输入聚焦(false);
-                应用页码输入();
+                if (页码输入已修改.current) 应用页码输入();
                 安排底部栏隐藏(true);
               }}
               onKeyDown={(事件) => {
                 事件.stopPropagation();
                 if (事件.key === "Enter") {
                   应用页码输入();
+                  页码输入已修改.current = false;
                   事件.currentTarget.blur();
                 } else if (事件.key === "Escape") {
+                  页码输入已修改.current = false;
                   if (沉浸模式) {
                     设置沉浸全屏(false);
                     事件.currentTarget.blur();
@@ -4695,7 +4766,7 @@ function ReaderPage({
                 }
               }}
             />
-            <strong>/ {总页数}</strong>
+            <strong>/{显示拆分半边 ? '' : ' '}{总页数}</strong>
           </label>
         </div>
         <div className="reader-footer-controls next-controls" aria-hidden={阅读器设置.readerHideFooterControls}>

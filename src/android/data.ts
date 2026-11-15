@@ -1,3 +1,4 @@
+import { parseSplitIdentity, sourcePageProgress } from '../../electron/shared/splitPages';
 import type { AppSettings, OmiComicApi, OmiComicAppData, VirtualFolder, VirtualFolderItemInput, 操作结果, 阅读资源结果 } from "../types";
 import { updateResourceRecords, withinPath } from "../../electron/services/resourceRecords";
 import { androidNotify, type NativeCall } from "./bridge";
@@ -179,8 +180,10 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
       const totalPages = Math.max(1,Math.floor(input.totalPages));
       const currentPageIndex = Math.min(totalPages-1,Math.max(0,Math.floor(input.currentPageIndex)));
       const old = d.readingProgress[input.resourceKey];
-      const p = {...input,totalPages,currentPageIndex,percent:Math.round((currentPageIndex+1)/totalPages*100),completed:currentPageIndex===totalPages-1,
-        hasStartedReading:!!(old?.hasStartedReading||input.hasStartedReading||currentPageIndex>0||totalPages===1),firstReadAt:old?.firstReadAt??input.firstReadAt??Date.now(),updatedAt:Date.now(), readerViewState:input.readerViewState??old?.readerViewState};
+      const readerViewState=input.readerViewState??old?.readerViewState;
+      const position=sourcePageProgress(currentPageIndex,totalPages,readerViewState);
+      const p = {...input,totalPages,currentPageIndex,...position,
+        hasStartedReading:!!(old?.hasStartedReading||input.hasStartedReading||currentPageIndex>0||position.completed),firstReadAt:old?.firstReadAt??input.firstReadAt??Date.now(),updatedAt:Date.now(),readerViewState};
       d.readingProgress[p.resourceKey]=p;
       d.recentOpened=[p,...d.recentOpened.filter(i=>i.resourceKey!==p.resourceKey)].slice(0,d.settings.recentOpenedLimit);
       d.temporaryOpened=d.temporaryOpened.map(i=>i.resourceKey===p.resourceKey?p:i);
@@ -251,11 +254,11 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
       for (const bookmark of d.bookmarks.filter(b=>b.resourceKey===resource.resourceKey)) {
         const oldIndex = resolvePageIndex(previous, bookmark.pageId, bookmark.archiveInnerPath??bookmark.pageName, bookmark.pageIndex);
         const id = bookmark.pageId??pageIdentity(previous[oldIndex]);
-        const newIndex = resource.pages.findIndex(p=>pageIdentity(p)===id);
+        const newIndex = resource.pages.findIndex(p=>pageIdentity(p)===parseSplitIdentity(id).identity);
         if(newIndex>=0) Object.assign(bookmark,{pageId:id,pageIndex:newIndex,totalPages:resource.total,pageName:resource.pages[newIndex].name});
       }
       const view = old?.readerViewState??{fitMode:d.settings.readerDefaultFitMode,pageMode:d.settings.readerPageMode,pageDirection:d.settings.doublePageDirection,flow:d.settings.readerDefaultFlow,panorama:false,immersive:false};
-      const progress = {...old,resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:index,currentPageId:input.currentPageId,currentPageName:resource.pages[index].name,totalPages:resource.total,percent:Math.round((index+1)/resource.total*100),completed:index===resource.total-1,updatedAt:Date.now(),readerViewState:{...view,pageSort:input.mode,pairingAnchor:index,pairingAnchorId:input.currentPageId}};
+      const progress = {...old,resourceKey:resource.resourceKey,sourcePath:resource.sourcePath,sourceType:resource.sourceType,title:resource.title,currentPageIndex:index,currentPageId:input.currentPageId,currentPageName:resource.pages[index].name,totalPages:resource.total,...sourcePageProgress(index,resource.total,view),updatedAt:Date.now(),readerViewState:{...view,pageSort:input.mode,pairingAnchor:index,pairingAnchorId:input.currentPageId}};
       d.readingProgress[resource.resourceKey]=progress;
       d.recentOpened=d.recentOpened.map(p=>p.resourceKey===resource.resourceKey?progress:p);
       d.temporaryOpened=d.temporaryOpened.map(p=>p.resourceKey===resource.resourceKey?progress:p);

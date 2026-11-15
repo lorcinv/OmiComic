@@ -113,3 +113,6 @@ test('records packaged animation coverage', async () => {
     result.animations.push(JSON.parse(await fs.readFile(`test-results/reader-animation-${format}-${source}.json`,'utf8')));
   await fs.writeFile(output,JSON.stringify(result,null,2));
 });
+
+// Exercise the new split-page path against each packaged Mac architecture.
+if(process.platform==='darwin')require('./reader-split-pages.electron.cjs');

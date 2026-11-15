@@ -119,7 +119,7 @@ test('up and down switch adjacent books in either reading flow without stealing 
   await input.focus(); await input.press('ArrowDown');
   expect(await count()).toBe(initial);
   await input.blur();
-  const zoom = page.getByRole('combobox', { name: '缩放方式' });
+  const zoom = page.getByRole('button', { name: '阅读设置', exact:true });
   await zoom.click(); await page.keyboard.press('ArrowDown');
   expect(await count()).toBe(initial);
   await page.keyboard.press('Escape'); await zoom.blur();
