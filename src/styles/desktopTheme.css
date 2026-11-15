@@ -101,6 +101,12 @@
 [data-omi-layout="desktop"] .reader-layout .reader-filename-strip { border-bottom: 1px solid var(--边框色); }
 [data-omi-layout="desktop"] .reader-layout .reader-footer { border-top: 1px solid var(--边框色); }
 [data-omi-layout="desktop"] .reader-tool-panel { background: var(--背景色); }
+/* taste-skill-ignore: the requested sidebar uses the existing desktop menu glass. */
+[data-omi-layout="desktop"] .reader-tool-panel.reader-display-sidebar {
+  background: color-mix(in srgb, var(--玻璃基色) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(1.16);
+  -webkit-backdrop-filter: blur(18px) saturate(1.16);
+}
 [data-omi-layout="desktop"] .reader-tool-panel > .reader-tool-section:first-child { border-top: 0; padding-top: 0; }
 
 /* Immersive progress only paints the completed portion, even with chrome hidden. */
