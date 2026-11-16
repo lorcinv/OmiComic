@@ -8,6 +8,7 @@
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-68776b" alt="GPL-3.0-only"></a>
     <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-65758b" alt="Available for Windows, macOS and Android">
   </p>
+  <p><em>If you find this helpful, please give it a STAR (☆ ω ☆)</em></p>
   <p><a href="#download">Download</a> · <a href="#video-demo">Video demo</a> · <a href="#features">Features</a> · <a href="docs/support.md">Support the author</a></p>
 </div>
 

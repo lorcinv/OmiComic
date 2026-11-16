@@ -8,6 +8,7 @@
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-68776b" alt="GPL-3.0-only"></a>
     <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-65758b" alt="Windows・macOS・Android 対応">
   </p>
+  <p><em>役に立ったら、STAR をお願いします (☆ ω ☆)</em></p>
   <p><a href="#ダウンロード">ダウンロード</a> · <a href="#紹介動画">紹介動画</a> · <a href="#機能">機能</a> · <a href="docs/support.md">作者を応援する</a></p>
 </div>
 

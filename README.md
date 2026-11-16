@@ -8,7 +8,7 @@
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-68776b" alt="GPL-3.0-only"></a>
     <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Android-65758b" alt="支持 Windows、macOS 和 Android">
   </p>
-  <p>对你有帮助的话点个STAR吧(☆ ω ☆)</p>
+  <p><em>对你有帮助的话点个STAR吧(☆ ω ☆)</em></p>
   <p><a href="#下载">下载</a> · <a href="#视频演示">视频演示</a> · <a href="#功能">功能</a> · <a href="docs/support.md">支持作者</a></p>
 </div>
 
