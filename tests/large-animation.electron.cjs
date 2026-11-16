@@ -40,3 +40,12 @@ for(const {format,source} of cases)test(`large ${source} ${format} plays and ret
   const result={format,source,bytes:(await fs.stat(file)).size,platform:process.platform,arch:process.arch,results};t.diagnostic(JSON.stringify(result));
   await fs.mkdir('test-results/large-animations',{recursive:true});await fs.writeFile(`test-results/large-animations/${source}-${format}.json`,JSON.stringify(result,null,2));
 });
+test('oversized animation reports the actual size limit',{timeout:30000},async t=>{
+  const profile=await fs.mkdtemp(path.join(os.tmpdir(),'omi-large-limit-')),file=path.join(profile,'TooLarge.gif');let app;
+  t.after(async()=>{if(app)await app.close();assert.equal(path.dirname(profile),path.resolve(os.tmpdir()));assert.ok(path.basename(profile).startsWith('omi-large-limit-'));await fs.rm(profile,{recursive:true,force:true});});
+  const handle=await fs.open(file,'w');await handle.truncate(256*1024**2+1);await handle.close();
+  await fs.writeFile(path.join(profile,'omicomic-data.json'),JSON.stringify({version:1,library:{roots:[{path:profile,name:'Books',addedAt:1,lastOpenedAt:1}]}}));
+  const env={...process.env,OMICOMIC_TEST_PROFILE:profile,OMICOMIC_TEST_HEADLESS:'1'};delete env.ELECTRON_RUN_AS_NODE;delete env.VITE_DEV_SERVER_URL;
+  app=await _electron.launch({executablePath:process.env.OMICOMIC_PACKAGED_EXE||require('electron'),args:process.env.OMICOMIC_PACKAGED_EXE?[file]:['.',file],env});
+  const page=await app.firstWindow();await expect(page.getByText('当前图片超过 256 MiB 读取上限，请缩小后打开。',{exact:true})).toBeVisible({timeout:20000});
+});

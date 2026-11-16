@@ -1,8 +1,21 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { crc32 } = require('node:zlib');
+const { crc32, deflateSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../../.cache/large-animation-fixtures');
+
+function largeApng() {
+  const chunk=(name,data)=>{const head=Buffer.alloc(8),crc=Buffer.alloc(4);head.writeUInt32BE(data.length);head.write(name,4);crc.writeUInt32BE(crc32(data,crc32(head.subarray(4))));return Buffer.concat([head,data,crc]);};
+  const width=512,height=512,frames=90,header=Buffer.alloc(13),animation=Buffer.alloc(8);
+  header.writeUInt32BE(width);header.writeUInt32BE(height,4);header[8]=8;header[9]=2;animation.writeUInt32BE(frames);
+  const payloads=[[220,45,70],[25,145,220]].map(color=>{const rows=Buffer.alloc((width*3+1)*height);for(let y=0;y<height;y++)for(let x=0;x<width;x++)for(let c=0;c<3;c++)rows[y*(width*3+1)+1+x*3+c]=color[c];return deflateSync(rows,{level:0});});
+  const chunks=[Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('acTL',animation)];let sequence=0;
+  for(let frame=0;frame<frames;frame++){
+    const control=Buffer.alloc(26);control.writeUInt32BE(sequence++);control.writeUInt32BE(width,4);control.writeUInt32BE(height,8);control.writeUInt16BE(1,20);control.writeUInt16BE(4,22);chunks.push(chunk('fcTL',control));
+    if(frame===0)chunks.push(chunk('IDAT',payloads[0]));else{const id=Buffer.alloc(4);id.writeUInt32BE(sequence++);chunks.push(chunk('fdAT',Buffer.concat([id,payloads[frame%2]])));}
+  }
+  chunks.push(chunk('IEND',Buffer.alloc(0)));return Buffer.concat(chunks);
+}
 
 // Valid container padding exercises byte limits without thousands of decoded frames.
 function padded(data, format, size = 66 * 1024 ** 2) {
@@ -35,15 +48,17 @@ async function prepare() {
   const still=await fs.readFile(path.join(__dirname,'../fixtures/animations/static.webp'));
   for(const format of ['gif','webp','apng']) {
     const folder=path.join(root,`Large-${format}`);await fs.mkdir(folder,{recursive:true});
-    if(!await fs.stat(path.join(folder,`01.${format}`)).catch(()=>null))await fs.writeFile(path.join(folder,`01.${format}`),padded(await fs.readFile(path.join(__dirname,`../fixtures/animations/animated.${format}`)),format));
+    const rebuild=format==='apng'&&!await fs.stat(path.join(root,'.apng-frames-v2')).catch(()=>null);
+    if(rebuild||!await fs.stat(path.join(folder,`01.${format}`)).catch(()=>null))await fs.writeFile(path.join(folder,`01.${format}`),format==='apng'?largeApng():padded(await fs.readFile(path.join(__dirname,`../fixtures/animations/animated.${format}`)),format));
     await fs.writeFile(path.join(folder,'02.webp'),still);
     const data=await fs.readFile(path.join(folder,`01.${format}`));
-    if(!await fs.stat(folder+'.cbz').catch(()=>null))await fs.writeFile(folder+'.cbz',zip([[`01.${format}`,data],['02.webp',still]]));
-    if(!await fs.stat(folder+'.epub').catch(()=>null))await fs.writeFile(folder+'.epub',zip([
+    if(rebuild||!await fs.stat(folder+'.cbz').catch(()=>null))await fs.writeFile(folder+'.cbz',zip([[`01.${format}`,data],['02.webp',still]]));
+    if(rebuild||!await fs.stat(folder+'.epub').catch(()=>null))await fs.writeFile(folder+'.epub',zip([
       ['META-INF/container.xml','<container><rootfiles><rootfile full-path="book.opf"/></rootfiles></container>'],
       ['book.opf','<package><manifest><item id="a" href="first.xhtml" media-type="application/xhtml+xml"/><item id="b" href="second.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/><itemref idref="b"/></spine></package>'],
       ['first.xhtml',`<html><body><img src="01.${format}"/></body></html>`],['second.xhtml','<html><body><img src="02.webp"/></body></html>'],[`01.${format}`,data],['02.webp',still],
     ]));
+    if(rebuild)await fs.writeFile(path.join(root,'.apng-frames-v2'),'90 full image frames, 512 x 512, uncompressed DEFLATE');
   }
   const seven=path.join(root,'Large-gif.cb7');
   const mixed=path.join(root,'Large-gif.mixed.epub');

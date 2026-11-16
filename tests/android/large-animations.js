@@ -10,6 +10,10 @@ const card=name=>[...document.querySelectorAll('.page-panel.is-visible .mobile-r
 await wait(()=>card('LargeAnimations'),'fixtures');card('LargeAnimations').querySelector('strong').click();
 const cases=['gif','webp','apng'].flatMap(format=>['folder','archive','epub'].map(source=>({format,source})));
 cases.push({format:'gif',source:'7z'},{format:'gif',source:'real'});
+const selectedPage=async index=>{
+  await wait(()=>active('[aria-label="阅读进度"]')?.getAttribute('aria-valuenow')===String(index+1),'selected page '+index);
+  await wait(async()=>{const page=active('[data-reader-page-index="'+index+'"]');if(!page)return false;const before=page.getBoundingClientRect();await pause(120);const after=page.getBoundingClientRect();return after.width>0&&after.x+after.width/2>0&&after.x+after.width/2<innerWidth&&Math.abs(before.x-after.x)<.5&&Math.abs(before.y-after.y)<.5;},'page movement settled '+index);
+};
 const sample=async(label,format,source)=>{
   const image=active('[data-reader-page-index="0"] img.reader-image');assert(image&&image.complete&&image.naturalWidth>0,'Image missing '+source+'/'+format+'/'+label);
   const effects=image.closest('.reader-effects');assert(effects.dataset.processing==='original'&&effects.dataset.displaySampling==='original','Animation passed through static processing');
@@ -22,11 +26,12 @@ const sample=async(label,format,source)=>{
 for(const {format,source} of cases){
   const name=source==='real'?'Lorenzo':'Large-'+format+(source==='archive'?'.cbz':source==='epub'?'.epub':source==='7z'?'.cb7':'');
   await wait(()=>card(name),'book '+name);await settled();
+  if(source==='folder'||source==='real')await wait(()=>card(name)?.querySelector('img')?.naturalWidth>0,'large animation cover '+name);
   const book=await value(api.getResourcePages({path:root+'/LargeAnimations/'+name}));if(source!=='epub')assert(book.total===2,'Large image missing from page index '+name+': '+book.total);
   await value(api.saveReadingProgress({resourceKey:book.resourceKey,sourcePath:book.sourcePath,sourceType:book.sourceType,title:name,currentPageIndex:0,totalPages:2,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:'horizontal',panorama:source==='archive',immersive:false}}));
   card(name).querySelector('strong').click();await wait(()=>active('.reader-layout')?.getAttribute('aria-busy')==='false','reader '+name);await settled();await sample('open',format,source);
-  document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));await wait(()=>active('[data-reader-page-index="1"] [data-native-image]'),'static native page '+name);
-  document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));await wait(()=>active('[data-reader-page-index="0"] img.reader-image')?.complete,'return');await sample('return',format,source);
+  document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));await selectedPage(1);await wait(()=>active('[data-reader-page-index="1"] [data-native-image]'),'static native page '+name);
+  document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));await selectedPage(0);await wait(()=>active('[data-reader-page-index="0"] img.reader-image')?.complete,'return');await sample('return',format,source);
   window.dispatchEvent(new Event('omi-reader-back',{cancelable:true}));await wait(()=>!active('.reader-stage'),'closed');await settled();
 }
 return {version:(await api.getAppInfo()).version,results,staticNative:true};

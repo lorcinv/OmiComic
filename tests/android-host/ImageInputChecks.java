@@ -9,6 +9,10 @@ public final class ImageInputChecks {
     for(String name:new String[]{"animated.gif","animated.webp","animated.png","animated.apng","metadata.png","static.webp","static.png"}){
       Path path=Paths.get(args[0],name);try(ImageInput input=new ImageInput(Files.newInputStream(path),Files.size(path),ImageInput.MAX_ANIMATION,null)){
         ImageAnimation.Info info=ImageAnimation.inspect(input);if((info!=null)==name.startsWith("static"))throw new AssertionError(name);
+        if(info!=null)try(ImageInput frames=new ImageInput(Files.newInputStream(path),Files.size(path),ImageInput.MAX_ANIMATION,null)){
+          byte[] preview=AnimationPreview.firstFrame(frames,info.mime);if(preview.length>64*1024*1024)throw new AssertionError("unbounded preview");
+          if(!info.mime.equals("image/webp")){java.awt.image.BufferedImage bitmap=javax.imageio.ImageIO.read(new ByteArrayInputStream(preview));if(bitmap==null||bitmap.getWidth()!=info.width||bitmap.getHeight()!=info.height)throw new AssertionError("first frame "+name);}
+        }
       }
     }
     byte[] bytes={1,2,3};CRC32 crc=new CRC32();crc.update(bytes);

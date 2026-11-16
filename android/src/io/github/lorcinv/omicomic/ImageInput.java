@@ -12,6 +12,8 @@ final class ImageInput extends FilterInputStream {
   private final Long expectedCrc;
   private final CRC32 crc=new CRC32();
   private final List<Closeable> owners=new ArrayList<>();
+  private final byte[] single=new byte[1];
+  private byte[] skipBuffer;
   private long count;
   private boolean closed,ended;
   ImageInput(InputStream input,long length,long limit,Long expectedCrc)throws IOException{
@@ -20,7 +22,7 @@ final class ImageInput extends FilterInputStream {
     if(length>limit){input.close();throw new IOException("动图超过 256 MiB 读取上限，请缩小后打开。");}
   }
   ImageInput own(Closeable owner){owners.add(owner);return this;}
-  @Override public int read()throws IOException{byte[] one=new byte[1];return read(one,0,1)<0?-1:one[0]&255;}
+  @Override public int read()throws IOException{return read(single,0,1)<0?-1:single[0]&255;}
   @Override public int read(byte[] bytes,int start,int size)throws IOException{
     if(size==0)return 0;if(closed)throw new IOException("图片流已关闭。");if(ended)return -1;
     try{
@@ -32,7 +34,7 @@ final class ImageInput extends FilterInputStream {
     }catch(IOException|RuntimeException error){try{close();}catch(IOException cleanup){error.addSuppressed(cleanup);}throw error;}
   }
   @Override public long skip(long size)throws IOException{
-    byte[] buffer=new byte[8192];long done=0;while(done<size){int n=read(buffer,0,(int)Math.min(buffer.length,size-done));if(n<0)break;done+=n;}return done;
+    if(skipBuffer==null)skipBuffer=new byte[8192];long done=0;while(done<size){int n=read(skipBuffer,0,(int)Math.min(skipBuffer.length,size-done));if(n<0)break;done+=n;}return done;
   }
   @Override public void close()throws IOException{
     if(closed)return;closed=true;IOException failure=null;

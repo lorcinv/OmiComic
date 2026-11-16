@@ -572,7 +572,8 @@ final class LocalLibrary {
       if(input.length>=0)headers.put("Content-Length",Long.toString(input.length));result.setResponseHeaders(headers);return result;
     }
     BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(Math.max(info.width,info.height)/options.inSampleSize>480)options.inSampleSize*=2;
-    Bitmap bitmap;try(ImageInput input=imageStream(m)){bitmap=BitmapFactory.decodeStream(input,null,options);}
+    byte[] first;try(ImageInput input=imageStream(m)){first=AnimationPreview.firstFrame(input,info.mime);}
+    Bitmap bitmap=BitmapFactory.decodeByteArray(first,0,first.length,options);
     if(bitmap==null)throw new IOException("动图封面无法解码。");
     try{ByteArrayOutputStream output=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,80,output);byte[] bytes=output.toByteArray();thumbnails.put(key,bytes);return mediaResponse("image/jpeg",bytes);}finally{bitmap.recycle();}
   }

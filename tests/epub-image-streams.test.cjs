@@ -24,6 +24,8 @@ test('large EPUB animation is streamed intact, uses a small chapter, and is revo
   const response=await epubImageResponse(url);assert.equal(response.status,200);
   const actual=createHash('sha256');for await(const chunk of response.body)actual.update(chunk);
   assert.equal(actual.digest('hex'),createHash('sha256').update(data).digest('hex'));
+  const controller=new AbortController(),cancelled=await epubImageResponse(url,controller.signal);controller.abort();
+  await assert.rejects(()=>cancelled.arrayBuffer());
   await book.close();assert.equal((await epubImageResponse(url)).status,404);
 });
 test('EPUB stream validates CRC and rejects changed files and unknown capabilities',async t=>{

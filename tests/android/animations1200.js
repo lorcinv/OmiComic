@@ -23,9 +23,10 @@ for(const format of ['gif','webp','png','apng'])for(const source of ['folder','a
   await value(api.saveReadingProgress({resourceKey:book.resourceKey,sourcePath:book.sourcePath,sourceType:book.sourceType,title:name,currentPageIndex:0,totalPages:2,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:'left-to-right',flow:'horizontal',panorama:source==='archive',immersive:false}}));
   card(name).querySelector('strong').click();await wait(()=>active('.reader-layout')?.getAttribute('aria-busy')==='false','reader');await settled();await sample('adjusted',format,source);
   // Static WebP retains the native reader, while animated WebP stays live in WebView.
-  window.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+  document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
+  await wait(()=>active('[aria-label="阅读进度"]')?.getAttribute('aria-valuenow')==='2','static page selected');
   await wait(()=>active('[data-reader-page-index="1"] [data-native-image]'),'static WebP native page');
-  window.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));await pause(500);await sample('return-from-static',format,source);
+  document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));await wait(()=>active('[aria-label="阅读进度"]')?.getAttribute('aria-valuenow')==='1','animation selected');await pause(500);await sample('return-from-static',format,source);
   window.__omiShot='animations1200-'+format+'-'+source;await wait(()=>!window.__omiShot,'screenshot');
   window.dispatchEvent(new Event('omi-reader-back',{cancelable:true}));await wait(()=>!active('.reader-stage'),'reader closed');await settled();
 }
