@@ -2156,7 +2156,7 @@ function 注册安全通道(): void {
         const 错误信息 = 错误代码 === "ARCHIVE_ENCRYPTED"
           ? "暂不支持加密压缩包。"
           : 错误代码 === "ARCHIVE_IMAGE_TOO_LARGE"
-            ? "当前图片过大，暂时无法安全读取。"
+            ? "当前图片超过 256 MiB 读取上限，请缩小后打开。"
             : "当前图片读取失败，请尝试重新打开。";
         return {
           ok: false,
@@ -2185,12 +2185,12 @@ function 注册安全通道(): void {
       }
       const data=await pagePreview(JSON.stringify([来源路径,文件状态.size,文件状态.mtimeMs,文件状态.ctimeMs]),来源路径,读取图片像素尺寸);
       return 会话已过期()?创建过期会话结果():{ok:true,data};
-    } catch {
+    } catch (错误) {
       return {
         ok: false,
         error: {
-          code: "READ_IMAGE_FAILED",
-          message: "无法读取该图片，文件可能不存在或没有访问权限。",
+          code: 错误 instanceof Error && 错误.message === "IMAGE_TOO_LARGE" ? "IMAGE_TOO_LARGE" : "READ_IMAGE_FAILED",
+          message: 错误 instanceof Error && 错误.message === "IMAGE_TOO_LARGE" ? "当前图片超过 256 MiB 读取上限，请缩小后打开。" : "无法读取该图片，文件可能不存在或没有访问权限。",
         },
       };
     }

@@ -149,8 +149,8 @@ final class NativeArchives implements Closeable {
     try {
     LinkedHashMap<String,PageEntry> index=indexes.get(key);
     if(index==null){
-      ZipArchive zip=ZipArchive.restore(disk.get("zip3\n"+key),source.size());
-      if(zip==null){zip=ZipArchive.open(source);if(zip!=null){indexBuilds++;disk.put("zip3\n"+key,zip.serialize());}}
+      ZipArchive zip=ZipArchive.restore(disk.get("zip4\n"+key),source.size());
+      if(zip==null){zip=ZipArchive.open(source);if(zip!=null){indexBuilds++;disk.put("zip4\n"+key,zip.serialize());}}
       if(zip!=null){
         zipIndexes.put(key,zip);index=new LinkedHashMap<>();int ordinal=0;
         for(ZipArchive.Entry entry:zip.entries.values())index.put(entry.name,new PageEntry(ordinal++,entry.modified));
@@ -173,7 +173,7 @@ final class NativeArchives implements Closeable {
           total+=size;
           String name=name(entry);
           names.add(name);
-          if(ArchiveEntry.filetype(entry)==ArchiveEntry.AE_IFREG&&((image(name)&&size<=MAX_IMAGE)||archive(name))) {
+          if(ArchiveEntry.filetype(entry)==ArchiveEntry.AE_IFREG&&(image(name)||archive(name))) {
             Long modifiedAt=null;
             if(ArchiveEntry.mtimeIsSet(entry)) {
               try { modifiedAt=Math.addExact(Math.multiplyExact(ArchiveEntry.mtime(entry),1000),ArchiveEntry.mtimeNsec(entry)/1000000); }
@@ -262,6 +262,34 @@ final class NativeArchives implements Closeable {
     } catch(IOException error) { closeReader();throw friendly(error); }
     }
   }
+  /** Independent stream lifetime: WebView can close it on page changes. */
+  ImageInput stream(SeekableSource source,String identity,String name,long limit)throws IOException{
+    ZipArchive zip;PageEntry metadata;
+    synchronized(this){if(!indexes.containsKey(identity))images(source,identity);metadata=indexes.get(identity).get(name);zip=zipIndexes.get(identity);}
+    if(metadata==null)throw new FileNotFoundException("压缩包图片已不存在。");
+    if(metadata.nestedArchive!=null){
+      SeekableSource nested=new SeekableSource(stage(source,identity,metadata.nestedArchive));
+      try{return stream(nested,childKey(identity,metadata.nestedArchive),metadata.childName,limit).own(nested);}catch(IOException|RuntimeException error){nested.close();throw error;}
+    }
+    if(zip!=null)return zip.stream(source,name,limit);
+    Handle handle=open(source);
+    try{
+      long entry=0;for(int ordinal=0;ordinal<=metadata.ordinal;ordinal++){entry=Archive.readNextHeader(handle.archive);if(entry==0)throw new FileNotFoundException("压缩包图片已不存在。");}
+      checkEncryption(entry);if(!name.equals(name(entry)))throw new IOException("压缩包内容已改变，请重新打开漫画。");
+      long length=ArchiveEntry.size(entry);if(length<0||length>limit)throw new IOException("动图超过 256 MiB 读取上限，请缩小后打开。");
+      InputStream input=new InputStream(){
+        final ByteBuffer buffer=ByteBuffer.allocateDirect(65536);
+        @Override public int read()throws IOException{byte[] one=new byte[1];return read(one,0,1)<0?-1:one[0]&255;}
+        @Override public int read(byte[] bytes,int offset,int size)throws IOException{
+          if(size==0)return 0;if(Thread.currentThread().isInterrupted())throw new IOException("图片读取已取消。");
+          buffer.clear();buffer.limit(Math.min(size,buffer.capacity()));Archive.readData(handle.archive,buffer);int n=buffer.position();
+          if(n==0)return -1;buffer.flip();buffer.get(bytes,offset,n);return n;
+        }
+        @Override public void close()throws IOException{handle.close();}
+      };
+      return new ImageInput(input,length,limit,null);
+    }catch(IOException|RuntimeException error){handle.close();throw error;}
+  }
   private void rememberPage(String key,byte[] data,long epoch) {
     if(!caching.get()||epoch!=cacheEpoch.get())return;
     if(data.length>CACHE_BYTES/2)return;
@@ -269,7 +297,7 @@ final class NativeArchives implements Closeable {
     while(cachedBytes>CACHE_BYTES||pages.size()>12){String first=pages.keySet().iterator().next();cachedBytes-=pages.remove(first).length;}
   }
   private LinkedHashMap<String,PageEntry> loadIndex(String key) {
-    byte[] cached=disk.get("raw3\n"+key);if(cached==null)return null;
+    byte[] cached=disk.get("raw4\n"+key);if(cached==null)return null;
     try {
       JSONArray rows=new JSONArray(new String(cached,StandardCharsets.UTF_8));
       if(rows.length()>MAX_ENTRIES)return null;
@@ -288,7 +316,7 @@ final class NativeArchives implements Closeable {
   }
   private void saveIndex(String key,Map<String,PageEntry> index) {
     JSONArray rows=new JSONArray();for(Map.Entry<String,PageEntry> entry:index.entrySet())rows.put(new JSONArray().put(entry.getKey()).put(entry.getValue().ordinal).put(entry.getValue().modifiedAt==null?JSONObject.NULL:entry.getValue().modifiedAt));
-    disk.put("raw3\n"+key,rows.toString().getBytes(StandardCharsets.UTF_8));
+    disk.put("raw4\n"+key,rows.toString().getBytes(StandardCharsets.UTF_8));
   }
   /** Covers do not build a whole-book index or disturb the active reader. */
   byte[] cover(SeekableSource source,String key)throws IOException {

@@ -3,8 +3,10 @@ import path from "node:path";
 import yauzl from "yauzl";
 import { XMLParser } from "fast-xml-parser";
 import sanitizeHtml from "sanitize-html";
+import { randomUUID } from 'node:crypto';
 import { imageAnimation } from '../shared/imageAnimation';
 import { safeRasterImage, rasterDimensions } from "./documentImageSafety";
+import { MAX_EPUB_ANIMATION_BYTES, type EPUBImageReference } from './epubImageStreams';
 
 const MAX_ENTRY = 16 * 1024 * 1024;
 const MAX_CHAPTER = 32 * 1024 * 1024;
@@ -30,17 +32,19 @@ export function resolveEpubPath(base: string, reference: string): string {
   if (result === ".." || result.startsWith("../")) throw new Error("EPUB 资源路径越界。");
   return result;
 }
-export function sanitizeChapter(html: string): string {
+export function sanitizeChapter(html: string, imageBase?: string): string {
+  const allowedSource = (source: string) => /^data:image\/(png|jpeg|gif|webp);base64,[a-z\d+/=]+$/i.test(source) || !!(imageBase && source.startsWith(imageBase) && /^[\da-f-]{36}$/.test(source.slice(imageBase.length)));
   return sanitizeHtml(html, {
     allowedTags: ["p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr", "strong", "em", "b", "i", "u", "s", "blockquote", "pre", "code", "ul", "ol", "li", "dl", "dt", "dd", "table", "thead", "tbody", "tr", "th", "td", "caption", "img", "ruby", "rt", "rp", "sup", "sub"],
     allowedAttributes: { img: ["src", "alt", "width", "height", "data-omi-animated"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
-    allowedSchemes: ["data"], allowedSchemesByTag: { img: ["data"] }, allowProtocolRelative: false,
-    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...(attrs['data-omi-animated']==='true'?{'data-omi-animated':'true'}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.width||"")?{width:attrs.width}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.height||"")?{height:attrs.height}:{}), ...( /^data:image\/(png|jpeg|gif|webp);base64,[a-z\d+/=]+$/i.test(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
+    allowedSchemes: ["data", "omicomic-image"], allowedSchemesByTag: { img: ["data", "omicomic-image"] }, allowProtocolRelative: false,
+    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...(attrs['data-omi-animated']==='true'?{'data-omi-animated':'true'}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.width||"")?{width:attrs.width}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.height||"")?{height:attrs.height}:{}), ...(allowedSource(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
   });
 }
 async function createBook(filePath: string) {
   const zip = await yauzl.openPromise(filePath, { autoClose: false, lazyEntries: true, validateEntrySizes: true, strictFileNames: true });
   const entries = new Map<string, yauzl.Entry>();
+  const imageIds = new Map<string, string>();
   try {
     for await (const entry of zip.eachEntry()) {
       if (entries.size >= 20000) throw new Error("EPUB 条目过多。");
@@ -78,7 +82,7 @@ async function createBook(filePath: string) {
       let html = (await read(current.path, 4 * 1024 * 1024)).toString("utf8");
       // First sanitize to inert image placeholders; never preserve publisher CSS, URLs, or SVG.
       html = sanitizeHtml(html, { allowedTags: [...sanitizeHtml.defaults.allowedTags, "img", "ruby", "rt", "rp"], allowedAttributes: { img: ["src", "alt", "width", "height"] }, allowedSchemes: [], allowProtocolRelative: false, transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { src: attrs.src || "", alt: attrs.alt || "" } }), image: (_tag,attrs)=>({tagName:"img",attribs:{src:attrs["xlink:href"]||attrs.href||"",alt:""}}) } });
-      const replacements = new Map<string, string>(),dimensions=new Map<string,{width:number;height:number;animated:boolean}>(); let bytes = 0;
+      const replacements = new Map<string, string>(),dimensions=new Map<string,{width:number;height:number;animated:boolean}>(), streamed=new Map<string,EPUBImageReference>(); let bytes = 0, oversized = false;
       for (const match of html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)) {
         const reference = match[1]; if (replacements.has(reference)) continue;
         if (replacements.size >= 100) break;
@@ -87,6 +91,19 @@ async function createBook(filePath: string) {
           const extension = path.posix.extname(imagePath).toLowerCase();
           const mime: Record<string, string> = { ".png": "png", ".apng": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".gif": "gif", ".webp": "webp" };
           if (!mime[extension]) continue;
+          const entry = entries.get(imagePath);
+          if (entry && entry.uncompressedSize > 8 * 1024 * 1024 && workerData?.imageBase) {
+            if (entry.uncompressedSize > MAX_EPUB_ANIMATION_BYTES) { oversized=true;continue; }
+            if (entry.uncompressedSize / Math.max(1,entry.compressedSize) > 1000) continue;
+            const stream = await zip.openReadStreamPromise(entry), chunks: Buffer[] = []; let size=0;
+            try { for await (const chunk of stream) { const part=chunk.subarray(0,256*1024-size);chunks.push(part);size+=part.length;if(size>=256*1024)break; } } finally { stream.destroy(); }
+            const header=Buffer.concat(chunks,size), animation=imageAnimation(header);
+            if (animation===false || !safeRasterImage(header,100_000_000,100000)) continue;
+            const id=imageIds.get(imagePath)||randomUUID();imageIds.set(imagePath,id);
+            streamed.set(id,{id,name:imagePath,mime:`image/${mime[extension]}`,bytes:entry.uncompressedSize});
+            dimensions.set(reference,{...rasterDimensions(header),animated:true});
+            replacements.set(reference,workerData.imageBase+id);continue;
+          }
           const data = await read(imagePath, 8 * 1024 * 1024); bytes += data.length;
           if (bytes > MAX_CHAPTER) throw new Error("EPUB 章节图片超过安全上限。");
           if (!safeRasterImage(data,100_000_000,100000)) continue;dimensions.set(reference,{...rasterDimensions(data),animated:imageAnimation(data)===true});
@@ -95,9 +112,11 @@ async function createBook(filePath: string) {
       }
       html=html.replace(/<img[^>]*\ssrc="([^"]*)"[^>]*>/g,(tag,reference)=>{const size=dimensions.get(reference);return size?tag.replace(/>$/,` width="${size.width}" height="${size.height}"${size.animated?' data-omi-animated="true"':''}>`):tag;});
       html = embedChapterImages(html, replacements);
-      const content = sanitizeChapter(html);
+      if (oversized) html += '<p>部分图片超过 256 MiB 读取上限，请缩小后打开。</p>';
+      const content = sanitizeChapter(html, workerData?.imageBase);
       if (Buffer.byteLength(content, "utf8") > MAX_SERIALIZED_CHAPTER - DOCUMENT_WRAPPER_RESERVE) throw new Error("EPUB 章节序列化内容超过安全上限。");
-      return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>body{max-width:850px;margin:32px auto;padding:0 24px;background:#fff;color:#202124;line-height:1.8;font:18px/1.8 system-ui}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body>${content}</body></html>`;
+      const result = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: omicomic-image:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><style>body{max-width:850px;margin:32px auto;padding:0 24px;background:#fff;color:#202124;line-height:1.8;font:18px/1.8 system-ui}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body>${content}</body></html>`;
+      return streamed.size ? {html:result,images:[...streamed.values()]} : result;
     }
     async function cover(): Promise<{ bytes: Uint8Array; name: string } | null> {
       const coverId = list<any>(opf?.metadata?.meta).find(item => item.name === "cover")?.content;

@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { SharedImageRead } from './sharedImageRead';
 import { imageAnimation, probeImageAnimation } from '../shared/imageAnimation';
+import { epubImageResponse } from './epubImageStreams';
 
 type Dimensions = { width?: number; height?: number };
 type Entry = Dimensions & { token: string; key: string; file: string; signature: string; mime: string; bytes: number; animated?: boolean;
@@ -79,6 +80,7 @@ export function registerDesktopImageProtocol() {
   protocol.handle('omicomic-image', async request => {
     try {
       const url = new URL(request.url);
+      if (url.hostname === 'epub' && request.method === 'GET') return await epubImageResponse(url, request.signal);
       const entry = url.hostname === 'page' ? tokens.get(url.pathname.slice(1)) : undefined;
       if (!entry || request.method !== 'GET') return new Response(null, { status: 404 });
       // Recheck the source for every fetch. Replacing a file never serves stale bytes.

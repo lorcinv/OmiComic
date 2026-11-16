@@ -9,12 +9,12 @@ export async function chapterPreview(html: string, signal: AbortSignal): Promise
   const imageSource = content.images[0]?.getAttribute('data-omi-preview') || content.images[0]?.getAttribute('src');
   let textTop = 28;
   try {
-    if (imageSource && /^(?:data:image\/(?:png|jpeg|gif|webp|bmp|avif);|https:\/\/omi\.local\/)/i.test(imageSource)) {
+    if (imageSource && /^(?:data:image\/(?:png|jpeg|gif|webp|bmp|avif);|https:\/\/omi\.local\/|omicomic-image:\/\/epub\/[\da-f-]{36}\/[\da-f-]{36}$)/i.test(imageSource)) {
       const image = new Image();
       const abort = () => { image.src = ''; };
       signal.addEventListener('abort', abort, { once: true });
       try {
-        if(imageSource.startsWith('https://omi.local/'))image.crossOrigin='anonymous';
+        if(imageSource.startsWith('https://omi.local/')||imageSource.startsWith('omicomic-image:'))image.crossOrigin='anonymous';
         image.src = imageSource; await image.decode(); signal.throwIfAborted();
         const text = content.body.textContent?.trim() ?? '';
         const onlyImage = content.body.dataset.omiImagePage === 'true' || !text;

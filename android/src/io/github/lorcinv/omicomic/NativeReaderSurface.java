@@ -322,6 +322,12 @@ final class NativeReaderSurface extends View {
         if(!pdf.exactFit)pdf.bitmap.setHasMipMap(true);pdf.bitmap.prepareToDraw();
         publishRaster(url,raster,work,0,SystemClock.uptimeMillis()-start);return work.future;
       }
+      ImageAnimation.Info info=library.readerAnimation(url);checkWork(work);
+      if(info!=null){
+        AnimatedSource animation=new AnimatedSource(url,info.width,info.height,(int)Math.max(0,info.bytes));
+        synchronized(cacheLock){animatedSources.put(url,animation);while(animatedSources.size()>512)animatedSources.remove(animatedSources.keySet().iterator().next());}
+        throw animation;
+      }
       byte[] data=library.readerImage(url);long readTime=SystemClock.uptimeMillis()-start;start=SystemClock.uptimeMillis();
       checkWork(work);
       BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(data,0,data.length,bounds);

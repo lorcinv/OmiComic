@@ -81,7 +81,7 @@ final class ZipArchive {
       check(offset,30,central);
       // Other ZIP methods retain the libarchive compatibility path for the entire book.
       if(method!=0&&method!=8)return null;
-      if((document&&!name.endsWith("/"))||(NativeArchives.image(name)&&size<=MAX_IMAGE)||NativeArchives.archive(name)){
+      if((document&&!name.endsWith("/"))||NativeArchives.image(name)||NativeArchives.archive(name)){
         if(index.entries.put(name,new Entry(name,offset,packed,size,crc,method,flags,modified))!=null)throw new IOException("压缩包中存在重复的图片路径。");
       }
       cursor+=46L+nameLength+extraLength+comment;
@@ -105,6 +105,17 @@ final class ZipArchive {
       CRC32 crc=new CRC32();crc.update(data);if(crc.getValue()!=e.crc)throw new IOException("ZIP 图片校验失败。");return data;
     }finally{if(inflater!=null)inflater.end();}
   }
+  ImageInput stream(SeekableSource source,String name,long limit)throws IOException{
+    Entry e=entries.get(name);if(e==null)throw new FileNotFoundException("压缩包图片已不存在。");
+    if(e.size>limit)throw new IOException("动图超过 256 MiB 读取上限，请缩小后打开。");
+    byte[] header=source.readAt(e.offset,30);
+    if(u32(header,0)!=0x04034b50L||u16(header,8)!=e.method||(u16(header,6)&1)!=0)throw new IOException("ZIP 图片索引已失效，请刷新目录。");
+    long start=e.offset+30+u16(header,26)+u16(header,28);check(start,e.packed,source.size());
+    InputStream raw=source.stream(start,e.packed);
+    if(e.method==0)return new ImageInput(raw,e.size,limit,e.crc);
+    Inflater inflater=new Inflater(true);
+    return new ImageInput(new InflaterInputStream(raw,inflater,65536){@Override public void close()throws IOException{try{super.close();}finally{inflater.end();}}},e.size,limit,e.crc);
+  }
   /** Stream nested containers to private cache without allocating a whole ZIP in RAM. */
   void copyTo(SeekableSource source,String name,OutputStream output,long limit)throws IOException{
     Entry e=entries.get(name);if(e==null)throw new FileNotFoundException("内层压缩包已不存在。");
@@ -127,7 +138,7 @@ final class ZipArchive {
     if(bytes==null)return null;try{JSONArray rows=new JSONArray(new String(bytes,StandardCharsets.UTF_8));if(rows.length()>MAX_ENTRIES)return null;ZipArchive zip=new ZipArchive();NativeArchives.MetadataBudget names=new NativeArchives.MetadataBudget();
       for(int i=0;i<rows.length();i++){JSONArray r=rows.getJSONArray(i);Entry e=new Entry(r.getString(0),r.getLong(1),r.getLong(2),r.getLong(3),r.getLong(4),r.getInt(5),r.getInt(6),r.isNull(7)?null:r.getLong(7));
         names.add(e.name);
-        check(e.offset,30,length);if((!NativeArchives.image(e.name)&&!NativeArchives.archive(e.name))||e.packed<0||e.packed>length||e.size<0||(NativeArchives.image(e.name)&&e.size>MAX_IMAGE)||(e.method!=0&&e.method!=8)||(e.flags&1)!=0||zip.entries.put(e.name,e)!=null)return null;}
+        check(e.offset,30,length);if((!NativeArchives.image(e.name)&&!NativeArchives.archive(e.name))||e.packed<0||e.packed>length||e.size<0||e.size>MAX_TOTAL||(e.method!=0&&e.method!=8)||(e.flags&1)!=0||zip.entries.put(e.name,e)!=null)return null;}
       return zip;
     }catch(Exception invalid){return null;}
   }

@@ -535,6 +535,47 @@ final class LocalLibrary {
     Media item;synchronized(media){item=media.get(uri.getLastPathSegment());}if(item==null||item.preview)throw new FileNotFoundException();
     fileAccess.readLock().lock();try{if(closed)throw new IOException("文件服务已关闭。");return imageBytes(item);}finally{fileAccess.readLock().unlock();}
   }
+  ImageAnimation.Info readerAnimation(String url)throws Exception{
+    awaitReaderCleanup();Uri uri=Uri.parse(url);
+    if(!MainActivity.isApp(uri)||!uri.getPath().startsWith("/media/"))throw new SecurityException("Invalid image URL");
+    Media item;synchronized(media){item=media.get(uri.getLastPathSegment());}if(item==null||item.preview)throw new FileNotFoundException();
+    fileAccess.readLock().lock();try{if(closed)throw new IOException("文件服务已关闭。");return animationInfo(item);}finally{fileAccess.readLock().unlock();}
+  }
+  private ImageInput imageStream(Media m)throws Exception{
+    if(m.encodedFile!=null)return new ImageInput(new FileInputStream(m.encodedFile),m.encodedFile.length(),ImageInput.MAX_ANIMATION,null);
+    Entry entry=resolve(m.path);if(!identity(entry).equals(m.identity))throw new IOException("文件已改变，请刷新目录。");
+    if(entry.directory){Entry first=null;for(Entry child:children(entry.uri,entry.path))if(image(child.name)&&!child.directory){first=child;break;}if(first==null)throw new FileNotFoundException();entry=first;}
+    String type=type(entry);
+    if(m.inner!=null||type.equals("archive")||type.equals("epub")){
+      SeekableSource source=source(entry,!m.preview);
+      try{
+        NativeArchives archives=m.preview?previewArchives:nativeArchives;
+        String name=m.inner;
+        if(name==null){if(type.equals("epub"))name=epubCover(source);else{List<String> names=archives.images(source,m.identity);if(names.isEmpty())throw new FileNotFoundException();name=names.get(0);}}
+        return archives.stream(source,m.identity,name,ImageInput.MAX_ANIMATION).own(source);
+      }catch(Exception error){source.close();throw error;}
+    }
+    if(!image(entry.name))throw new SecurityException();
+    return new ImageInput(resolver.openInputStream(entry.uri),entry.size>0?entry.size:-1,ImageInput.MAX_ANIMATION,null);
+  }
+  private ImageAnimation.Info animationInfo(Media m)throws Exception{
+    if(m.pdfDoc!=null||m.region!=null)return null;
+    String name=(m.inner!=null?m.inner:m.path).toLowerCase(Locale.ROOT);
+    // JPEG/BMP and document rasters keep their existing decode path.
+    if(m.encodedFile==null&&!(name.endsWith(".gif")||name.endsWith(".webp")||name.endsWith(".png")||name.endsWith(".apng")||type(resolve(m.path)).equals("archive")||type(resolve(m.path)).equals("epub")||resolve(m.path).directory))return null;
+    try(ImageInput input=imageStream(m)){return ImageAnimation.inspect(input);}
+  }
+  private WebResourceResponse animationResponse(String key,Media m,ImageAnimation.Info info)throws Exception{
+    if(!m.preview){
+      ImageInput input=imageStream(m);WebResourceResponse result=MainActivity.response(info.mime,input,200,"OK");
+      Map<String,String> headers=new HashMap<>(result.getResponseHeaders());headers.put("Cache-Control","private, max-age=86400, immutable");
+      if(input.length>=0)headers.put("Content-Length",Long.toString(input.length));result.setResponseHeaders(headers);return result;
+    }
+    BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(Math.max(info.width,info.height)/options.inSampleSize>480)options.inSampleSize*=2;
+    Bitmap bitmap;try(ImageInput input=imageStream(m)){bitmap=BitmapFactory.decodeStream(input,null,options);}
+    if(bitmap==null)throw new IOException("动图封面无法解码。");
+    try{ByteArrayOutputStream output=new ByteArrayOutputStream();bitmap.compress(Bitmap.CompressFormat.JPEG,80,output);byte[] bytes=output.toByteArray();thumbnails.put(key,bytes);return mediaResponse("image/jpeg",bytes);}finally{bitmap.recycle();}
+  }
   static final class DocumentRaster {
     final Bitmap bitmap;final int width,height,sample;final boolean exactFit;
     DocumentRaster(Bitmap bitmap,int width,int height,int sample){this(bitmap,width,height,sample,false);}
@@ -702,6 +743,7 @@ final class LocalLibrary {
     fileAccess.readLock().lock();
     try {
       if(m.preview){byte[] cached=thumbnails.get(key);if(cached!=null)return mediaResponse("image/jpeg",cached);}
+      ImageAnimation.Info animation=animationInfo(m);if(animation!=null)return animationResponse(key,m,animation);
       byte[] bytes=imageBytes(m);
       BitmapFactory.Options size=new BitmapFactory.Options();size.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,size);
       if(size.outWidth<=0||size.outHeight<=0||(long)size.outWidth*size.outHeight>100_000_000L)throw new IOException("图片尺寸超出上限。");
@@ -716,7 +758,12 @@ final class LocalLibrary {
       return mediaResponse(mime,bytes);
     }finally{fileAccess.readLock().unlock();}
   }
-  private JSONObject pageImage(JSONObject input)throws Exception{return new JSONObject().put("url",registerMedia(input.getString("sourcePath"),input.optString("archiveInnerPath",null),input.optBoolean("preview")));}
+  private JSONObject pageImage(JSONObject input)throws Exception{
+    String url=registerMedia(input.getString("sourcePath"),input.optString("archiveInnerPath",null),input.optBoolean("preview"));
+    JSONObject result=new JSONObject().put("url",url);
+    if(!input.optBoolean("preview")){ImageAnimation.Info info=readerAnimation(url);if(info!=null)result.put("animated",true).put("width",info.width).put("height",info.height).put("encodedBytes",Math.max(0,info.bytes));}
+    return result;
+  }
   private JSONObject thumbnail(JSONObject input)throws Exception{
     Entry root=resolve(input.getString("path"));
     if(!root.directory)return coverResult(root,null).put("byteSize",root.size);
@@ -1095,7 +1142,7 @@ final class LocalLibrary {
       case "renderDocumentImage":return documentImageRegion(input);
       case "renderDocumentPage":return nativePdfPage(input);
       case "readDocumentChapter":{Doc d=documents.get(input.getString("id"));if(d==null)throw new IOException("文档已关闭。");return chapter(d,input.getInt("index"));}
-      case "epubImage":{String entry=resolveZip(input.getString("entry"),input.getString("href"));if(!image(entry))return null;String path=input.getString("path"),url=registerMedia(path,entry,false);String preview=registerMedia(path,entry,true);Media item;synchronized(media){item=media.get(Uri.parse(url).getLastPathSegment());}return documentImageInfo(url,preview,imageBytes(item));}
+      case "epubImage":{String entry=resolveZip(input.getString("entry"),input.getString("href"));if(!image(entry))return null;String path=input.getString("path"),url=registerMedia(path,entry,false);String preview=registerMedia(path,entry,true);Media item;synchronized(media){item=media.get(Uri.parse(url).getLastPathSegment());}ImageAnimation.Info info=animationInfo(item);if(info!=null)return new JSONObject().put("url",url).put("preview",preview).put("animated",true).put("width",info.width).put("height",info.height);return documentImageInfo(url,preview,imageBytes(item));}
       default:throw new IOException("未知本地操作："+method);
     }
   }

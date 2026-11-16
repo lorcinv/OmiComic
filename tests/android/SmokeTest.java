@@ -767,9 +767,10 @@ public final class SmokeTest extends Instrumentation {
       if(fixture.contains("navmemory"))scriptAsset="navigation-memory";
       if(fixture.equals("updates1196"))scriptAsset="update-check";
       if(fixture.contains("animations1200"))scriptAsset="animations1200";
+      if(fixture.contains("largeAnimations"))scriptAsset="large-animations";
       try(InputStream input=getContext().getAssets().open(scriptAsset+".js");ByteArrayOutputStream bytes=new ByteArrayOutputStream()){byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);script=bytes.toByteArray();}
       eval("window.__omiFixture="+JSONObject.quote(args.getString("fixture",""))+";window.__omiResult=null; (async()=>{const info=await window.omicomic.getAppInfo();if(info.version!=="+JSONObject.quote(expectedVersion)+")throw new Error('Displayed version mismatch: '+info.version);"+new String(script,StandardCharsets.UTF_8)+"})().then(result=>window.__omiResult={ok:true,result},error=>window.__omiResult={ok:false,error:String(error.stack||error),body:document.body.innerText.slice(-2500)});");
-      deadline=System.currentTimeMillis()+((fixture.contains("bugs1187")||fixture.contains("cutout1191")||fixture.contains("animations1200"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
+      deadline=System.currentTimeMillis()+(fixture.contains("largeAnimations")?600000:(fixture.contains("bugs1187")||fixture.contains("cutout1191")||fixture.contains("animations1200"))?240000:(mode.startsWith("mobile1123-"))?1200000:(mode.startsWith("mobile1117"))?600000:(mode.startsWith("mobile1116")||mode.equals("formats1142")||mode.startsWith("mobile-fixes")||mode.equals("interface-polish")||mode.equals("theme-polish")||mode.equals("loading"))?240000:150000);
       String result;
       if(mode.equals("authorize1141")){
         // A background WebView pauses JavaScript callbacks while SAF owns the window.
@@ -1190,6 +1191,11 @@ public final class SmokeTest extends Instrumentation {
         try{io.put("pdfCoverHits",field(library,"pdfCoverHits")).put("pdfCoverRenders",field(library,"pdfCoverRenders"));}catch(NoSuchFieldException legacy){}
         try{io.put("zipRandomReads",field(field(library,"nativeArchives"),"zipRandomReads")).put("uriIndexHits",field(library,"uriIndexHits")).put("directoryIndexHits",field(library,"directoryIndexHits"));}catch(NoSuchFieldException legacy){}
         resultObject.put("io",io);
+        if(!resultObject.optBoolean("ok")&&args.getString("fixture","").contains("largeAnimations")){
+          JSONArray stacks=new JSONArray();for(java.util.Map.Entry<Thread,StackTraceElement[]> trace:Thread.getAllStackTraces().entrySet()){
+            String value=java.util.Arrays.toString(trace.getValue());if(value.contains("LocalLibrary")||value.contains("NativeArchives")||value.contains("ImageInput"))stacks.put(trace.getKey().getName()+" "+trace.getKey().getState()+" "+value);
+          }resultObject.put("imageStacks",stacks);
+        }
         if(mode.equals("loading-restore")){
           if(io.optLong("readerIndexBuilds")!=0)throw new IOException("Restart rebuilt persistent indexes");
           if(packageInfo.versionCode<10117&&(io.optLong("readerPageDecodes")!=0||io.optLong("readerPageDiskHits")<9))throw new IOException("Restart reread archive pages instead of retained cache");

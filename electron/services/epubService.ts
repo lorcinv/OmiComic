@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import path from "node:path";
+import { createEpubImageSession } from './epubImageStreams';
 
 export interface EPUBChapter { name: string; index: number; fixedLayout?: boolean }
 export class EPUBDocumentSource {
@@ -7,21 +8,26 @@ export class EPUBDocumentSource {
   private counter = 0;
   private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
   private closed = false;
+  private imageSession: ReturnType<typeof createEpubImageSession>;
   constructor(filePath: string) {
     // Worker runs from a real file in installed builds; development keeps the same sibling layout.
     const workerPath = path.join(__dirname, "epubWorker.js").replace(/app\.asar([\\/])/, "app.asar.unpacked$1");
-    this.worker = new Worker(workerPath, { workerData: { filePath }, resourceLimits: { maxOldGenerationSizeMb: 192 } });
+    this.imageSession = createEpubImageSession(filePath);
+    this.worker = new Worker(workerPath, { workerData: { filePath, imageBase: this.imageSession.base }, resourceLimits: { maxOldGenerationSizeMb: 192 } });
     this.worker.on("message", ({ id, data, error }) => {
       const task = this.pending.get(id);
       if (!task) return;
       clearTimeout(task.timer); this.pending.delete(id);
-      if (error) task.reject(new Error(error)); else task.resolve(data);
+      if (error) task.reject(new Error(error));
+      else try { if (data && typeof data.html === 'string' && Array.isArray(data.images)) { this.imageSession.register(data.images); task.resolve(data.html); } else task.resolve(data); }
+      catch (failure) { task.reject(failure instanceof Error ? failure : Error(String(failure))); }
     });
     this.worker.on("error", (error) => this.fail(error));
     this.worker.on("exit", () => this.fail(new Error("EPUB 阅读任务已结束。")));
   }
   private fail(error: Error) {
     this.closed = true;
+    this.imageSession.close();
     for (const task of this.pending.values()) { clearTimeout(task.timer); task.reject(error); }
     this.pending.clear();
   }
