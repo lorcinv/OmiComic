@@ -15,20 +15,20 @@ OmiComic is a local comic reader for Windows, macOS and Android, focused on fast
 
 ## Download
 
-Current version: **1.2.1**.
+Current version: **1.2.2**.
 
 | Platform | Package |
 | --- | --- |
-| Windows x64 | [Installer · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) · [Portable · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
-| macOS · Apple Silicon (M-series, arm64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
-| macOS · Intel (x64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
+| Windows x64 | [Installer · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-Setup-1.2.2-x64.exe) · [Portable · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-Portable-1.2.2-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.2 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-android.apk) |
+| macOS · Apple Silicon (M-series, arm64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-arm64.zip) |
+| macOS · Intel (x64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-x64.zip) |
 
 - **Windows**: run the EXE to install, or extract the entire portable ZIP and run <code>OmiComic.exe</code>.
 - **Android**: install the APK; it can update your existing installation.
 - **macOS**: choose Apple Silicon for M-series chips or Intel for Intel processors. [Choose your version](docs/APPLE.md#mac-download). These packages are unsigned and not notarized; see [installation and first launch](docs/APPLE.md#mac-install).
 
-1.2.1 adds spread splitting, refines the desktop reading sidebar, improves Android button feedback and preview direction, and fixes blank pages in some EPUB files. [Release notes](docs/releases/v1.2.1.md) · [Version history](docs/releases/README.en.md).
+1.2.2 fixes large animated images failing to open, missing archive pages and stalled cover loading on Android, plus large animations missing from EPUB files on Windows and macOS. [Release notes](docs/releases/v1.2.2.md) · [Version history](docs/releases/README.en.md).
 
 ## Video demo
 

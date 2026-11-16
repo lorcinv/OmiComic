@@ -15,20 +15,20 @@ OmiComic は、ローカルでの高速起動とすっきりした読書体験�
 
 ## ダウンロード
 
-現在のバージョン：**1.2.1**。
+現在のバージョン：**1.2.2**。
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Setup-1.2.1-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-Portable-1.2.1-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.1 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-android.apk) |
-| macOS · Apple Silicon（M シリーズ、arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-arm64.zip) |
-| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.1/OmiComic-1.2.1-mac-x64.zip) |
+| Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-Setup-1.2.2-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-Portable-1.2.2-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.2 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-android.apk) |
+| macOS · Apple Silicon（M シリーズ、arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-arm64.zip) |
+| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-mac-x64.zip) |
 
 - **Windows**：インストーラー版は EXE を実行します。インストール不要のポータブル版は ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。
 - **Android**：APK をインストールします。既存のアプリをそのまま更新できます。
 - **macOS**：M シリーズは Apple Silicon、Intel プロセッサーは Intel を選びます。[バージョンの選び方](docs/APPLE.md#mac-download)。現在の配布版は署名・公証を行っていません。[インストールと初回起動](docs/APPLE.md#mac-install)をご確認ください。
 
-1.2.1：横長ページの分割を追加し、デスクトップの読書設定をサイドバーに整理しました。Android のボタン操作とプレビュー方向を改善し、一部 EPUB の白紙表示を修正しました。[更新内容](docs/releases/v1.2.1.md) · [バージョン履歴](docs/releases/README.ja.md)。
+1.2.2：Android で大容量のアニメーション画像が開けない問題、圧縮ファイル内のページ欠落、表紙読み込みによる停止を修正しました。Windows/macOS では EPUB 内の大容量アニメーション画像の表示を修正しました。[更新内容](docs/releases/v1.2.2.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 紹介動画
 
