@@ -33,12 +33,12 @@ test('packaged reader sorts real folders/archives, restores identities and runs 
   const env={...process.env,OMICOMIC_TEST_HEADLESS:'1',OMICOMIC_TEST_PROFILE:profile};delete env.ELECTRON_RUN_AS_NODE;delete env.VITE_DEV_SERVER_URL;
   const launch=async file=>{app=await _electron.launch({executablePath:executable,args:file?[file]:[],env});const page=await app.firstWindow();await page.emulateMedia({reducedMotion:'reduce'});return page;};
   let page=await launch(path.join(books,'漫画.cbz'));
-  const openSettings=async()=>{await page.getByRole('button',{name:'返回',exact:true}).click();await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^阅读器 /}).click();await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toBeVisible();};
+  const openSettings=async()=>{await page.getByRole('button',{name:'返回',exact:true}).click();await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:/^漫画阅读设置/}).click();await expect(page.getByRole('slider',{name:'翻页间隔',exact:true})).toBeVisible();};
   const resumeBook=async(file,type)=>{await expect(page.locator('.book-reader-settings')).toHaveAttribute('aria-busy','false');await page.getByRole('button',{name:'关闭设置',exact:true}).click();const key=await page.evaluate(async input=>(await window.omicomic.getResourcePages(input)).data.resourceKey,{path:file,type});await page.getByRole('button',{name:/^最近阅读/}).click();await page.locator('.resource-card[data-selection-key='+JSON.stringify(key)+']').dblclick();};
 
   await expect(page.locator('.reader-image').first()).toBeVisible();
   assert.equal((await page.evaluate(root=>window.omicomic.addLibraryRoot({path:root,name:'一次性测试样本'}),books)).ok,true);
-  const info=await app.evaluate(({app})=>({version:app.getVersion(),packaged:app.isPackaged,profile:app.getPath('userData')}));assert.equal(info.packaged,true);assert.equal(info.version,require('../package.json').version);assert.equal(info.profile,profile);
+  const info=await app.evaluate(({app})=>({version:app.getVersion(),packaged:app.isPackaged,profile:app.getPath('userData')}));assert.equal(info.packaged,true);assert.equal(info.version,require('../package.json').desktopVersion);assert.equal(info.profile,profile);
   const cases=[];
   for(const [file,type] of [[books,'folder'],[path.join(books,'漫画.cbz'),'archive'],[path.join(books,'漫画.cb7'),'archive'],[path.join(books,'漫画.cbr'),'archive']]) {
     const result=await page.evaluate(async ({file,type})=>{

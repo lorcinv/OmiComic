@@ -57,6 +57,37 @@ test('packaged reader persists split halves and distinct bookmarks with unchange
   assert.equal(await canvas.evaluate(el=>el===window.__splitCanvas),true);
   await page.getByRole('button',{name:'返回',exact:true}).click();await app.close();app=null;
   page=await launch(document);await expect(input(page)).toHaveValue('1R');
+  for (const rtl of [false, true]) {
+    if (rtl) await page.getByRole('button', { name: '当前从左到右阅读，点击切换为从右到左', exact: true }).click();
+    const next = rtl ? 'ArrowLeft' : 'ArrowRight', previous = rtl ? 'ArrowRight' : 'ArrowLeft';
+    const first = rtl ? 'R' : 'L', second = rtl ? 'L' : 'R';
+    const counter = page.locator('.reader-page-jump input');
+    const frame = page.locator('.reader-page-frame:not([aria-hidden="true"])');
+    for (const immersive of [false, true]) {
+      if (immersive) {
+        await page.keyboard.press('f');
+        await expect(page.locator('.reader-layout')).toHaveClass(/\bis-immersive\b/);
+      }
+      await page.keyboard.press('Home');
+      await expect(counter).toHaveValue('1' + first);
+      for (const [key, labels] of [
+        [next, ['1'+second, '2'+first, '2'+second, '3'+first]],
+        [previous, ['2'+second, '2'+first, '1'+second]],
+      ]) {
+        for (const label of labels) {
+          await page.keyboard.press(key);
+          await expect(counter).toHaveValue(label);
+          await expect(frame).toHaveAttribute('data-reader-page-index', String(Number(label[0]) - 1));
+          await expect(frame).toHaveAttribute('data-reader-half', label[1]);
+        }
+      }
+      if (immersive) {
+        await page.keyboard.press('f');
+        await expect(page.locator('.reader-layout')).not.toHaveClass(/\bis-immersive\b/);
+      }
+    }
+  }
+  t.diagnostic('Split keyboard passed in both reading directions, windowed and immersive.');
   assert.deepEqual(await fs.readFile(document),pdfBytes);checks.push({source:'PDF',restore:'1R',sharedCanvas:true});
   await app.close();app=null;
   await fs.writeFile('test-results/split-packaged.json',JSON.stringify({executable,hidden:true,checks,sourceBytesUnchanged:true},null,2));

@@ -12,7 +12,7 @@ const { path7z } = require('7zip-bin-full');
 
 test('portable ZIP contains only the runtime and reads all formats after extraction', { timeout: 420000 }, async t => {
   assert.equal(process.platform, 'win32');
-  const version = require('../package.json').version;
+  const version = require('../package.json').desktopVersion;
   const archive = path.resolve(`release/OmiComic-Portable-${version}-x64.zip`);
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omicomic-portable-'));
   const extracted = path.join(root, '免安装程序');

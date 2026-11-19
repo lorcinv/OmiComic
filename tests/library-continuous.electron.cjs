@@ -35,7 +35,7 @@ test('packaged library scrolls continuously and identifies real collection folde
   const page = await app.firstWindow();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const info = await app.evaluate(({ app }) => ({ version: app.getVersion(), packaged: app.isPackaged }));
-  assert.equal(info.version, require('../package.json').version); assert.equal(info.packaged, true);
+  assert.equal(info.version, require('../package.json').desktopVersion); assert.equal(info.packaged, true);
   assert.equal(await page.evaluate(async books => {
     const api = window.omicomic;
     const added = await api.addLibraryRoot({ path: books, name: '真实目录' });

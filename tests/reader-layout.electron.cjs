@@ -30,7 +30,7 @@ test('shipped reader fits real wide/tall PNGs, pairs safely and separates panora
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 960));
   const page = await app.firstWindow(); await page.emulateMedia({ reducedMotion: 'reduce' });
   const info = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, version: app.getVersion(), profile: app.getPath('userData') }));
-  assert.equal(info.packaged, true); assert.equal(info.version, require('../package.json').version); assert.equal(info.profile, profile);
+  assert.equal(info.packaged, true); assert.equal(info.version, require('../package.json').desktopVersion); assert.equal(info.profile, profile);
   await expectReaderFit(page,'适应窗口',false);
   const fit = label => chooseReaderFit(page,label);
   const pixels = index => page.locator(`[data-reader-page-index="${index}"] :is(.reader-image,.reader-processed-image,.reader-display-raster):visible`).first();

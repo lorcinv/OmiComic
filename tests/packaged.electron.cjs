@@ -88,5 +88,5 @@ test('shipped Windows EXE reads images, ZIP, 7z, PDF and EPUB with isolated pers
   const protectedRoot=await page.evaluate(sourcePath=>window.omicomic.changeLocalResource({path:sourcePath,action:'trash'}),books);
   assert.equal(protectedRoot.ok,false);await fs.access(books);
   await fs.mkdir('test-results', { recursive: true });
-  await fs.writeFile('test-results/packaged-smoke.json', JSON.stringify({ executable, version: require('../package.json').version, formats: results, persistedTemporaryRecords: data.temporaryOpened.length }, null, 2));
+  await fs.writeFile('test-results/packaged-smoke.json', JSON.stringify({ executable, version: require('../package.json').desktopVersion, formats: results, persistedTemporaryRecords: data.temporaryOpened.length }, null, 2));
 });

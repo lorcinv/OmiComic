@@ -2,7 +2,7 @@ param([string]$Installer)
 $ErrorActionPreference = 'Stop'
 $omiWorkspace = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $omiWorkspace
-$omiVersion = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version
+$omiVersion = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).desktopVersion
 if (!$Installer) { $Installer = 'release/OmiComic-Setup-' + $omiVersion + '-x64.exe' }
 $omiGuid = ('const {UUID}=require("builder-util-runtime"); process.stdout.write(UUID.v5("io.github.lorcinv.omicomic", UUID.parse("50e065bc-3134-11e6-9bab-38c9862bdaf3")));' | & node).Trim()
 $omiUninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $omiGuid

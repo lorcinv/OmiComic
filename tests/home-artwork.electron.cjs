@@ -32,7 +32,7 @@ test('packaged home artwork imports local images, survives source moves and rest
   };
   let page = await launch();
   const version = await electron.evaluate(({ app }) => app.getVersion());
-  assert.equal(version, require('../package.json').version);
+  assert.equal(version, require('../package.json').desktopVersion);
   const defaultSource = await page.locator('.omi-home__art img').getAttribute('src');
   const select = async source => {
     await electron.evaluate(({ dialog }, source) => { dialog.showOpenDialog = async () => ({ canceled: source === null, filePaths: source ? [source] : [] }); }, source);
