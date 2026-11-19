@@ -4014,6 +4014,8 @@ function ReaderPage({
     全景模式,
     缩放模式,
     有效页模式,
+    拆页模式,
+    当前拆分半边,
     阅读器设置.doublePageFirstSingle,
     阅读器设置.smartDetectSpreadPage,
     当前页组Key,

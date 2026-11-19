@@ -4,12 +4,19 @@ import {pdf} from './android/filmstrip-fixtures.cjs';
 test.setTimeout(60000);
 test.use({screenshot:'only-on-failure'});
 
-async function fixture(page:Page,{rtl=false,mobile=false,document=false,half}:{rtl?:boolean;mobile?:boolean;document?:boolean;half?:'L'|'R'}={}){
-  await page.addInitScript(installMock,{count:3});
-  await page.addInitScript(async({rtl,document,bytes,half})=>{
+async function fixture(page: Page, options: {
+  rtl?: boolean;
+  mobile?: boolean;
+  document?: boolean;
+  half?: 'L' | 'R';
+  widePages?: boolean[];
+} = {}) {
+  const { rtl = false, mobile = false, document = false, half, widePages = [true, false, true] } = options;
+  await page.addInitScript(installMock, { count: widePages.length });
+  await page.addInitScript(async({rtl,document,bytes,half,widePages})=>{
     const api=window.omicomic,data=await api.getAppData();if(!data.ok)throw Error('fixture');
     Object.assign(data.data.settings,{readerDefaultFitMode:'fit-window',doublePageDirection:rtl?'right-to-left':'left-to-right',mobileReaderAutoHide:false,readerPreloadPages:2});
-    const canvases=[true,false,true].map((wide,index)=>{const c=window.document.createElement('canvas');c.width=wide?1200:600;c.height=900;const x=c.getContext('2d')!;x.fillStyle='#d84848';x.fillRect(0,0,c.width/2,c.height);x.fillStyle='#3984cc';x.fillRect(c.width/2,0,c.width/2,c.height);x.fillStyle='white';x.font='60px sans-serif';x.fillText(`${index+1} LEFT`,30,200);x.fillText(`${index+1} RIGHT`,c.width/2+20,600);return c;});
+    const canvases=widePages.map((wide,index)=>{const c=window.document.createElement('canvas');c.width=wide?1200:600;c.height=900;const x=c.getContext('2d')!;x.fillStyle='#d84848';x.fillRect(0,0,c.width/2,c.height);x.fillStyle='#3984cc';x.fillRect(c.width/2,0,c.width/2,c.height);x.fillStyle='white';x.font='60px sans-serif';x.fillText(`${index+1} LEFT`,30,200);x.fillText(`${index+1} RIGHT`,c.width/2+20,600);return c;});
     (window as any).__reads=[];(window as any).__marks=[];
     api.getPageImage=async input=>{const n=Number(/page(\d+)/.exec(input.sourcePath)?.[1]??0);(window as any).__reads.push(n);const c=canvases[n];return{ok:true,data:{url:c.toDataURL(),width:c.width,height:c.height}};};
     api.getReadingProgress=async()=>({ok:true,data:(window as any).__saved.at(-1)??{currentPageIndex:0,readerViewState:{fitMode:'fit-window',pageMode:'single',pageDirection:rtl?'right-to-left':'left-to-right',flow:'horizontal',panorama:false,immersive:false,splitWidePages:true,splitPageHalf:half,autoRead:{intervalSeconds:1,scrollPixelsPerSecond:80}}}});
@@ -20,14 +27,46 @@ async function fixture(page:Page,{rtl=false,mobile=false,document=false,half}:{r
       api.openDocument=async()=>({ok:true,data:{size:bytes.length,chapters:[]}});
       api.readDocumentRange=async(_id,begin,end)=>({ok:true,data:new Uint8Array(bytes.slice(begin,end))});api.closeDocument=async()=>({ok:true,data:null});
     }
-  },{rtl,document,bytes:[...Buffer.from(pdf(3).toString().replaceAll('/MediaBox [0 0 400 600]','/MediaBox [0 0 800 600]'))],half});
+  },{rtl,document,bytes:[...Buffer.from(pdf(3).toString().replaceAll('/MediaBox [0 0 400 600]','/MediaBox [0 0 800 600]'))],half,widePages});
   await page.goto('/');
   if(mobile){await page.evaluate(()=>window.document.documentElement.dataset.platform='android');await page.getByRole('button',{name:'打开资源库',exact:true}).click();await page.locator('.mobile-resource-card').filter({has:page.getByText('Book',{exact:true})}).click();}
   else await page.getByRole('button',{name:'继续上次阅读',exact:true}).click();
-  await expect(page.locator('.reader-page-frame:not([aria-hidden="true"]) [data-reader-page-crop]')).toBeVisible();
+  const firstFrame = shown(page);
+  await expect(document || widePages[0] ? firstFrame.locator('[data-reader-page-crop]') : firstFrame).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>(window as any).__saved.length)).toBeGreaterThan(0);
 }
 const shown=(page:Page)=>page.locator('.reader-page-frame:not([aria-hidden="true"])');
+
+for (const rtl of [false, true]) {
+  for (const immersive of [false, true]) {
+    test(`desktop split keyboard turns each half once (${rtl ? 'RTL' : 'LTR'}, ${immersive ? 'immersive' : 'windowed'})`, async ({ page }) => {
+      await fixture(page, { rtl, widePages: [false, true, false] });
+      if (immersive) {
+        await page.keyboard.press('f');
+        await expect(page.locator('.reader-layout')).toHaveClass(/\bis-immersive\b/);
+      }
+
+      const next = rtl ? 'ArrowLeft' : 'ArrowRight';
+      const previous = rtl ? 'ArrowRight' : 'ArrowLeft';
+      const firstHalf = rtl ? 'R' : 'L';
+      const secondHalf = rtl ? 'L' : 'R';
+      const frame = shown(page);
+      const steps = [
+        [next, '1', firstHalf],
+        [next, '1', secondHalf],
+        [next, '2', undefined],
+        [previous, '1', secondHalf],
+        [previous, '1', firstHalf],
+        [previous, '0', undefined],
+      ] as const;
+      for (const [key, sourceIndex, half] of steps) {
+        await page.keyboard.press(key);
+        await expect(frame).toHaveAttribute('data-reader-page-index', sourceIndex);
+        if (half) await expect(frame).toHaveAttribute('data-reader-half', half);
+      }
+    });
+  }
+}
 
 for(const rtl of [false,true])test(`desktop split mixed pages has reversible navigation and distinct bookmarks (${rtl?'RTL':'LTR'})`,async({page})=>{
   await fixture(page,{rtl});
