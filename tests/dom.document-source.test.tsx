@@ -3,6 +3,8 @@ import { installMock } from './mock';
 
 vi.mock('../src/reader/androidChapterLayout',async()=>{const actual=await vi.importActual<any>('../src/reader/androidChapterLayout');return{...actual,paginateChapter:async(html:string)=>({pages:[html],previews:['']})};});
 
+vi.mock('../src/android/webviewCapabilities', () => ({ needsCompatiblePdf: false }));
+
 const pdf = vi.hoisted(() => ({ load: vi.fn(), parse: vi.fn(), destroy: vi.fn(async () => {}) }));
 vi.mock('../src/reader/pdfRuntime', () => {
   pdf.load();
@@ -40,13 +42,23 @@ it.each([false,true])('long EPUB image animation=%s keeps the appropriate page l
   finally {book.dispose();}
 });
 
-it('PDF still initializes the range reader and releases its worker on close', async () => {
+it.each([
+  { platform: 'win32', maxImageSize: 64_000_000, canvasMaxAreaInBytes: 64_000_000 },
+  { platform: 'android', maxImageSize: 16_000_000, canvasMaxAreaInBytes: undefined },
+])('opens a streamed PDF with the $platform image budget and releases it on close', async ({ platform, ...imageOptions }) => {
   const book = await source('pdf');
+  document.documentElement.dataset.platform = platform;
   window.omicomic.openDocument = vi.fn(async () => ({ ok: true, data: { size: 100, chapters: [] } }));
   window.omicomic.closeDocument = vi.fn(async () => ({ ok: true, data: null }));
-  expect((await book.open()).pages).toHaveLength(3);
-  expect(pdf.parse).toHaveBeenCalledWith(expect.objectContaining({ disableStream: true, disableAutoFetch: true, maxImageSize: 16_000_000 }));
-  book.dispose();
+  try {
+    expect((await book.open()).pages).toHaveLength(3);
+    expect(pdf.parse).toHaveBeenCalledWith(expect.objectContaining({
+      disableStream: true, disableAutoFetch: true, ...imageOptions,
+    }));
+  } finally {
+    book.dispose();
+    delete document.documentElement.dataset.platform;
+  }
   expect(pdf.destroy).toHaveBeenCalledOnce();
 });
 

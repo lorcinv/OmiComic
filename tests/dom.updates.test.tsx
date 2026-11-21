@@ -2,11 +2,23 @@ import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { compareVersions, selectUpdate, checkForUpdates } from '../src/updates';
 import UpdateCheck from '../src/components/UpdateCheck';
+import AboutOmiComic from '../src/components/AboutOmiComic';
 const base = 'https://github.com/lorcinv/OmiComic';
 const release = (tag: string, asset: string, extra = {}) => ({ tag_name: tag, html_url: `${base}/releases/tag/${tag}`, body: 'Reading fixes', assets: [{ name: asset, size: 1024, browser_download_url: `${base}/releases/download/${tag}/${asset}` }], ...extra });
 const info = { name:'OmiComic', version:'1.1.96', platform:'win32', arch:'x64' };
 beforeEach(()=>{ localStorage.clear(); window.omicomic = { getAppInfo: async()=>info } as any; });
 afterEach(()=>{ vi.unstubAllGlobals(); });
+
+it.each([
+  { platform: 'win32', version: '1.2.3' },
+  { platform: 'darwin', version: '1.2.3' },
+  { platform: 'android', version: '1.2.2' },
+])('shows the running $platform version in About', async ({ platform, version }) => {
+  window.omicomic.getAppInfo = async () => ({ ...info, platform, version });
+  render(<AboutOmiComic />);
+  expect(await screen.findByText('Omi · 版本 ' + version)).toBeTruthy();
+});
+
 describe('platform-specific update reminders',()=>{
   it('compares numeric versions and ignores prereleases and missing platform packages',()=>{
     expect(compareVersions('1.1.100','1.1.99')).toBe(1);

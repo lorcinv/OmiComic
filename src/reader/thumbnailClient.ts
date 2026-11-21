@@ -161,7 +161,8 @@ async function completeCover(result: 操作结果<缩略图结果>): Promise<操
   // A native/cached cover is complete. PDF.js belongs only to the fallback
   // render below; prewarming it for every visible PDF stalls a cold library.
   if(!isAndroid())void loadPdfRuntime().then(runtime=>runtime.warmPdfWorker()).catch(()=>undefined);
-  const key = `${result.data.pdfPath}:${result.data.sourceVersion ?? ""}`;
+  // Replace covers that may have been rendered blank by the previous image limit.
+  const key = JSON.stringify([2, result.data.pdfPath, result.data.sourceVersion ?? ""]);
   let url = cache.get(key) ?? null;
   if(!url)url=await readPdfCover(key);
   if (!url) {

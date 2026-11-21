@@ -1,5 +1,4 @@
-import { version } from '../../package.json';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { isAndroid } from '../platform';
 import omiIcon from '../../resources/icon.svg';
@@ -12,9 +11,19 @@ export const OMI_GITHUB_URL = 'https://github.com/lorcinv/OmiComic';
 
 export default function AboutOmiComic({ active = true }: { active?: boolean }) {
   const [guideOpen, setGuideOpen] = useState(false);
+  const [version, setVersion] = useState('');
   const guideButton = useRef<HTMLButtonElement>(null);
   const scrollPosition = useRef(0);
   const scrollContainer = useRef<Element | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void window.omicomic.getAppInfo?.().then(info => {
+      if (mounted) setVersion(info.version);
+    }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, []);
+
   const closeGuide = () => {
     setGuideOpen(false);
     requestAnimationFrame(() => {
@@ -26,7 +35,7 @@ export default function AboutOmiComic({ active = true }: { active?: boolean }) {
   return <div className="omi-about">
     <header className="omi-about__brand">
       <img src={omiIcon} alt="" width="72" height="72" draggable={false} />
-      <div><h3>OmiComic</h3><p>Omi · {t('版本 ')}{version}</p></div>
+      <div><h3>OmiComic</h3><p>Omi{version && <> · {t('版本 ')}{version}</>}</p></div>
     </header>
     <div className="omi-about__intro">
       <p>{t('OmiComic（Omi）是一款本地漫画阅读器，让收藏、整理和阅读回到简单、专注的体验。')}</p>

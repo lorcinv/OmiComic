@@ -20,6 +20,9 @@ export interface DocumentPage {
   animated?: boolean;
 }
 
+const PDF_RENDER_PIXEL_LIMIT = 16_000_000;
+const PDF_DESKTOP_SOURCE_PIXEL_LIMIT = 64_000_000;
+
 const preparedDocuments=new Map<string,DocumentSource>();
 const foregroundDocuments=new Set<DocumentSource>();
 
@@ -219,6 +222,7 @@ export class DocumentSource {
 
   private async initializePdf(size:number,initialData:Uint8Array,pdfRuntime:Awaited<ReturnType<typeof loadPdfRuntime>>){
       const { getDocument, PDFDataRangeTransport, getSharedPdfWorker } = pdfRuntime;
+      const desktop = !isAndroid();
       const source = this;
       class Ranges extends PDFDataRangeTransport {
         private queue = Promise.resolve();
@@ -251,7 +255,10 @@ export class DocumentSource {
         wasmUrl: new URL("pdfjs/wasm/", document.baseURI).href,
         iccUrl: new URL("pdfjs/iccs/", document.baseURI).href,
         rangeChunkSize: 256 * 1024, disableStream: true, disableAutoFetch: true,
-        useSystemFonts: true, maxImageSize: 16_000_000, stopAtErrors: true,
+        useSystemFonts: true, stopAtErrors: true,
+        // Keep the source image bounded while allowing the worker to shrink large scans.
+        maxImageSize: desktop ? PDF_DESKTOP_SOURCE_PIXEL_LIMIT : PDF_RENDER_PIXEL_LIMIT,
+        canvasMaxAreaInBytes: desktop ? PDF_RENDER_PIXEL_LIMIT * 4 : undefined,
       });
       this.pdf = await this.loading.promise;
       return Array.from({ length: this.pdf.numPages }, (_, index) => ({ index, name: `第 ${index + 1} 页` }));
@@ -411,7 +418,7 @@ export class DocumentSource {
       const native = page.getViewport({ scale: 1 });
       const scale = thumbnail ? Math.min(1, 360 / Math.max(native.width, native.height)) : Math.min(
         Math.max(1.5, Math.max(innerWidth, innerHeight) * Math.min(devicePixelRatio || 1, 2) / Math.max(native.width, native.height)),
-        Math.sqrt(16_000_000 / (native.width * native.height)), 4096 / Math.max(native.width, native.height),
+        Math.sqrt(PDF_RENDER_PIXEL_LIMIT / (native.width * native.height)), 4096 / Math.max(native.width, native.height),
       );
       const view = page.getViewport({ scale });
       canvas.width = Math.ceil(view.width); canvas.height = Math.ceil(view.height);

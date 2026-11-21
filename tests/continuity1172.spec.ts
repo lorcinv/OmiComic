@@ -1,5 +1,6 @@
 import{test,expect,type Page}from'@playwright/test';
 import{readFileSync}from'node:fs';
+import { deflateSync } from 'node:zlib';
 import{installMock}from'./mock';
 
 const pdfBytes=[...readFileSync('tests/fixtures/documents/three-pages.pdf')];
@@ -55,11 +56,95 @@ test('PDF parsing worker is shared across documents and survives closing a thumb
  expect(result).toMatchObject({pages:3,same:true,destroyed:false});expect(result.pixels).toBeGreaterThan(0);
 });
 
-test('PDF covers survive reload and invalidate when the source version changes',async({page})=>{
- const read=async(version:string)=>page.evaluate(async({bytes,version})=>{
-  let opens=0;window.omicomic={getThumbnail:async()=>({ok:true,data:{url:null,pdfPath:'/cache.pdf',sourceVersion:version}}),openDocument:async()=>{opens++;return{ok:true,data:{size:bytes.length,chapters:[]}};},readDocumentRange:async(_id:string,begin:number,end:number)=>({ok:true,data:new Uint8Array(bytes.slice(begin,end))}),closeDocument:async()=>({ok:true,data:null})} as any;
-  const{getResourceThumbnail}=await import('/src/reader/thumbnailClient.ts'),result=await getResourceThumbnail({path:'/cache.pdf',type:'pdf'});return{opens,url:result.ok&&result.data.url};
- },{bytes:pdfBytes,version});
- await page.goto('/tests/fixtures/document-harness.html');const cold=await read('1');expect(cold.opens).toBe(1);expect(cold.url).toMatch(/^data:image/);await page.waitForTimeout(100);await page.reload();const cached=await read('1');expect(cached.opens).toBe(0);expect(cached.url).toBe(cold.url);expect((await read('2')).opens).toBe(1);
- await page.evaluate(async()=>{const{clearResourceThumbnailCache}=await import('/src/reader/thumbnailClient.ts');clearResourceThumbnailCache('/cache.pdf');});expect((await read('2')).opens).toBe(1);
+function largeScanPdf(): Buffer {
+  const width = 3400, height = 5200;
+  const image = deflateSync(Buffer.alloc(width * height, 72));
+  const draw = 'q 360 0 0 480 0 0 cm /Scan Do Q';
+  const objects = [
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
+    Buffer.from('<< /Type /Pages /Count 1 /Kids [3 0 R] >>'),
+    Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 360 480] /Resources << /XObject << /Scan 5 0 R >> >> /Contents 4 0 R >>'),
+    Buffer.from(`<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`),
+    Buffer.concat([
+      Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`),
+      image,
+      Buffer.from('\nendstream'),
+    ]),
+  ];
+  const chunks = [Buffer.from('%PDF-1.5\n')];
+  const xref = ['0000000000 65535 f \n'];
+  let offset = chunks[0].length;
+  for (const [index, object] of objects.entries()) {
+    xref.push(`${String(offset).padStart(10, '0')} 00000 n \n`);
+    const chunk = Buffer.concat([Buffer.from(`${index + 1} 0 obj\n`), object, Buffer.from('\nendobj\n')]);
+    chunks.push(chunk);
+    offset += chunk.length;
+  }
+  chunks.push(Buffer.from(`xref\n0 ${xref.length}\n${xref.join('')}trailer\n<< /Size ${xref.length} /Root 1 0 R >>\nstartxref\n${offset}\n%%EOF\n`));
+  return Buffer.concat(chunks);
+}
+
+test('large PDF scans render and replace blank legacy covers while the new covers persist', async ({ page }) => {
+  const bytes = [...largeScanPdf()];
+  const read = (version: string) => page.evaluate(async ({ bytes, version }) => {
+    let opens = 0;
+    window.omicomic = {
+      getThumbnail: async () => ({ ok: true, data: { url: null, pdfPath: '/cache.pdf', sourceVersion: version } }),
+      openDocument: async () => { opens++; return { ok: true, data: { size: bytes.length, chapters: [] } }; },
+      readDocumentRange: async (_id: string, begin: number, end: number) => ({ ok: true, data: new Uint8Array(bytes.slice(begin, end)) }),
+      closeDocument: async () => ({ ok: true, data: null }),
+    } as typeof window.omicomic;
+    const { getResourceThumbnail } = await import('/src/reader/thumbnailClient.ts');
+    const result = await getResourceThumbnail({ path: '/cache.pdf', type: 'pdf' });
+    const url = result.ok ? result.data.url : null;
+    if (!url) return { opens, url, pixel: null };
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    return { opens, url, pixel: ctx.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data[0] };
+  }, { bytes, version });
+
+  await page.goto('/tests/fixtures/document-harness.html');
+  await page.evaluate(async () => {
+    const { savePdfCover } = await import('/src/reader/pdfCoverStore.ts');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await savePdfCover('/cache.pdf:1', '/cache.pdf', canvas.toDataURL('image/jpeg'));
+  });
+
+  const cold = await read('1');
+  expect(cold.opens).toBe(1);
+  expect(Math.abs(cold.pixel! - 72)).toBeLessThan(6);
+  await page.waitForTimeout(100);
+  await page.reload();
+  expect(await read('1')).toEqual({ ...cold, opens: 0 });
+  expect((await read('2')).opens).toBe(1);
+
+  const readerPixel = await page.evaluate(async () => {
+    const { DocumentSource } = await import('/src/reader/documentSource.ts');
+    const source = new DocumentSource({
+      key: 'pdf:/cache.pdf', resourceKey: 'pdf:/cache.pdf', sourcePath: '/cache.pdf',
+      sourceType: 'pdf', title: 'Scan', pages: [], total: 0,
+    });
+    try {
+      await source.open();
+      const { canvas } = await source.readPage(0);
+      return canvas?.getContext('2d')?.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data[0];
+    } finally {
+      source.dispose();
+    }
+  });
+  expect(Math.abs(readerPixel! - 72)).toBeLessThan(6);
+
+  await page.evaluate(async () => {
+    const { clearResourceThumbnailCache } = await import('/src/reader/thumbnailClient.ts');
+    clearResourceThumbnailCache('/cache.pdf');
+  });
+  expect((await read('2')).opens).toBe(1);
 });
