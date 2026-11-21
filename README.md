@@ -16,20 +16,20 @@ OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、macOS 与
 
 ## 下载
 
-Windows 和 macOS 桌面版为 **1.2.3**，Android 手机版为 **1.2.2**。
+Windows 和 macOS 桌面版为 **1.2.4**，Android 手机版为 **1.2.2**。
 
 | 平台 | 安装包 |
 | --- | --- |
-| Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-Setup-1.2.3-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-Portable-1.2.3-x64.zip) |
+| Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Setup-1.2.4-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Portable-1.2.4-x64.zip) |
 | Android 8.0+ | [OmiComic 1.2.2 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-android.apk) |
-| macOS · Apple Silicon（M 系列，arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-1.2.3-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-1.2.3-mac-arm64.zip) |
-| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-1.2.3-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-1.2.3-mac-x64.zip) |
+| macOS · Apple Silicon（M 系列，arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.zip) |
+| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.zip) |
 
 - **Windows**：安装版运行 EXE，按提示安装；免安装版完整解压 ZIP 后运行 <code>OmiComic.exe</code>。
 - **Android**：安装 APK，可直接覆盖升级。
 - **macOS**：M 系列选 Apple Silicon，Intel 芯片选 Intel。[如何选择版本](docs/APPLE.md#mac-download) · 当前包未签名、未公证，[安装与首次打开说明](docs/APPLE.md#mac-install)。
 
-桌面版 1.2.3 修复了跨页拆分后，左右方向键有时需要按两次才能翻页的问题。 [本版更新](docs/releases/v1.2.3.md) · [更新记录](docs/releases/README.md)。
+桌面版 1.2.4 修复了部分高分辨率扫描 PDF 的封面和页面空白问题，并修正了「关于」中的版本号。 [本版更新](docs/releases/v1.2.4.md) · [更新记录](docs/releases/README.md)。
 
 ## 视频演示
 

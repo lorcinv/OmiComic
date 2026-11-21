@@ -2,12 +2,13 @@
 
 # リリース履歴
 
-デスクトップ版（Windows・macOS）は **1.2.3**、Android 版は **1.2.2** です。[更新内容](v1.2.3.md)。
+デスクトップ版（Windows・macOS）は **1.2.4**、Android 版は **1.2.2** です。[更新内容](v1.2.4.md)。
 
-[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.3)
+[最新版をダウンロード](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.4)
 
 | バージョン | 対応環境 | リリース |
 | --- | --- | --- |
+| v1.2.4 | Windows x64 / macOS arm64, x64 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.4) |
 | v1.2.3 | Windows x64 / macOS arm64, x64 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.3) |
 | v1.2.2 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.2) |
 | v1.2.1 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.1) |
