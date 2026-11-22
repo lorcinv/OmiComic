@@ -3,7 +3,8 @@
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
   <uses-permission android:name="android.permission.INTERNET" />
   <application android:label="OmiComic" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/OmiTheme" android:allowBackup="false" android:usesCleartextTraffic="false" android:extractNativeLibs="false" android:supportsRtl="true">
-    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:configChanges="orientation|screenSize|keyboardHidden|uiMode" android:windowSoftInputMode="adjustResize">
+    <!-- Opening from another app uses OmiComic's launcher task and reader session. -->
+    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:documentLaunchMode="never" android:configChanges="orientation|screenSize|keyboardHidden|uiMode" android:windowSoftInputMode="adjustResize">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
       <!-- Some file managers report comic archives as generic binary files. -->
       <intent-filter>

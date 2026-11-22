@@ -18,8 +18,10 @@ if (!$SkipBuild) {
   $fixture=Join-Path $build 'assets/external.cbz'
   $zipStream=[IO.File]::Open($fixture,[IO.FileMode]::Create)
   $zip=[IO.Compression.ZipArchive]::new($zipStream,[IO.Compression.ZipArchiveMode]::Create)
-  try { [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,(Join-Path $build 'assets/external.png'),'001.png') | Out-Null } finally { $zip.Dispose();$zipStream.Dispose() }
-  $manifest='<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.lorcinv.omicomic.externaltest"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/><application android:label="Omi external-open test" android:testOnly="true"><provider android:name=".ExternalOpenTest$Provider" android:authorities="io.github.lorcinv.omicomic.externaltest.files" android:exported="true" android:grantUriPermissions="true"/></application><instrumentation android:name=".ExternalOpenTest" android:targetPackage="io.github.lorcinv.omicomic"/></manifest>'
+  try {
+    foreach ($page in @('001.png','002.png')) { [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,(Join-Path $build 'assets/external.png'),$page) | Out-Null }
+  } finally { $zip.Dispose();$zipStream.Dispose() }
+  $manifest='<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="io.github.lorcinv.omicomic.externaltest"><uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/><application android:label="Omi external-open test" android:testOnly="true"><activity android:name=".ExternalOpenTest$Sender" android:exported="true"/><provider android:name=".ExternalOpenTest$Provider" android:authorities="io.github.lorcinv.omicomic.externaltest.files" android:exported="true" android:grantUriPermissions="true"/></application><instrumentation android:name=".ExternalOpenTest" android:targetPackage="io.github.lorcinv.omicomic"/></manifest>'
   [IO.File]::WriteAllText((Join-Path $build 'AndroidManifest.xml'),$manifest,[Text.UTF8Encoding]::new($false))
   Run (Join-Path $JavaHome 'bin/javac.exe') @('--release','8','-encoding','UTF-8','-cp',$platform,'-d',(Join-Path $build 'classes'),'tests/android/ExternalOpenTest.java')
   Run (Join-Path $JavaHome 'bin/jar.exe') @('cf',(Join-Path $build 'classes.jar'),'-C',(Join-Path $build 'classes'),'.')

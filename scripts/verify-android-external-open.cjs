@@ -7,6 +7,9 @@ const array = value => value == null ? [] : Array.isArray(value) ? value : [valu
 const requiredMime = ['image/jpeg', 'image/png', 'image/apng', 'image/webp', 'image/gif', 'image/bmp', 'application/pdf', 'application/epub+zip', 'application/x-mobipocket-ebook', 'application/x-mobi', 'application/zip', 'application/x-zip', 'application/x-zip-compressed', 'application/x-cbz', 'application/vnd.comicbook+zip', 'application/x-rar', 'application/x-rar-compressed', 'application/vnd.rar', 'application/x-cbr', 'application/vnd.comicbook-rar', 'application/x-7z-compressed', 'application/x-cb7', 'application/octet-stream'];
 
 function checkActivity(activity) {
+  // aapt reports the manifest enums as ActivityInfo's integer values.
+  if (!['singleTask', 2].includes(activity?.['android:launchMode'])) throw new Error('MainActivity must use singleTask to reuse the OmiComic task');
+  if (!['never', 3].includes(activity['android:documentLaunchMode'])) throw new Error('MainActivity must refuse separate document tasks');
   const filters = array(activity?.['intent-filter']);
   for (const action of ['VIEW', 'SEND']) {
     const filter = filters.find(f => array(f.action).some(a => a['android:name'] === `android.intent.action.${action}`) && array(f.data).some(d => d['android:mimeType']));
@@ -47,8 +50,8 @@ function verifyApk(apk, aapt) {
       const parent = stack.at(-1).value, value = {};
       (parent[element[2]] ??= []).push(value); stack.push({ indent, value });
     } else {
-      const attribute = /^\s*A: (android:\w+)(?:\([^)]*\))?="([^"]*)"/.exec(line);
-      if (attribute) stack.at(-1).value[attribute[1]] = attribute[2];
+      const attribute = /^\s*A: (android:\w+)(?:\([^)]*\))?=(?:"([^"]*)"|\(type 0x10\)(0x[\da-f]+))/.exec(line);
+      if (attribute) stack.at(-1).value[attribute[1]] = attribute[2] ?? Number(attribute[3]);
     }
   }
   const activity = tree.manifest?.[0]?.application?.[0]?.activity?.find(a => a['android:name'] === '.MainActivity');
