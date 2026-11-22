@@ -29,7 +29,7 @@ Copy-Item -Path 'dist-android\*' -Destination $assetTarget -Recurse
 Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $build 'assets\LICENSE')
 Copy-Item -LiteralPath 'ASSET_CREDITS.md' -Destination (Join-Path $build 'assets\ASSET_CREDITS.md')
 $version = (Get-Content -Raw -Encoding UTF8 -LiteralPath 'package.json' | ConvertFrom-Json).version
-[IO.File]::WriteAllText((Join-Path $build 'assets\SOURCE_CODE.txt'), ('OmiComic ' + $version + " source code (GPL-3.0-only)`n" + 'https://github.com/lorcinv/OmiComic/releases/tag/v' + $version + "`nDownload the Source code (zip) or Source code (tar.gz) archive on that page.`n"), [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText((Join-Path $build 'assets\SOURCE_CODE.txt'), ('OmiComic ' + $version + " source code (GPL-3.0-only)`n" + 'https://github.com/lorcinv/OmiComic/releases/tag/v' + $version + "`nDownload the corresponding Android source archive on that page.`n"), [Text.UTF8Encoding]::new($false))
 $licenseTarget = Join-Path $assetTarget 'licenses'
 New-Item -ItemType Directory -Force -Path $licenseTarget | Out-Null
 $noticeLines = @('OmiComic Android third-party notices', 'Android System WebView is provided by the device.', '')
@@ -47,11 +47,9 @@ Copy-Item -Path 'android\licenses\*' -Destination $licenseTarget
 Copy-Item -LiteralPath 'resources\icon.png' -Destination (Join-Path $build 'res\drawable\icon.png')
 Copy-Item -Path 'android\res\*' -Destination (Join-Path $build 'res') -Recurse -Force
 $manifest = Get-Content -Raw -Encoding UTF8 -LiteralPath 'android\AndroidManifest.xml'
-$parts = $version.Split('.')
-if ($parts.Length -ne 3) { throw 'Android version must contain major.minor.patch.' }
-$versionCode = [int]$parts[0]*10000 + [int]$parts[1]*100 + [int]$parts[2]
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Android version must contain major.minor.patch.' }
+# Android compares versionCode for upgrades. Keep the independently incremented manifest value.
 $manifest = $manifest -replace 'android:versionName="[^"]+"', ('android:versionName="' + $version + '"')
-$manifest = $manifest -replace 'android:versionCode="[^"]+"', ('android:versionCode="' + $versionCode + '"')
 [IO.File]::WriteAllText((Join-Path $build 'AndroidManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
 $sources = @(Get-ChildItem -LiteralPath 'android\src' -Recurse -Filter '*.java' | ForEach-Object FullName)
 $nativeJar = Join-Path $build 'native\classes.jar'

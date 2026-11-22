@@ -1,9 +1,9 @@
 # 版本更新
 
-## 1.2.5 — 2026-11-22
+## 1.2.3 — 2026-11-22
 
 - 修复 Android 从文件管理器打开文件时出现重复窗口、最近阅读不同步的问题。选择「仅此一次」也会进入 OmiComic 自己的窗口。
-- [版本说明](docs/releases/v1.2.5.md) · [GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.5)。
+- [安卓版本说明](docs/releases/v1.2.3.md#android-版) · [GitHub 发行页](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.3)。
 
 ## 1.2.0 — 2026-11-14
 
