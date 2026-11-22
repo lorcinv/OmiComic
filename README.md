@@ -16,12 +16,12 @@ OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、macOS 与
 
 ## 下载
 
-Windows 和 macOS 桌面版为 **1.2.4**，Android 手机版为 **1.2.2**。
+Windows 和 macOS 桌面版为 **1.2.4**，Android 手机版为 **1.2.5**。
 
 | 平台 | 安装包 |
 | --- | --- |
 | Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Setup-1.2.4-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Portable-1.2.4-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.2 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-android.apk) |
+| Android 8.0+ | [OmiComic 1.2.5 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.5/OmiComic-1.2.5-android.apk) |
 | macOS · Apple Silicon（M 系列，arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.zip) |
 | macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.zip) |
 
@@ -29,7 +29,7 @@ Windows 和 macOS 桌面版为 **1.2.4**，Android 手机版为 **1.2.2**。
 - **Android**：安装 APK，可直接覆盖升级。
 - **macOS**：M 系列选 Apple Silicon，Intel 芯片选 Intel。[如何选择版本](docs/APPLE.md#mac-download) · 当前包未签名、未公证，[安装与首次打开说明](docs/APPLE.md#mac-install)。
 
-桌面版 1.2.4 修复了部分高分辨率扫描 PDF 的封面和页面空白问题，并修正了「关于」中的版本号。 [本版更新](docs/releases/v1.2.4.md) · [更新记录](docs/releases/README.md)。
+Android 1.2.5 修复了从文件管理器打开文件时出现重复窗口、最近阅读不同步的问题。 [安卓更新](docs/releases/v1.2.5.md) · [桌面更新](docs/releases/v1.2.4.md) · [更新记录](docs/releases/README.md)。
 
 ## 视频演示
 

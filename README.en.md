@@ -16,12 +16,12 @@ OmiComic is a local comic reader for Windows, macOS and Android, focused on fast
 
 ## Download
 
-The desktop release for Windows and macOS is **1.2.4**. The Android release is **1.2.2**.
+The desktop release for Windows and macOS is **1.2.4**. The Android release is **1.2.5**.
 
 | Platform | Package |
 | --- | --- |
 | Windows x64 | [Installer · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Setup-1.2.4-x64.exe) · [Portable · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Portable-1.2.4-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.2 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-android.apk) |
+| Android 8.0+ | [OmiComic 1.2.5 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.5/OmiComic-1.2.5-android.apk) |
 | macOS · Apple Silicon (M-series, arm64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.zip) |
 | macOS · Intel (x64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.zip) |
 
@@ -29,7 +29,7 @@ The desktop release for Windows and macOS is **1.2.4**. The Android release is *
 - **Android**: install the APK; it can update your existing installation.
 - **macOS**: choose Apple Silicon for M-series chips or Intel for Intel processors. [Choose your version](docs/APPLE.md#mac-download). These packages are unsigned and not notarized; see [installation and first launch](docs/APPLE.md#mac-install).
 
-Desktop version 1.2.4 fixes blank covers and pages in some high-resolution scanned PDFs and displays the running app version in About. [Release notes](docs/releases/v1.2.4.md) · [Version history](docs/releases/README.en.md).
+Android 1.2.5 opens files from the file manager in the same OmiComic window, so recent reads and reading progress stay up to date. [Android release notes](docs/releases/v1.2.5.md) · [Desktop release notes](docs/releases/v1.2.4.md) · [Version history](docs/releases/README.en.md).
 
 ## Video demo
 

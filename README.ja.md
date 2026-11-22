@@ -16,12 +16,12 @@ OmiComic は、ローカルでの高速起動とすっきりした読書体験�
 
 ## ダウンロード
 
-デスクトップ版（Windows・macOS）は **1.2.4**、Android 版は **1.2.2** です。
+デスクトップ版（Windows・macOS）は **1.2.4**、Android 版は **1.2.5** です。
 
 | 対応環境 | パッケージ |
 | --- | --- |
 | Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Setup-1.2.4-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Portable-1.2.4-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.2 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.2/OmiComic-1.2.2-android.apk) |
+| Android 8.0+ | [OmiComic 1.2.5 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.5/OmiComic-1.2.5-android.apk) |
 | macOS · Apple Silicon（M シリーズ、arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.zip) |
 | macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.zip) |
 
@@ -29,7 +29,7 @@ OmiComic は、ローカルでの高速起動とすっきりした読書体験�
 - **Android**：APK をインストールします。既存のアプリをそのまま更新できます。
 - **macOS**：M シリーズは Apple Silicon、Intel プロセッサーは Intel を選びます。[バージョンの選び方](docs/APPLE.md#mac-download)。現在の配布版は署名・公証を行っていません。[インストールと初回起動](docs/APPLE.md#mac-install)をご確認ください。
 
-デスクトップ版 1.2.4 では、一部の高解像度スキャン PDF で表紙やページが白くなる問題と、バージョン表示の誤りを修正しました。 [更新内容](docs/releases/v1.2.4.md) · [バージョン履歴](docs/releases/README.ja.md)。
+Android 版 1.2.5 では、ファイルマネージャーから開いたときにウィンドウが重複し、読書履歴がすぐに反映されない問題を修正しました。 [Android 版の更新内容](docs/releases/v1.2.5.md) · [デスクトップ版の更新内容](docs/releases/v1.2.4.md) · [バージョン履歴](docs/releases/README.ja.md)。
 
 ## 紹介動画
 
