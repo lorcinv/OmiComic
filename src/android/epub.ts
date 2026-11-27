@@ -25,6 +25,8 @@ export async function sanitizeAndroidChapter(payload: string, native: NativeCall
     }
     const raster = tag === "img" || tag === "image";
     const target = raster ? output.createElement("img") : allowed.has(tag) ? output.createElement(tag) : output.createElement("span");
+    const anchor = node.getAttribute('id') || node.getAttribute('xml:id') || (tag === 'a' ? node.getAttribute('name') : null);
+    if (anchor && anchor.length <= 512) target.setAttribute('data-omi-anchor', anchor);
     if (raster) {
       if (++images > 150) return;
       const href = node.getAttribute("src") || node.getAttribute("href") || node.getAttribute("xlink:href") || node.getAttributeNS("http://www.w3.org/1999/xlink", "href"); if (!href || /^(?:[a-z]+:|\/\/)/i.test(href)) { unsupportedImages++; return; }

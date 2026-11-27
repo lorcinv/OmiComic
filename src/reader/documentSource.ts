@@ -7,6 +7,7 @@ import { displaySamplingMoving } from './displaySampling';
 import { needsCompatiblePdf } from '../android/webviewCapabilities';
 import { loadPdfRuntime } from './loadPdfRuntime';
 import { androidChapterPresentation, countAndroidTextPages, paginateChapter, type ChapterPages, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT } from './androidChapterLayout';
+import { epubOutline, pdfOutline, type ReaderOutlineEntry } from './readerOutline';
 
 export interface DocumentPage {
   url: string;
@@ -63,6 +64,9 @@ export class DocumentSource {
   private pdfFallback?:Promise<void>;
   private documentPages?: {chapter:number;slice:number;image:boolean;name:string}[];
   private chapterNames:{name:string;index:number;fixedLayout?:boolean}[]=[];
+  private chapterStarts = new Map<number, number>();
+  private chapterAnchors = new Map<number, Map<string, number>>();
+  private outline?: Promise<ReaderOutlineEntry[]>;
   private chapterLayouts=new Map<number,ChapterPages>();
   private chapterImages=new Map<number,ReturnType<typeof androidChapterPresentation>>();
   private chapterCounts=new Map<number,number>();
@@ -75,9 +79,41 @@ export class DocumentSource {
   private nativeFitAxis?:'width'|'height';
   setReaderSession(session:number,fitAxis?:'width'|'height'){this.readerSession=session;this.nativeFitAxis=fitAxis;}
   subscribe(listener:(change:{from:number;before:阅读资源结果['pages']})=>void){this.listeners.add(listener);return()=>{this.listeners.delete(listener);};}
+
+  readOutline(): Promise<ReaderOutlineEntry[]> {
+    this.outline ??= this.loadOutline().catch(error => { this.outline = undefined; throw error; });
+    return this.outline;
+  }
+
+  private async loadOutline(): Promise<ReaderOutlineEntry[]> {
+    if (this.resource.sourceType === 'pdf') {
+      await this.fallbackPdf();
+      return this.pdf ? pdfOutline(this.pdf) : [];
+    }
+    if (this.resource.sourceType !== 'epub' || !window.omicomic.readDocumentNavigation) return [];
+    const result = await window.omicomic.readDocumentNavigation(this.id);
+    this.assertOpen();
+    if (!result.ok) throw Error(result.error.message);
+    return epubOutline(result.data);
+  }
+
+  outlinePage(target: ReaderOutlineEntry['target']): number {
+    if ('page' in target) return target.page;
+    const first = this.chapterStarts.get(target.chapter) ?? 0;
+    return first + (target.anchor ? this.chapterAnchors.get(target.chapter)?.get(target.anchor) ?? 0 : 0);
+  }
+
+  async resolveOutlinePage(target: ReaderOutlineEntry['target']): Promise<number> {
+    if ('chapter' in target && target.anchor && !this.chapterCounts.has(target.chapter)) {
+      try { await this.layoutChapter(target.chapter); } catch { this.assertOpen(); }
+    }
+    return this.outlinePage(target);
+  }
   private rebuildPages(){
     const resource=this.openedResource,before=resource?.pages??[];
     this.documentPages=this.chapterNames.flatMap(chapter=>Array.from({length:this.chapterCounts.get(chapter.index)??1},(_,slice)=>({chapter:chapter.index,slice,image:!!chapter.fixedLayout,name:(this.chapterCounts.get(chapter.index)??1)>1?`${chapter.name} · ${slice+1}/${this.chapterCounts.get(chapter.index)}`:chapter.name})));
+    this.chapterStarts.clear();
+    this.documentPages.forEach((page, index) => { if (page.slice === 0) this.chapterStarts.set(page.chapter, index); });
     if(!resource)return;
     resource.pages=this.documentPages.map((page,index)=>({index,name:page.name,pageId:page.slice===0?`epub-chapter:${page.chapter}`:`epub-text:${page.chapter}:${page.slice}`,sourcePath:resource.sourcePath,type:'epub-chapter'}));
     resource.total=resource.pages.length;resource.documentIndexing=this.chapterCounts.size<this.chapterNames.length;
@@ -90,6 +126,7 @@ export class DocumentSource {
     const task=(async()=>{
       const html=await this.chapter(index),image=androidChapterPresentation(html),tiles=!image.animated&&image.image&&image.width&&image.height&&image.height>image.width*3?Math.ceil(image.height/(image.width*1.5)):0,layout=tiles?{pages:Array.from({length:tiles},()=>html),previews:Array.from({length:tiles},()=>'')}:image.image?{pages:[html],previews:['']}:await paginateChapter(html,this.abortController.signal,image);this.assertOpen();
       if(image.image)this.chapterImages.set(index,image);
+      if (layout.anchors?.size) this.chapterAnchors.set(index, layout.anchors);
       this.chapterLayouts.set(index,layout);const changed=(this.chapterCounts.get(index)??1)!==layout.pages.length;this.chapterCounts.set(index,layout.pages.length);
       let bytes=[...this.chapterLayouts.values()].reduce((sum,item)=>sum+(item.bytes?.()??item.pages.reduce((n,p)=>n+p.length*2,0)),0);
       for(const [key,item] of this.chapterLayouts){if(bytes<=8*1024*1024)break;if(key===index)continue;const size=item.bytes?.()??item.pages.reduce((n,p)=>n+p.length*2,0);this.chapterLayouts.delete(key);this.chapterImages.delete(key);item.dispose?.();bytes-=size;}
@@ -241,6 +278,7 @@ export class DocumentSource {
             this.onDataRange(begin, bytes);
           }).catch(reason => {
             if (source.closed) return;
+            if (source.nativePdf) { void source.loading?.destroy().catch(() => undefined); return; }
             source.failure = reason instanceof Error ? reason : new Error("PDF 读取失败。");
             source.dispose();
           });
@@ -265,7 +303,7 @@ export class DocumentSource {
   }
   private async fallbackPdf(){
     if(this.pdf)return;if(this.pdfFallback)return this.pdfFallback;
-    this.pdfFallback=(async()=>{const result=await window.omicomic.readDocumentRange(this.id,0,Math.min(this.pdfSize,256*1024));if(!result.ok)throw Error(result.error.message);await this.initializePdf(this.pdfSize,new Uint8Array(result.data),await loadPdfRuntime());})();
+    this.pdfFallback=(async()=>{const result=await window.omicomic.readDocumentRange(this.id,0,Math.min(this.pdfSize,256*1024));this.assertOpen();if(!result.ok)throw Error(result.error.message);await this.initializePdf(this.pdfSize,new Uint8Array(result.data),await loadPdfRuntime());})().catch(error=>{this.pdfFallback=undefined;throw error;});
     return this.pdfFallback;
   }
 

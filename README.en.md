@@ -16,20 +16,20 @@ OmiComic is a local comic reader for Windows, macOS and Android, focused on fast
 
 ## Download
 
-The desktop release for Windows and macOS is **1.2.4**. The Android release is **1.2.3**.
+Version **1.2.6** is available for Windows, macOS and Android.
 
 | Platform | Package |
 | --- | --- |
-| Windows x64 | [Installer · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Setup-1.2.4-x64.exe) · [Portable · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Portable-1.2.4-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.3 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-1.2.3-android.apk) |
-| macOS · Apple Silicon (M-series, arm64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.zip) |
-| macOS · Intel (x64) | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.zip) |
+| Windows x64 | [Installer · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Setup-1.2.6-x64.exe) · [Portable · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Portable-1.2.6-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.6 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-android.apk) |
+| macOS · Apple Silicon (M-series, arm64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-arm64.zip) |
+| macOS · Intel (x64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-x64.zip) |
 
 - **Windows**: run the EXE to install, or extract the entire portable ZIP and run <code>OmiComic.exe</code>.
 - **Android**: install the APK; it can update your existing installation.
 - **macOS**: choose Apple Silicon for M-series chips or Intel for Intel processors. [Choose your version](docs/APPLE.md#mac-download). These packages are unsigned and not notarized; see [installation and first launch](docs/APPLE.md#mac-install).
 
-Android 1.2.3 opens files from the file manager in the same OmiComic window, so recent reads and reading progress stay up to date. [Android release notes](docs/releases/v1.2.3.md#android-版) · [Desktop release notes](docs/releases/v1.2.4.md) · [Version history](docs/releases/README.en.md).
+The Chapters panel supports chapter folders in comic archives and built-in outlines in PDF and EPUB. [Release notes](docs/releases/v1.2.6.md) · [Version history](docs/releases/README.en.md)
 
 ## Video demo
 
@@ -110,7 +110,7 @@ Browse and organize a full comic library with controls designed for a mouse and 
 
 ## macOS
 
-Available for Apple Silicon (M-series, arm64) and Intel (x64). Open the DMG and drag OmiComic into Applications, or unzip the ZIP and move the app there. It shares the Windows library, reading tools and local formats, with native window controls, Command shortcuts and Dock reopening after closing the window.
+Available for Apple Silicon (M-series, arm64) and Intel (x64). Unzip the ZIP file and move OmiComic to Applications. It shares the Windows library, reading tools and local formats, with native window controls, Command shortcuts and Dock reopening after closing the window.
 
 This release has no Apple Developer ID signature or notarization. See the [Mac installation guide](docs/APPLE.md) and the macOS tab in the in-app guide for first launch, ⌘+K search, ⌘+wheel zoom and window controls.
 

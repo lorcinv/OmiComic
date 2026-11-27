@@ -67,7 +67,7 @@ final class LocalLibrary {
   private static final String[] COLUMNS={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE,DocumentsContract.Document.COLUMN_LAST_MODIFIED};
   private static final class Entry {String name,path,mime;Uri uri;long size,modified,cachedAt;boolean directory;}
   private static final class Media {Doc pdfDoc;int pdfPage;String fitAxis;File encodedFile;String encodedKey,bodyUrl;android.graphics.Rect region;int targetWidth;String path,inner,identity;boolean preview;Media(String p,String i,boolean t,String id){path=p;inner=i;preview=t;identity=id;}}
-  private static final class Doc {String path;SeekableSource source;ZipArchive epubZip;PdfRenderer pdf;PdfRenderer.Page detailPage;int detailPageIndex=-1;long detailPageUse;int pdfPageCount;final Map<Integer,int[]> pdfSizes=new java.util.concurrent.ConcurrentHashMap<>();boolean closed;File imageDirectory;List<String> chapters=new ArrayList<>();}
+  private static final class Doc {String path;SeekableSource source;ZipArchive epubZip;PdfRenderer pdf;PdfRenderer.Page detailPage;int detailPageIndex=-1;long detailPageUse;int pdfPageCount;final Map<Integer,int[]> pdfSizes=new java.util.concurrent.ConcurrentHashMap<>();boolean closed;File imageDirectory;List<String> chapters=new ArrayList<>();final Map<String,String> epubNavigation=new LinkedHashMap<>();}
   private static final class CoverScan {
     final Deque<Entry> remaining=new ArrayDeque<>();
     final Set<String> visited=new HashSet<>();
@@ -966,7 +966,17 @@ final class LocalLibrary {
       if(opf==null||opf.isEmpty())throw new IOException("EPUB 缺少书目。");
       List<Tag> packageDoc=xml(epubEntry(d,opf,4*1024*1024));Map<String,String> manifest=new HashMap<>();
       boolean fixedLayout=false;for(Tag tag:packageDoc)if(tag.name.equals("meta")&&tag.get("name").equals("fixed-layout")&&tag.get("content").equals("true"))fixedLayout=true;
-      for(Tag item:packageDoc)if(item.name.equals("item"))manifest.put(item.get("id"),resolveZip(opf,item.get("href")));
+      List<Tag> navigationItems=new ArrayList<>();String ncxId="";
+      for(Tag item:packageDoc)if(item.name.equals("spine")){ncxId=item.get("toc");break;}
+      for(Tag item:packageDoc)if(item.name.equals("item")){
+        manifest.put(item.get("id"),resolveZip(opf,item.get("href")));
+        if(Arrays.asList(item.get("properties").split("\\s+")).contains("nav"))navigationItems.add(0,item);
+        else if(item.get("id").equals(ncxId)||item.get("media-type").equals("application/x-dtbncx+xml"))navigationItems.add(item);
+      }
+      for(Tag item:navigationItems){
+        String kind=Arrays.asList(item.get("properties").split("\\s+")).contains("nav")?"nav":"ncx";
+        if(!d.epubNavigation.containsKey(kind))d.epubNavigation.put(kind,manifest.get(item.get("id")));
+      }
       for(Tag item:packageDoc)if(item.name.equals("itemref")){
         if(d.chapters.size()>=5000)throw new IOException("EPUB 章节过多。");
         String entry=manifest.get(item.get("idref"));if(entry!=null){d.chapters.add(entry);chapters.put(new JSONObject().put("name","第 "+d.chapters.size()+" 章").put("index",d.chapters.size()-1).put("fixedLayout",fixedLayout));}
@@ -1072,6 +1082,16 @@ final class LocalLibrary {
     // Sanitization runs in the renderer's detached DOM, before the sandboxed chapter iframe.
     return new JSONObject().put("html",html).put("path",d.path).put("entry",entry).toString();
   }
+  private JSONObject epubNavigation(Doc doc)throws Exception{
+    JSONArray navigation=new JSONArray();
+    for(Map.Entry<String,String> item:doc.epubNavigation.entrySet()){
+      try{
+        byte[] bytes=epubEntry(doc,item.getValue(),1024*1024);
+        navigation.put(new JSONObject().put("path",item.getValue()).put("kind",item.getKey()).put("xml",new String(bytes,StandardCharsets.UTF_8)));
+      }catch(IOException invalidNavigation){/* Still allow reading a book with damaged navigation. */}
+    }
+    return new JSONObject().put("chapters",new JSONArray(doc.chapters)).put("documents",navigation);
+  }
   private void save(AtomicFile target,JSONObject data)throws Exception{
     FileOutputStream out=null;try{out=target.startWrite();out.write(data.toString().getBytes(StandardCharsets.UTF_8));target.finishWrite(out);}catch(Exception e){target.failWrite(out);throw e;}
   }
@@ -1142,6 +1162,7 @@ final class LocalLibrary {
       case "registerDocumentImage":return registerDocumentImage(input);
       case "renderDocumentImage":return documentImageRegion(input);
       case "renderDocumentPage":return nativePdfPage(input);
+      case "readDocumentNavigation":{Doc d=documents.get(input.getString("id"));if(d==null)throw new IOException("文档已关闭。");return epubNavigation(d);}
       case "readDocumentChapter":{Doc d=documents.get(input.getString("id"));if(d==null)throw new IOException("文档已关闭。");return chapter(d,input.getInt("index"));}
       case "epubImage":{String entry=resolveZip(input.getString("entry"),input.getString("href"));if(!image(entry))return null;String path=input.getString("path"),url=registerMedia(path,entry,false);String preview=registerMedia(path,entry,true);Media item;synchronized(media){item=media.get(Uri.parse(url).getLastPathSegment());}ImageAnimation.Info info=animationInfo(item);if(info!=null)return new JSONObject().put("url",url).put("preview",preview).put("animated",true).put("width",info.width).put("height",info.height);return documentImageInfo(url,preview,imageBytes(item));}
       default:throw new IOException("未知本地操作："+method);

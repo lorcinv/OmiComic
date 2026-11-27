@@ -36,9 +36,9 @@ export function sanitizeChapter(html: string, imageBase?: string): string {
   const allowedSource = (source: string) => /^data:image\/(png|jpeg|gif|webp);base64,[a-z\d+/=]+$/i.test(source) || !!(imageBase && source.startsWith(imageBase) && /^[\da-f-]{36}$/.test(source.slice(imageBase.length)));
   return sanitizeHtml(html, {
     allowedTags: ["p", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr", "strong", "em", "b", "i", "u", "s", "blockquote", "pre", "code", "ul", "ol", "li", "dl", "dt", "dd", "table", "thead", "tbody", "tr", "th", "td", "caption", "img", "ruby", "rt", "rp", "sup", "sub"],
-    allowedAttributes: { img: ["src", "alt", "width", "height", "data-omi-animated"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
+    allowedAttributes: { '*': ['data-omi-anchor'], img: ["src", "alt", "width", "height", "data-omi-animated"], td: ["colspan", "rowspan"], th: ["colspan", "rowspan"] },
     allowedSchemes: ["data", "omicomic-image"], allowedSchemesByTag: { img: ["data", "omicomic-image"] }, allowProtocolRelative: false,
-    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...(attrs['data-omi-animated']==='true'?{'data-omi-animated':'true'}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.width||"")?{width:attrs.width}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.height||"")?{height:attrs.height}:{}), ...(allowedSource(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
+    transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { alt: attrs.alt || "", ...(attrs['data-omi-anchor'] ? {'data-omi-anchor': attrs['data-omi-anchor']} : {}), ...(attrs['data-omi-animated']==='true'?{'data-omi-animated':'true'}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.width||"")?{width:attrs.width}:{}), ...(/^[1-9]\d{0,5}$/.test(attrs.height||"")?{height:attrs.height}:{}), ...(allowedSource(attrs.src || "") ? { src: attrs.src } : {} ) } }) },
   });
 }
 async function createBook(filePath: string) {
@@ -76,12 +76,34 @@ async function createBook(filePath: string) {
       return { name: `第 ${index + 1} 章`, index, fixedLayout:list<any>(opf?.metadata?.meta).some(meta=>meta.name==="fixed-layout"&&meta.content==="true"), path: resolveEpubPath(opfPath, resource.href) };
     });
     if (!chapters.length || chapters.length > 10000) throw new Error("EPUB 没有可阅读章节或章节过多。");
+    async function navigation() {
+      const items = [...manifest.values()];
+      const nav = items.find(item => String(item.properties || '').split(/\s+/).includes('nav'));
+      const ncx = manifest.get(String(opf?.spine?.toc)) ?? items.find(item => item['media-type'] === 'application/x-dtbncx+xml');
+      const documents = [];
+      for (const { item, kind } of [{ item: nav, kind: 'nav' }, { item: ncx, kind: 'ncx' }]) {
+        if (!item?.href) continue;
+        try {
+          const target = resolveEpubPath(opfPath, item.href);
+          documents.push({ path: target, kind, xml: (await read(target, 1024 * 1024)).toString('utf8') });
+        } catch { /* A damaged directory must not prevent reading the book. */ }
+      }
+      return { chapters: chapters.map(chapter => chapter.path), documents };
+    }
     async function chapter(index: number) {
       if (!Number.isInteger(index) || index < 0 || index >= chapters.length) throw new Error("章节编号无效。");
       const current = chapters[index];
       let html = (await read(current.path, 4 * 1024 * 1024)).toString("utf8");
       // First sanitize to inert image placeholders; never preserve publisher CSS, URLs, or SVG.
-      html = sanitizeHtml(html, { allowedTags: [...sanitizeHtml.defaults.allowedTags, "img", "ruby", "rt", "rp"], allowedAttributes: { img: ["src", "alt", "width", "height"] }, allowedSchemes: [], allowProtocolRelative: false, transformTags: { img: (_tag, attrs) => ({ tagName: "img", attribs: { src: attrs.src || "", alt: attrs.alt || "" } }), image: (_tag,attrs)=>({tagName:"img",attribs:{src:attrs["xlink:href"]||attrs.href||"",alt:""}}) } });
+      html = sanitizeHtml(html, { allowedTags: [...sanitizeHtml.defaults.allowedTags, "img", "ruby", "rt", "rp"], allowedAttributes: { '*': ['data-omi-anchor'], img: ["src", "alt", "width", "height"] }, allowedSchemes: [], allowProtocolRelative: false, transformTags: {
+        '*': (tagName, attrs) => {
+          const anchor = attrs.id || attrs['xml:id'] || (tagName === 'a' ? attrs.name : undefined);
+          if (anchor && anchor.length <= 512) attrs['data-omi-anchor'] = anchor;
+          return { tagName: tagName === 'a' ? 'span' : tagName, attribs: attrs };
+        },
+        img: (_tag, attrs) => ({ tagName: 'img', attribs: { src: attrs.src || '', alt: attrs.alt || '', id: attrs.id || attrs['xml:id'] || '' } }),
+        image: (_tag, attrs) => ({ tagName: 'img', attribs: { src: attrs['xlink:href'] || attrs.href || '', alt: '', id: attrs.id || attrs['xml:id'] || '' } }),
+      } });
       const replacements = new Map<string, string>(),dimensions=new Map<string,{width:number;height:number;animated:boolean}>(), streamed=new Map<string,EPUBImageReference>(); let bytes = 0, oversized = false;
       for (const match of html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)) {
         const reference = match[1]; if (replacements.has(reference)) continue;
@@ -138,7 +160,7 @@ async function createBook(filePath: string) {
       }
       return null;
     }
-    return { chapters: chapters.map(({ name, index, fixedLayout }) => ({ name, index, fixedLayout })), chapter, cover };
+    return { chapters: chapters.map(({ name, index, fixedLayout }) => ({ name, index, fixedLayout })), chapter, cover, navigation };
   } catch (error) { zip.close(); throw error; }
 }
 if (parentPort) {
@@ -148,7 +170,7 @@ if (parentPort) {
   let queue = Promise.resolve();
   parentPort.on("message", ({ id, method, index }) => {
     queue = queue.then(async () => {
-      try { const source = await book; const data = method === "index" ? source.chapters : method === "cover" ? await source.cover() : await source.chapter(index); parentPort!.postMessage({ id, data }); }
+      try { const source = await book; const data = method === "index" ? source.chapters : method === "cover" ? await source.cover() : method === 'navigation' ? await source.navigation() : await source.chapter(index); parentPort!.postMessage({ id, data }); }
       catch (error) { parentPort!.postMessage({ id, error: error instanceof Error ? error.message : "EPUB 读取失败。" }); }
     });
   });

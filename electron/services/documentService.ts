@@ -77,6 +77,11 @@ export function registerDocumentIpc(findRoot: (filePath: string) => string | nul
     if (!(document instanceof EPUBDocumentSource)) throw new Error("该文档不是 EPUB。");
     return document.request<string>("chapter", index);
   });
+  handle("document:navigation", async (event, id) => {
+    const document = source(event, id);
+    if (!(document instanceof EPUBDocumentSource)) throw new Error("该文档不是 EPUB。");
+    return document.request("navigation");
+  });
   handle("document:close", async (event, requestId) => {
     const id = key(event, requestId); const session = sessions.get(id);
     closedRequests.set(id, Date.now());

@@ -310,6 +310,7 @@ html[data-platform="android"] .mobile-sheet-overlay:not(.is-side-drawer) .mobile
 .mobile-category-row button:last-child { flex:0 0 44px; text-align:center; font-size:calc(22px * var(--desktop-font-scale, 1)); }
 .is-mobile-library button > svg,.reader-layout.is-mobile-reader button > svg { pointer-events:none; }
 .mobile-tree-children > small { display:block; padding:8px 24px; font-size:calc(12px * var(--desktop-font-scale, 1)); color:var(--次文字); }
+.mobile-library-drawer-empty { padding-inline:16px; }
 .mobile-drawer-footer { position:sticky; z-index:2; bottom:0; display:flex; flex-shrink:0; gap:8px; margin-top:auto; padding:12px 12px 8px; border-top:1px solid var(--边框色); background:var(--面板色); }
 .is-side-drawer .mobile-sheet:has(.mobile-drawer-footer) { padding-bottom:0; }
 .mobile-drawer-footer button { flex:1; justify-content:center; text-align:center; min-height:44px; border:1px solid var(--边框色); border-radius:12px; color:var(--主文字); background:var(--控件背景); }

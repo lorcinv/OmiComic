@@ -16,20 +16,20 @@ OmiComic は、ローカルでの高速起動とすっきりした読書体験�
 
 ## ダウンロード
 
-デスクトップ版（Windows・macOS）は **1.2.4**、Android 版は **1.2.3** です。
+Windows・macOS・Android の最新版は **1.2.6** です。
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Setup-1.2.4-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Portable-1.2.4-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.3 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-1.2.3-android.apk) |
-| macOS · Apple Silicon（M シリーズ、arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.zip) |
-| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.zip) |
+| Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Setup-1.2.6-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Portable-1.2.6-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.6 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-android.apk) |
+| macOS · Apple Silicon（M シリーズ、arm64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-arm64.zip) |
+| macOS · Intel（x64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-x64.zip) |
 
 - **Windows**：インストーラー版は EXE を実行します。インストール不要のポータブル版は ZIP をすべて展開し、<code>OmiComic.exe</code> を起動します。
 - **Android**：APK をインストールします。既存のアプリをそのまま更新できます。
 - **macOS**：M シリーズは Apple Silicon、Intel プロセッサーは Intel を選びます。[バージョンの選び方](docs/APPLE.md#mac-download)。現在の配布版は署名・公証を行っていません。[インストールと初回起動](docs/APPLE.md#mac-install)をご確認ください。
 
-Android 版 1.2.3 では、ファイルマネージャーから開いたときにウィンドウが重複し、読書履歴がすぐに反映されない問題を修正しました。 [Android 版の更新内容](docs/releases/v1.2.3.md#android-版) · [デスクトップ版の更新内容](docs/releases/v1.2.4.md) · [バージョン履歴](docs/releases/README.ja.md)。
+「章」パネルは漫画の圧縮ファイル内の章フォルダーと、PDF・EPUB の内蔵目次に対応します。 [更新内容](docs/releases/v1.2.6.md) · [バージョン履歴](docs/releases/README.ja.md)
 
 ## 紹介動画
 
@@ -110,7 +110,7 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 ## macOS 版
 
-Apple Silicon（M シリーズ、arm64）と Intel（x64）に対応します。DMG を開き、OmiComic を「アプリケーション」にドラッグするか、ZIP を展開してアプリを移動します。Windows と同じローカル形式・本棚・読書ツールに加え、標準のウィンドウボタン、Command キー、閉じたウィンドウの Dock からの再表示に対応します。
+Apple Silicon（M シリーズ、arm64）と Intel（x64）に対応します。ZIP を展開し、OmiComic を「アプリケーション」に移動します。Windows と同じローカル形式・本棚・読書ツールに加え、標準のウィンドウボタン、Command キー、閉じたウィンドウの Dock からの再表示に対応します。
 
 現在の配布版は Apple Developer ID による署名・公証を行っていません。[Mac インストール案内](docs/APPLE.md) とアプリ内ガイドの macOS タブで、初回起動、⌘＋K の検索、⌘＋ホイールの拡大縮小などを確認できます。
 

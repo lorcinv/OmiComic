@@ -16,20 +16,20 @@ OmiComic 是一款注重本地高速启动与纯净阅读的 Windows、macOS 与
 
 ## 下载
 
-Windows 和 macOS 桌面版为 **1.2.4**，Android 手机版为 **1.2.3**。
+Windows、macOS 和 Android 最新版均为 **1.2.6**。
 
 | 平台 | 安装包 |
 | --- | --- |
-| Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Setup-1.2.4-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-Portable-1.2.4-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.3 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.3/OmiComic-1.2.3-android.apk) |
-| macOS · Apple Silicon（M 系列，arm64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-arm64.zip) |
-| macOS · Intel（x64） | [DMG](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.dmg) · [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.4/OmiComic-1.2.4-mac-x64.zip) |
+| Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Setup-1.2.6-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Portable-1.2.6-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.6 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-android.apk) |
+| macOS · Apple Silicon（M 系列，arm64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-arm64.zip) |
+| macOS · Intel（x64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-x64.zip) |
 
 - **Windows**：安装版运行 EXE，按提示安装；免安装版完整解压 ZIP 后运行 <code>OmiComic.exe</code>。
 - **Android**：安装 APK，可直接覆盖升级。
 - **macOS**：M 系列选 Apple Silicon，Intel 芯片选 Intel。[如何选择版本](docs/APPLE.md#mac-download) · 当前包未签名、未公证，[安装与首次打开说明](docs/APPLE.md#mac-install)。
 
-Android 1.2.3 修复了从文件管理器打开文件时出现重复窗口、最近阅读不同步的问题。 [安卓更新](docs/releases/v1.2.3.md#android-版) · [桌面更新](docs/releases/v1.2.4.md) · [更新记录](docs/releases/README.md)。
+「章节」支持漫画压缩包的分章文件夹，以及 PDF 和 EPUB 内置目录。 [本次更新](docs/releases/v1.2.6.md) · [版本记录](docs/releases/README.md)
 
 ## 视频演示
 
@@ -110,7 +110,7 @@ https://github.com/user-attachments/assets/fd510975-c555-45ca-9d2b-286f09397135
 
 ## macOS
 
-支持 Apple Silicon（M 系列，arm64）与 Intel（x64）。打开 DMG，将 OmiComic 拖入“应用程序”，或解压 ZIP 后移动应用。提供与 Windows 相同的本地格式、书架、标签和阅读工具，支持原生窗口按钮、Command 快捷键及关闭窗口后从 Dock 重新打开。
+支持 Apple Silicon（M 系列，arm64）与 Intel（x64）。解压 ZIP 后将 OmiComic 拖入“应用程序”。提供与 Windows 相同的本地格式、书架、标签和阅读工具，支持原生窗口按钮、Command 快捷键及关闭窗口后从 Dock 重新打开。
 
 当前发行包没有 Apple 开发者签名与公证。首次打开的处理方式见 [Mac 安装说明](docs/APPLE.md)；内置操作说明可切换到 macOS，查看安装、⌘＋K 搜索、⌘＋滚轮缩放和窗口操作。
 

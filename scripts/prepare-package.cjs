@@ -9,10 +9,15 @@ async function main() {
   await fs.rm(stage, { recursive: true, force: true });
   await fs.mkdir(stage, { recursive: true });
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
-  const desktopVersion = manifest.desktopVersion || manifest.version;
+  const localBuild = process.env.OMI_LOCAL_BUILD_NUMBER;
+  if (localBuild && (!/^[1-9]\d*$/.test(localBuild) || Number(localBuild) > 65535))
+    throw new Error('Local build number must be an integer between 1 and 65535.');
   const config = JSON.parse(await fs.readFile(path.join(root, 'electron-builder.json'), 'utf8'));
-  const desktopBaseVersion = config.buildNumber ? manifest.version : desktopVersion;
-  const windowsVersion = config.buildNumber ? `${desktopBaseVersion}.${config.buildNumber}` : desktopBaseVersion;
+  const buildNumber = localBuild || config.buildNumber;
+  const configuredVersion = manifest.desktopVersion || manifest.version;
+  const desktopBaseVersion = buildNumber ? manifest.version : configuredVersion;
+  const windowsVersion = buildNumber ? `${desktopBaseVersion}.${buildNumber}` : desktopBaseVersion;
+  const desktopVersion = localBuild ? windowsVersion : configuredVersion;
   if (desktopVersion !== windowsVersion) throw new Error('Desktop display version and Windows build number must match.');
   await fs.writeFile(path.join(stage, 'desktop-version.nsh'), `!define OMI_DESKTOP_VERSION "${desktopVersion}"\n`);
   if ((await fs.readdir(path.join(root, 'dist', 'assets'))).some(name => name.startsWith('home-scene-')))
@@ -26,7 +31,7 @@ async function main() {
   await fs.copyFile(path.join(root, 'ASSET_CREDITS.md'), path.join(stage, 'ASSET_CREDITS.md'));
   await fs.writeFile(path.join(stage, 'SOURCE_CODE.txt'),
     `OmiComic ${desktopVersion} source code (GPL-3.0-only)\n` +
-    `https://github.com/lorcinv/OmiComic/releases/tag/v${desktopVersion}\n` +
+    `https://github.com/lorcinv/OmiComic/releases/tag/v${localBuild ? manifest.version : desktopVersion}\n` +
     'Download the Source code (zip) or Source code (tar.gz) archive on that page.\n');
   await fs.cp(path.join(root, 'dist'), path.join(stage, 'dist'), { recursive: true });
   const result = await build({

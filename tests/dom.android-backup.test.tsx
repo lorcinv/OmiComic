@@ -8,6 +8,7 @@ describe('Android backup and temporary directory bridge',()=>{
     const native:NativeCall=async<T,>(method:string,args:any={})=>{
       const result=await(async()=>{switch(method){
         case'loadData':return stored;
+        case'getAppVersion':return '1.2.6.1';
         case'saveData':stored=structuredClone(args.data);return null;
         case'exportBackupFile':document=args.text;exportName=args.filename;return'content://backup/export.json';
         case'readBackupFile':return document;
@@ -20,8 +21,9 @@ describe('Android backup and temporary directory bridge',()=>{
       }})();return result as T;
     };
     const api=await createAndroidApi(native),ref={resourceKey:'archive:/local/book/第一卷.cbz',sourcePath:'/local/book/第一卷.cbz',sourceType:'archive' as const,title:'第一卷.cbz'};
+    expect((await api.getAppInfo()).version).toBe('1.2.6.1');
     await api.updateResourceMeta({...ref,tags:['原标签'],note:'原备注'});
-    expect((await api.exportDataBackup!()).ok).toBe(true);expect(exportName).toMatch(/^OmiComic-Data-android-\d{8}-\d{6}\.json$/);
+    expect((await api.exportDataBackup!()).ok).toBe(true);expect(JSON.parse(document).appVersion).toBe('1.2.6.1');expect(exportName).toMatch(/^OmiComic-Data-android-\d{8}-\d{6}\.json$/);
     await api.updateResourceMeta({...ref,tags:['修改后']});
     const preview=await api.readDataBackup!();if(!preview.ok||!preview.data)throw Error('preview');
     expect((await api.applyDataBackup!('wrong',{mappings:[],mode:'replace',prefer:'imported',includeSettings:false})).ok).toBe(false);

@@ -3,7 +3,7 @@ import type { AppSettings, OmiComicApi, OmiComicAppData, VirtualFolder, VirtualF
 import { updateResourceRecords, withinPath } from "../../electron/services/resourceRecords";
 import { androidNotify, type NativeCall } from "./bridge";
 import { sanitizeAndroidChapter } from "./epub";
-import { version as appVersion } from "../../package.json";
+import { version as packageVersion } from "../../package.json";
 import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
 import { backupFilename, createDataBackup, parseDataBackup, mergeBackup, autoMatchBackupLocations, type DataImportPreview } from '../../electron/shared/dataBackup';
 import { mobileTypography } from '../../electron/shared/desktopTypography';
@@ -45,7 +45,11 @@ const parent = (p: string) => p.slice(0, p.lastIndexOf("/"));
 
 export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi> {
   const platform = "android" as const;
-  const stored = await native<Partial<OmiComicAppData> | null>("loadData");
+  const [stored, installedVersion] = await Promise.all([
+    native<Partial<OmiComicAppData> | null>("loadData"),
+    native<string | null>("getAppVersion").catch(() => null),
+  ]);
+  const appVersion = installedVersion || packageVersion;
   let data: OmiComicAppData = {
     version: 1, library: { roots: [] }, settings: defaults, readingProgress: {}, recentOpened: [],
     temporaryOpened: [], removedRecentResourceKeys: [], favorites: [], bookmarks: [], resourceMeta: {},
@@ -274,6 +278,7 @@ export async function createAndroidApi(native: NativeCall): Promise<OmiComicApi>
     releaseReaderResource: path=>call("releaseReaderResource",{path}),
     setReaderSession: async()=>ok(null),
     openDocument: input=>call("openDocument",input),
+    readDocumentNavigation: id=>call("readDocumentNavigation",{id}),
     registerDocumentImage:(id,data)=>call("registerDocumentImage",{id,data}),
     renderDocumentImage:(url,tile,preview)=>call("renderDocumentImage",{url,tile,preview}),
     renderDocumentPage:(id,index,preview,fitAxis)=>call("renderDocumentPage",{id,index,preview,fitAxis}),

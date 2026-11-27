@@ -68,7 +68,7 @@ export default function MobileLibraryDrawer(p: {
   }
   return <MobileSheet side title={t("资源库")} onClose={p.onClose}>
     <MobileReorderList items={p.roots} itemKey={root => root.path} onReorder={p.onReorder} render={root => row(root.path, root.name, root.path, 0)} />
-    {!p.roots.length && <p>{t("添加漫画目录后即可开始阅读。")}</p>}
+    {!p.roots.length && <p className="mobile-library-drawer-empty">{t("添加漫画目录后即可开始阅读。")}</p>}
     <div className="mobile-drawer-footer"><button onClick={p.onAdd}><MobileIcon name="add"/>{t("添加目录")}</button><button onClick={p.onFile}><MobileIcon name="library"/>{t("打开文件")}</button></div>
   </MobileSheet>;
 }

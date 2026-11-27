@@ -133,6 +133,40 @@ test('desktop settings cover window controls and consume only the outside closin
   await page.mouse.click(x,y);await expect(page.getByRole('textbox',{name:'跳转到页码'})).toHaveValue('1R');
 });
 
+for (const platform of ['win32', 'darwin']) test(`desktop ${platform} sidebars close from the top blank area and the rest of the window`, async ({ page }) => {
+  await fixture(page);
+  await page.evaluate(value => { document.documentElement.dataset.platform = value; }, platform);
+  const layer = page.locator('.reader-sidebar-dismiss-layer');
+  const viewport = page.viewportSize()!;
+  for (const label of ['章节', '阅读设置']) {
+    const toggle = page.getByRole('button', { name: label, exact: true });
+    const sidebar = page.getByRole('dialog', { name: label, exact: true });
+    const x = Math.round(viewport.width / 2);
+    for (const y of [16, Math.round(viewport.height / 2), viewport.height - 12]) {
+      await toggle.click();
+      await expect(sidebar).toBeVisible();
+      expect(await layer.boundingBox()).toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+      const target = await page.evaluate(([px, py]) => {
+        const hit = document.elementFromPoint(px, py);
+        return hit?.matches('.reader-sidebar-dismiss-layer') && getComputedStyle(hit).getPropertyValue('app-region') === 'no-drag';
+      }, [x, y]);
+      expect(target).toBe(true);
+      if (y === 16) {
+        await sidebar.locator('.reader-sidebar-heading').click();
+        await expect(sidebar).toBeVisible();
+      }
+      await page.mouse.click(x, y);
+      await expect(sidebar).toHaveCount(0);
+      await expect(layer).toHaveCount(0);
+      await expect(page.getByRole('textbox', { name: '跳转到页码' })).toHaveValue('1L');
+    }
+    await toggle.click();
+    await page.keyboard.press('Escape');
+    await expect(sidebar).toHaveCount(0);
+    await expect(toggle).toBeFocused();
+  }
+});
+
 test('automatic reading advances through both halves and stops on the final half',async({page})=>{
   await fixture(page);await page.getByRole('button',{name:'开始自动阅读',exact:true}).click();
   const counter=page.getByRole('textbox',{name:'跳转到页码'});

@@ -10,7 +10,7 @@ export const MOBILE_SHEET_MOTION_MS = 180;
 export function dismissMobileSheet(afterClose?: () => void): void {
   window.dispatchEvent(new CustomEvent('omi-mobile-sheet-dismiss', { detail: afterClose }));
 }
-export default function MobileSheet({ title, onClose, beforeClose, children, side = false, showClose = true, showHeading = true, showHandle = true }: { title: string; onClose: () => void; beforeClose?: () => boolean; children: ReactNode; side?: boolean | 'right'; showClose?: boolean; showHeading?: boolean; showHandle?: boolean }) {
+export default function MobileSheet({ title, onClose, beforeClose, children, side = false, showClose = true, showHeading = true, showHandle = true, overlayClassName = '' }: { title: string; onClose: () => void; beforeClose?: () => boolean; children: ReactNode; side?: boolean | 'right'; showClose?: boolean; showHeading?: boolean; showHandle?: boolean; overlayClassName?: string }) {
   const panel = useRef<HTMLElement>(null), backdrop = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   useRememberedScroll(side ? content : panel, `mobile:sheet:${side || 'bottom'}:${title}`);
@@ -145,7 +145,7 @@ export default function MobileSheet({ title, onClose, beforeClose, children, sid
       if(previous?.isConnected)previous.focus({preventScroll:true});
     };
   },[]);
-  return createPortal(<div className={`mobile-sheet-overlay ${side?'is-side-drawer':''} ${side==='right'?'is-right-drawer':''}`} onClick={event=>{if(event.target===event.currentTarget||event.target===backdrop.current){event.preventDefault();event.stopPropagation();if(!closing.current)settle(0);}}}>
+  return createPortal(<div className={`mobile-sheet-overlay ${side?'is-side-drawer':''} ${side==='right'?'is-right-drawer':''} ${overlayClassName}`} onClick={event=>{if(event.target===event.currentTarget||event.target===backdrop.current){event.preventDefault();event.stopPropagation();if(!closing.current)settle(0);}}}>
     <div className="mobile-sheet-backdrop" ref={backdrop} style={{opacity:0}} aria-hidden="true"/>
     <section className={`mobile-sheet${showHeading ? '' : ' is-headingless'}`} ref={panel} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
       {showHandle&&!side&&<div className="mobile-sheet-grab-area" onPointerDown={startHandleDrag} onPointerMove={moveHandleDrag} onPointerUp={event=>endHandleDrag(event)} onPointerCancel={event=>endHandleDrag(event,true)} onLostPointerCapture={event=>{if(event.target===event.currentTarget)endHandleDrag(event,true);}}><div className="mobile-sheet-handle" aria-hidden="true"/></div>}

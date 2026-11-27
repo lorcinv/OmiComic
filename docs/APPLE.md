@@ -1,6 +1,6 @@
 # macOS
 
-[下载 OmiComic 1.2.4](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.4) · [中文操作说明](USER_GUIDE.zh-CN.md) · [English guide](USER_GUIDE.en.md) · [日本語ガイド](USER_GUIDE.ja.md)
+[下载 OmiComic 1.2.6](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.6) · [中文操作说明](USER_GUIDE.zh-CN.md) · [English guide](USER_GUIDE.en.md) · [日本語ガイド](USER_GUIDE.ja.md)
 
 ## macOS 安装
 
@@ -15,17 +15,17 @@
 | Apple M 系列芯片 | Apple Silicon · 文件名含 `mac-arm64` |
 | Intel 处理器 | Intel · 文件名含 `mac-x64` |
 
-不确定芯片类型时，可参考 [Apple 的识别说明](https://support.apple.com/zh-cn/116943)。同一架构的 DMG 与 ZIP 包含相同的应用，选择一种即可。
+不确定芯片类型时，可参考 [Apple 的识别说明](https://support.apple.com/zh-cn/116943)。当前版本提供 ZIP。
 
-English: in Apple menu → About This Mac, check Chip or Processor. Choose `mac-arm64` for Apple M-series chips or `mac-x64` for Intel. DMG and ZIP contain the same app.
+English: in Apple menu → About This Mac, check Chip or Processor. Choose `mac-arm64` for Apple M-series chips or `mac-x64` for Intel. The current release is distributed as ZIP files.
 
-日本語：Apple メニュー →「この Mac について」でチップまたはプロセッサーを確認します。Apple M シリーズは `mac-arm64`、Intel は `mac-x64` を選びます。同じアーキテクチャの DMG と ZIP に含まれるアプリは同じです。
+日本語：Apple メニュー →「この Mac について」でチップまたはプロセッサーを確認します。Apple M シリーズは `mac-arm64`、Intel は `mac-x64` を選びます。最新版は ZIP 形式で配布しています。
 
 <a id="mac-install"></a>
 
 ### 安装与首次打开
 
-打开 DMG 后将 OmiComic 拖入“应用程序”；ZIP 解压后同样移动 `OmiComic.app`。
+解压 ZIP，将 `OmiComic.app` 拖入「应用程序」。
 
 当前包没有 Apple Developer ID 签名与公证。确认下载来自本仓库的 Release 后，若提示无法验证开发者或未公证，可先尝试打开，再进入“系统设置 → 隐私与安全性 → 仍要打开”。具体提示和操作见 [Apple 官方说明](https://support.apple.com/en-us/102445)。
 

@@ -52,6 +52,29 @@ test('rejects corrupt, unsupported, incomplete and prototype-bearing backups bef
   assert.throws(() => backup.parseDataBackup(JSON.stringify(missing)), /不完整/);
 });
 
+test('imports backups with omitted or null optional fields without losing book records', async t => {
+  const f = await fixture(t), { data, ref } = populate(f.data);
+  const legacy = backup.createDataBackup(data, 'android', '1.1.78');
+  delete legacy.data.temporaryOpened;
+  delete legacy.data.library.roots[0].lastOpenedAt;
+  legacy.data.bookmarks[0].note = null;
+  legacy.data.bookmarks[0].tags = null;
+  legacy.data.virtualFolders[0].tags = null;
+  delete legacy.data.virtualFolders[0].note;
+  delete legacy.data.settings.confirmBeforeBatchDelete;
+  const parsed = backup.parseDataBackup(JSON.stringify(legacy));
+  assert.equal(parsed.data.library.roots[0].lastOpenedAt, data.library.roots[0].addedAt);
+  assert.deepEqual(parsed.data.temporaryOpened, []);
+  assert.equal(parsed.data.bookmarks[0].note, '');
+  assert.equal(parsed.data.bookmarks[0].pageId, data.bookmarks[0].pageId);
+  assert.equal(parsed.data.virtualFolders[0].note, '');
+  assert.deepEqual(parsed.data.virtualFolders[0].tags, []);
+  assert.deepEqual(parsed.data.virtualFolders[0].items, data.virtualFolders[0].items);
+  const merged = backup.mergeBackup(f.data, parsed, { ...options([]), includeSettings: true }, 'android');
+  assert.equal(merged.readingProgress[ref.resourceKey].currentPageIndex, 4);
+  assert.deepEqual(merged.settings.confirmBeforeBatchDelete, f.data.settings.confirmBeforeBatchDelete);
+});
+
 test('Windows to Android mapping updates all book references and stable page identities, without mutating the backup', async t => {
   const f = await fixture(t), { data, ref } = populate(f.data), out = backup.createDataBackup(data, 'win', '1.1.76');
   const original = structuredClone(out), target = '/local/granted/漫画', next = backup.remapBackup(out, options([{ from: 'D:\\Comics', to: target }]), 'android');

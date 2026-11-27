@@ -75,7 +75,7 @@ npm run dist:android
 
 脚本使用 Android 官方 aapt、d8、zipalign、apksigner 编译和签名，不依赖 Android Studio 或 Gradle。当前仓库下载的 SDK 也可从 `.cache/android-tools` 使用。输出文件为 `release/OmiComic-<版本>-android.apk`。PNGJ 2.1.0 以固定 SHA-256 校验后编入 APK，许可证随包附带。
 
-`package.json` 中的 `version` 是安卓版显示的版本号。`android/AndroidManifest.xml` 中的 `android:versionCode` 用于覆盖升级，每次发布 APK 时递增。
+`package.json` 中的 `version` 是安卓版显示的版本号。打包脚本用正式版本号计算 `versionCode`。本地试装后缀只改变显示版本号，便于覆盖回同版本的正式包。
 
 `android/dependencies.json` 固定 Maven Central 原生依赖版本和 SHA-256。构建会核验 AAR、原生 ELF 对齐，使用项目 7-Zip 以 ZIP Store 方式加入原生库，再执行 16 KB zipalign 和签名。不会将 Windows 7-Zip 或 RAR 工具打入 APK。
 

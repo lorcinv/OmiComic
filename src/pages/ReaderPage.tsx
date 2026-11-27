@@ -1,4 +1,6 @@
 import ReaderDisplaySidebar from '../components/ReaderDisplaySidebar';
+import ReaderOutlineSidebar from '../components/ReaderOutlineSidebar';
+import type { ReaderOutlineEntry } from '../reader/readerOutline';
 import '../styles/readerSplit.css';
 import ReaderPageCrop from '../components/ReaderPageCrop';
 import { adjacentSplitPosition, splitHalf, splitPart, splitIdentity, parseSplitIdentity, SPLIT_WIDE_RATIO, type SplitPart } from '../../electron/shared/splitPages';
@@ -13,7 +15,7 @@ import { abortable } from '../reader/abortable';
 import useMobileReaderAutoHide from '../hooks/useMobileReaderAutoHide';
 import { tr, t } from '../i18n';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import type {
   CSSProperties,
   PointerEvent as ReactPointerEvent,
@@ -367,6 +369,7 @@ function ReaderPage({
   const 手机布局 = useMobileLayout();
   const [手机工具栏可见, 设置手机工具栏可见] = useState(false);
   const [手机阅读设置打开, 设置手机阅读设置打开] = useState(false);
+  const [章节侧栏打开, 设置章节侧栏打开] = useState(false);
   const [手机页面预览打开, 设置手机页面预览打开] = useState(false);
   const { resource, source: 文档源, loading: 文档加载中, error: 文档错误 } = useReaderDocument(输入资源,initialPageIndex,isAndroid()&&输入资源?.sourceType==='epub'&&(!interactive||entryPending));
   // The manifest already carries settings and saved progress. Use them for the
@@ -1355,13 +1358,13 @@ function ReaderPage({
   },[显示页组索引.join('|'),显示拆分半边]);
   useEffect(()=>{手机滑页.cancel();},[resource?.resourceKey]);
   useMobileReaderAutoHide(手机布局 && isActive && interactive, 手机工具栏可见, 阅读器设置.mobileReaderAutoHide !== false,
-    手机阅读设置打开 || 手机页面预览打开 || 进度拖动比例 !== null || 阅读视图初始化中, () => 设置手机工具栏可见(false));
+    手机阅读设置打开 || 章节侧栏打开 || 手机页面预览打开 || 进度拖动比例 !== null || 阅读视图初始化中, () => 设置手机工具栏可见(false));
   useLayoutEffect(()=>{
     // Preparation still belongs to the outgoing library. Do not resize/hide its
     // status bar while the saved page is being decoded behind the snapshot.
     const active=isActive&&interactive;
-    if(isAndroid())void window.omicomic.setReaderChrome?.(Boolean(active&&!手机工具栏可见&&!手机阅读设置打开&&!手机页面预览打开),active,全景模式);
-  },[isActive,interactive,手机工具栏可见,手机阅读设置打开,手机页面预览打开,全景模式]);
+    if(isAndroid())void window.omicomic.setReaderChrome?.(Boolean(active&&!手机工具栏可见&&!手机阅读设置打开&&!章节侧栏打开&&!手机页面预览打开),active,全景模式);
+  },[isActive,interactive,手机工具栏可见,手机阅读设置打开,章节侧栏打开,手机页面预览打开,全景模式]);
   useLayoutEffect(()=>()=>{if(isAndroid())void window.omicomic.setReaderChrome?.(false,false);},[]);
   useEffect(() => {
     if(!手机布局 || !手机页面预览打开 || !手机工具栏可见)return;
@@ -3332,6 +3335,7 @@ function ReaderPage({
     设置拆分宽页(初始阅读状态.视图.splitWidePages === true);
     设置拆页位置({[起始索引]:splitPart(初始阅读状态.视图.splitPageHalf,初始阅读状态.视图.pageDirection==='right-to-left')});
     设置桌面阅读设置打开(false);
+    设置章节侧栏打开(false);
     设置双页配对起点(初始阅读状态.配对起点);
     设置阅读流向(初始阅读状态.视图.flow);
     设置缩放模式(初始阅读状态.视图.fitMode);
@@ -4265,10 +4269,19 @@ function ReaderPage({
   }
   const 工具面板打开 = useRef(false);
   useEffect(()=>{
-    阅读面板打开.current=桌面阅读设置打开||工具面板打开.current;
-    if(桌面阅读设置打开){自动阅读.pause();清理顶部栏隐藏定时器();设置顶部栏可见(true);}
+    阅读面板打开.current=桌面阅读设置打开||章节侧栏打开||工具面板打开.current;
+    if(桌面阅读设置打开||章节侧栏打开){自动阅读.pause();清理顶部栏隐藏定时器();设置顶部栏可见(true);}
     else 安排顶部栏隐藏();
-  },[桌面阅读设置打开]);
+  },[桌面阅读设置打开,章节侧栏打开]);
+
+  async function 跳转到目录项(index: number, entry?: ReaderOutlineEntry) {
+    const resourceKey = resource?.resourceKey;
+    if (entry && 'chapter' in entry.target && 文档源) {
+      try { index = await 文档源.resolveOutlinePage(entry.target); }
+      catch { return; }
+    }
+    if (resourceKey && 资源Key引用.current === resourceKey) await 跳转到页面索引(index, 0, true);
+  }
 
   function 渲染书签按钮(附加类名: string) {
     return (
@@ -4304,7 +4317,7 @@ function ReaderPage({
     if (Number.isInteger(next)) void 切换模式2页面(next,'slide');
     else { 实时拖动阅读比例(next/Math.max(1,总页数-1)); 提交模式2自由位置(); }
   }
-  useReaderVolumeKeys(Boolean(isActive && interactive && 阅读器设置.readerVolumeKeys && !阅读视图初始化中 && !手机阅读设置打开), Boolean(阅读器设置.readerVolumeKeysReversed), () => 音量翻页(-1), () => 音量翻页(1));
+  useReaderVolumeKeys(Boolean(isActive && interactive && 阅读器设置.readerVolumeKeys && !阅读视图初始化中 && !手机阅读设置打开 && !章节侧栏打开), Boolean(阅读器设置.readerVolumeKeysReversed), () => 音量翻页(-1), () => 音量翻页(1));
 
   async function 保存音量键设置(patch: Pick<Partial<AppSettings>, 'readerVolumeKeys' | 'readerVolumeKeysReversed' | 'readerVolumePanoramaPages' | 'mobileReaderPreviews' | 'mobilePreviewWidth' | 'mobilePanoramaTapPaging' | 'mobileReaderDoubleTapZoom'>) {
     const result = await window.omicomic.updateSettings(patch);
@@ -4324,7 +4337,12 @@ function ReaderPage({
       style={!resource?.readerInit && 阅读视图初始化中 && !错误信息 && !文档错误 ? { visibility: "hidden" } : undefined}
     >
       <GammaFilter id={伽马滤镜Id} gamma={画面调整.gamma} />
+      {!手机布局 && isActive && (桌面阅读设置打开 || (章节侧栏打开 && resource)) && createPortal(
+        <div className="reader-sidebar-dismiss-layer" aria-hidden="true" />, document.body,
+      )}
       {!手机布局 && <ReaderDisplaySidebar open={桌面阅读设置打开&&isActive} onClose={()=>设置桌面阅读设置打开(false)} fitMode={全景模式?垂直阅读?'fit-width':'fit-height':缩放模式} onFit={选择缩放模式} fitDisabled={阅读视图初始化中||全景模式} adjustments={画面调整} onAdjustments={调整画面} epub={resource?.sourceType==='epub'||resource?.sourceType==='mobi'} splitControl={渲染拆页按钮()}/>}
+      {章节侧栏打开 && isActive && resource && <ReaderOutlineSidebar key={resource.resourceKey} mobile={手机布局}
+        resource={resource} source={文档源} currentPage={安全索引} onClose={() => 设置章节侧栏打开(false)} onJump={(index, entry) => void 跳转到目录项(index, entry)} />}
       {进度保存错误 && <div className="document-save-error" role="alert">{t(进度保存错误 ?? '')}<button aria-label={t("关闭进度提示")} onClick={() => 设置进度保存错误(null)}>×</button></div>}
       {可隐藏工具栏 && !手机布局 && (
         <>
@@ -4353,6 +4371,11 @@ function ReaderPage({
             <ArrowIcon direction="left" />
             <span>{t("返回")}</span>
           </button>}
+          <button className="reader-bookmark-button reader-outline-toggle" type="button" data-reader-outline
+            aria-label={t('章节')} title={t('章节')} aria-haspopup="dialog" aria-expanded={章节侧栏打开}
+            disabled={阅读视图初始化中 || !resource?.total} onClick={() => 设置章节侧栏打开(value => !value)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
           {渲染书签按钮("is-toolbar-bookmark")}
         </div>
         {手机布局 && <><strong className="mobile-reader-title">{resource?.title ?? ""}</strong><button className="mobile-reader-more" aria-label={t("阅读设置")} aria-haspopup="dialog" onClick={() => { 设置手机阅读设置打开(true); }}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button></>}
@@ -4470,7 +4493,7 @@ function ReaderPage({
               if (手机布局) { 设置手机阅读设置打开(false); 设置手机工具栏可见(false); }
               自动阅读.toggle();
             }}
-            onPanel={open => { 工具面板打开.current=open; 阅读面板打开.current = open||桌面阅读设置打开; if (open) { if(!手机布局)自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
+            onPanel={open => { 工具面板打开.current=open; 阅读面板打开.current = open||桌面阅读设置打开||章节侧栏打开; if (open) { if(!手机布局)自动阅读.pause(); 清理顶部栏隐藏定时器(); 设置顶部栏可见(true); } else 安排顶部栏隐藏(); }} />
           {isAndroid() && <div className="mobile-volume-settings">
             <label className="settings-toggle"><input type="checkbox" checked={阅读器设置.mobileReaderDoubleTapZoom !== false} onChange={event => void 保存音量键设置({mobileReaderDoubleTapZoom:event.target.checked})}/><span>{t("双击放大画面")}</span></label>
             <label className="settings-toggle"><input type="checkbox" checked={Boolean(阅读器设置.readerVolumeKeys)} onChange={event => void 保存音量键设置({ readerVolumeKeys: event.target.checked })}/><span>{t("音量键翻页")}</span></label>

@@ -180,6 +180,7 @@ public final class MainActivity extends Activity {
               JSONObject input=new JSONObject(msg.getData());
               int id=input.getInt("id"); String method=input.getString("method");JSONObject args=input.optJSONObject("args");
               if(args==null)args=new JSONObject();
+              if(method.equals("getAppVersion")){reply(id,getPackageManager().getPackageInfo(getPackageName(),0).versionName,null);return;}
               if(method.equals("finishLaunch")){final boolean animated=args.optBoolean("animated",true);web.postVisualStateCallback(id,new WebView.VisualStateCallback(){@Override public void onComplete(long ignored){revealLaunch(animated);reply(id,true,null);}});return;}
               if(method.equals("readerConfigure")){readerSurface.configure(args);if(id!=0)reply(id,true,null);return;}
               if(method.equals("readerFrame")){readerSurface.frame(args);return;}

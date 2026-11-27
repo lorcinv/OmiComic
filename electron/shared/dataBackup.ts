@@ -31,10 +31,17 @@ export function parseDataBackup(raw: string): DataBackup {
   if (!text(value.platform) || !text(value.appVersion) || !text(value.exportedAt) || !Number.isFinite(Date.parse(value.exportedAt))) fail();
   const d = value.data;
   if (!object(d) || d.version !== 1 || !object(d.settings) || !object(d.library) || !Array.isArray(d.library.roots)) fail();
-  for (const root of d.library.roots) if (!object(root) || !text(root.path) || !root.path || !text(root.name) || !Number.isFinite(root.addedAt) || !Number.isFinite(root.lastOpenedAt)) fail();
+  for (const root of d.library.roots) {
+    if (!object(root) || !text(root.path) || !root.path || !text(root.name) || !Number.isFinite(root.addedAt)) fail();
+    root.lastOpenedAt ??= root.addedAt;
+    if (!Number.isFinite(root.lastOpenedAt)) fail();
+  }
+  d.temporaryOpened ??= [];
   const record = (r: unknown) => {
     if (!object(r) || !text(r.resourceKey) || !r.resourceKey || !text(r.sourcePath) || !r.sourcePath || !text(r.title)
       || !['folder', 'image', 'archive', 'pdf', 'epub', 'mobi', 'unknown'].includes(String(r.sourceType))) fail();
+    if (r.tags === null) r.tags = [];
+    if (r.note === null) r.note = '';
     if (r.tags !== undefined && (!Array.isArray(r.tags) || !r.tags.every(text))) fail();
     if (r.note !== undefined && !text(r.note)) fail();
   };
@@ -54,11 +61,17 @@ export function parseDataBackup(raw: string): DataBackup {
   for (const shelf of d.bookshelves) { if (!object(shelf) || !text(shelf.id) || !shelf.id || ids.has(shelf.id) || !text(shelf.name)) fail(); ids.add(shelf.id); }
   ids.clear();
   for (const folder of d.virtualFolders) {
-    if (!object(folder) || !text(folder.id) || !folder.id || ids.has(folder.id) || !text(folder.bookshelfId) || !text(folder.name) || !Array.isArray(folder.items) || !Array.isArray(folder.tags) || !folder.tags.every(text) || !text(folder.note)) fail();
+    if (!object(folder) || !text(folder.id) || !folder.id || ids.has(folder.id) || !text(folder.bookshelfId) || !text(folder.name) || !Array.isArray(folder.items)) fail();
+    folder.tags ??= [];
+    folder.note ??= '';
+    if (!Array.isArray(folder.tags) || !folder.tags.every(text) || !text(folder.note)) fail();
     ids.add(folder.id); for (const item of folder.items) record(item);
   }
   const settings = d.settings;
-  if (!['mist', 'nord', 'sand', 'night'].includes(String(settings.colorTheme)) || !object(settings.confirmBeforeBatchDelete)) fail();
+  if (settings.colorTheme === null) delete settings.colorTheme;
+  if (settings.confirmBeforeBatchDelete === null) delete settings.confirmBeforeBatchDelete;
+  if (settings.colorTheme !== undefined && !['mist', 'nord', 'sand', 'night'].includes(String(settings.colorTheme))) fail();
+  if (settings.confirmBeforeBatchDelete !== undefined && !object(settings.confirmBeforeBatchDelete)) fail();
   const copy = createDataBackup(d as unknown as OmiComicAppData, value.platform, value.appVersion, new Date(value.exportedAt));
   return copy;
 }

@@ -2576,6 +2576,10 @@ export const messages: Record<string, readonly [string, string]> = {
     "Chapter",
     "章"
   ],
+  "第 {0} 页": [
+    "Page {0}",
+    "{0} ページ"
+  ],
   "正在显示调整效果": [
     "Showing adjustments",
     "調整後の表示"

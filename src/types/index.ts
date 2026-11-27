@@ -301,6 +301,11 @@ export interface 阅读页面项 {
   type: 阅读页类型;
 }
 
+export interface EpubNavigation {
+  chapters: string[];
+  documents: { path: string; kind: 'nav' | 'ncx'; xml: string }[];
+}
+
 export interface 阅读资源结果 {
   readerInit?: { settings: AppSettings; progress: ReadingProgress | null };
   requestedPageId?: string;
@@ -433,6 +438,7 @@ export interface OmiComicApi {
   renderDocumentPage?(id:string,index:number,preview:boolean,fitAxis?:'width'|'height'):Promise<操作结果<{url:string;width:number;height:number}>>;
   readDocumentRange(id: string, begin: number, end: number): Promise<操作结果<Uint8Array>>;
   readDocumentChapter(id: string, index: number): Promise<操作结果<string>>;
+  readDocumentNavigation?(id: string): Promise<操作结果<EpubNavigation>>;
   closeDocument(id: string): Promise<操作结果<null>>;
   getAppInfo(): Promise<应用信息>;
   getAppData(): Promise<操作结果<OmiComicAppData>>;

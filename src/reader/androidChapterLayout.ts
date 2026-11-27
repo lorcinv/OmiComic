@@ -31,7 +31,7 @@ export function countAndroidTextPages(html:string,signal:AbortSignal):Promise<nu
   });
 }
 
-export interface ChapterPages {pages:string[];previews:string[];bytes?:()=>number;dispose?:()=>void}
+export interface ChapterPages {pages:string[];previews:string[];anchors?:Map<string,number>;bytes?:()=>number;dispose?:()=>void}
 /** Paginate one chapter once; visible pages keep only their own DOM fragment. */
 export async function paginateChapter(input:string,signal:AbortSignal,presentation:ReturnType<typeof androidChapterPresentation>=androidChapterPresentation(input)):Promise<ChapterPages>{
   if(presentation.image)return{pages:[input],previews:['']};
@@ -83,6 +83,14 @@ export async function paginateChapter(input:string,signal:AbortSignal,presentati
       }
       const points=[...starts.entries()].sort((a,b)=>a[0]-b[0]);
       if(!points.length){done(undefined,{pages:[presentation.html],previews:['']});return;}
+      const anchors = new Map<string, number>();
+      const columns = new Map(points.map(([col], index) => [col, index]));
+      for (const element of flow.querySelectorAll<HTMLElement>('[data-omi-anchor]')) {
+        const anchor = element.dataset.omiAnchor;
+        if (!anchor || anchors.has(anchor) || !element.getClientRects().length) continue;
+        anchors.set(anchor, columns.get(column(element.getBoundingClientRect().left)) ?? 0);
+        if (anchors.size >= 2000) break;
+      }
       const pageCache=new Map<number,string>(),previewCache=new Map<number,string>();
       const makePage=(n:number)=>{
         const cached=pageCache.get(n);if(cached)return cached;
@@ -101,7 +109,7 @@ export async function paginateChapter(input:string,signal:AbortSignal,presentati
       };
       const pages=new Proxy(new Array<string>(points.length),{has(target,key){return typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length||Reflect.has(target,key);},get(target,key,receiver){if(typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length)return makePage(Number(key));return Reflect.get(target,key,receiver);}});
       const previews=new Proxy(new Array<string>(points.length),{has(target,key){return typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length||Reflect.has(target,key);},get(target,key,receiver){if(typeof key==='string'&&/^\d+$/.test(key)&&Number(key)<target.length){makePage(Number(key));return previewCache.get(Number(key))??'';}return Reflect.get(target,key,receiver);}});
-      done(undefined,{pages,previews,bytes:()=>input.length*4+[...pageCache.values()].reduce((n,p)=>n+p.length*2,0),dispose:()=>{pageCache.clear();previewCache.clear();points.length=0;while(flow.firstChild)flow.removeChild(flow.firstChild);}});
+      done(undefined,{pages,previews,anchors,bytes:()=>input.length*4+[...pageCache.values()].reduce((n,p)=>n+p.length*2,0),dispose:()=>{pageCache.clear();previewCache.clear();points.length=0;while(flow.firstChild)flow.removeChild(flow.firstChild);}});
     })().catch(done);};
     frame.srcdoc=presentation.html;document.body.append(frame);
   });

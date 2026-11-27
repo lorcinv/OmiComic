@@ -232,6 +232,16 @@ In horizontal reading, click the left 40% or right 40% of the reading area, incl
 </details>
 
 <details>
+<summary>How do I organize chapters into folders?</summary>
+
+Select Chapters next to the bookmark icon in the reader toolbar. When chapters are available, each row shows the chapter title on the left and its starting page on the right. The page list shows the padded code (001, 002, 003) on the left and the page position (1, 2, 3) on the right.
+
+- **Comic archives**: Put each chapter’s images in a separate sibling folder inside one archive. For example, Comic.cbz can contain 01 First chapter/001.jpg and 02 Second chapter/001.jpg. Folder names become chapter titles. Prefix them with 01, 02 and so on to set the order. A shared book folder inside the archive is fine. Individual image folders in the library open as separate comics.
+- **PDF and EPUB**: PDF uses the file’s embedded bookmarks that link to pages. To add chapters, use a PDF editor to create bookmarks pointing to each chapter’s first page, save, and reopen the file. EPUB uses its embedded navigation. A PDF with only a printed or scanned contents page shows the page list.
+
+</details>
+
+<details>
 <summary>How do EPUB and MOBI navigation work?</summary>
 
 EPUB and MOBI progress is chapter-based. Use Previous/Next and the progress bar to switch chapters, then scroll within each chapter. Image-only EPUB chapters add no text margins or separate page number; text chapters keep normal reading margins. MOBI currently uses a format placeholder cover. See supported formats for the limits of DRM-free MOBI (traditional, KF8 and dual-format).

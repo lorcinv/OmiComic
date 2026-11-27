@@ -357,6 +357,7 @@ contextBridge.exposeInMainWorld("omicomic", {
   setDocumentPurpose:(id:string,purpose:"reader"|"thumbnail")=>ipcRenderer.invoke("document:purpose",id,purpose),
   openDocument: (input: { path: string; type: "pdf" | "epub" | "mobi"; id: string; purpose?: "reader" | "thumbnail" }) => ipcRenderer.invoke("document:open", input),
   readDocumentRange: (id: string, begin: number, end: number) => ipcRenderer.invoke("document:range", id, begin, end),
+  readDocumentNavigation: (id: string) => ipcRenderer.invoke("document:navigation", id),
   readDocumentChapter: (id: string, index: number) => ipcRenderer.invoke("document:chapter", id, index),
   closeDocument: (id: string) => ipcRenderer.invoke("document:close", id),
   setReaderPageSort: (input: { path: string; type: 阅读资源类型; mode: PageSort; currentPageId: string }) => ipcRenderer.invoke("阅读:页面排序", input),
