@@ -33,7 +33,7 @@ Windows・macOS・Android の最新版は **1.2.7** です。
 - **macOS**：M シリーズは Apple Silicon、Intel プロセッサーは Intel を選びます（[バージョンの選び方](docs/APPLE.md#mac-download)）。配布版は未署名・未公証のため、初回起動は [インストール案内](docs/APPLE.md#mac-install) をご確認ください。
 
 > [!TIP]
-> **1.2.7 の主な更新**：画像フォルダーで、中国語・日本語・英語のファイル名の先頭部分から章を認識できます。ページ順はこれまでどおりです。[更新内容](docs/releases/v1.2.7.md) · [サンプル画像](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [バージョン履歴](docs/releases/README.ja.md)
+> **1.2.7 の主な更新**：画像フォルダーで、中国語・日本語・英語のファイル名の先頭部分から章を認識できます。ページ順はこれまでどおりです。Android のサムネイルプレビューの幅は既定で 120 px です。[更新内容](docs/releases/v1.2.7.md) · [サンプル画像](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [バージョン履歴](docs/releases/README.ja.md)
 
 ## 紹介動画
 

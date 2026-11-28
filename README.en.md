@@ -33,7 +33,7 @@ Version **1.2.7** is available for Windows, macOS and Android.
 - **macOS**: choose Apple Silicon for M-series chips or Intel for Intel processors ([choose your version](docs/APPLE.md#mac-download)); packages are unsigned and not notarized—see [installation and first launch](docs/APPLE.md#mac-install).
 
 > [!TIP]
-> **What's new in 1.2.7**: The Chapters panel now finds chapters in image folders from Chinese, Japanese or English filename prefixes, preserving the current page order. [Release notes](docs/releases/v1.2.7.md) · [Sample images](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [Version history](docs/releases/README.en.md)
+> **What's new in 1.2.7**: The Chapters panel now finds chapters in image folders from Chinese, Japanese or English filename prefixes, preserving the current page order. Android thumbnail previews now default to 120 px. [Release notes](docs/releases/v1.2.7.md) · [Sample images](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [Version history](docs/releases/README.en.md)
 
 ## Video demo
 

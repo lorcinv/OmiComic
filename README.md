@@ -33,7 +33,7 @@ Windows、macOS、Android 最新版均为 **1.2.7**。
 - **macOS**：M 系列选 Apple Silicon，Intel 芯片选 Intel（[如何选择版本](docs/APPLE.md#mac-download)）；安装包未签名和公证，首次打开见 [安装说明](docs/APPLE.md#mac-install)。
 
 > [!TIP]
-> **1.2.7 更新亮点**：普通图片文件夹可按中、日、英文文件名前缀分章，沿用原有翻页顺序。[本次更新](docs/releases/v1.2.7.md) · [试读样本](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [版本记录](docs/releases/README.md)
+> **1.2.7 更新亮点**：普通图片文件夹可按中、日、英文文件名前缀分章，沿用原有翻页顺序。Android 缩略预览默认行宽为 120 px。[本次更新](docs/releases/v1.2.7.md) · [试读样本](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [版本记录](docs/releases/README.md)
 
 ## 视频演示
 
