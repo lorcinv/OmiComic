@@ -2,10 +2,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ReaderOutlineSidebar from '../src/components/ReaderOutlineSidebar';
 import type { DocumentSource } from '../src/reader/documentSource';
-import { epubOutline, imageOutline, pdfOutline, readerPageCode } from '../src/reader/readerOutline';
+import { epubOutline, folderFilenameOutline, imageOutline, pdfOutline, readerPageCode } from '../src/reader/readerOutline';
 import type { 阅读资源结果 } from '../src/types';
 
-function book(names: string[], type: 'archive' | 'folder' = 'archive'): 阅读资源结果 {
+function book(names: string[], type: 'archive' | 'folder' | 'image' = 'archive'): 阅读资源结果 {
   return {
     sourcePath: '/comics/test', resourceKey: 'test', key: 'test', title: 'Test',
     sourceType: type, total: names.length,
@@ -21,6 +21,42 @@ describe('reader outline', () => {
       { title: '第02话', depth: 0, target: { page: 2 } },
     ]);
     expect(imageOutline(book(['Book/001.jpg', 'Book/002.jpg']).pages)).toEqual([]);
+  });
+
+  it.each([
+    ['第一话', '第二话'], ['第01章', '第02章'], ['第01話', '第02話'],
+    ['Chapter 01', 'Chapter 02'], ['Episode 11', 'Episode 101'],
+  ])('reads %s and %s from folder filenames in the supplied reading order', (first, second) => {
+    const resource = book(['000.jpg', second + '-001.jpg', second + '-002.jpg', first + '-001.png'], 'folder');
+    expect(folderFilenameOutline(resource.pages)).toEqual([
+      { title: second, depth: 0, target: { page: 1 } },
+      { title: first, depth: 0, target: { page: 3 } },
+    ]);
+  });
+
+  it.each([
+    ['001.jpg', '002.jpg', '卷3-001.jpg', '2026-01.jpg'],
+    ['Chapter 1-001.jpg', 'chapter 01-002.jpg'],
+    ['第01话-001.jpg', '第02话-001.jpg', '第01话-002.jpg'],
+    ['漫画 Chapter 01-001.jpg', '漫画 Chapter 02-001.jpg'],
+  ].map(names => [names]))('keeps a page list for names without clear chapter boundaries', (names) => {
+    expect(folderFilenameOutline(book(names, 'folder').pages)).toEqual([]);
+  });
+
+  it.each(['folder', 'image'] as const)('jumps to a filename chapter from a %s entry point', (type) => {
+    const resource = book(['第01话-001.jpg', '第01话-002.jpg', '第02话-001.jpg'], type);
+    const onJump = vi.fn();
+    render(<ReaderOutlineSidebar mobile={false} resource={resource} currentPage={0} onClose={vi.fn()} onJump={onJump} />);
+    const dialog = within(screen.getByRole('dialog', { name: '章节' }));
+    expect(dialog.getAllByRole('button')).toHaveLength(2);
+    fireEvent.click(dialog.getByRole('button', { name: '第02话 第 3 页' }));
+    expect(onJump).toHaveBeenCalledWith(2, { title: '第02话', depth: 0, target: { page: 2 } });
+  });
+
+  it('keeps the original archive outline rules for flat image names', () => {
+    const resource = book(['第01话-001.jpg', '第02话-001.jpg']);
+    render(<ReaderOutlineSidebar mobile={false} resource={resource} currentPage={0} onClose={vi.fn()} onJump={vi.fn()} />);
+    expect(within(screen.getByRole('dialog', { name: '章节' })).getByRole('button', { name: '001 1' })).toBeTruthy();
   });
 
   it('resolves EPUB 3 nested entries and percent-encoded anchors', () => {

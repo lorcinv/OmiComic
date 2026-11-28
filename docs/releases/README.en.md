@@ -2,12 +2,13 @@
 
 # Release history
 
-Version **1.2.6** is available for Windows, macOS and Android. [Release notes](v1.2.6.md)
+Version **1.2.7** is available for Windows, macOS and Android. [Release notes](v1.2.7.md)
 
-[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.6)
+[Get the latest version](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.7)
 
 | Version | Platform | Release |
 | --- | --- | --- |
+| v1.2.7 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.7) |
 | v1.2.6 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.6) |
 | v1.2.4 | Windows x64 / macOS arm64, x64 | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.4) |
 | v1.2.3 | Windows x64 / macOS arm64, x64 / Android | [Release](https://github.com/lorcinv/OmiComic/releases/tag/v1.2.3) |

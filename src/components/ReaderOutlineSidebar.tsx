@@ -4,7 +4,7 @@ import MobileSheet, { dismissMobileSheet } from './MobileSheet';
 import { consumeDismissGesture } from '../hooks/consumeDismissGesture';
 import { t, tr } from '../i18n';
 import type { DocumentSource } from '../reader/documentSource';
-import { imageOutline, readerPageCode, type ReaderOutlineEntry } from '../reader/readerOutline';
+import { folderFilenameOutline, imageOutline, readerPageCode, type ReaderOutlineEntry } from '../reader/readerOutline';
 import type { 阅读资源结果 } from '../types';
 
 interface Props {
@@ -61,7 +61,11 @@ export default function ReaderOutlineSidebar({ mobile, resource, source, current
     };
   }, [mobile]);
 
-  const imageEntries = useMemo(() => resource.sourceType === 'archive' || resource.sourceType === 'folder' ? imageOutline(resource.pages) : [], [resource.pages, resource.sourceType]);
+  const imageEntries = useMemo(() => {
+    if (resource.sourceType === 'archive') return imageOutline(resource.pages);
+    if (resource.sourceType === 'folder' || resource.sourceType === 'image') return folderFilenameOutline(resource.pages);
+    return [];
+  }, [resource.pages, resource.sourceType]);
   const outline = documentOutline?.source === source ? documentOutline?.entries : undefined;
   const loadingOutline = Boolean(source && !outline);
   const entries = outline ?? imageEntries;

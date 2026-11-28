@@ -25,6 +25,27 @@ export function imageOutline(pages: 阅读页面项[]): ReaderOutlineEntry[] {
   return [...groups.values()].map(({ title, page }) => ({ title, depth: 0, target: { page } }));
 }
 
+const folderChapterName = /^((?:第\s*(?:[0-9]+|[〇零一二两兩三四五六七八九十百千万萬]+)\s*[话話章]|(?:Chapter|Episode)\s+[0-9]+))\s*[-_－–—]\s*[0-9]+\.[^./\\]+$/iu;
+
+export function folderFilenameOutline(pages: 阅读页面项[]): ReaderOutlineEntry[] {
+  const entries: ReaderOutlineEntry[] = [];
+  const seen = new Set<string>();
+  let previous: string | undefined;
+
+  for (const page of pages) {
+    const title = folderChapterName.exec(page.name)?.[1];
+    const chapter = title?.toLowerCase().replace(/\s+/g, '').replace('話', '话').replace(/[0-9]+/g, number => number.replace(/^0+(?=[0-9])/, ''));
+    if (chapter !== previous && chapter && title) {
+      if (seen.has(chapter)) return [];
+      seen.add(chapter);
+      entries.push({ title, depth: 0, target: { page: page.index } });
+    }
+    previous = chapter;
+  }
+
+  return entries.length >= 2 ? entries : [];
+}
+
 function epubTarget(base: string, href: string, chapters: Map<string, number>): ReaderOutlineEntry['target'] | undefined {
   const separator = href.indexOf('#');
   const path = (separator === -1 ? href : href.slice(0, separator)).split('?')[0];

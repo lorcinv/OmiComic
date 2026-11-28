@@ -19,21 +19,21 @@ OmiComic は、高速起動とすっきりした読書体験を重視した Wind
 
 ## ダウンロード
 
-Windows・macOS・Android の最新版は **1.2.6** です。
+Windows・macOS・Android の最新版は **1.2.7** です。
 
 | 対応環境 | パッケージ |
 | --- | --- |
-| Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Setup-1.2.6-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Portable-1.2.6-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.6 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-android.apk) |
-| macOS · Apple Silicon（M シリーズ、arm64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-arm64.zip) |
-| macOS · Intel（x64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-x64.zip) |
+| Windows x64 | [インストーラー版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-Setup-1.2.7-x64.exe) · [ポータブル版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-Portable-1.2.7-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.7 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-android.apk) |
+| macOS · Apple Silicon（M シリーズ、arm64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-mac-arm64.zip) |
+| macOS · Intel（x64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-mac-x64.zip) |
 
 - **Windows**：インストーラー版は EXE を実行して導入します。ポータブル版は ZIP をすべて展開し、`OmiComic.exe` を起動します。
 - **Android**：APK をインストールすると、そのまま上書き更新できます。
 - **macOS**：M シリーズは Apple Silicon、Intel プロセッサーは Intel を選びます（[バージョンの選び方](docs/APPLE.md#mac-download)）。配布版は未署名・未公証のため、初回起動は [インストール案内](docs/APPLE.md#mac-install) をご確認ください。
 
 > [!TIP]
-> **1.2.6 の主な更新**：リーダーに「章」目次を追加（圧縮ファイルの章フォルダー、PDF しおり、EPUB 目次に対応）。サイドバー操作の改善と、Android のアンインストール時データ保持にも対応しました。[更新内容](docs/releases/v1.2.6.md) · [バージョン履歴](docs/releases/README.ja.md)
+> **1.2.7 の主な更新**：画像フォルダーで、中国語・日本語・英語のファイル名の先頭部分から章を認識できます。ページ順はこれまでどおりです。[更新内容](docs/releases/v1.2.7.md) · [サンプル画像](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [バージョン履歴](docs/releases/README.ja.md)
 
 ## 紹介動画
 

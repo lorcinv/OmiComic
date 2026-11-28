@@ -19,21 +19,21 @@ OmiComic 是一款面向 Windows、macOS、Android 的纯本地漫画阅读器�
 
 ## 下载
 
-Windows、macOS、Android 最新版均为 **1.2.6**。
+Windows、macOS、Android 最新版均为 **1.2.7**。
 
 | 平台 | 安装包 |
 | --- | --- |
-| Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Setup-1.2.6-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Portable-1.2.6-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.6 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-android.apk) |
-| macOS · Apple Silicon（M 系列，arm64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-arm64.zip) |
-| macOS · Intel（x64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-x64.zip) |
+| Windows x64 | [安装版 · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-Setup-1.2.7-x64.exe) · [免安装版 · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-Portable-1.2.7-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.7 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-android.apk) |
+| macOS · Apple Silicon（M 系列，arm64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-mac-arm64.zip) |
+| macOS · Intel（x64） | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-mac-x64.zip) |
 
 - **Windows**：安装版运行 EXE 按提示安装；免安装版完整解压后运行 `OmiComic.exe`。
 - **Android**：安装 APK，可直接覆盖升级。
 - **macOS**：M 系列选 Apple Silicon，Intel 芯片选 Intel（[如何选择版本](docs/APPLE.md#mac-download)）；安装包未签名和公证，首次打开见 [安装说明](docs/APPLE.md#mac-install)。
 
 > [!TIP]
-> **1.2.6 更新亮点**：新增阅读器「章节」目录，支持压缩包分章文件夹、PDF 书签目录以及 EPUB 内置目录，并支持 Android 卸载保留数据。查看 [本次更新](docs/releases/v1.2.6.md) · [版本记录](docs/releases/README.md)
+> **1.2.7 更新亮点**：普通图片文件夹可按中、日、英文文件名前缀分章，沿用原有翻页顺序。[本次更新](docs/releases/v1.2.7.md) · [试读样本](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [版本记录](docs/releases/README.md)
 
 ## 视频演示
 

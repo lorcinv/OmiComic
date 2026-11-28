@@ -19,21 +19,21 @@ OmiComic is a local comic reader for Windows, macOS and Android built for fast s
 
 ## Download
 
-Version **1.2.6** is available for Windows, macOS and Android.
+Version **1.2.7** is available for Windows, macOS and Android.
 
 | Platform | Package |
 | --- | --- |
-| Windows x64 | [Installer · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Setup-1.2.6-x64.exe) · [Portable · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-Portable-1.2.6-x64.zip) |
-| Android 8.0+ | [OmiComic 1.2.6 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-android.apk) |
-| macOS · Apple Silicon (M-series, arm64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-arm64.zip) |
-| macOS · Intel (x64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.6/OmiComic-1.2.6-mac-x64.zip) |
+| Windows x64 | [Installer · EXE](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-Setup-1.2.7-x64.exe) · [Portable · ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-Portable-1.2.7-x64.zip) |
+| Android 8.0+ | [OmiComic 1.2.7 · APK](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-android.apk) |
+| macOS · Apple Silicon (M-series, arm64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-mac-arm64.zip) |
+| macOS · Intel (x64) | [ZIP](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-mac-x64.zip) |
 
 - **Windows**: run the EXE to install, or extract the entire portable ZIP and run `OmiComic.exe`.
 - **Android**: install the APK to install or update in place.
 - **macOS**: choose Apple Silicon for M-series chips or Intel for Intel processors ([choose your version](docs/APPLE.md#mac-download)); packages are unsigned and not notarized—see [installation and first launch](docs/APPLE.md#mac-install).
 
 > [!TIP]
-> **What's new in 1.2.6**: Added the Chapters panel for archive chapter folders, PDF bookmarks and EPUB outlines, refined sidebar interactions, and enabled keeping app data on Android uninstall. See [Release notes](docs/releases/v1.2.6.md) · [Version history](docs/releases/README.en.md)
+> **What's new in 1.2.7**: The Chapters panel now finds chapters in image folders from Chinese, Japanese or English filename prefixes, preserving the current page order. [Release notes](docs/releases/v1.2.7.md) · [Sample images](https://github.com/lorcinv/OmiComic/releases/download/v1.2.7/OmiComic-1.2.7-folder-chapter-demo.zip) · [Version history](docs/releases/README.en.md)
 
 ## Video demo
 
