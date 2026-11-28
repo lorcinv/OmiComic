@@ -4,7 +4,7 @@ import { updateResourceRecords, withinPath } from "../../electron/services/resou
 import { androidNotify, type NativeCall } from "./bridge";
 import { sanitizeAndroidChapter } from "./epub";
 import { version as packageVersion } from "../../package.json";
-import { bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
+import { DEFAULT_MOBILE_PREVIEW_WIDTH, bookmarkMatches, normalizePageSort, pageIdentity, resolvePageIndex, sortReaderPages } from '../../electron/shared/readerPreferences';
 import { backupFilename, createDataBackup, parseDataBackup, mergeBackup, autoMatchBackupLocations, type DataImportPreview } from '../../electron/shared/dataBackup';
 import { mobileTypography } from '../../electron/shared/desktopTypography';
 import { normalizeThemePreferences } from '../../electron/shared/colorTheme';
@@ -13,6 +13,7 @@ import { normalizeStartupPage } from '../../electron/shared/startupPage';
 const defaults: AppSettings = {
   showHomePage: true,
   language: 'zh-CN',
+  mobilePreviewWidth: DEFAULT_MOBILE_PREVIEW_WIDTH,
   mobileReaderAutoHide: true,
   mobileReaderDoubleTapZoom: true,
   mobileLibraryLayout: "grid", mobileGridColumns: 2, mobileListCoverSize: 82, readerVolumeKeys: false, readerVolumeKeysReversed: false, mobilePanoramaTapPaging:false,

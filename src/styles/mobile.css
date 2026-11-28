@@ -531,7 +531,7 @@ html[data-platform="android"] .root-delete-dialog { width:100%; max-width:560px;
 .is-mobile-library .resource-detail-intro h2 { grid-row:1; -webkit-line-clamp:6; padding-top:4px; }
 .is-mobile-library .resource-detail-reading-launch { grid-row:2; }
 .is-mobile-library .resource-detail-direct-editor { grid-row:3; }
-.is-mobile-library .resource-detail-thumbnail-grid { grid-template-columns:repeat(auto-fill,minmax(min(var(--mobile-preview-width,88px),100%),1fr)); }
+.is-mobile-library .resource-detail-thumbnail-grid { grid-template-columns:repeat(auto-fill,minmax(min(var(--mobile-preview-width,120px),100%),1fr)); }
 .is-mobile-library:has(.is-resource-detail) { padding-top:0; }
 
 .mobile-settings-surface { z-index:1150 !important; position:fixed; inset:0; padding:0 !important; }

@@ -14,7 +14,7 @@ import { useMobileScrim } from '../hooks/mobileScrim';
 import DataManagement from './DataManagement';
 import { FontSizeControl } from './FontSizeControl';
 import { mobileTypography } from '../../electron/shared/desktopTypography';
-import { FIT_MODE_OPTIONS } from '../../electron/shared/readerPreferences';
+import { DEFAULT_MOBILE_PREVIEW_WIDTH, FIT_MODE_OPTIONS } from '../../electron/shared/readerPreferences';
 import { effectiveStartupPage, startupPages } from '../../electron/shared/startupPage';
 import { useRememberedScroll } from '../hooks/useRememberedScroll';
 import { applyDesktopTypography, 应用主题设置, effectiveColorTheme, normalizeThemePreferences, useSystemDarkMode, 主题选项 } from '../theme';
@@ -68,7 +68,7 @@ export default function MobileSettings({ settings, onSaved, onClose, bookSetting
         <div className="settings-row"><span>{t("卡片布局")}</span><GlassSelect ariaLabel={t("卡片布局")} value={display.layout} options={uiOptions([{value:'grid' as const,label:'网格'},{value:'list' as const,label:'缩略图与说明'}])} onChange={layout=>save(patchMobileDisplay(value,displayPage,{layout}))}/></div>
         <label className="mobile-option-row"><span>{t("网格列数")}<output>{display.columns}</output></span><input type="range" aria-label={t("网格列数")} min="2" max="6" step="1" value={display.columns} onChange={event=>save(patchMobileDisplay(value,displayPage,{columns:Number(event.target.value)}))}/></label>
         <label className="mobile-option-row"><span>{t("列表封面尺寸")}<output>{display.coverSize} px</output></span><input type="range" aria-label={t("列表封面尺寸")} min="64" max="132" step="4" value={display.coverSize} onChange={event=>save(patchMobileDisplay(value,displayPage,{coverSize:Number(event.target.value)}))}/></label>
-        {range('mobilePreviewWidth',t("缩略预览行宽"),64,144,8,88,' px')}
+        {range('mobilePreviewWidth',t("缩略预览行宽"),64,144,8,DEFAULT_MOBILE_PREVIEW_WIDTH,' px')}
       </>}
       {category==='library' && <>
         {select('tagSearchMode',t("多条件匹配方式"),[{value:'fuzzy',label:'任一条件'},{value:'exact',label:'全部条件'}],'fuzzy')}

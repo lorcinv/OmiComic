@@ -20,6 +20,19 @@ function nativeStore() {
 }
 
 describe('Android durable library adapter',()=>{
+  it('defaults mobile preview rows to 120 px and restores an explicitly saved width', async () => {
+    const store = nativeStore();
+    const api = await createAndroidApi(store.native);
+    const data = await api.getAppData();
+    if (!data.ok) throw new Error(data.error.message);
+    expect(data.data.settings.mobilePreviewWidth).toBe(120);
+
+    await api.updateSettings({ mobilePreviewWidth: 88 });
+    const restored = await (await createAndroidApi(store.native)).getAppData();
+    if (!restored.ok) throw new Error(restored.error.message);
+    expect(restored.data.settings.mobilePreviewWidth).toBe(88);
+  });
+
   it('preserves untouched shelf fields through repeated renames, note edits and restart', async () => {
     const store=nativeStore(),api=await createAndroidApi(store.native);
     const created=await api.createVirtualFolder({name:'原名',note:'原备注'});if(!created.ok)throw new Error();

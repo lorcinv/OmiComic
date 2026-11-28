@@ -21,7 +21,7 @@ import { effectiveStartupPage, startupPages, type LibraryStartupPage } from '../
 import { useCoverQueue } from '../hooks/useMobileCoverQueue';
 import { useEmptyFolders } from '../hooks/useEmptyFolders';
 import BookReaderSettings from '../components/BookReaderSettings';
-import { pageIdentity, resolvePageIndex, FIT_MODE_OPTIONS } from '../../electron/shared/readerPreferences';
+import { DEFAULT_MOBILE_PREVIEW_WIDTH, FIT_MODE_OPTIONS, pageIdentity, resolvePageIndex } from '../../electron/shared/readerPreferences';
 import { getResourceThumbnail, clearResourceThumbnailCache } from "../reader/thumbnailClient";
 import ResourcePlaceholder from "../components/ResourcePlaceholder";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -936,7 +936,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
   const [手机详情菜单, 设置手机详情菜单] = useState(false);
   const [手机书架排序, 设置手机书架排序] = useState(false);
   const [手机每页数量, 设置手机每页数量] = useState<50 | 100 | 150 | 200 | 500>(50);
-  const [手机预览宽度, 设置手机预览宽度] = useState(88);
+  const [手机预览宽度, 设置手机预览宽度] = useState(DEFAULT_MOBILE_PREVIEW_WIDTH);
   const 手机导航区域 = useRef<HTMLElement>(null);
   function 匹配整理搜索(query: string, texts: Array<string | undefined | null>, tags: string[], mode: 搜索匹配模式): boolean {
     return matchesMobileSearch(query, texts, tags, mode, 空格分隔搜索条件);
@@ -1328,7 +1328,7 @@ function LibraryPage({ onOpenReader, onHome, refreshToken, isActive, onReady, ba
     界面设置快照.current = 设置;
     设置手机显示设置(设置);
     设置手机每页数量(设置.mobilePageSize ?? 50);
-    设置手机预览宽度(设置.mobilePreviewWidth ?? 88);
+    设置手机预览宽度(设置.mobilePreviewWidth ?? DEFAULT_MOBILE_PREVIEW_WIDTH);
     设置音量键翻页(Boolean(设置.readerVolumeKeys));
     设置反转音量键(Boolean(设置.readerVolumeKeysReversed));
     应用主题设置(设置);

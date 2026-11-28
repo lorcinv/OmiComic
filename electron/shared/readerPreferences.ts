@@ -21,6 +21,7 @@ export interface ReaderPreferences {
   pairingAnchorId?: string;
 }
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = { enabled: false, brightness: 100, contrast: 100, gamma: 1, warmth: 0, grayscale: false, invert: false, sharpen: 0, denoise: 0 };
+export const DEFAULT_MOBILE_PREVIEW_WIDTH = 120;
 export const DEFAULT_AUTO_READ: AutoReadOptions = { intervalSeconds: 5, scrollPixelsPerSecond: 80 };
 export const PAGE_SORT_OPTIONS = [
   { value: "name-asc" as const, label: "文件名自然升序" },

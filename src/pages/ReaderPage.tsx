@@ -49,7 +49,7 @@ import useMobilePageSwipe from '../hooks/useMobilePageSwipe';
 import ReaderSwipePreview from '../components/ReaderSwipePreview';
 import ReaderImageEffects, { GammaFilter } from "../components/ReaderImageEffects";
 import { useAutoRead } from "../reader/useAutoRead";
-import { DEFAULT_ADJUSTMENTS, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
+import { DEFAULT_ADJUSTMENTS, DEFAULT_MOBILE_PREVIEW_WIDTH, normalizeAdjustments, normalizeAutoRead, normalizePageSort, pageIdentity, resolvePageIndex, type PageSort } from "../../electron/shared/readerPreferences";
 import { useReaderDocument } from "../reader/useReaderDocument";
 import { advanceInertia, estimateReleaseVelocity, estimateTouchVelocity, touchReleaseSample, mouseDragGain, acceleratedMouseVelocity, touchDragGain, acceleratedTouchVelocity, touchInertiaTime, MAX_MOTION_SPEED, MIN_MOTION_SPEED, MOTION_SAMPLE_WINDOW_MS } from "../reader/motion";
 import { afterDisplaySamplingMotion, holdDisplaySampling, noteDisplaySamplingMotion } from "../reader/displaySampling";
@@ -267,7 +267,7 @@ const 默认阅读器设置: Pick<
   mobileReaderPreviews: true,
   mobileReaderAutoHide: true,
   mobileReaderDoubleTapZoom: true,
-  mobilePreviewWidth: 88,
+  mobilePreviewWidth: DEFAULT_MOBILE_PREVIEW_WIDTH,
   readerVolumeKeys: false,
   readerVolumeKeysReversed: false,
   mobilePanoramaTapPaging: false,
@@ -346,7 +346,7 @@ function 创建初始阅读状态(
       mobileReaderPreviews: 设置.mobileReaderPreviews !== false,
       mobileReaderAutoHide: 设置.mobileReaderAutoHide !== false,
       desktopReaderAutoHide: 设置.desktopReaderAutoHide === true,
-      mobilePreviewWidth: 设置.mobilePreviewWidth ?? 88,
+      mobilePreviewWidth: 设置.mobilePreviewWidth ?? DEFAULT_MOBILE_PREVIEW_WIDTH,
     },
   };
 }
@@ -4715,7 +4715,7 @@ function ReaderPage({
         )}
       </div>
 
-      {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews rtl={从右到左阅读} pages={resource.pages} current={进度预览索引} currentGroup={进度预览组} followingProgress={进度拖动比例!==null} width={阅读器设置.mobilePreviewWidth ?? 88} documentSource={文档源}
+      {手机布局 && 手机页面预览打开 && 手机工具栏可见 && resource && <MobileReaderPreviews rtl={从右到左阅读} pages={resource.pages} current={进度预览索引} currentGroup={进度预览组} followingProgress={进度拖动比例!==null} width={阅读器设置.mobilePreviewWidth ?? DEFAULT_MOBILE_PREVIEW_WIDTH} documentSource={文档源}
         nativeImage={页面图片状态表[进度预览索引]?.native ? 页面图片状态表[进度预览索引]?.url || null : undefined}
         nativeImages={页面图片状态表} nativePages={原生图片核心&&!模式2?原生窗口索引:undefined} nativeRadius={!模式2 && 内存缓存上限字节 > 0 ? Math.min(2,预加载页数) : 0}
         onPage={index => { 实时拖动阅读比例(index/Math.max(1,总页数-1)); if(模式2) 提交模式2自由位置(); }}/>}
